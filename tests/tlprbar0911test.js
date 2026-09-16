@@ -84,17 +84,28 @@ ok('★★ 三個寫入端都帶 sheet（新增動作／套歷史課表／套方
      得批次改寫資料庫、還可能留下編號空洞。「刪掉現在看的最後一張」不必重編號。
    ⚠ 那張上面已經記的動作會一起刪，所以一定要先問、而且要講出幾筆；
      完全空白的那張不必問，直接收掉暫存張數就好。 */
-ok('★★★ 刪除鈕只在「總數>1 且正看著最後一張」時出現',
-   /\$\{\(_sheetN>1 && _sheet===_sheetN\)\?`<button type="button" class="tl-sheet tl-sheet-del" onclick="tlDelSheet\(\)"/.test(S)
+/* 2026-09-16 二修（使用者：「刪除的按鈕在標籤旁邊　幫我改到這一列最右邊　名稱改成移除頁面」）——
+   原本夾在數字鈕與 [+] 中間，緊鄰要按的東西容易誤觸；改推到整列最右並改名。
+   ⚠ 位置換了之後 ${...} 與條件之間多了換行，原本要求兩者相連的正則會失效 ——
+     這裡改成分開比對「條件」與「按鈕本體」，不再綁死它們的排版。 */
+ok('★★★ 移除鈕只在「總數>1 且正看著最後一張」時出現',
+   /\(_sheetN>1 && _sheet===_sheetN\)\?`<button type="button" class="tl-sheet tl-sheet-del" onclick="tlDelSheet\(\)"/.test(S)
    && /if\(total<=1 \|\| cur!==total\) return;/.test(src));
+ok('★★ 移除鈕在整列最右、文字是「移除頁面」（不再是夾在中間的 ✕）',
+   /title="移除目前這一頁課表">移除頁面<\/button>/.test(S)
+   && /\.tl-sheets \.tl-sheet-del\{color:var\(--danger\);margin-left:auto;/.test(src)
+   && S.indexOf('tl-sheet-add') < S.indexOf('tl-sheet-del'));
 ok('★★★ 有紀錄先問並講出幾筆；空白那張直接收掉',
    /這張上面已經記了 <b>\$\{rows\.length\}<\/b> 個動作，會一起刪掉。/.test(src)
    && /if\(!rows\.length\)\{ done\(\); return; \}/.test(src));
 ok('★★ 1V2 要在同一位學員之內算（切到第 2 位時刪的是他自己那張）',
    /&& \(!_is1v2 \|\| \(Number\(l\.slot\)===2\?2:1\)===_slot\)\);/.test(src));
-ok('　　三顆鈕在視覺上分得開（數字實線／✕ 紅字實線／＋ 綠字虛線）',
-   /\.tl-sheets \.tl-sheet-del\{color:var\(--danger\);min-width:38px;\}/.test(src)
-   && /\.tl-sheets \.tl-sheet-add\{color:var\(--green\);border-style:dashed;/.test(src));
+/* 2026-09-16 二修：移除鈕從夾在中間的 ✕ 改成推到最右的「移除頁面」，
+   所以不再釘 min-width（四個字靠 padding 撐）。這一條守的本意沒變：三顆鈕要分得開。 */
+ok('　　三顆鈕在視覺上分得開（選中綠底／＋ 綠字虛線／移除頁面 紅字靠右）',
+   /\.tl-sheets \.tl-sheet-del\{color:var\(--danger\);margin-left:auto;/.test(src)
+   && /\.tl-sheets \.tl-sheet-add\{color:var\(--green\);border-style:dashed;/.test(src)
+   && /\.tl-sheets \.tl-sheet\.on\{background:var\(--green\);/.test(src));
 
 console.log('\n'+pass+' 過 / '+fail+' 敗');
 process.exit(fail?1:0);
