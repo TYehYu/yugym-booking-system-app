@@ -131,10 +131,26 @@ ok('★★★ 日期時間是大字主視覺，沿用課卡現成的 .mcx-when',
    /<p class="mcx-when" style="margin:2px 0 12px;">\$\{memWhenText\(s\.date,t\)\}/.test(src));
 ok('★★ 原本拆成三列的「類型／日期／時間」已收進大字那一行（資訊沒少，只是不再拆散）',
    !/<span style="color:var\(--t2\);">時間<\/span>　\$\{t\}（60 分鐘）/.test(src));
-ok('★★★ 場地是三顆等寬大按鈕，未選退到米底、選中深綠（主從分得出）',
+/* ⚠⚠ 按鈕三態定案（2026-09-16 使用者）：可選＝**白底**、選取＝綠底、不能選＝灰底。
+   我上一版把「可選」做成米底，米底和不能選的灰太接近，
+   客人看不出「多功能／教室」其實還點得下去（截圖裡那兩顆像是壞掉的）。
+   ⚠ 基礎的 .msb-vbtn 本來就是這三態，放大版不可以自己走一套。 */
+ok('★★★ 場地是三顆等寬大按鈕；三態＝可選白底／選取綠底／不能選灰底',
    /<span id="msb-vbtns" class="msb-vbig">/.test(src)
-   && /\.msb-vbig \.msb-vbtn\{flex:1;/.test(src)
-   && /\.msb-vbig \.msb-vbtn\.on\{background:var\(--green\)/.test(src));
+   && /\.msb-vbig \.msb-vbtn\{flex:1;[^}]*background:#fff;/.test(src)
+   && /\.msb-vbig \.msb-vbtn\.on\{background:var\(--green\)/.test(src)
+   && /\.msb-vbig \.msb-vbtn\.off\{background:var\(--card2\)/.test(src));
+/* 2026-09-16 使用者：「點跑步機的時候跟人數這一列太靠近了」。
+   ⚠ 真正的成因不只是間距：「人數」、按鈕、提示三個擠在同一 flex 列，
+     「另一台這個時段已被預約」一長就把前兩個壓扁 ——「人數」變成兩個字各一行、
+     按鈕文字也折行，圓角膠囊被擠成圓形。所以提示要獨立一行、label 與按鈕要 flex:none。 */
+ok('★★★ 人數列與場地列拉開，且提示文字獨立一行（不擠壓按鈕造成文字折行）',
+   /#msb-tmrow\{align-items:center;gap:8px;flex-wrap:wrap;margin-top:10px;\}/.test(src)
+   && /\.msb-tmnote\{flex:1 0 100%;/.test(src)
+   && /\.msb-tml\{color:var\(--t2\);flex:none;\}/.test(src)
+   && /\.msb-tmbtns\{display:flex;gap:7px;flex:none;\}/.test(src));
+ok('★★ 版面細節不留 inline（inline 權重最高，CSS 蓋不過去）；只有動態的 display 留著',
+   /<div id="msb-tmrow" style="display:\$\{\(s\.pickVenue==='treadmill'\)\?'flex':'none'\};">/.test(src));
 ok('★★ 只放大場地那一組，人數維持小膠囊（都放大就沒有主從）',
    !/id="msb-tmbtns" class="msb-vbig"/.test(src));
 ok('★★ 單張票不再寫「剩 N 點」；多張票的下拉保留（那是區分兩張票的依據）',

@@ -12,8 +12,13 @@ ok('★★★ 建立預約：標籤與按鈕都改人', /<span style="font-size:
 ok('★★★ 換場地（自主訓練）：1 人／2 人', /onclick="svPickUnits\(1\)">1 人<\/button>/.test(src)
    && /onclick="svPickUnits\(2\)">2 人<\/button>/.test(src)
    && /<span style="font-size:12\.5px;color:var\(--t2\);">人數<\/span>/.test(src));
+/* 2026-09-16：會員端這一列的版面細節搬進 CSS（.msb-tml／.msb-tmbtns／.msb-tmnote），
+   因為 inline style 權重最高、CSS 那邊怎麼調都蓋不過去（提示文字一長就把
+   「人數」壓成兩個字各一行、按鈕也跟著折行）。
+   ⚠ 這一條守的本意是「標籤與按鈕都講**人**」（0909 那次把台改成人），
+     inline style 只是當初順帶被抄進正則 —— 釘著它只會讓每次調版面都誤觸紅燈。 */
 ok('★★★ 會員端預約：標籤與按鈕都改人',
-   /<span style="color:var\(--t2\);">人數<\/span>/.test(src)
+   /<span class="msb-tml">人數<\/span>/.test(src)
    && /onclick="msbChooseUnits\(\$\{n\}\)">\$\{n\} 人<\/button>/.test(src));
 ok('★★★ 課卡明細的一人／兩人按鈕', /onclick="bkSetVenueUnits\('\$\{b\.id\}',\$\{n\}\)">\$\{NUM\[n\]\|\|n\}人<\/button>/.test(src));
 

@@ -477,6 +477,15 @@ t('　 為什麼要按點篩選（白挨一次擋）—— 理由寫在原地',
 t('★★ 確認預約那一步的「返回」退回挑時段，不是關掉整個流程',
   /<button class="btn btn-ghost" onclick="msbSlotBack\(\)">返回<\/button>/.test(s)
   && /function msbSlotBack\(\)\{\s*\n\s*const b=window\._mh2SlotBack;\s*\n\s*if\(b && b\.date\)\{ memh2SelfSlots\(b\.date, b\.until\|\|''\); return; \}/.test(s));
+/* 2026-09-16 使用者：「快速預約選取時段的時候會有綠底＋打勾 移除打勾」——
+   綠底已經足夠表達「選的就是這一格」，多一個勾會把時間文字往左推，整排時段的數字對不齊。
+   ⚠ .cag-slot-on 是**共用**規則：教練端快速預約（_chvQsPick）與會員端（_mh2Pick）
+     都靠它上色，所以兩邊一起拿掉 —— 同一個手勢在兩個角色看到不同回饋更奇怪。
+   ⚠⚠ 反面斷言先剝註解再比對：原地留的「〔已移除〕」說明必然會寫出被移除的東西，
+     直接掃全檔會命中自己寫的墓誌銘（這個坑今天已經踩過好幾次）。 */
+t('★★ 選中的時段只用綠底，不再加打勾',
+  /\.modal \.cag-slots \.cag-slot\.cag-slot-on\{background:var\(--green\)/.test(s)
+  && !/cag-slot-on::after/.test(s.replace(/\/\*[\s\S]*?\*\//g,'')));
 t('★★ 來路由 memh2GoSlot 立（日期＋那一點的效期都要帶）',
   /window\._mh2SlotBack=\{ date:\(\(window\._msb\|\|\{\}\)\.date\)\|\|mh2S\(\)\.date, until:window\._mh2SelfUntil\|\|'' \};/.test(s));
 t('★★ 沒有來路就照舊關掉（舊版下方訂位表、改期那兩條路不受影響）',
