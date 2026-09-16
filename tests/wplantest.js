@@ -458,12 +458,28 @@ ok('★★★ 從抽屜開出來的彈窗要蓋在抽屜上面（抽屜 9999 > �
 ok('★★★ 用 10050 不用更高 —— 挑選視窗 #adp-sheet 是 10090，那一層要能蓋在彈窗上面',
    /用 10050 不用更高：挑選視窗 #adp-sheet 是 10090/.test(src)
    && /#adp-sheet\{position:fixed;inset:0;z-index:10090;\}/.test(src));
-/* 2026-09-16：使用者要求動作名稱大一點（14.5px → 17px）。
-   ⚠ 這一條守的是「長名稱會截斷」，字級本來只是順帶被抄進正則裡 ——
-     釘著字級只會讓每次調大小都誤觸這條紅燈，所以把字級拿掉，只釘截斷那三件套。 */
-ok('★★★ 動作名稱長就截斷，不要把右邊的數字擠出去（flex 子項預設 min-width:auto）',
-   /\.tlh-ex\{font-size:[\d.]+px;font-weight:700;color:var\(--text\);\s*\n\s*min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;\}/.test(src)
-   && /flex 子項預設 min-width:auto，長字串不會縮/.test(src));
+/* 2026-09-16 二改（使用者：「右邊組數可以從第二列開始往下排　第一列視覺高度
+   留給左邊的動作名稱」）—— 名稱獨佔第一列，副標同時搬到組數左邊當左欄。
+   ⚠ 這一條原本守「長名稱會截斷所以不會把數字擠出去」；現在名稱根本不是 flex 子項，
+     重疊在結構上就不可能發生，所以改守結構本身，截斷三件套整組退場。
+   ⚠ 0909 那條防線沒有消失，只是換人扛：現在的 flex 子項是副標，備註一長
+     一樣會擠到右邊的數字，min-width:0 要掛在它身上。 */
+ok('★★★ 動作名稱獨佔第一列（不再與第一組數字搶同一列）',
+   /<div class="tlh-ex">\$\{l\.exercise_name\}<\/div>/.test(src)
+   && /\.tlh-ex\{font-size:[\d.]+px;font-weight:700;color:var\(--text\);line-height:[\d.]+;margin-bottom:\d+px;\}/.test(src));
+/* 2026-09-16 三改（使用者：「左邊第一列是動作名稱　第二列備註　第三列靠下留給姿勢/工具」）。
+   ⚠ 空的那一列不要畫成空元素，否則沒備註的動作會憑空多一段高度。 */
+ok('★★★ 左欄三列：備註第二列、姿勢／工具靠下；沒有的那一列不畫',
+   /<div class="tlh-log-main"><div class="tlh-log-left">\$\{_nt\?`<div class="tlh-note">\$\{_nt\}<\/div>`:''\}\$\{_pt\?`<div class="tlh-pt">\$\{_pt\}<\/div>`:''\}<\/div>/.test(src)
+   && /\.tlh-pt\{[^}]*margin-top:auto;/.test(src));
+/* ⚠⚠ margin-top:auto 要有效，左欄必須先被拉到整張卡的高度 ——
+   align-items 若是 flex-start，左欄只有內容高，auto 沒有空間可推，姿勢／工具就沉不下去。 */
+ok('★★★ align-items 必須是 stretch，margin-top:auto 才推得動',
+   /\.tlh-log-main\{display:flex;justify-content:space-between;align-items:stretch;/.test(src)
+   && /\.tlh-log-left\{[^}]*min-width:0;\}/.test(src));
+/* 「一長就把右邊數字擠出去」（2026-09-09）的防線現在掛在左欄身上，它才是 flex 子項。 */
+ok('★★ 左欄擋得住長備註（min-width:0）',
+   /\.tlh-log-left\{display:flex;flex-direction:column;flex:1 1 auto;min-width:0;\}/.test(src));
 /* 2026-09-16 使用者：「訓練動作名稱放左邊　右邊放組數每一組分開紀錄　如果三組就用三列」——
    右邊從單行摘要改成一組一列（直向 flex），所以這一條釘的兩件事分家了：
    ・「不被壓縮」仍是 .tlh-sets 的 flex:none（0909 那條「動作名一長就把數字擠出去」的防線）

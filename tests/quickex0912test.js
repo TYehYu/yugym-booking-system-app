@@ -113,6 +113,15 @@ ok('★★ 上次的數字不分教練（會員的歷史就是會員的）',
 ok('★★ 打字只重畫清單那一塊（整頁重畫會失焦、中文選字被打斷）',
    /oninput="window\._tlState\.exercise_name=this\.value;tlQuickFilter\(\);"/.test(src)
    && /function tlQuickFilter\(\)\{ const box=document\.getElementById\('ae-pre-box'\);/.test(src));
+/* 2026-09-16 使用者附截圖：「卡片沒有白色底　然後動作名稱可以放大一點」——
+   ⚠ 同一張視窗裡 .ae-opt 上一輪已經改成白底，這條清單卻還留在 --card2，
+     米底上放米塊看不出卡片邊界（就是「米底白框」那個語彙）。兩條要一起看。 */
+ok('★★★ 常用動作清單是白底（視窗底是米色，卡片要白才看得出一顆顆的邊界）',
+   /\.ae-pre-row\{[^}]*background:var\(--card\);/.test(src)
+   && !/\.ae-pre-row\{[^}]*background:var\(--card2\);/.test(src));
+ok('★★ 動作名稱放大到 16px，長名稱不會把右邊的「上次…」擠出去',
+   /\.ae-pre-n\{font-size:16px;font-weight:700;color:var\(--text\);min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;\}/.test(src)
+   && /\.ae-pre-l\{[^}]*flex:none;\}/.test(src));
 ok('★ 清單還在載入時不畫空狀態（免得閃一下「還沒有常用動作」）', /if\(!window\._tlQuickEx\) return '';/.test(src));
 
 console.log('\n④ 設定清單的地方（訓練方案頁）');

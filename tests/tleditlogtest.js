@@ -36,6 +36,19 @@ ok('★★★ 姿勢／工具收成摘要鈕，點了開挑選視窗（鈕上要
 ok('★★★ 挑選視窗的「返回」是 tleRender（不是 closeModal —— 關掉就什麼都沒了）',
    /<button class="btn btn-ghost" onclick="tleRender\(\)">返回<\/button>/.test(src)
    && /function tlePick\(field\)\{\s*\n\s*tleReadSets\(\);/.test(src));
+/* 2026-09-16 使用者附截圖：「目前選的這一個卡片可以給綠色底」——
+   ⚠ 綠底的樣式全是 .lot-row.lot-row-cur 這種雙類別選擇器，按鈕要**同時**帶兩個類別；
+     第一版只掛了 lot-row-cur，整組規則一條都沒生效，看起來就跟沒選一樣。
+   ⚠ 抽獎那支選中後是死的（cursor:default 還加 disabled），這裡不行 ——
+     再點一次目前選的那一項是「取消選擇」，加了 disabled 就永遠取消不掉。
+   ⚠ 只在 tlePick 函式體內找 disabled，不掃全檔：別處的挑選視窗本來就有死列。 */
+{
+  const P=fn('tlePick');
+  ok('★★★ 目前選的那一項＝品牌綠底（lot-row 與 lot-row-cur 要同時掛）',
+     /class="ash-eirow ash-ei-2c lot-row\$\{x===cur\?' lot-row-cur':''\}"/.test(P)
+     && /\.tle-picklist \.lot-row\.lot-row-cur\{cursor:pointer;\}/.test(src));
+  ok('★★★ 綠底那一列仍按得動（不能加 disabled，否則取消不掉）', !/disabled/.test(P));
+}
 ok('★★ 單位切換在表頭的重量欄，不再自己佔一列',
    /<span class="ae-head-unit">重量<span class="wpe-unit">/.test(R)
    && !/class="ae-unit-row"/.test(R));
