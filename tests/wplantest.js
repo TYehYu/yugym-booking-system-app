@@ -461,8 +461,13 @@ ok('★★★ 用 10050 不用更高 —— 挑選視窗 #adp-sheet 是 10090，
 ok('★★★ 動作名稱長就截斷，不要把右邊的數字擠出去（flex 子項預設 min-width:auto）',
    /\.tlh-ex\{font-size:14\.5px;font-weight:700;color:var\(--text\);\s*\n\s*min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;\}/.test(src)
    && /flex 子項預設 min-width:auto，長字串不會縮/.test(src));
-ok('★★ 右邊那段不折行、不被壓縮',
-   /\.tlh-sets\{[^}]*flex:none;white-space:nowrap;\}/.test(src));
+/* 2026-09-16 使用者：「訓練動作名稱放左邊　右邊放組數每一組分開紀錄　如果三組就用三列」——
+   右邊從單行摘要改成一組一列（直向 flex），所以這一條釘的兩件事分家了：
+   ・「不被壓縮」仍是 .tlh-sets 的 flex:none（0909 那條「動作名一長就把數字擠出去」的防線）
+   ・「不折行」移到每一列 .tlh-setrow 身上 —— 掛在容器上已經沒有意義了。 */
+ok('★★ 右邊那段不被壓縮；一組一列之後，不折行改由每一列負責',
+   /\.tlh-sets\{[^}]*flex:none;display:flex;flex-direction:column;align-items:flex-end;/.test(src)
+   && /\.tlh-setrow\{white-space:nowrap;\}/.test(src));
 
 console.log('\n'+pass+' 過 / '+fail+' 敗');
 process.exit(fail?1:0);

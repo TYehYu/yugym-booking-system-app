@@ -3822,11 +3822,19 @@ tr.pe-row:hover td{background:var(--sage-bg,#eef4ee);}
 /* ⚠ flex 子項預設 min-width:auto，長字串不會縮 —— 動作名稱一長就把右邊的
    次數／重量擠出去、看起來像兩段字疊在一起（2026-09-09 使用者回報「中間文字重疊了」）。
    左邊給 min-width:0＋截斷，右邊 flex:none＋不折行。 */
-.tlh-log-main{display:flex;justify-content:space-between;align-items:baseline;gap:10px;min-width:0;}
+/* ⚠ align-items 從 baseline 改成 flex-start（2026-09-16）：右邊改成一組一列之後，
+   baseline 會讓左邊的動作名去對齊右側**最後一列**的基線，動作名就被拉到整塊的下緣。
+   flex-start 才是「動作名與第一組同一行」。 */
+.tlh-log-main{display:flex;justify-content:space-between;align-items:flex-start;gap:10px;min-width:0;}
 .tlh-ex{font-size:14.5px;font-weight:700;color:var(--text);
   min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;}
+/* 一組一列（2026-09-16 使用者：「右邊放組數每一組分開紀錄　如果三組就用三列」）——
+   原本是單行摘要所以 white-space:nowrap 掛在這一層；現在改成直向堆疊，
+   nowrap 要移到每一列（.tlh-setrow）身上，否則整塊不折行的是容器、沒有意義。
+   ⚠ 用 align-items:flex-end 讓各列靠右對齊 —— 這是直向 flex，text-align 在這裡不起作用。 */
 .tlh-sets{font-size:13px;font-weight:600;color:var(--green);font-family:var(--num);text-align:right;
-  flex:none;white-space:nowrap;}
+  flex:none;display:flex;flex-direction:column;align-items:flex-end;gap:2px;}
+.tlh-setrow{white-space:nowrap;}
 .tlh-log-sub{font-size:11px;color:var(--t3);margin-top:3px;}
 .tlh-log .tl-del{position:absolute;top:8px;right:8px;background:none;border:none;color:var(--t3);font-size:13px;cursor:pointer;padding:4px;}
 /* 點一列＝修改（2026-09-11 使用者：「套用方案沒辦法修改內容」）—— 按下去要有回饋，看得出點得下去 */
@@ -13251,8 +13259,8 @@ function tbl(s){return TABLE_ALIAS[s]||s;}
 let sb=null;
 // ── 版本號（日期+時間格式：年後兩碼+月+日.時分，例 26620.1058 = 26年6/20 10:58）──
 // 每次改版手動更新這一行即可，畫面與 title 會一起更新
-const APP_VERSION = '260916.1309';
-const APP_VERSION_LABEL = 'v260916.1309';
+const APP_VERSION = '260916.1317';
+const APP_VERSION_LABEL = 'v260916.1317';
 const CLOUD = !!(window.YUGYM_CONFIG && window.YUGYM_CONFIG.url && window.YUGYM_CONFIG.anonKey);
 if(CLOUD){ sb = supabase.createClient(window.YUGYM_CONFIG.url, window.YUGYM_CONFIG.anonKey); }
 
@@ -61984,7 +61992,18 @@ async function renderTrainingLogSheet(){
   const sec2 = logs.length===0
     ? '<div class="tls-empty">還沒有紀錄</div>'
     : `<div class="tlh-logs">${logs.map(l=>`<div class="tlh-log" onclick="tlEditLog('${l.id}')">
-        <div class="tlh-log-main"><span class="tlh-ex">${l.exercise_name}</span><span class="tlh-sets">${setLine(l)}</span></div>
+        ${/* 一組一列（2026-09-16 使用者：「訓練動作名稱放左邊　右邊放組數每一組分開紀錄
+             如果三組就用三列」）——
+             原本右邊是一行摘要：有重量時「2 組 × 10 次 × 25 lb」，沒重量時「10、10、10」。
+             ⚠ 用 tlSetsFromLog 展開，它已經處理好兩種資料：有 sets_detail 的照抄逐組；
+               只存了 組/次/重量 的（臀肌分腿蹲、股四分腿蹲那種 sets_detail 是 null 的舊路徑）
+               依 sets 展開成同樣幾列。兩種都畫得出來，不會有人漏掉。
+             ⚠ 單位存在 log 層級的 weight_unit，sets_detail 裡沒有，所以每列都讀 l.weight_unit。
+             ⚠ 沒有重量的動作（伏地挺身、懸吊抬腿）只寫「10 次」，不要硬掛一個空單位。 */''}
+        <div class="tlh-log-main"><span class="tlh-ex">${l.exercise_name}</span><span class="tlh-sets">${
+          tlSetsFromLog(l).map(s=>{ const _w=wpWeightHtml(s.weight,l.weight_unit);
+            return `<span class="tlh-setrow">${s.reps||'-'} 次${_w?' × '+_w:''}</span>`; }).join('')
+        }</span></div>
         <div class="tlh-log-sub">${[l.posture,l.tool].filter(Boolean).join(' / ')}${l.note?'　·　'+l.note.replace(/\[[^\]]*\]/g,'').trim():''}</div>
         ${/* ⚠ 整列點下去是修改（tlEditLog），✕ 要擋住冒泡，不然刪之前會先跳出修改視窗 */''}
         <button class="tl-del" onclick="event.stopPropagation();delTrainingLog('${l.id}')">✕</button>
