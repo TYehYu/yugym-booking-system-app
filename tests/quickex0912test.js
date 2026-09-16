@@ -123,6 +123,14 @@ ok('★★ 存的是名稱與工具姿勢，不存數字（數字以會員上次
    && !/coach_exercises',\{[^}]*reps:/.test(src));
 ok('★★ 同名擋下來（清單是給人點的，重覆兩列只會挑錯）', /已經在常用清單裡了/.test(src));
 ok('★ 刪除要再問一次，並講明不影響已記錄的訓練', /function cxeDelAsk\(\)\{/.test(src) && /已經記錄的訓練不受影響/.test(src));
+/* 2026-09-16 使用者附截圖：「刪除按鈕改在右上角」——
+   原本底部是「刪除｜取消｜儲存」三顆並排，刪除緊鄰儲存容易誤按。
+   ⚠ 紅字而非紅底：這是問過才執行的可逆動作，紅底留給確認視窗裡的「確定刪除」。
+   ⚠ 新增時（e.id 空）不該出現這顆。 */
+ok('★★ 刪除在標題列右上角，底部只剩取消與儲存',
+   /<span>\$\{e\.id\?'修改常用動作':'新增常用動作'\}<\/span>/.test(src)
+   && /\$\{e\.id\?`<button class="btn btn-ghost btn-sm" style="color:var\(--danger\);flex:none;" onclick="cxeDelAsk\(\)">刪除<\/button>`:''\}/.test(src)
+   && !/<div class="modal-foot">\$\{e\.id\?'<button class="btn btn-red" onclick="cxeDelAsk\(\)">/.test(src));
 
 console.log('\n⑤ 資料表（docs/migrations/20260912_coach_exercises.sql）');
 ok('★★★ RLS：自己的＋管理員', /alter table public\.coach_exercises enable row level security;/.test(sql)
