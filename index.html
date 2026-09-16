@@ -10911,6 +10911,9 @@ button.vu-dot:hover{border-color:var(--green);color:var(--green);}
 .vu-dot.cur{box-shadow:0 0 0 2px var(--gold-d,#b48a56);}
 /* 跑步機燈號已移除（2026-08-03 使用者指示）——佔用數改為只在背後夾制台數選擇 */
 .cag-slot-tag{font-size:11px;opacity:.8;margin-left:5px;font-weight:600;}
+/* 〔已移除〕2026-09-16 一度把「只剩一台」做成純文字，違背既有定案 ——
+   規則是「不能用就寫原因，別藏按鈕：淡化列出＋寫原因，不要隱藏」（0823 定案）。
+   現在人數沿用場地按鈕那套 .msb-vbtn.off + disabled + title，不另做一套樣式。 */
 /* 改期視窗裡的「原時段」那一格（2026-08-31）：虛線淡化、不可點 ——
    它被自己這筆預約佔著，不會出現在可選時段裡，但一定要看得到，
    不然客人會以為原本那個時間不見了。 */
@@ -13376,8 +13379,8 @@ function tbl(s){return TABLE_ALIAS[s]||s;}
 let sb=null;
 // ── 版本號（日期+時間格式：年後兩碼+月+日.時分，例 26620.1058 = 26年6/20 10:58）──
 // 每次改版手動更新這一行即可，畫面與 title 會一起更新
-const APP_VERSION = '260916.2130';
-const APP_VERSION_LABEL = 'v260916.2130';
+const APP_VERSION = '260916.2221';
+const APP_VERSION_LABEL = 'v260916.2221';
 const CLOUD = !!(window.YUGYM_CONFIG && window.YUGYM_CONFIG.url && window.YUGYM_CONFIG.anonKey);
 if(CLOUD){ sb = supabase.createClient(window.YUGYM_CONFIG.url, window.YUGYM_CONFIG.anonKey); }
 
@@ -59921,7 +59924,13 @@ async function memh2SelfSlots(ds, until, reschedId){
   const cells=_all.map(m=>{
     if(m===_origM) return `<button type="button" class="cag-slot cag-slot-now" disabled
       title="這張預約目前就在這個時段">${minToTime(m)}<span class="cag-slot-tag">目前</span></button>`;
-    const tag=VN[r.vids[m]]||'';
+    /* 跑步機要帶「剩幾台」（2026-09-16 使用者：「跑步機的數量有辦法顯示在快速預約介面嗎」）——
+       ⚠ 這一支與 msbLoadSlots 是**兩支各自畫時段的 UI**（會員端 V2 走這裡），
+         兩邊都要加，只改一支客人看不到。
+       ⚠ 算不出來時退回只寫「跑步機」，不要印出「剩 undefined 台」。 */
+    const _vnm=VN[r.vids[m]]||'';
+    const _tmn=(r.tmFree||{})[m];
+    const tag=(r.vids[m]==='treadmill' && _tmn!=null) ? `${_vnm} 剩 ${_tmn} 台` : _vnm;
     return `<button type="button" class="cag-slot" data-t="${minToTime(m)}" onclick="memh2SelSlot('${minToTime(m)}')">${
       minToTime(m)}${tag?`<span class="cag-slot-tag">${tag}</span>`:''}</button>`; }).join('');
   const _d=parseYmd(date)||new Date(TODAY);
@@ -61246,7 +61255,28 @@ async function msbProbeFree(){
     return [m,err,vbk.venue_unit];
   }));
   results.forEach(([m,err,vu])=>{ if(!err){ free.add(m); vids[m]=String(vu||'').split('_')[0]; } });
-  return {free,vids,bh:_bh};
+  /* 每個時段的跑步機剩幾台（2026-09-16 使用者：「跑步機的數量有辦法顯示在快速預約介面嗎」）——
+     客人挑時段時就該看得到還剩幾台，不必點進去才發現只剩一台。
+     ⚠ 走 fetchDayOccupancy：與 validateBooking、msbPickSlot 同一支「當日佔用」RPC，
+       有快取，所以這裡不會多送一次請求（上面 24 個時段的探測已經把它暖起來了）。
+     ⚠ 數**筆數**不是「不同編號的數量」—— 舊資料有不帶編號的 venue_unit='treadmill'
+       （櫃檯換場地寫的），用編號去重會把兩筆算成一台。與 msbPickSlot 的 _tmUsed 同一個理由。
+     ⚠ 改期時不把自己那一筆算進去，否則原時段會少算一台。
+     ⚠ 整段包在 try 裡：抓不到佔用就不給台數，標籤退回只寫「跑步機」，不擋預約流程。 */
+  const tmFree={};
+  try{
+    const _cap=(typeof venueCap==='function')?(venueCap('treadmill')||2):2;
+    const _rows=await fetchDayOccupancy(s.date).catch(()=>[]);
+    const _selfId=s.resched?s.resched.id:null;
+    probes.forEach(m=>{
+      const _ns=m, _ne=m+60;
+      const _used=(_rows||[]).filter(x=>x && x.status!=='cancelled' && x.id!==_selfId
+        && String(x.venue_unit||'').split('_')[0]==='treadmill'
+        && timeToMin(x.start_time)<_ne && timeToMin(x.start_time)+(Number(x.duration)||60)>_ns).length;
+      tmFree[m]=Math.max(0, _cap-Math.min(_used,_cap));
+    });
+  }catch(_){}
+  return {free,vids,tmFree,bh:_bh};
 }
 async function msbLoadSlots(){
   const s=window._msb; if(!s) return;
@@ -61265,8 +61295,15 @@ async function msbLoadSlots(){
   box.innerHTML=slotPanelHTML({date:s.date,todayStr:ymd(TODAY),nowMin:now.getHours()*60+now.getMinutes(),
     startH:Math.floor(Math.max(540,_open)/60), endH:Math.ceil(_close/60),
     duration:60,isFree:(a,b)=>free.has(a),pickFn:'msbPickSlot',
-    /* 第一順位（多功能）沒位時，該時段標出實際會用的場地（教室／跑步機） */
-    tagFn:(mm)=>({group:'教室',treadmill:'跑步機'}[vids[mm]]||'')});
+    /* 第一順位（多功能）沒位時，該時段標出實際會用的場地（教室／跑步機）。
+       ⚠ 跑步機再加上「剩幾台」（2026-09-16 使用者要的）—— 一個場地兩台，
+         剩 1 台跟剩 2 台對客人是兩件事（想跟同伴一起跑就得挑剩 2 台的時段）。
+       ⚠ 算不出來（抓不到佔用）時退回只寫「跑步機」，不要印出「剩 undefined 台」。 */
+    tagFn:(mm)=>{ const _v=vids[mm];
+      if(_v==='group') return '教室';
+      if(_v!=='treadmill') return '';
+      const _n=(r.tmFree||{})[mm];
+      return (_n==null)?'跑步機':`跑步機 剩 ${_n} 台`; }});
 }
 async function msbPickSlot(t){
   const s=window._msb; if(!s) return;
@@ -61337,12 +61374,19 @@ async function msbPickSlot(t){
       ${/* 2026-08-10 使用者回報：「選教室跟多功能，下方的 1台2台不要顯示」——
            其實 8/06 就該隱藏，但這裡的 style 原本寫成 display:none;display:flex;
            後者蓋掉前者，初始渲染永遠看得到台數列（點過場地鈕後才正確）。 */''}
-      <div id="msb-tmrow" style="display:${(s.pickVenue==='treadmill'&&s.tmFree>1)?'flex':'none'};align-items:center;gap:8px;">
+      ${/* 2026-09-16 使用者回報：「只剩下一台跑步機的時候 沒有顯示1台2台 這樣會以為約了兩台」——
+           原本 tmFree<=1 就整列隱藏，客人完全看不到自己約了幾台，只能猜。
+           ⚠ 但也不能改回「只有一顆『1 人』的選擇列」：2026-08-06 使用者反對過那個
+             （假的選擇列，點了也沒有別的可選）。
+           ⚠ 所以拆成兩種內容：還空著兩台以上＝可選的按鈕列；只剩一台＝**純文字**
+             寫明「1 人」並講清楚原因。列本身只要選了跑步機就出現，不再因為剩幾台而消失。 */''}
+      <div id="msb-tmrow" style="display:${(s.pickVenue==='treadmill')?'flex':'none'};align-items:center;gap:8px;">
         <span style="color:var(--t2);">人數</span>
         <span id="msb-tmbtns" style="display:flex;gap:7px;">${
-          Array.from({length:Math.max(1,_tmCap-_tmUsed)},(_,i)=>i+1).map(n=>
-            `<button class="msb-vbtn${(s.pickUnits||1)===n?' on':''}" onclick="msbChooseUnits(${n})">${n} 人</button>`).join('')}</span>
-        <span style="font-size:11px;color:var(--t3);">第 2 人不扣點</span>
+          Array.from({length:_tmCap},(_,i)=>i+1).map(n=> n<=s.tmFree
+            ? `<button class="msb-vbtn${(s.pickUnits||1)===n?' on':''}" onclick="msbChooseUnits(${n})">${n} 人</button>`
+            : `<button class="msb-vbtn off" disabled title="這個時段只剩 ${s.tmFree} 台">${n} 人</button>`).join('')}</span>
+        <span style="font-size:11px;color:var(--t3);">${s.tmFree>1?'第 2 人不扣點':'另一台這個時段已被預約'}</span>
       </div>
       ${(!s.resched&&(s.family||[]).length)?(()=>{ s.famOpts=['自己'].concat(s.family); s.pickFam=0;
         return `<div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap;"><span style="color:var(--t2);">使用人</span><span id="msb-fbtns" style="display:flex;gap:7px;flex-wrap:wrap;">${s.famOpts.map((n,i)=>`<button class="msb-vbtn${i===0?' on':''}" data-fi="${i}" onclick="msbChooseFam(${i})">${n}</button>`).join('')}</span></div>`; })():''}
@@ -61373,8 +61417,10 @@ function msbChooseVenue(vid){
   const s=window._msb; if(!s) return;
   s.pickUnits=1;
   const row=document.getElementById('msb-tmrow');
-  /* 只有「跑步機」且真的還空著兩台以上才需要選台數；其他場地沒有台數的概念（2026-08-06） */
-  if(row) row.style.display = (vid==='treadmill' && (s.tmFree||0)>1) ? 'flex' : 'none';
+  /* 只有「跑步機」有台數的概念，其他場地沒有（2026-08-06）。
+     ⚠ 2026-09-16 起「剩幾台」只決定**內容**（可選的按鈕列 vs 純文字「1 人」），
+       不再決定顯不顯示 —— 只剩一台就整列消失的話，客人看不到自己約了幾台。 */
+  if(row) row.style.display = (vid==='treadmill') ? 'flex' : 'none';
   document.querySelectorAll('#msb-tmbtns .msb-vbtn').forEach(b=>
     b.classList.toggle('on', b.textContent.trim()==='1 人'));
   s.pickVenue=vid;

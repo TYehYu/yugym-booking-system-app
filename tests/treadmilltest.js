@@ -92,16 +92,46 @@ ok('　　建立成功的吐司講清楚開了幾人、第 2 人不扣點',
 console.log('\n③ 會員自己從手機約也要能選台數');
 /* 2026-08-02 使用者指示：「只要會連動上行事曆、影響其他人預約場地的地方，
    都要補上要預約幾台」—— 會員端的自主訓練訂位同樣會佔住跑步機。 */
-ok('★ 確認視窗多一列「台數」，只在選了跑步機且真的還空著兩台以上時出現',
-   /<div id="msb-tmrow" style="display:\$\{\(s\.pickVenue==='treadmill'&&s\.tmFree>1\)\?'flex':'none'\}/.test(src)
+/* 2026-09-16 使用者回報：「確認預約介面 只剩下一台跑步機的時候 沒有顯示1台2台
+   這樣會以為約了兩台」—— 原本 tmFree<=1 整列隱藏，客人看不到自己約了幾台。
+   ⚠ 但不能改回「只有一顆『1 人』的選擇列」：2026-08-06 使用者反對過那個
+     （假的選擇列，點了也沒有別的可選）。
+   ⚠ 折法：列本身只要選了跑步機就出現；「剩幾台」只決定**內容** ——
+     兩台以上＝可選的按鈕列，只剩一台＝純文字並寫明原因。 */
+ok('★ 確認視窗的「人數」列：選了跑步機就出現（不再因為只剩一台而整列消失）',
+   /<div id="msb-tmrow" style="display:\$\{\(s\.pickVenue==='treadmill'\)\?'flex':'none'\}/.test(src)
    && /\(s\.tmFree=Math\.max\(0,_tmCap-_tmUsed\), ''\)/.test(src)
    && /onclick="msbChooseUnits\(\$\{n\}\)"/.test(src));
-ok('★ 可選的台數＝該時段實際還空著的數量（不會讓人選到已被約走的）',
-   /Array\.from\(\{length:Math\.max\(1,_tmCap-_tmUsed\)\},\(_,i\)=>i\+1\)/.test(src));
-ok('★ 換場地時台數重置回 1，且只有跑步機（且還空著兩台以上）才顯示台數列',
+/* ⚠⚠ 2026-09-16 使用者糾正：「我記得有一個規則 如果選項不能選 要用暗化的然後提示 不要隱藏」
+   —— 這是 0823 就定案的做法（不能用就寫原因、別藏按鈕）。
+   我一度把「只剩一台」做成純文字，等於把「2 人」整個藏掉，正是那條規則要避免的。
+   ⚠ 沿用同一張視窗裡現成的語彙：場地按鈕的 .msb-vbtn.off + disabled + title。
+     不要再為這一列另做一套樣式。 */
+ok('★★★ 只剩一台時「2 人」暗化不可選並寫出原因（不是隱藏、也不是換成純文字）',
+   /: `<button class="msb-vbtn off" disabled title="這個時段只剩 \$\{s\.tmFree\} 台">\$\{n\} 人<\/button>`/.test(src)
+   && /另一台這個時段已被預約/.test(src));
+ok('★★ 沿用場地按鈕那套暗化語彙，沒有另做一套',
+   !/msb-tmone/.test(src.replace(/\/\*[\s\S]*?\*\//g,'')));
+/* 「跑步機的數量有辦法顯示在快速預約介面嗎」——挑時段那一頁就要看得到剩幾台。
+   ⚠⚠ 挑時段有**兩支各自畫的 UI**：msbLoadSlots（slotPanelHTML 的 tagFn）與
+     memh2SelfSlots（自己拼 cells，會員端 V2 走這支）。兩邊都要帶，只改一支客人看不到。
+   ⚠ 算不出來時退回只寫「跑步機」，不可印出「剩 undefined 台」。 */
+ok('★★★ 快速預約的時段標籤帶「剩 N 台」（兩支挑時段 UI 都要有）',
+   /return \(_n==null\)\?'跑步機':`跑步機 剩 \$\{_n\} 台`;/.test(src)
+   && /const tag=\(r\.vids\[m\]==='treadmill' && _tmn!=null\) \? `\$\{_vnm\} 剩 \$\{_tmn\} 台` : _vnm;/.test(src));
+ok('★★ 剩餘台數在探測階段一起算好，且不多送一次請求（同一支有快取的當日佔用 RPC）',
+   /const _rows=await fetchDayOccupancy\(s\.date\)\.catch\(\(\)=>\[\]\);/.test(src)
+   && /return \{free,vids,tmFree,bh:_bh\};/.test(src)
+   && /改期時不把自己那一筆算進去，否則原時段會少算一台/.test(src));
+/* 2026-09-16 改法翻面：原本「只畫還空著的那幾顆」，現在**畫滿場地容量**、
+   超過可用的那幾顆暗化不可選 —— 客人要看得出「這裡本來有 2 台，只是另一台被約走了」。
+   只畫一顆的話，看起來像系統只支援一台。 */
+ok('★ 畫滿場地容量的顆數，超過還空著的那幾顆暗化（不是不畫出來）',
+   /Array\.from\(\{length:_tmCap\},\(_,i\)=>i\+1\)\.map\(n=> n<=s\.tmFree/.test(src));
+ok('★ 換場地時台數重置回 1；只有跑步機才顯示人數列（剩幾台只決定內容，不決定顯不顯示）',
    /function msbChooseUnits\(n\)\{/.test(src)
    && /s\.pickUnits=1;\n\s*const row=document\.getElementById\('msb-tmrow'\);/.test(src)
-   && /row\.style\.display = \(vid==='treadmill' && \(s\.tmFree\|\|0\)>1\) \? 'flex' : 'none';/.test(src));
+   && /row\.style\.display = \(vid==='treadmill'\) \? 'flex' : 'none';/.test(src));
 ok('★ 台數帶給 RPC（p_units），且只有真的排到跑步機才帶',
    /p_units:Math\.max\(1,Number\(units\)\|\|1\)/.test(src)
    && /const _units=\(String\(vbk\.venue_unit\|\|''\)\.split\('_'\)\[0\]==='treadmill'\)\?\(s\.pickUnits\|\|1\):1;/.test(src));
@@ -170,11 +200,20 @@ console.log('\n④ 實跑：補開第 2 台');
     }
 
     console.log('\n⑦ 被約走一台之後，下一位選不到兩台（2026-08-03 使用者確認規則）');
-ok('★ 台數按鈕只長到「還空著的台數」（1 台被約走 → 只剩「1 台」可選）',
-   /Array\.from\(\{length:Math\.max\(1,_tmCap-_tmUsed\)\},\(_,i\)=>i\+1\)/.test(src));
-ok('★ 只剩 1 台時整列台數選擇隱藏（沒得選就不用問；切換場地後也一樣，2026-08-06）',
-   /id="msb-tmrow" style="display:\$\{\(s\.pickVenue==='treadmill'&&s\.tmFree>1\)\?'flex':'none'\}/.test(src)
-   && /row\.style\.display = \(vid==='treadmill' && \(s\.tmFree\|\|0\)>1\)/.test(src));
+/* ⚠⚠ 2026-09-16 使用者推翻 0803／0806 這兩條：
+     「如果跑步機只剩下一台的時候 1台 2台(暗化處理)」
+     「我記得有一個規則 如果選項不能選 要用暗化的然後提示 不要隱藏」
+   ——「沒得選就不用問」看似合理，但客人看不到「這裡本來有 2 台」，
+     就分不出是系統只支援一台、還是另一台剛好被約走。
+   ⚠ 這是 0823 就定案的通則（記憶 yugym-disabled-with-reason）：
+     不能用就暗化＋寫原因，不要隱藏。這裡當初做成隱藏是特例，現在收回特例。
+   ⚠ 沿用同一張視窗裡現成的語彙 .msb-vbtn.off + disabled + title（場地按鈕就在隔壁用）。 */
+ok('★★★ 畫滿場地容量的顆數，超過還空著的那幾顆暗化（不是只畫空著的）',
+   /Array\.from\(\{length:_tmCap\},\(_,i\)=>i\+1\)\.map\(n=> n<=s\.tmFree/.test(src));
+ok('★★★ 只剩 1 台時**不隱藏**整列：2 人暗化並寫出原因（切換場地後也一樣）',
+   /id="msb-tmrow" style="display:\$\{\(s\.pickVenue==='treadmill'\)\?'flex':'none'\}/.test(src)
+   && /row\.style\.display = \(vid==='treadmill'\) \? 'flex' : 'none';/.test(src)
+   && /disabled title="這個時段只剩 \$\{s\.tmFree\} 台"/.test(src));
 ok('★ 上一個時段選的 2 台不會漏到只剩 1 台的時段（pickUnits 夾回上限）',
    /s\.pickUnits=Math\.min\(s\.pickUnits\|\|1, Math\.max\(1,_tmCap-_tmUsed\)\);/.test(src));
 ok('★ 台數列不得疊寫 display（2026-08-10 使用者回報：選教室/多功能仍看到 1台2台——display:none;display:flex 後者蓋前者，初始永遠顯示）',
