@@ -8,7 +8,8 @@ const src=fs.readFileSync(process.env.HOME+'/Projects/yugym-booking-system-app/i
 let pass=0,fail=0;
 const ok=(n,c,x)=>{ if(c){pass++;console.log('  ✓ '+n);} else {fail++;console.log('  ✗ '+n+(x!==undefined?'  → '+JSON.stringify(x):''));} };
 const eq=(n,a,b)=>ok(n,JSON.stringify(a)===JSON.stringify(b),{得到:a,預期:b});
-const g=(a,b)=>{const i=src.indexOf(a); if(i<0) throw new Error('找不到 '+a); return src.slice(i, src.indexOf(b,i)+b.length);};
+/* 〔已移除〕g() —— 把某段程式碼整段挖出來實跑的 helper，只有 ④ 三大項那一區在用，
+   PR 清掉之後就沒有呼叫端了（2026-09-16）。 */
 
 console.log('① 教練只進得去自己的課');
 ok('★★★ 不是這堂的負責教練就擋下',
@@ -48,95 +49,25 @@ ok('★★★ 兩格改直向置中（原本只有 text-align，內容矮的那�
    /\.tlh-ov-cell\{[^}]*display:flex;flex-direction:column;align-items:center;justify-content:center;\}/.test(src));
 ok('★★ 原因寫在原地', /只靠 text-align\s*\n?\s*只有水平置中/.test(src));
 
-console.log('\n④ 三大項歷史紀錄');
-{
-  /* 把算法整段挖出來實跑，不只比對字串 */
-  const F=new Function(`
-    ${g('const TL_LB2KG=','return [reps*sets*kg, kg];\n}')}
-    ${g('function tlPrBetter(a,b){','比重量；完全一樣不算破紀錄\n}')}
-    ${g('function tlPrChain(logs){','  return chain;\n}')}
-    ${g('const TL_PR_LIFTS=','.filter(Boolean);\n}')}
-    return {tlPrChain,tlPrByExercise,tlPrScore,tlPrBetter,TL_PR_LIFTS};`)();
-
-  eq('★★★ 只追這三項', F.TL_PR_LIFTS, ['深蹲','硬舉','臥推']);
-
-  const L=(d,ex,reps,sets,w,u)=>({created_at:d,exercise_name:ex,reps,sets,weight:w,weight_unit:u||'kg'});
-  const logs=[
-    L('2026-07-07','槓鈴深蹲',10,3,60),
-    L('2026-07-21','槓鈴深蹲',8,3,55),      // 比較輕 → 不算破紀錄
-    L('2026-08-04','史密斯深蹲',10,3,70),   // 換動作但一樣是深蹲 → 破了
-    L('2026-08-18','槓鈴深蹲',12,3,70),     // 同重量、次數更多 → 破了
-    L('2026-08-25','槓鈴深蹲',12,3,70),     // 完全一樣 → 不算破
-    L('2026-08-11','相撲硬舉',5,5,100),
-    L('2026-09-01','上斜臥推',10,3,40),
-    L('2026-09-02','保加利亞分腿蹲',12,3,200), // 不含關鍵字 → 不入三大項
-    L('2026-09-03','徒手深蹲',20,3,null),      // 沒重量 → 不進紀錄
-  ];
-  const r=F.tlPrByExercise(logs);
-  eq('★★★ 三項各一列，沒練過的不出現', r.map(x=>x.lift), ['深蹲','硬舉','臥推']);
-  const sq=r.find(x=>x.lift==='深蹲');
-  eq('★★★ 深蹲目前紀錄＝總量最高那筆（70×12×3=2520）',
-     [sq.best.weight,sq.best.reps,sq.best.sets,sq.best.exercise_name], [70,12,3,'槓鈴深蹲']);
-  eq('★★★ 留下歷程：總量一路往上（1800 → 2100 → 2520），變低、打平的都不列',
-     sq.chain.map(l=>l.created_at), ['2026-07-07','2026-08-04','2026-08-18']);
-  ok('★★★ 換動作照樣歸戶（史密斯深蹲也算深蹲），但列出破紀錄當下的動作名',
-     sq.chain[1].exercise_name==='史密斯深蹲');
-  ok('★★★ 名稱不含關鍵字的不會混進來（保加利亞分腿蹲沒有變成深蹲紀錄）',
-     sq.best.exercise_name==='槓鈴深蹲');
-  ok('★★★ 沒填重量的不進紀錄（徒手訓練）', F.tlPrScore(L('2026-09-03','徒手深蹲',20,3,null))===null);
-
-  console.log('  —— 比較方式＝訓練總量（2026-09-09 使用者原話的那組數字）');
-  const vol=l=>F.tlPrScore(l)[0];
-  eq('★★★ 10×3×60 ＝ 1800', vol(L('d','深蹲',10,3,60)), 1800);
-  eq('★★★ 6×4×80 ＝ 1920', vol(L('d','深蹲',6,4,80)), 1920);
-  ok('★★★ 1920 > 1800 → 更新紀錄（重量比較輕也算，這正是使用者要的）',
-     F.tlPrBetter(F.tlPrScore(L('d','深蹲',6,4,80)), F.tlPrScore(L('d','深蹲',10,3,60)))===true);
-  ok('★★★ 反過來不算（1800 破不了 1920）',
-     F.tlPrBetter(F.tlPrScore(L('d','深蹲',10,3,60)), F.tlPrScore(L('d','深蹲',6,4,80)))===false);
-  ok('★★★ 不是比最大重量 —— 80kg 那筆贏，不是因為它比較重，是總量比較大',
-     vol(L('d','深蹲',1,1,200))===200
-     && F.tlPrBetter(F.tlPrScore(L('d','深蹲',1,1,200)), F.tlPrScore(L('d','深蹲',10,3,60)))===false);
-  ok('★★★ lb 先換算成公斤再乘（10×3×100lb ≈ 1361，輸給 1800）',
-     Math.round(vol(L('d','深蹲',10,3,100,'lb')))===1361
-     && F.tlPrBetter(F.tlPrScore(L('d','深蹲',10,3,100,'lb')), F.tlPrScore(L('d','深蹲',10,3,60)))===false);
-  ok('★★★ 次數／組數沒填當 1，不能當 0（當 0 總量歸零、永遠破不了紀錄）',
-     vol(L('d','深蹲',null,null,60))===60);
-  ok('★★★ 打平不算破紀錄（否則每次做一樣的都多一列）',
-     F.tlPrBetter([1800,60],[1800,60])===false);
-  ok('★★ 同總量比重量（1800 用 90kg 做 vs 60kg 做 → 重的贏）',
-     F.tlPrBetter(F.tlPrScore(L('d','深蹲',10,2,90)), F.tlPrScore(L('d','深蹲',10,3,60)))===true);
-}
-ok('★★★ 不另開資料表 —— 紀錄由 training_logs 推導，所以「自動更新」不用寫同步',
-   /沒有另開一張表：紀錄本來就是 training_logs 算得出來的/.test(src));
-/* 2026-09-11：三大項改成固定三格放在凍結區，「全部紀錄 ›」那顆鈕併進整塊（點哪裡都開全部紀錄） */
-/* 2026-09-16 使用者：「上方 深蹲硬舉臥推移除」，並確認「整塊拿掉，不再顯示」——
-   抽屜裡那一列三大項換成了課表張數頁籤（見 tests/tlprbar0911test.js）。
-   ⚠ 只拿掉畫面，底層一律保留：PR 的計算與「全部紀錄」視窗都還在，
-     日後要在別處接回入口只要一行。所以這一條改成守「底層還在、UI 已移除」。
-   ⚠ 但要知道 tlPrByExercise 全系統只剩這一個呼叫端被拔掉後沒有別的入口，
-     三大項 PR 目前在畫面上是完全看不到的。 */
-ok('★★★ 三大項 UI 已移除，但 PR 底層與「全部紀錄」視窗都還在',
-   !/<div class="tlh-prb" onclick="tlOpenPrHistory\(\)" title="全部紀錄">/.test(src)
-   && /function tlOpenPrHistory\(\)\{/.test(src)
-   && /function tlPrByExercise\(memLogs\)\{/.test(src));
-ok('★★★ 視窗列出每一項的完整歷程，最新那列標起來',
-   /function tlOpenPrHistory\(\)\{/.test(src)
-   && /r\.chain\.slice\(\)\.reverse\(\)\.map\(\(l,i\)=>`<div class="prh-row\$\{i\?'':' on'\}">/.test(src)
-   && /\.prh-row\.on\{background:#e3efe9;/.test(src));
-ok('★★ 沒紀錄時講得出「還沒有」，不是空白',
-   /還沒有深蹲／硬舉／臥推的紀錄。/.test(src));
-ok('★★★ 紀錄列要看得到總量（判準就是這個數字，不列出來看不出為什麼這筆贏）',
-   /<em class="prh-vol">\$\{tlPrVol\(l\)\}<\/em>/.test(src)
-   && /<em class="prh-vol">\$\{tlPrVol\(r\.best\)\}<\/em>/.test(src)
-   && /\.prh-vol\{/.test(src));
+/* 〔已移除〕④ 三大項歷史紀錄（2026-09-16 使用者：「三大項ＰＲ移除了」「一併清掉」）——
+   這一區原本把整套 PR 算法挖出來實跑：訓練總量（次數×組數×重量）當判準、
+   換動作照樣歸戶（史密斯深蹲也算深蹲）、lb 先換算成公斤、打平不算破紀錄、
+   次數組數沒填當 1 不當 0。
+   程式碼側一併清除：tlPrScore／tlPrBetter／tlPrChain／tlPrByExercise／tlPrVol／
+   tlPrDate／tlOpenPrHistory／TL_PR_LIFTS／TL_LB2KG，以及三組 CSS
+   （.tlh-prb-*／.tlh-pr-*／.prh-*）。
+   ⚠ 沒有動到 training_logs 的任何欄位：PR 本來就是從既有紀錄推導的，沒有自己的資料表，
+     日後要做回來只是重寫推導，一筆資料都沒少。
+   ⚠ 底下那條 body:has 的斷言不屬於這一區，已移到後面保留。 */
+/* ⚠ 下面這一條**不屬於 PR**：它釘的是 tlSetLine（那支沒有被刪），
+   守的是「數字順序一律 組數 × 次數 × 重量」這個全系統慣例。 */
 ok('★★★ 次數與組數本來就在紀錄列上（tlSetLine 就是「12 次 × 3 組 × 70kg」）',
    /* 2026-09-11 使用者：「訓練紀錄統一改成 組數x次數x重量」 */
    /\(l\.sets\?l\.sets\+' 組':null\),\(l\.reps!=null\?l\.reps\+' 次':null\)/.test(src));
-ok('★★ 會員自己命名的動作名要跳脫（tlSetLine 回 HTML，動作名不在裡面）',
-   /* 2026-09-16：抽屜那三格已移除，所以只剩「全部紀錄」視窗這一處要守。
-      那三格的名稱本來就來自固定清單 TL_PR_LIFTS（不是使用者輸入），原本也不需跳脫。 */
-   /<span class="prh-x">\$\{escH\(l\.exercise_name\|\|''\)\}<\/span>/.test(src));
-ok('★★ 這張視窗是從抽屜裡開的 —— 靠 body:has 那條規則才蓋得住抽屜',
+/* ⚠ 這一條**不屬於 PR**，所以 PR 清掉之後它要留著、繼續有人守：
+   body:has 那條規則同時服務 #tl-sheet／#tl-add-sheet／#qb-sheet／#bk-mem-sheet 四個抽屜，
+   從抽屜裡開出來的視窗（套用歷史課表、修改紀錄、套用方案…）全靠它才蓋得住抽屜。 */
+ok('★★ 從抽屜裡開的視窗靠 body:has 那條規則才蓋得住抽屜',
    /body:has\(#tl-sheet\) \.modal-bg/.test(src));
 
 console.log('\n⑤ 抽屜不要蓋住頂列（2026-09-09：「上面表頭logo要露出」）');
@@ -164,13 +95,13 @@ ok('★★★ 抽屜的空狀態改用自己的名字，不再被同名規則波
    /\.tls-empty\{text-align:center;/.test(src)
    /* 2026-09-11 簡化：空狀態縮成一行（使用者：「這個頁面可以簡化」）—— 守的仍是 class 名稱，不是文字 */
    && /\? '<div class="tls-empty">還沒有紀錄<\/div>'/.test(src));
-/* ⚠ 2026-09-16：這條規則多了 background（使用者：「課表的視窗 底色改成米色」），
-   所以不再是一字不差比對 —— 但它要守的東西沒變：**面板用的是 .tls-panel 這個名字**，
-   不是時間軸那張卡的 .tl-panel（那邊的 padding／背景／overflow-x 會整組蓋過來）。
-   ⚠ 米底改在 .tls-panel 而不是 .ms-panel：後者是 11 個視窗共用的底。 */
+/* ⚠ 2026-09-16 兩修：米底先加在 .tls-panel（課表專屬），同日使用者選 A
+   「一次全改」之後上移到 .ms-panel（11 個視窗共用的底），.tls-panel 就不再自己指定背景。
+   這一條要守的東西始終沒變：**面板用的是 .tls-panel 這個名字**，
+   不是時間軸那張卡的 .tl-panel（那邊的 padding／背景／overflow-x 會整組蓋過來）。 */
 ok('★★★ 抽屜面板也改名 —— .tl-panel 是時間軸那張卡，padding／背景／overflow-x 會整組蓋過來',
    /\.tls-panel\{[^}]*padding-bottom:16px;/.test(src)
-   && /\.tls-panel\{[^}]*background:var\(--card2\);/.test(src)
+   && /\.ms-panel\{[^}]*background:var\(--card2\);/.test(src)
    && /<div class="ms-panel tls-panel">/.test(src));
 ok('★★★ 抽屜裡不再留任何 tl-panel／tl-empty 的用法',
    !/class="ms-panel tl-panel"/.test(src)

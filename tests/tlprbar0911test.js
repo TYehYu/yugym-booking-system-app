@@ -32,10 +32,23 @@ console.log('\n③ 課表張數頁籤（2026-09-16 取代三大項那一列）')
      但要知道 tlPrByExercise 全系統只有那一個呼叫端，拿掉後 PR 在畫面上是完全看不到了。 */
 ok('★★★ 三大項那一列已從抽屜移除',
    !/const overview=`<div class="tlh-prb"/.test(S) && !/\$\{overview\}/.test(S));
-ok('★★★ 底層保留：TL_PR_LIFTS／tlPrByExercise／tlOpenPrHistory 都還在',
-   /const TL_PR_LIFTS=\['深蹲','硬舉','臥推'\];/.test(src)
-   && /function tlPrByExercise\(memLogs\)\{/.test(src)
-   && /function tlOpenPrHistory\(\)\{/.test(src));
+/* 2026-09-16 二修：使用者確認「三大項ＰＲ移除了」「一併清掉」——
+   0916 稍早是「拿掉畫面、底層保留」，這一輪連計算與歷史視窗一起清。
+   ⚠ 沒有動到 training_logs 的任何欄位：PR 本來就從既有紀錄推導，沒有自己的資料表，
+     所以日後要做回來只是重寫推導，資料一筆都沒少。 */
+/* ⚠⚠ 反面斷言（「某某已經不存在」）**一定要先剝掉註解再比對** ——
+   移除一個功能時，我們會在原地留一段「〔已移除〕…」的說明，那段說明必然會寫出
+   被移除的函式名與 class 名。直接掃整個檔案，就會命中自己寫的墓誌銘，永遠為 false。
+   2026-09-16 當天第五次踩這個坑（見 tests 裡其他幾支的同款警告）。 */
+const codeOnly=src.replace(/\/\*[\s\S]*?\*\//g,'').replace(/^\s*\/\/.*$/gm,'');
+ok('★★★ 底層也清乾淨：七支 tlPr* 與 TL_PR_LIFTS、TL_LB2KG 都不留',
+   !/TL_PR_LIFTS|TL_LB2KG/.test(codeOnly)
+   && ['tlPrScore','tlPrBetter','tlPrVol','tlPrChain','tlPrByExercise','tlPrDate','tlOpenPrHistory']
+        .every(f=>!new RegExp(f+'\\b').test(codeOnly))
+   && !/window\._tlPr\b/.test(codeOnly));
+ok('★★ 三組專屬 CSS 也收掉（.tlh-prb-*／.tlh-pr-*／.prh-*）',
+   !/\.tlh-prb/.test(codeOnly) && !/\.tlh-pr-/.test(codeOnly)
+   && !/\.prh-lift|\.prh-row|\.prh-vol|\.prh-body/.test(codeOnly));
 ok('★★★ 頁籤列：每張一顆數字鈕，末端一顆 [+]',
    /<div class="tl-sheets">\$\{Array\.from\(\{length:_sheetN\}/.test(S)
    && /onclick="tlSetSheet\(\$\{n\}\)"/.test(S)
