@@ -52,6 +52,19 @@ ok('★★★ 放開後把整份新順序寫回 sort_order（只寫有變的那�
    && /if\(!e \|\| Number\(e\.sort_order\)===k\+1\) continue;/.test(src));
 ok('★★ ✕ 不進拖移（否則按刪除會先浮起一張卡）',
    /if\(e\.target && e\.target\.closest && e\.target\.closest\('\.cxe-b'\)\) return;/.test(src));
+/* 2026-09-16 使用者回報：「我用手機拖拉常用動作卡片　卡片雖然也可以正確移動
+   但是會有選字的拖曳」—— body.cxe-dragging-on 的 user-select:none 是長按 400ms
+   成立後才加，而系統長按選字 300～500ms 就觸發，來不及。整列永久關掉才擋得住。 */
+ok('★★★ 整列永久不可選字（不能只靠拖移成立後才關，那時已經在選字了）',
+   /\.cxe-row\{[^}]*-webkit-user-select:none;user-select:none;-webkit-touch-callout:none;\}/.test(src)
+   && /el\.style\.touchAction='none'; el\.style\.webkitUserSelect='none'; el\.style\.userSelect='none';/.test(src));
+/* 2026-09-16 使用者附截圖：「卡片按鈕不是白框」——視窗底是米色，選項也用米色就沒有邊界。
+   ⚠ 選中（.active 淡綠）與「自己打一個」（.ae-add 白底虛線）兩種狀態不能被一起改掉，
+     三態要分得開。 */
+ok('★★ 工具／姿勢的選項是白底卡（米底白卡，不是米底米塊）',
+   /\.ae-opt\{background:var\(--card\);border:1px solid var\(--bd\);/.test(src)
+   && /\.ae-opt\.active\{background:#e3efe9;border-color:var\(--green\);/.test(src)
+   && /\.ae-opt\.ae-add\{background:#fff;border-style:dashed;/.test(src));
 /* 2026-09-16：訓練方案那張卡先被要求移除（沒方案時用一整屏講解，把常用動作擠掉），
    隨後使用者要「教練方便新增」，改成窄條入口 —— 標題列與「＋ 新方案」永遠在，
    方案清單只有真的有方案才列。
