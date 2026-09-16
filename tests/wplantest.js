@@ -458,8 +458,11 @@ ok('★★★ 從抽屜開出來的彈窗要蓋在抽屜上面（抽屜 9999 > �
 ok('★★★ 用 10050 不用更高 —— 挑選視窗 #adp-sheet 是 10090，那一層要能蓋在彈窗上面',
    /用 10050 不用更高：挑選視窗 #adp-sheet 是 10090/.test(src)
    && /#adp-sheet\{position:fixed;inset:0;z-index:10090;\}/.test(src));
+/* 2026-09-16：使用者要求動作名稱大一點（14.5px → 17px）。
+   ⚠ 這一條守的是「長名稱會截斷」，字級本來只是順帶被抄進正則裡 ——
+     釘著字級只會讓每次調大小都誤觸這條紅燈，所以把字級拿掉，只釘截斷那三件套。 */
 ok('★★★ 動作名稱長就截斷，不要把右邊的數字擠出去（flex 子項預設 min-width:auto）',
-   /\.tlh-ex\{font-size:14\.5px;font-weight:700;color:var\(--text\);\s*\n\s*min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;\}/.test(src)
+   /\.tlh-ex\{font-size:[\d.]+px;font-weight:700;color:var\(--text\);\s*\n\s*min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;\}/.test(src)
    && /flex 子項預設 min-width:auto，長字串不會縮/.test(src));
 /* 2026-09-16 使用者：「訓練動作名稱放左邊　右邊放組數每一組分開紀錄　如果三組就用三列」——
    右邊從單行摘要改成一組一列（直向 flex），所以這一條釘的兩件事分家了：

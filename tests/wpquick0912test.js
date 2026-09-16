@@ -101,6 +101,27 @@ ok('★★★ 整列可點（不再只有中間那塊），且拖移後的那一
    && /onclick="cxeRowTap\('\$\{e\.id\}'\)" onpointerdown="cxeLpStart\(event,'\$\{e\.id\}'\)"/.test(src)
    && /function cxeRowTap\(id\)\{\s*\n\s*if\(window\._cxeDragged\)\{ window\._cxeDragged=0; return; \}/.test(src));
 ok('★ 上課的快速清單吃同一個順序', /window\._tlQuickEx=cxeSorted\(cxeMine\(pre\)\);/.test(src));
+/* 2026-09-16 使用者：「常用動作四列分類 上肢推 上肢拉 下肢推 下肢拉 其他」，選「分類當頁籤」。
+   ⚠ 資料庫存 null＝還沒分類，讀取端一律當「其他」（cxeCatOf）——
+     不要把 '其他' 硬塞進資料庫，那會讓「刻意歸為其他」與「根本沒分過」分不出來。 */
+ok('★★★ 五個分類與 null 的處理',
+   /const CXE_CATS=\['上肢推','上肢拉','下肢推','下肢拉','其他'\];/.test(src)
+   && /const cxeCatOf=e=>\{ const c=String\(\(e&&e\.category\)\|\|''\)\.trim\(\); return CXE_CATS\.indexOf\(c\)>=0\?c:'其他'; \};/.test(src));
+ok('★★★ 頁籤只畫有動作的分類，並記住目前停在哪一類',
+   /const cats=CXE_CATS\.filter\(c=>cnt\[c\]\);/.test(src)
+   && /window\._cxeCat=cur;/.test(src)
+   && /function cxeSetCat\(c\)\{ window\._cxeCat=String\(c\|\|''\); navTo\('coach_plans'\); \}/.test(src));
+ok('★★ 頁籤沿用票券卡那組 .tkfilter／.tkf-btn／.tkf-n（不另做一套）',
+   /<div class="tkfilter" style="margin:2px 0 12px;">/.test(src)
+   && /class="tkf-btn\$\{c===cur\?' active':''\}" onclick="cxeSetCat\('\$\{c\}'\)">\$\{c\}<i class="tkf-n">\$\{cnt\[c\]\}<\/i>/.test(src));
+/* ⚠⚠ 這一條是分類做成頁籤之後最容易出事的地方：畫面上只有當前那一類，
+   若把 ids 直接寫成 sort_order 1..n，會把其他類別佔用的順序整個蓋掉。 */
+ok('★★★ 拖移排序只在「這一類原本佔據的全域位置」裡重排，不動其他類別',
+   /const slots=\[\]; mine\.forEach\(\(e,i\)=>\{ if\(set\.has\(e\.id\)\) slots\.push\(i\); \}\);/.test(src)
+   && /slots\.forEach\(\(pos,k\)=>\{ const e=mine\.find\(x=>x\.id===ids\[k\]\); if\(e\) next\[pos\]=e; \}\);/.test(src)
+   && /for\(let k=0;k<next\.length;k\+\+\)\{/.test(src));
+ok('★★ 新增時預設吃目前這一頁的分類（在下肢推那頁按新增，多半就是要加下肢推）',
+   /category:\(window\._cxeCat\|\|''\)/.test(src));
 
 console.log('\n③ 方案：從常用動作挑');
 ok('★★★ ＋新增動作改成開挑選視窗（讀 coach_exercises、照清單順序）',

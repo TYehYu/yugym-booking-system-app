@@ -118,8 +118,13 @@ ok('★ 清單還在載入時不畫空狀態（免得閃一下「還沒有常用
 console.log('\n④ 設定清單的地方（訓練方案頁）');
 ok('★★★ 訓練方案頁多一張「我的常用動作」卡', /function cxeCardHtml\(list\)\{/.test(src) && /\$\{cxeCardHtml\(quickEx\)\}/.test(src)
    && /dbGetAll\('coach_exercises'\)\.catch\(\(\)=>\[\]\)\]\);/.test(src));
-ok('★★ 存的是名稱與工具姿勢，不存數字（數字以會員上次的為準）',
-   /await dbPut\('coach_exercises',\{ id:e\.id\|\|uid\('CXE'\), coach_id:SESSION\.id, name,\s*\n\s*tool:e\.tool\|\|null, posture:e\.posture\|\|null, active:true,/.test(src)
+/* 2026-09-16：寫入多了 category（分類），所以不再一字不差比對整個物件 ——
+   守的本意沒變：存的是「這個動作是什麼」（名稱／工具／姿勢／分類），不存數字。
+   數字一律以該會員上次的紀錄為準，常用清單只是範本。 */
+ok('★★ 存的是名稱與工具姿勢分類，不存數字（數字以會員上次的為準）',
+   /await dbPut\('coach_exercises',\{ id:e\.id\|\|uid\('CXE'\), coach_id:SESSION\.id, name,/.test(src)
+   && /tool:e\.tool\|\|null, posture:e\.posture\|\|null,/.test(src)
+   && /category:e\.category\|\|null,/.test(src)
    && !/coach_exercises',\{[^}]*reps:/.test(src));
 ok('★★ 同名擋下來（清單是給人點的，重覆兩列只會挑錯）', /已經在常用清單裡了/.test(src));
 ok('★ 刪除要再問一次，並講明不影響已記錄的訓練', /function cxeDelAsk\(\)\{/.test(src) && /已經記錄的訓練不受影響/.test(src));

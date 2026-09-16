@@ -3856,7 +3856,11 @@ tr.pe-row:hover td{background:var(--sage-bg,#eef4ee);}
    baseline 會讓左邊的動作名去對齊右側**最後一列**的基線，動作名就被拉到整塊的下緣。
    flex-start 才是「動作名與第一組同一行」。 */
 .tlh-log-main{display:flex;justify-content:space-between;align-items:flex-start;gap:10px;min-width:0;}
-.tlh-ex{font-size:14.5px;font-weight:700;color:var(--text);
+/* 動作名稱放大（2026-09-16 使用者附截圖：「動作名稱可以大一點」）——
+   14.5px 只比右邊的次數／重量（13px）大 1.5px，主角看起來反而比數字輕。
+   ⚠ 放大後長名稱更容易吃到截斷，但 min-width:0＋ellipsis 已經在，
+     擠壞版面的情況不會回來（見上面 2026-09-09 那段）。 */
+.tlh-ex{font-size:17px;font-weight:700;color:var(--text);
   min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;}
 /* 一組一列（2026-09-16 使用者：「右邊放組數每一組分開紀錄　如果三組就用三列」）——
    原本是單行摘要所以 white-space:nowrap 掛在這一層；現在改成直向堆疊，
@@ -13326,8 +13330,8 @@ function tbl(s){return TABLE_ALIAS[s]||s;}
 let sb=null;
 // ── 版本號（日期+時間格式：年後兩碼+月+日.時分，例 26620.1058 = 26年6/20 10:58）──
 // 每次改版手動更新這一行即可，畫面與 title 會一起更新
-const APP_VERSION = '260916.1754';
-const APP_VERSION_LABEL = 'v260916.1754';
+const APP_VERSION = '260916.1804';
+const APP_VERSION_LABEL = 'v260916.1804';
 const CLOUD = !!(window.YUGYM_CONFIG && window.YUGYM_CONFIG.url && window.YUGYM_CONFIG.anonKey);
 if(CLOUD){ sb = supabase.createClient(window.YUGYM_CONFIG.url, window.YUGYM_CONFIG.anonKey); }
 
@@ -61948,6 +61952,13 @@ async function submitQuickSelfBook(){
    ════════════════════════════════════════════════════════════ */
 const TL_BODY_PARTS=['功能性','上肢','下肢'];
 const TL_POSTURES=['站姿','跪姿','坐姿','趴姿','躺姿'];
+/* 常用動作的分類（2026-09-16 使用者：「常用動作四列分類 上肢推 上肢拉 下肢推 下肢拉 其他」）——
+   順序就是畫面上頁籤的順序。
+   ⚠ 與 TL_BODY_PARTS（功能性／上肢／下肢）是不同的兩套：那一組是 training_logs 的「部位」，
+     沒有推／拉之分，而且 0911 之後新增動作已經不問部位了。兩者不要混用。
+   ⚠ 資料庫存 null＝還沒分類，讀取端一律當「其他」（見 cxeCatOf）。 */
+const CXE_CATS=['上肢推','上肢拉','下肢推','下肢拉','其他'];
+const cxeCatOf=e=>{ const c=String((e&&e.category)||'').trim(); return CXE_CATS.indexOf(c)>=0?c:'其他'; };
 const TL_TOOLS=['啞鈴','壺鈴','槓鈴','SSB槓鈴','四角槓','史密斯','Cable','TRX','彈力帶','徒手'];
 window._tlState=null; // 新增動作流程暫存
 
@@ -68339,6 +68350,10 @@ async function _cxeMove(id,dir){
     navTo('coach_plans');
   }catch(err){ showToast('排序失敗：'+((err&&err.message)||err)); }
 }
+/* 切換分類頁籤（2026-09-16）——只換畫面，不動資料。
+   ⚠ 用 navTo 重畫整頁（與新增／刪除／排序後的作法一致），
+     不要只抽換清單：拖移的事件是綁在列上的，半套重畫容易留下失效的監聽。 */
+function cxeSetCat(c){ window._cxeCat=String(c||''); navTo('coach_plans'); }
 /* 點一列＝編輯（2026-09-16）——拖移放開後的那一次 click 不要跟著開編輯視窗。
    ⚠ 與 wpLpStart 用 _wpDragged 同一個手法：長按成立過就設旗標，這裡吃掉一次。 */
 function cxeRowTap(id){
@@ -68353,9 +68368,17 @@ async function cxeSaveOrder(ids){
   if(!Array.isArray(ids)||!ids.length) return;
   let all=[]; try{ all=await dbGetAll('coach_exercises'); }catch(_){ showToast('讀取失敗，請再試一次'); return; }
   const mine=cxeSorted(cxeMine(all));
+  /* ⚠⚠ 分類頁籤之下，畫面上只有當前那一類 —— 直接把 ids 寫成 sort_order 1..n
+     會把其他類別佔用的順序整個蓋掉（例如上肢推 8 個變成 1..8，而下肢推原本也在 1..8）。
+     作法：只在「這一類原本佔據的那幾個全域位置」裡重排，其他類別的位置一格都不動。
+     ⚠ 沒有分類頁籤時（一次看全部）行為完全一樣：slots 就是 0..n-1。 */
+  const set=new Set(ids);
+  const slots=[]; mine.forEach((e,i)=>{ if(set.has(e.id)) slots.push(i); });
+  const next=mine.slice();
+  slots.forEach((pos,k)=>{ const e=mine.find(x=>x.id===ids[k]); if(e) next[pos]=e; });
   try{
-    for(let k=0;k<ids.length;k++){
-      const e=mine.find(x=>x.id===ids[k]);
+    for(let k=0;k<next.length;k++){
+      const e=next[k];
       if(!e || Number(e.sort_order)===k+1) continue;
       await dbPut('coach_exercises',Object.assign({},e,{sort_order:k+1,updated_at:new Date().toISOString()}));
     }
@@ -68462,13 +68485,26 @@ function cxeLpStart(e,id){
   window.addEventListener('touchcancel',up);
 }
 function cxeCardHtml(list){
-  const mine=cxeSorted(cxeMine(list));
+  const all=cxeSorted(cxeMine(list));
+  /* 分類頁籤（2026-09-16 使用者：「常用動作四列分類 上肢推 上肢拉 下肢推 下肢拉 其他
+     這個在手機端也可以一併優化」，並選「分類當頁籤（上方一列）」）——
+     ⚠ 只畫「有動作」的分類：五個頁籤若有兩個是 0，佔著位置卻點不出東西，反而礙事。
+     ⚠ 目前停在哪一類記在 window._cxeCat；那一類被清空（或第一次進來）就落回第一個有東西的。
+     ⚠ 頁籤沿用票券卡的 .tkfilter／.tkf-btn／.tkf-n —— 那組本來就是「清單分類頁籤」，
+       連旁邊的數量標都現成，不另做一套。 */
+  const cnt={}; all.forEach(e=>{ const c=cxeCatOf(e); cnt[c]=(cnt[c]||0)+1; });
+  const cats=CXE_CATS.filter(c=>cnt[c]);
+  const cur=cats.indexOf(String(window._cxeCat||''))>=0 ? String(window._cxeCat) : (cats[0]||'');
+  window._cxeCat=cur;
+  const mine=cur ? all.filter(e=>cxeCatOf(e)===cur) : all;
   return `<div class="card">
     <div class="wp-head">
       <div><div class="card-title" style="margin:0;">我的常用動作</div>
         <div class="wp-sub">上課按「＋ 新增動作」、方案挑動作，都照這個順序。<br>這位會員做過的，數字會自動帶上次的。</div></div>
       <button class="btn btn-green btn-sm" onclick="cxeEdit('')">＋ 新增</button>
     </div>
+    ${cats.length>1?`<div class="tkfilter" style="margin:2px 0 12px;">${cats.map(c=>
+      `<button type="button" class="tkf-btn${c===cur?' active':''}" onclick="cxeSetCat('${c}')">${c}<i class="tkf-n">${cnt[c]}</i></button>`).join('')}</div>`:''}
     ${/* 2026-09-16 使用者：「手機版點常用動作的卡片會進入一個視窗 但是桌機的有時候點不進去」——
          成因：整列有 cursor:pointer 卻沒有 onclick，真正可點的只有裡面那顆 .cxe-main 按鈕。
          列的內距（12px 14px）、.cxe-main 與右側之間的 gap（10px）、✕ 以外的空白全是死角，
@@ -68499,9 +68535,12 @@ function cxeCardHtml(list){
   </div>`;
 }
 async function cxeEdit(id){
-  let e={id:'',name:'',tool:'',posture:'',created_at:'',sort_order:null};
+  /* ⚠ 新增時的 category 預設吃「目前正在看的那個分類頁籤」（2026-09-16）——
+     教練在「下肢推」那一頁按新增，十之八九就是要加一個下肢推的動作。 */
+  let e={id:'',name:'',tool:'',posture:'',category:(window._cxeCat||''),created_at:'',sort_order:null};
   if(id){ try{ const r=await dbGet('coach_exercises',id);
-    if(r) e={id:r.id,name:r.name||'',tool:r.tool||'',posture:r.posture||'',created_at:r.created_at||'',
+    if(r) e={id:r.id,name:r.name||'',tool:r.tool||'',posture:r.posture||'',category:r.category||'',
+             created_at:r.created_at||'',
              sort_order:(r.sort_order==null?null:Number(r.sort_order))}; }catch(_){} }
   window._cxe=e; cxeRender();
 }
@@ -68523,6 +68562,11 @@ function cxeRender(){
     </div>
     <div class="form-row"><label>動作名稱 *</label>
       <input type="text" id="cxe-name" value="${escH(e.name)}" placeholder="例如：保加利亞分腿蹲" oninput="window._cxe.name=this.value"></div>
+    ${/* 分類放在最前面（2026-09-16）：它決定這個動作會出現在哪一個頁籤底下，
+         比工具／姿勢更關鍵，所以排在它們之前。
+         ⚠ 再點一次＝取消選擇（回到「其他」）—— 與工具姿勢同一個手勢，cxeSet 已經這樣做了。 */''}
+    <div class="ae-label">分類</div>
+    <div class="ae-grid ae-grid-3">${CXE_CATS.map(c=>`<button type="button" class="ae-opt${e.category===c?' active':''}" onclick="cxeSet('category','${c}')">${c}</button>`).join('')}</div>
     <div class="ae-label">使用工具（可不選）</div>
     <div class="ae-grid ae-grid-3">${TL_TOOLS.map(t=>`<button type="button" class="ae-opt${e.tool===t?' active':''}" onclick="cxeSet('tool','${t}')">${t}</button>`).join('')}</div>
     <div class="ae-label">使用姿勢（可不選）</div>
@@ -68551,7 +68595,11 @@ async function _cxeSave(){
   const ord=(e.sort_order!=null)?e.sort_order:(mine.reduce((m,x)=>Math.max(m,Number(x.sort_order)||0),0)+1);
   try{
     await dbPut('coach_exercises',{ id:e.id||uid('CXE'), coach_id:SESSION.id, name,
-      tool:e.tool||null, posture:e.posture||null, active:true, sort_order:ord,
+      tool:e.tool||null, posture:e.posture||null,
+      /* 沒選就存 null（＝還沒分類），讀取端當「其他」—— 不要硬塞'其他'進資料庫，
+         那會讓「教練刻意歸為其他」與「根本沒分過」變得分不出來。 */
+      category:e.category||null,
+      active:true, sort_order:ord,
       created_at:e.created_at||new Date().toISOString(), updated_at:new Date().toISOString() });
     closeModal(); showToast('已儲存'); navTo('coach_plans');
   }catch(err){ showToast('儲存失敗：'+((err&&err.message)||err)); }
