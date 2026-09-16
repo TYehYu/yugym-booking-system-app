@@ -21,17 +21,34 @@ console.log('\n② 一組一列，姿勢與工具在上方（2026-09-16 改版�
    ⚠ 級距鈕（.wpe-* 的 ±1／±5）隨「組數」欄位一起退場：現在每一組直接打數字。
      單位切換仍沿用 .wpe-unit 那組樣式。 */
 const R=fn('tleRender');
-ok('★★★ 版面順序：動作 → 姿勢 → 工具 → 逐組 → [+]',
-   (()=>{ const i=[R.indexOf('id="tle-name"'), R.indexOf("optRow('posture'"), R.indexOf("optRow('tool'"),
+/* 2026-09-16 二修（使用者：「姿勢跟工作改成一列兩個按鈕 點進去跳視窗選 不然太佔畫面了
+   然後重量單位改到上方標題組 次數 重量kg 這邊可以少一列」）——
+   姿勢 5 顆＋工具 10 顆平鋪佔掉 7 列，把逐組輸入擠出畫面；收成一列兩顆摘要鈕。
+   單位切換本來自己佔一列，搬進表頭的「重量」欄。 */
+ok('★★★ 版面順序：動作 → 姿勢/工具兩顆摘要鈕 → 逐組 → [+]',
+   (()=>{ const i=[R.indexOf('id="tle-name"'), R.indexOf("pickBtn('posture'"), R.indexOf("pickBtn('tool'"),
           R.indexOf('class="ae-sets-head"'), R.indexOf('tleAddSet()')];
       return i.every(x=>x>0) && i.every((x,k)=>k===0||x>i[k-1]); })());
+ok('★★★ 姿勢／工具收成摘要鈕，點了開挑選視窗（鈕上要顯示目前選的，沒選寫「未設定」）',
+   /class="ae-opt tle-pick" onclick="tlePick\('\$\{field\}'\)"/.test(R)
+   && /<i>\$\{E\[field\]\?escH\(E\[field\]\):'未設定'\}<\/i>/.test(R)
+   && /function tlePick\(field\)\{/.test(src));
+ok('★★★ 挑選視窗的「返回」是 tleRender（不是 closeModal —— 關掉就什麼都沒了）',
+   /<button class="btn btn-ghost" onclick="tleRender\(\)">返回<\/button>/.test(src)
+   && /function tlePick\(field\)\{\s*\n\s*tleReadSets\(\);/.test(src));
+ok('★★ 單位切換在表頭的重量欄，不再自己佔一列',
+   /<span class="ae-head-unit">重量<span class="wpe-unit">/.test(R)
+   && !/class="ae-unit-row"/.test(R));
 ok('★★★ 每一組都是輸入框（不是只有最後一組可改）',
    /id="tle-r-\$\{i\}"/.test(R) && /id="tle-w-\$\{i\}"/.test(R)
    && /sets\.map\(\(s,i\)=>`<div class="ae-set-cur">/.test(R));
+/* 2026-09-16 二修：平鋪的 optRow 退場（姿勢工具改成兩顆摘要鈕），
+   所以不再有 ae-opt${E[field]===x…} 與 ae-grid-${cols} 這兩個動態字串。
+   這一條守的本意沒變：逐組列仍用那套四欄 grid，摘要鈕仍是 .ae-opt 白底卡，不另做一套樣式。 */
 ok('★★ 沿用逐組列那套四欄 grid 與 .ae-opt 白底卡（不另做一套樣式）',
    /class="ae-sets-head"/.test(R) && /class="ae-cur-fields"/.test(R)
-   && /class="ae-opt\$\{E\[field\]===x\?' active':''\}"/.test(R)
-   && /class="ae-grid ae-grid-\$\{cols\}"/.test(R));
+   && /class="ae-opt tle-pick"/.test(R)
+   && /class="ae-grid ae-grid-2"/.test(R));
 ok('★★ 每一組可以單獨刪掉；刪到一組不剩補一組空的',
    /onclick="tleDelSet\(\$\{i\}\)"/.test(R)
    && /if\(!E\.sets\.length\) E\.sets\.push\(\{reps:'',weight:''\}\);/.test(src));

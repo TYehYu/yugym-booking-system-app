@@ -4054,6 +4054,13 @@ body.cxe-dragging-on .cxe-row{cursor:grabbing;}
 .ae-set-in{flex:1;border:none;outline:none;padding:12px 0;font-size:18px;font-family:var(--num);font-weight:700;color:var(--green);background:transparent;width:100%;min-width:0;}
 .ae-set-field span{font-size:12px;color:var(--t3);}
 /* 重量單位切換（2026-09-15）：整張表單一個單位，擺在組別列下方靠右 */
+/* 姿勢／工具的摘要鈕（2026-09-16）：左邊欄位名、右邊目前選的值。
+   ⚠ 沿用 .ae-opt 的底與圓角，只改內部排法 —— 它跟其他選項鈕是同一種東西（可點的卡）。 */
+.tle-pick{display:flex;align-items:center;justify-content:space-between;gap:8px;text-align:left;padding:12px 14px;}
+.tle-pick i{font-style:normal;font-weight:400;font-size:12px;color:var(--t3);}
+/* 表頭裡的單位切換（省掉獨立一列）：鈕縮小，跟「重量」兩個字並排 */
+.ae-head-unit{display:inline-flex;align-items:center;justify-content:center;gap:6px;}
+.ae-head-unit .wpe-u{padding:2px 7px;font-size:10.5px;}
 .ae-unit-row{display:flex;align-items:center;justify-content:flex-end;gap:10px;margin-top:10px;}
 .ae-unit-lb{font-size:12px;color:var(--t3);}
 .ae-add-set{width:100%;background:#e3efe9;border:1px solid var(--green);border-radius:10px;padding:12px;color:var(--green);font-weight:700;font-family:inherit;font-size:14px;cursor:pointer;margin-top:8px;}
@@ -13319,8 +13326,8 @@ function tbl(s){return TABLE_ALIAS[s]||s;}
 let sb=null;
 // ── 版本號（日期+時間格式：年後兩碼+月+日.時分，例 26620.1058 = 26年6/20 10:58）──
 // 每次改版手動更新這一行即可，畫面與 title 會一起更新
-const APP_VERSION = '260916.1746';
-const APP_VERSION_LABEL = 'v260916.1746';
+const APP_VERSION = '260916.1754';
+const APP_VERSION_LABEL = 'v260916.1754';
 const CLOUD = !!(window.YUGYM_CONFIG && window.YUGYM_CONFIG.url && window.YUGYM_CONFIG.anonKey);
 if(CLOUD){ sb = supabase.createClient(window.YUGYM_CONFIG.url, window.YUGYM_CONFIG.anonKey); }
 
@@ -62386,16 +62393,28 @@ function tleRender(){
   const E=window._tle; if(!E) return;
   const u=E.unit;
   const sets=(Array.isArray(E.sets)&&E.sets.length)?E.sets:[{reps:'',weight:''}];
-  const optRow=(field,list,cols)=>`<div class="ae-grid ae-grid-${cols}">${list.map(x=>
-    `<button type="button" class="ae-opt${E[field]===x?' active':''}" onclick="tleSetOpt('${field}','${x}')">${x}</button>`).join('')}</div>`;
+  /* 姿勢／工具收成一列兩顆摘要鈕（2026-09-16 使用者：「姿勢跟工作改成一列兩個按鈕
+     點進去跳視窗選 不然太佔畫面了」）——
+     原本 5＋10 顆平鋪佔掉 7 列，把真正要填的逐組輸入擠到畫面外。
+     ⚠ 挑選視窗用 .ash-eirow 那套一列一項的清單（cxeRender／lottoFixAsk 同款），
+       不用 #mpk-sheet：那一支綁 <select>＋.form-row、是為「搜尋會員」設計的，
+       姿勢工具只有 5／10 個固定選項，套上去反而彆扭。
+     ⚠ 鈕上直接顯示目前選的是什麼，沒選就寫「未設定」—— 收起來之後看不到選項，
+       更需要在鈕上講清楚現在的狀態。 */
+  const pickBtn=(field,label)=>`<button type="button" class="ae-opt tle-pick" onclick="tlePick('${field}')">
+      <span>${label}</span><i>${E[field]?escH(E[field]):'未設定'}</i></button>`;
   showModal(`<div class="ash-sheetmk"></div><div class="modal-title">修改紀錄</div>
     <div class="form-row"><label>動作 *</label>
       <input type="text" id="tle-name" value="${escH(E.name)}" autocomplete="off" oninput="tleSet('name',this.value)"></div>
-    <div class="ae-label">使用姿勢（可不選）</div>
-    ${optRow('posture',TL_POSTURES,2)}
-    <div class="ae-label">使用工具（可不選）</div>
-    ${optRow('tool',TL_TOOLS,3)}
-    <div class="ae-sets-head"><span>組</span><span>次數</span><span>重量 ${u}</span></div>
+    <div class="ae-grid ae-grid-2" style="margin:14px 0 4px;">
+      ${pickBtn('posture','姿勢')}${pickBtn('tool','工具')}
+    </div>
+    ${/* 單位切換搬進表頭的「重量」欄（使用者：「重量單位改到上方標題組 次數 重量kg
+         這邊可以少一列」）—— 原本自己佔一整列，而表頭本來就寫著「重量 kg」，
+         把切換鈕接在那個字後面最省空間，也最好懂：改的就是這一欄的單位。 */''}
+    <div class="ae-sets-head"><span>組</span><span>次數</span>
+      <span class="ae-head-unit">重量<span class="wpe-unit">${WP_UNITS.map(x=>
+        `<button type="button" class="wpe-u${u===x?' on':''}" onclick="tleUnit('${x}')">${x}</button>`).join('')}</span></span></div>
     ${sets.map((s,i)=>`<div class="ae-set-cur">
       <div class="ae-set-no">${i+1}</div>
       <div class="ae-cur-fields">
@@ -62405,10 +62424,7 @@ function tleRender(){
       <button class="ae-set-del" onclick="tleDelSet(${i})" title="刪掉這一組">✕</button>
     </div>`).join('')}
     <button class="ae-add-set" onclick="tleAddSet()">＋ 新增一組</button>
-    <div class="ae-unit-row">
-      <span class="ae-unit-lb">重量單位</span>
-      <div class="wpe-unit">${WP_UNITS.map(x=>`<button type="button" class="wpe-u${u===x?' on':''}" onclick="tleUnit('${x}')">${x}</button>`).join('')}</div>
-    </div>
+    ${/* 〔已移除〕獨立的「重量單位」那一列 —— 切換鈕已經搬到表頭的重量欄（見上方）。 */''}
     <div class="form-row" style="margin-top:6px;"><label>備註（可留空）</label>
       <input type="text" id="tle-note" value="${escH(E.note)}" autocomplete="off" oninput="tleSet('note',this.value)"></div>
     <div class="modal-foot"><button class="btn btn-ghost" onclick="closeModal()">取消</button>
@@ -62429,6 +62445,27 @@ function tleReadSets(){
 function tleUnit(u){ tleReadSets(); const E=window._tle; if(!E) return; E.unit=wpUnitOf(u); tleRender(); }
 /* 再點一次＝取消選擇（姿勢與工具本來就可以不填，與 cxeSet 同一個手勢） */
 function tleSetOpt(f,v){ tleReadSets(); const E=window._tle; if(!E) return; E[f]=(E[f]===v)?'':v; tleRender(); }
+/* 姿勢／工具的挑選視窗（2026-09-16）——
+   ⚠ 一定要先 tleReadSets：開視窗會把主視窗換掉，沒收回來的話使用者剛打的數字會不見。
+   ⚠ 「返回」是 tleRender()，不是 closeModal() —— 這張視窗是從修改紀錄裡開出來的，
+     關掉就什麼都沒了，要畫回主視窗。
+   ⚠ 再點一次目前選的那一項＝取消選擇（與 cxeSet 同一個手勢，姿勢工具本來就可不填）。 */
+function tlePick(field){
+  tleReadSets();
+  const E=window._tle; if(!E) return;
+  const isP=field==='posture';
+  const list=isP?TL_POSTURES:TL_TOOLS, cur=E[field]||'';
+  showModal(`<div class="modal-title">選擇${isP?'姿勢':'工具'}</div>
+    <div class="ash-eihead">再點一次目前選的那一項就會取消選擇（這一欄本來就可以不填）。</div>
+    ${list.map(x=>`<button type="button" class="ash-eirow ash-ei-2c${x===cur?' lot-row-cur':''}" onclick="tlePickSet('${field}','${x}')">
+      <span class="ash-eilb">${x}</span>${x===cur?'<span class="ash-eisub">目前選的</span>':''}</button>`).join('')}
+    <div class="modal-foot"><button class="btn btn-ghost" onclick="tleRender()">返回</button></div>`);
+}
+function tlePickSet(field,v){
+  const E=window._tle; if(!E) return;
+  E[field]=(E[field]===v)?'':v;
+  tleRender();
+}
 /* 新一組沿用上一組的數字（同重量做多組是最常見的情形，照 tlAddSet 的慣例） */
 function tleAddSet(){
   tleReadSets(); const E=window._tle; if(!E) return;
