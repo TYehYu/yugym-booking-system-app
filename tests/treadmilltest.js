@@ -123,6 +123,23 @@ ok('★★ 剩餘台數在探測階段一起算好，且不多送一次請求（
    /const _rows=await fetchDayOccupancy\(s\.date\)\.catch\(\(\)=>\[\]\);/.test(src)
    && /return \{free,vids,tmFree,bh:_bh\};/.test(src)
    && /改期時不把自己那一筆算進去，否則原時段會少算一台/.test(src));
+
+/* 2026-09-16 使用者：「這個確認預約的視窗 來個優化建議 讓客人清楚 日期 時間 場地」。
+   ⚠ 原本「類型／日期／時間」拆三列、和「使用票卡」一樣大，最該看的反而不突出。
+   ⚠ 大字沿用會員端課卡現成的 .mcx-when，不自創樣式（記憶：優先用既有語彙）。 */
+ok('★★★ 日期時間是大字主視覺，沿用課卡現成的 .mcx-when',
+   /<p class="mcx-when" style="margin:2px 0 12px;">\$\{memWhenText\(s\.date,t\)\}/.test(src));
+ok('★★ 原本拆成三列的「類型／日期／時間」已收進大字那一行（資訊沒少，只是不再拆散）',
+   !/<span style="color:var\(--t2\);">時間<\/span>　\$\{t\}（60 分鐘）/.test(src));
+ok('★★★ 場地是三顆等寬大按鈕，未選退到米底、選中深綠（主從分得出）',
+   /<span id="msb-vbtns" class="msb-vbig">/.test(src)
+   && /\.msb-vbig \.msb-vbtn\{flex:1;/.test(src)
+   && /\.msb-vbig \.msb-vbtn\.on\{background:var\(--green\)/.test(src));
+ok('★★ 只放大場地那一組，人數維持小膠囊（都放大就沒有主從）',
+   !/id="msb-tmbtns" class="msb-vbig"/.test(src));
+ok('★★ 單張票不再寫「剩 N 點」；多張票的下拉保留（那是區分兩張票的依據）',
+   /使用票卡<\/span>　\$\{msbNo\(cur\.id\)\}\$\{nm\(cur\)\}<\/div>/.test(src)
+   && /剩 \$\{t\.sessions_remaining\} 點/.test(src));
 /* 2026-09-16 改法翻面：原本「只畫還空著的那幾顆」，現在**畫滿場地容量**、
    超過可用的那幾顆暗化不可選 —— 客人要看得出「這裡本來有 2 台，只是另一台被約走了」。
    只畫一顆的話，看起來像系統只支援一台。 */

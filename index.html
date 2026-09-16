@@ -10899,6 +10899,18 @@ body.mc-mode .cal-body{background:var(--bg);}
   background:#fff;color:var(--t2);font-family:inherit;}
 .msb-vbtn.on{background:var(--green);border-color:var(--green);color:#fff;}
 .msb-vbtn.off{opacity:.35;cursor:not-allowed;background:var(--card2);}
+/* 確認視窗的場地：標籤一行、三顆等寬大按鈕（2026-09-16 使用者：「讓客人清楚 日期 時間 場地」）——
+   ⚠ 未選的退到米底、不是白底：白底和選中的深綠對比不夠，三顆看起來一樣重要，
+     客人分不出「現在是哪一個」。
+   ⚠ 只放大場地這一組（.msb-vbig 限定），人數那列維持原本的小膠囊 ——
+     場地是這一步要確認的，人數是附帶的，都放大就沒有主從。
+   ⚠ 兩個 class 的選擇器權重高於單獨的 .msb-vbtn，所以蓋得過上面那三條。 */
+.msb-vrow{display:flex;flex-direction:column;gap:6px;}
+.msb-vbig{display:flex;gap:8px;}
+.msb-vbig .msb-vbtn{flex:1;padding:11px 8px;font-size:14px;border-radius:11px;
+  background:var(--card2);color:var(--t2);}
+.msb-vbig .msb-vbtn.on{background:var(--green);border-color:var(--green);color:#fff;}
+.msb-vbig .msb-vbtn.off{opacity:.4;}
 /* 跑步機兩台的佔用燈號（2026-07-31 使用者指示）：灰＝可預約、綠＝已預約。
    跑步機是「一個場地兩台」，一對二的客人可能一次佔掉兩台，客人要看得出還剩幾台。 */
 /* 預約明細：場地旁邊的單位燈號開關（2026-07-31 使用者指示） */
@@ -13379,8 +13391,8 @@ function tbl(s){return TABLE_ALIAS[s]||s;}
 let sb=null;
 // ── 版本號（日期+時間格式：年後兩碼+月+日.時分，例 26620.1058 = 26年6/20 10:58）──
 // 每次改版手動更新這一行即可，畫面與 title 會一起更新
-const APP_VERSION = '260916.2221';
-const APP_VERSION_LABEL = 'v260916.2221';
+const APP_VERSION = '260916.2231';
+const APP_VERSION_LABEL = 'v260916.2231';
 const CLOUD = !!(window.YUGYM_CONFIG && window.YUGYM_CONFIG.url && window.YUGYM_CONFIG.anonKey);
 if(CLOUD){ sb = supabase.createClient(window.YUGYM_CONFIG.url, window.YUGYM_CONFIG.anonKey); }
 
@@ -60926,7 +60938,10 @@ function msbTkLine(time){
   if(!cur) return '';
   s.pickTk=cur.id;
   const nm=t=>(t.plan_name||'自主訓練點數').replace(/</g,'&lt;');
-  if(cand.length===1) return `<div><span style="color:var(--t2);">使用票卡</span>　${msbNo(cur.id)}${nm(cur)}（剩 ${cur.sessions_remaining} 點）</div>`;
+  /* 單張票不寫「剩 N 點」（2026-09-16 使用者選「票卡那列簡化」）——
+     下面那一行已經寫了「確認後將扣 1 點」，這裡再報一次餘額只是把一行擠成兩行。
+     ⚠ 多張票的下拉**保留**餘額：那裡是在做選擇，剩幾點正是區分兩張票的依據，拿掉反而難選。 */
+  if(cand.length===1) return `<div><span style="color:var(--t2);">使用票卡</span>　${msbNo(cur.id)}${nm(cur)}</div>`;
   /* 多套票卡讓會員自己選（2026-07-31 使用者定案），預設是最快到期的那一套
      —— 排序見 msbTkCand：限時段的（友善點）最先，其餘依到期日，沒有效期的排最後。 */
   return `<div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap;"><span style="color:var(--t2);">使用票卡</span>
@@ -61359,12 +61374,25 @@ async function msbPickSlot(t){
   const vbtns=opts.map(([vid,label,ok])=> ok
     ? `<button class="msb-vbtn${s.pickVenue===vid?' on':''}" data-vid="${vid}" onclick="msbChooseVenue('${vid}')">${label}</button>`
     : `<button class="msb-vbtn off" disabled title="此時段已滿">${label}</button>`).join('');
+  /* 日期時間做成大字主視覺（2026-09-16 使用者：「來個優化建議 讓客人清楚 日期 時間 場地」）——
+     原本「類型／日期／時間」拆成三列，和「使用票卡」同樣大小；但客人在這一步只想確認
+     「哪一天、幾點、在哪」，最重要的資訊反而不突出。
+     ⚠ 沿用會員端課卡現成的 .mcx-when（21px/900＋副標 span），不自創樣式。
+     ⚠ memWhenText 已經含星期與「上午／下午／晚上」，一行就講完 ——
+       所以原本那三列整組收掉，資訊沒有少，只是不再被拆散。
+     ⚠ 改期時副標改寫「原本是 …」：那是改期才需要對照的東西，約新的一點不必出現。 */
   showModal(`<div class="modal-title">${s.resched?'確認改期':'確認預約'}</div>
+    <p class="mcx-when" style="margin:2px 0 12px;">${memWhenText(s.date,t)}<span>${
+      s.resched?`原本是 ${s.resched.origDate.replace(/-/g,'/')} ${s.resched.origTime}`
+               :`${s.type==='friendly'?'友善自主訓練':'自主訓練'}・60 分鐘`}</span></p>
     <div style="background:var(--card2);border-radius:10px;padding:14px;font-size:13.5px;line-height:2;">
-      ${s.resched?`<div><span style="color:var(--t2);">原時段</span>　${s.resched.origDate.replace(/-/g,'/')}　${s.resched.origTime}</div>`:`<div><span style="color:var(--t2);">類型</span>　${s.type==='friendly'?'友善自主訓練':'自主訓練'}</div>`}
-      <div><span style="color:var(--t2);">${s.resched?'新時段':'日期'}</span>　${s.date.replace(/-/g,'/')}（週${WD[d.getDay()]}）${s.resched?'　'+t:''}</div>
-      ${s.resched?'':`<div><span style="color:var(--t2);">時間</span>　${t}（60 分鐘）</div>`}
-      <div style="display:flex;align-items:center;gap:8px;"><span style="color:var(--t2);">場地</span><span id="msb-vbtns" style="display:flex;gap:7px;">${vbtns}</span></div>
+      ${/* 場地：標籤獨立一行＋三顆等寬大按鈕（2026-09-16 使用者選的）——
+           原本是小膠囊擠在「場地」兩個字旁邊，三顆並排看起來像還停在選擇階段。
+           ⚠ 它本來就還可以改（客人在這一步能換場地），所以不是把它變成唯讀，
+             而是把「現在是哪一個」講清楚：選中深綠、未選退到米底。
+           ⚠ 只放大場地這一組；人數維持小膠囊 —— 都放大就沒有主從了。 */''}
+      <div class="msb-vrow"><span style="color:var(--t2);">場地</span>
+        <span id="msb-vbtns" class="msb-vbig">${vbtns}</span></div>
       ${/* 跑步機台數（2026-08-02 使用者指示）：一對二的客人一次會佔掉兩台，
            不先講清楚，另一台就會被別人約走。第 2 台不另外扣點。
            只有「選了跑步機」且「真的還空著兩台以上」時才出現。 */''}
