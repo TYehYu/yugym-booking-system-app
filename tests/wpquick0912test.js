@@ -111,9 +111,37 @@ ok('★★★ 頁籤只畫有動作的分類，並記住目前停在哪一類',
    /const cats=CXE_CATS\.filter\(c=>cnt\[c\]\);/.test(src)
    && /window\._cxeCat=cur;/.test(src)
    && /function cxeSetCat\(c\)\{ window\._cxeCat=String\(c\|\|''\); navTo\('coach_plans'\); \}/.test(src));
+/* 2026-09-16 使用者附截圖：手機上「上肢推」被折成三列直書。
+   ⚠ flex 子項預設會被壓縮，五顆三字中文塞不下時會被壓到最小寬度、中文逐字換行。
+   ⚠⚠ 同一個坑 2026-08-20 在票券卡踩過（acctfortunetest 釘著 .pp-sheet-* 那兩條），
+     當時只補在那個範圍內；訓練方案頁的頁籤落在範圍外又中一次。
+     所以「不折字」這條通用防線放在共用規則上，逐處補一定會再漏。 */
+ok('★★★ 按鈕本身不折字（通用防線放在 .tkf-btn，不逐處補）',
+   /\.tkf-btn\{flex:0 0 auto;white-space:nowrap;/.test(src));
+/* 使用者選了「橫向捲動」而不是換行：五顆排成一列可左右滑，永遠只佔一列高度。
+   ⚠⚠ 只套訓練方案頁（.tkf-scroll），**基礎 .tkfilter 不可以動** ——
+     票券卡共用那支而且沒出問題，改共用規則等於把範圍放大到沒被要求的地方。 */
+ok('★★★ 橫向捲動只套這一頁，沒有動到票券卡共用的 .tkfilter',
+   /\.tkfilter\.tkf-scroll\{flex-wrap:nowrap;overflow-x:auto;/.test(src)
+   && /\.tkfilter\{display:flex;gap:8px;margin-bottom:14px;\}/.test(src));
+ok('★★ 捲軸要藏起來（桌機會冒出橫軸，和圓角膠囊鈕放在一起很突兀）',
+   /\.tkfilter\.tkf-scroll\{[^}]*scrollbar-width:none;/.test(src)
+   && /\.tkfilter\.tkf-scroll::-webkit-scrollbar\{display:none;\}/.test(src));
 ok('★★ 頁籤沿用票券卡那組 .tkfilter／.tkf-btn／.tkf-n（不另做一套）',
-   /<div class="tkfilter" style="margin:2px 0 12px;">/.test(src)
+   /<div class="tkfilter tkf-scroll" style="margin:2px 0 12px;">/.test(src)
    && /class="tkf-btn\$\{c===cur\?' active':''\}" onclick="cxeSetCat\('\$\{c\}'\)">\$\{c\}<i class="tkf-n">\$\{cnt\[c\]\}<\/i>/.test(src));
+/* 2026-09-16 使用者選的三項手機優化（都在「我的常用動作」這張卡）：
+   ⚠⚠ 上面那張卡的「＋ 新方案」要維持 btn-green —— 它才是這一頁的主要動作。
+     兩顆都降級或都不降，就回到「分不出主次」的原點。 */
+ok('★★★ 常用動作的「＋ 新增」降成次要鈕，訓練方案的「＋ 新方案」仍是主要鈕',
+   /<button class="btn btn-ghost btn-sm" onclick="cxeEdit\(''\)">＋ 新增<\/button>/.test(src)
+   && /<button class="btn btn-green btn-sm" onclick="wpEdit\(''\)">＋ 新方案<\/button>/.test(src));
+ok('★★ 副標收成一行（第二句講的是課表行為，不是這一頁的操作）',
+   /<div class="wp-sub">上課按「＋ 新增動作」、方案挑動作，都照這個順序。<\/div>/.test(src));
+ok('★★ 清單列的刪除鈕改小並淡化（平常灰，滑過或按下才轉紅）',
+   /\.cxe-b\{width:26px;height:26px;/.test(src)
+   && /\.cxe-b\.cxe-del\{color:var\(--t3\);\}/.test(src)
+   && /\.cxe-b\.cxe-del:hover,\.cxe-b\.cxe-del:active\{color:var\(--danger\);/.test(src));
 /* ⚠⚠ 這一條是分類做成頁籤之後最容易出事的地方：畫面上只有當前那一類，
    若把 ids 直接寫成 sort_order 1..n，會把其他類別佔用的順序整個蓋掉。 */
 ok('★★★ 拖移排序只在「這一類原本佔據的全域位置」裡重排，不動其他類別',
@@ -124,7 +152,7 @@ ok('★★ 新增時預設吃目前這一頁的分類（在下肢推那頁按新
    /category:\(window\._cxeCat\|\|''\)/.test(src));
 
 console.log('\n③ 方案：從常用動作挑');
-ok('★★★ ＋新增動作改成開挑選視窗（讀 coach_exercises、照清單順序）',
+ok('★★★ ＋新增動作改成開挑選視窗（讀 coach_exercises，清單照教練排好的順序列出）',
    /async function wpAddItem\(\)\{[\s\S]{0,260}dbGetAll\('coach_exercises'\)[\s\S]{0,120}cxeSorted\(cxeMine\(all\)\)/.test(src));
 const AP=new Function('window','showToast','wpRender','wpNewItem',
   fnBody('wpQuickApply')+'\nreturn wpQuickApply;');
@@ -132,11 +160,42 @@ const AP=new Function('window','showToast','wpRender','wpNewItem',
   const W={_wp:{items:[]}, _wpQuick:{list:[{id:'e1',name:'深蹲',tool:'槓鈴'},{id:'e2',name:'划船'},{id:'e3',name:'棒式'}], on:['e3','e1']}};
   let painted=0;
   AP(W,()=>{},()=>{painted++;},()=>({name:'',tool:'',reps:12,sets:3,weight:'',unit:'kg',note:''}))();
-  eq('★★★ 照清單順序加入，不是勾選的先後（清單順序＝教練排好的上課順序）',
-     W._wp.items.map(x=>x.name), ['深蹲','棒式']);
-  eq('★★ 工具一起帶過去', W._wp.items[0].tool, '槓鈴');
+  /* 2026-09-16 使用者：「請按照我點的順序排序」—— 這一條整個翻面了。
+     ⚠ 先勾 e3 再勾 e1，就要得到「棒式、深蹲」；照清單順序的話會是「深蹲、棒式」。
+     ⚠ Q.on 一直都是用 push 記錄勾選先後，順序資訊本來就在；
+       原本那一行用 Q.list.filter 等於把它洗回清單順序，白白丟掉。
+     ⚠ 清單順序仍然決定「列出來的排法」，只是不再決定加入的先後。 */
+  eq('★★★ 照點選的先後加入（不是清單順序）',
+     W._wp.items.map(x=>x.name), ['棒式','深蹲']);
+  eq('★★ 工具一起帶過去（深蹲被排到第二個，它才是有工具的那一個）', W._wp.items[1].tool, '槓鈴');
   eq('★★ 加完回到方案畫面、暫存清掉', [painted, W._wpQuick], [1, null]);
 }
+{
+  const W={_wp:{items:[]}, _wpQuick:{list:[{id:'e1',name:'深蹲'}], on:['e1','zz']}};
+  AP(W,()=>{},()=>{},()=>({}))();
+  eq('★★ 勾選裡有清單上找不到的 id 就跳過（挑選期間清單被別處重整過）',
+     W._wp.items.map(x=>x.name), ['深蹲']);
+}
+/* ⚠⚠ 沒勾的那一列**不可以**回填清單位置（i+1）——兩種號碼混在同一欄會撞號。
+   實跑驗過：清單 [a,b,c,d]，倒著點 d→b→a 時畫面同時出現兩個「3」
+   （啟動推的勾選序 3、伏地挺身的清單位置 3）；取消中間那個之後還會並排兩個「2」。
+   這條反面斷言就是擋這個回頭路的。 */
+ok('★★★ 勾選了才顯示「第幾個被點到」，沒勾的留空（回填清單位置會撞號）',
+   /<span class="cxe-no\$\{Q\.on\.indexOf\(e\.id\)>=0\?' cxe-no-pick':''\}">\$\{Q\.on\.indexOf\(e\.id\)>=0\?Q\.on\.indexOf\(e\.id\)\+1:''\}<\/span>/.test(src)
+   && /\.cxe-no-pick\{color:#fff;background:var\(--green\);/.test(src));
+/* 留空但不拿掉 span：.cxe-no 的 min-width 撐住位置，勾選時文字才不會左右跳。 */
+ok('★★ .cxe-no 有 min-width 撐位（留空時不會讓整列位移）',
+   /\.cxe-no\{[^}]*min-width:16px;\}/.test(src));
+ok('★★ 文案講明是照點選順序', /照你點選的順序加進方案。/.test(src));
+/* 2026-09-16 使用者：「我每次選一個項目就會跳回頁面最上方」——
+   wpQuickTgl 走的是整張 showModal 重畫，DOM 換掉之後捲動位置歸零。
+   ⚠ 不能改成「只更新被點的那一列」：勾選序號是連動的，取消中間某一個，
+     後面每一個號碼都要往前遞補，整份清單本來就得重畫。
+   ⚠ 兩個容器都要接：清單自己會捲（.cxe-pick 有 max-height），
+     視窗本體在手機上也會捲（.modal 是 max-height:90vh;overflow-y:auto）。 */
+ok('★★★ 重畫前後把捲動位置接回去（清單與視窗本體都要）',
+   /const keep=\['\.cxe-pick','\.modal'\]\.map\(sel=>\{/.test(src)
+   && /keep\.forEach\(\(\[sel,top\]\)=>\{ const el=document\.querySelector\(sel\); if\(el\) el\.scrollTop=top; \}\);/.test(src));
 {
   const W={_wp:{items:[]}, _wpQuick:{list:[{id:'e1',name:'深蹲'}], on:[]}};
   let toast='';
