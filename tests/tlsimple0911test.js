@@ -65,7 +65,17 @@ ok('★ 空狀態一行', /'<div class="tls-empty">還沒有紀錄<\/div>'/.test
 console.log('\n④ 套用方案看得出點得下去');
 ok('★★★ 每張方案卡右邊一顆「套用 ›」', /<div class="wp-item tlpp-card" onclick="tlPlanAsk\('\$\{p\.id\}'\)">\s*\n\s*<span class="tlpp-go">套用 ›<\/span>/.test(src));
 ok('★★ 白底浮起來、按下去縮一下', /\.wp-item\.tlpp-card\{background:#fff;/.test(src) && /\.wp-item\.tlpp-card:active\{transform:scale\(\.98\);/.test(src));
-ok('★★ 只掛在挑選視窗 —— 訓練方案編輯器的 .wp-item 規則沒動', /\.wp-item\{position:relative;background:var\(--card2\);/.test(src));
+/* 2026-09-16：訓練方案編輯器的動作卡也改成白底（使用者附截圖：「動作卡片 要用白框」）——
+   視窗底是米色，卡片也米色就看不出一張張的邊界（與 .ae-opt／.ae-pre-row 同一個語彙）。
+   ⚠ 這一條守的本意**不是「顏色是什麼」**，而是「.tlpp-card 的樣式只掛在挑選視窗、
+     沒有波及編輯器」。兩者現在都白底，區別改由 tlpp-card 的透明邊框＋陰影承擔，
+     所以改釘那個差異，不要再拿背景色當識別。 */
+ok('★★ 只掛在挑選視窗 —— 編輯器的 .wp-item 有自己的實線邊框，沒被 tlpp-card 波及',
+   /\.wp-item\{position:relative;background:#fff;border:1px solid var\(--bd\);/.test(src)
+   && /\.wp-item\.tlpp-card\{background:#fff;border-color:transparent;box-shadow:/.test(src));
+ok('★★ 訓練方案編輯器的動作卡是白底（米底視窗上要看得出一張張卡）',
+   /\.wp-item\{position:relative;background:#fff;/.test(src)
+   && !/\.wp-item\{position:relative;background:var\(--card2\);/.test(src));
 
 console.log('\n'+pass+' 過 / '+fail+' 敗');
 process.exit(fail?1:0);
