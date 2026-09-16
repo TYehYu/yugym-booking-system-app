@@ -13310,8 +13310,8 @@ function tbl(s){return TABLE_ALIAS[s]||s;}
 let sb=null;
 // ── 版本號（日期+時間格式：年後兩碼+月+日.時分，例 26620.1058 = 26年6/20 10:58）──
 // 每次改版手動更新這一行即可，畫面與 title 會一起更新
-const APP_VERSION = '260916.1656';
-const APP_VERSION_LABEL = 'v260916.1656';
+const APP_VERSION = '260916.1701';
+const APP_VERSION_LABEL = 'v260916.1701';
 const CLOUD = !!(window.YUGYM_CONFIG && window.YUGYM_CONFIG.url && window.YUGYM_CONFIG.anonKey);
 if(CLOUD){ sb = supabase.createClient(window.YUGYM_CONFIG.url, window.YUGYM_CONFIG.anonKey); }
 
@@ -62348,58 +62348,90 @@ async function tlEditLog(id){
   if(!l){ showToast('找不到這筆紀錄'); return; }
   const n=tlLogNums(l)||{reps:'',sets:'',weight:'',unit:'kg'};
   if(n.sets==='' && l.sets_detail){ try{ const a=JSON.parse(l.sets_detail)||[]; if(a.length) n.sets=a.length; }catch(_){} }
-  let varied=false;
-  if(l.sets_detail){ try{ const a=JSON.parse(l.sets_detail)||[];
-    varied=a.length>1 && a.some(x=>String(x&&x.reps)!==String(a[0]&&a[0].reps)||String(x&&x.weight)!==String(a[0]&&a[0].weight)); }catch(_){} }
   const unit=wpUnitOf(n.unit);
-  window._tle={id, name:l.exercise_name||'', reps:n.reps, sets:n.sets, weight:n.weight, unit, varied,
-    note:String(l.note||'').replace(/\[[^\]]*\]/g,'').trim(),     /* 舊路徑把逐組文字塞在備註的 [ ] 裡，顯示時本來就拿掉 */
-    orig:JSON.stringify([n.reps,n.sets,n.weight,unit])};
+  /* 2026-09-16 使用者：「這邊應該要改成一列一列的　才可以單獨修改每一組的次數跟重量
+       然後站姿坐姿·工具 可以設定按鈕在上方」——
+     改成逐組編輯後，原本的 varied／orig 兩個機制都不需要了：
+     ・varied 是「原本每組不同，改了會被統一」的警語 —— 現在本來就一組一組改，不會被統一
+     ・orig 是「數字有沒有動過」的比對 —— 現在一律直接寫 sets_detail，不必判斷
+     ⚠ 用 tlSetsFromLog 展開：有逐組明細就照抄，只有「組×次×重量」的舊資料
+       會依組數展開成同樣幾組，兩種都編輯得到。
+     ⚠ posture／tool 原本沒帶進來（視窗裡也沒得改），現在要設定按鈕就得先讀進來。 */
+  window._tle={id, name:l.exercise_name||'', unit,
+    posture:l.posture||'', tool:l.tool||'',
+    sets:tlSetsFromLog(l),
+    note:String(l.note||'').replace(/\[[^\]]*\]/g,'').trim()};     /* 舊路徑把逐組文字塞在備註的 [ ] 裡，顯示時本來就拿掉 */
   tleRender();
 }
+/* 版面照使用者指定的順序（2026-09-16）：
+     第一列 動作 → 第二列 姿勢按鈕 → 第三列 工具按鈕 → 每一組各一列（次數 × 重量）→ [+] 新增一組
+   ⚠ 逐組列沿用「記錄訓練」那套四欄 grid（組｜次數｜重量｜✕），0915 才把表頭／已完成組／
+     輸入組統一成同一組欄寬，這裡直接用同一套就會對齊；.ae-cur-fields 的 display:contents
+     是讓兩個輸入框直接落進欄位，不要拿掉。
+   ⚠ 與「記錄訓練」的差別：那邊只有最後一組可編輯（前面是唯讀摘要），
+     這裡**每一組都是輸入框** —— 使用者要的就是「單獨修改每一組」。
+   ⚠ 姿勢／工具沿用 .ae-opt（已改成白底卡）與 .ae-grid-2／-3，不另做一套樣式。 */
 function tleRender(){
   const E=window._tle; if(!E) return;
   const u=E.unit;
-  const val=f=>(E[f]===''||E[f]==null)?'':E[f];
-  const stepRow=(field,label,unitTxt,steps)=>`
-    <div class="wpe-row">
-      <div class="wpe-lb">${label}</div>
-      <div class="wpe-ctl">
-        ${steps.map(s=>`<button type="button" class="wpe-b" onclick="tleStep('${field}',${-s})">−${s}</button>`).join('')}
-        <span class="wpe-v"><input type="number" inputmode="decimal" id="tle-${field}" value="${val(field)}"
-          placeholder="—" oninput="tleSet('${field}',this.value)">${unitTxt?`<i>${unitTxt}</i>`:''}</span>
-        ${steps.slice().reverse().map(s=>`<button type="button" class="wpe-b" onclick="tleStep('${field}',${s})">＋${s}</button>`).join('')}
-      </div>
-    </div>`;
+  const sets=(Array.isArray(E.sets)&&E.sets.length)?E.sets:[{reps:'',weight:''}];
+  const optRow=(field,list,cols)=>`<div class="ae-grid ae-grid-${cols}">${list.map(x=>
+    `<button type="button" class="ae-opt${E[field]===x?' active':''}" onclick="tleSetOpt('${field}','${x}')">${x}</button>`).join('')}</div>`;
   showModal(`<div class="ash-sheetmk"></div><div class="modal-title">修改紀錄</div>
     <div class="form-row"><label>動作 *</label>
       <input type="text" id="tle-name" value="${escH(E.name)}" autocomplete="off" oninput="tleSet('name',this.value)"></div>
-    ${stepRow('sets','組數','組',[1])}
-    ${stepRow('reps','次數','次',[1])}
-    <div class="wpe-row">
-      <div class="wpe-lb">重量<i class="wp-hint">可留空＝徒手</i></div>
-      <div class="wpe-unit">${WP_UNITS.map(x=>`<button type="button" class="wpe-u${u===x?' on':''}" onclick="tleUnit('${x}')">${x}</button>`).join('')}
-        <button type="button" class="wpe-clear" onclick="tleSet('weight','');tleRender();">徒手</button></div>
+    <div class="ae-label">使用姿勢（可不選）</div>
+    ${optRow('posture',TL_POSTURES,2)}
+    <div class="ae-label">使用工具（可不選）</div>
+    ${optRow('tool',TL_TOOLS,3)}
+    <div class="ae-sets-head"><span>組</span><span>次數</span><span>重量 ${u}</span></div>
+    ${sets.map((s,i)=>`<div class="ae-set-cur">
+      <div class="ae-set-no">${i+1}</div>
+      <div class="ae-cur-fields">
+        <div class="ae-set-field"><input type="number" inputmode="numeric" id="tle-r-${i}" class="ae-set-in" placeholder="次數" value="${s.reps==null?'':s.reps}"><span>次</span></div>
+        <div class="ae-set-field"><input type="number" inputmode="decimal" id="tle-w-${i}" class="ae-set-in" placeholder="留空＝徒手" value="${s.weight==null?'':s.weight}"><span>${u}</span></div>
+      </div>
+      <button class="ae-set-del" onclick="tleDelSet(${i})" title="刪掉這一組">✕</button>
+    </div>`).join('')}
+    <button class="ae-add-set" onclick="tleAddSet()">＋ 新增一組</button>
+    <div class="ae-unit-row">
+      <span class="ae-unit-lb">重量單位</span>
+      <div class="wpe-unit">${WP_UNITS.map(x=>`<button type="button" class="wpe-u${u===x?' on':''}" onclick="tleUnit('${x}')">${x}</button>`).join('')}</div>
     </div>
-    ${stepRow('weight','',u,WP_STEPS[u])}
     <div class="form-row" style="margin-top:6px;"><label>備註（可留空）</label>
       <input type="text" id="tle-note" value="${escH(E.note)}" autocomplete="off" oninput="tleSet('note',this.value)"></div>
-    ${E.varied?'<ul class="mk-pts"><li>原本每組數字不同；改了數字會變成統一的組數 × 次數 × 重量</li></ul>':''}
     <div class="modal-foot"><button class="btn btn-ghost" onclick="closeModal()">取消</button>
       <button class="btn btn-green" onclick="tleSave()">儲存</button></div>`);
 }
-function tleSet(f,v){ const E=window._tle; if(!E) return; E[f]=(f==='name'||f==='note')?v:(String(v).trim()===''?'':Number(v)); }
-function tleUnit(u){ const E=window._tle; if(!E) return; E.unit=wpUnitOf(u); tleRender(); }
-/* 與 wpStep 同一套：小數四捨五入到一位（0.5 級距才不會跑出 40.300000000000004）；
-   重量減到 0 以下＝徒手（留空）；次數／組數最少 1 */
-function tleStep(f,d){
+function tleSet(f,v){ const E=window._tle; if(!E) return; E[f]=v; }
+/* ⚠ 任何會重畫視窗的動作（切單位、加組、刪組、選姿勢工具）都要先把輸入框的值收回 state，
+   否則重繪會把使用者剛打、還沒存的數字洗掉 —— 與「記錄訓練」的 tlReadCur 同一個道理。 */
+function tleReadSets(){
   const E=window._tle; if(!E) return;
-  const cur=(E[f]===''||E[f]==null)?0:Number(E[f]);
-  let v=Math.round((cur+d)*10)/10;
-  if(f==='weight'){ if(v<=0) v=''; }
-  else { if(v<1) v=1; v=Math.round(v); }
-  E[f]=v;
-  const el=document.getElementById('tle-'+f); if(el) el.value=(v===''?'':v);
+  if(Array.isArray(E.sets)) E.sets.forEach((s,i)=>{
+    const r=document.getElementById('tle-r-'+i), w=document.getElementById('tle-w-'+i);
+    if(r) s.reps=r.value; if(w) s.weight=w.value;
+  });
+  const nm=document.getElementById('tle-name'); if(nm) E.name=nm.value;
+  const n=document.getElementById('tle-note'); if(n) E.note=n.value;
+}
+function tleUnit(u){ tleReadSets(); const E=window._tle; if(!E) return; E.unit=wpUnitOf(u); tleRender(); }
+/* 再點一次＝取消選擇（姿勢與工具本來就可以不填，與 cxeSet 同一個手勢） */
+function tleSetOpt(f,v){ tleReadSets(); const E=window._tle; if(!E) return; E[f]=(E[f]===v)?'':v; tleRender(); }
+/* 新一組沿用上一組的數字（同重量做多組是最常見的情形，照 tlAddSet 的慣例） */
+function tleAddSet(){
+  tleReadSets(); const E=window._tle; if(!E) return;
+  if(!Array.isArray(E.sets)) E.sets=[];
+  const last=E.sets[E.sets.length-1]||{reps:'',weight:''};
+  E.sets.push({reps:last.reps,weight:last.weight});
+  tleRender();
+}
+/* 刪到一組不剩就補一組空的：視窗上總得有一列可以填，不然使用者會卡在空白畫面 */
+function tleDelSet(i){
+  tleReadSets(); const E=window._tle; if(!E||!Array.isArray(E.sets)) return;
+  E.sets.splice(i,1);
+  if(!E.sets.length) E.sets.push({reps:'',weight:''});
+  tleRender();
 }
 async function tleSave(){ return onceAct('tlesave', _tleSave); }
 async function _tleSave(){
@@ -62408,14 +62440,25 @@ async function _tleSave(){
   if(!name){ showToast('請填動作名稱'); return; }
   let l=null; try{ l=await dbGet('training_logs',E.id); }catch(_){}
   if(!l){ closeModal(); showToast('找不到這筆紀錄'); return; }
-  const num=x=>(x===''||x==null||!isFinite(Number(x)))?null:Number(x);
-  const w=num(E.weight);
-  Object.assign(l,{ exercise_name:name, note:String(E.note||'').trim()||null });
-  if(JSON.stringify([E.reps,E.sets,E.weight,E.unit])!==E.orig){
-    Object.assign(l,{ reps:num(E.reps), sets:num(E.sets),
-      weight:(w!=null&&w>0)?w:null, weight_unit:(w!=null&&w>0)?wpUnitOf(E.unit):null,
-      sets_detail:null });   /* 數字改過就以這一組為準（見上方 ⚠） */
-  }
+  /* 逐組存檔（2026-09-16）：一律寫 sets_detail，不再有「數字沒動就不碰」那條分支 ——
+     視窗本來就是一組一組編輯的，存下去的就是畫面上那幾組。
+     ⚠⚠ reps／sets／weight 三個彙總欄位**一定要一起同步**：三大項 PR 是從 l.weight
+       推導的（tlLogNums），只寫 sets_detail 的話，改完紀錄 PR 會停在舊數字。
+       weight 取最重的那一組、reps 取第一組 —— 與 _tlSaveExercise 同一套規則。
+     ⚠ 沒有任何重量（徒手）就存 null，連 weight_unit 也不留 —— 徒手不該帶單位。 */
+  const valid=(E.sets||[]).filter(s=>String(s.reps==null?'':s.reps).trim()!==''||String(s.weight==null?'':s.weight).trim()!=='');
+  if(!valid.length){ showToast('請至少記錄一組的次數或重量'); return; }
+  const _su=wpUnitOf(E.unit);
+  const ws=valid.map(x=>Number(x.weight)).filter(n=>isFinite(n)&&n>0);
+  const rf=String(valid[0].reps==null?'':valid[0].reps).trim()!=='' ? parseInt(valid[0].reps,10) : null;
+  Object.assign(l,{
+    exercise_name:name,
+    posture:E.posture||null, tool:E.tool||null,
+    reps:(rf!=null&&isFinite(rf))?rf:null, sets:valid.length,
+    weight:ws.length?Math.max.apply(null,ws):null,
+    weight_unit:ws.length?_su:null,
+    sets_detail:JSON.stringify(valid.map(s=>({reps:String(s.reps==null?'':s.reps), weight:String(s.weight==null?'':s.weight)}))),
+    note:String(E.note||'').trim()||null });
   try{ await dbPut('training_logs',l); closeModal(); showToast('已修改'); renderTrainingLogSheet(); }
   catch(e){ showToast('儲存失敗：'+((e&&e.message)||e)); }
 }

@@ -14,29 +14,46 @@ ok('★★★ ✕ 擋住冒泡（刪之前不會先跳出修改視窗）', /<but
 ok('★★ 看得出點得下去：標題旁一句提示（有紀錄才畫）＋按壓回饋',
    /今日訓練紀錄\$\{logs\.length\?'<span class="tlh-hint">點一下可修改<\/span>':''\}/.test(src) && /\.tlh-log:active\{background:#e3efe9;\}/.test(src));
 
-console.log('\n② 跟訓練方案編輯器同一套（樣式與級距）');
+console.log('\n② 一組一列，姿勢與工具在上方（2026-09-16 改版）');
+/* 使用者：「這邊應該要改成一列一列的　才可以單獨修改每一組的次數跟重量　然後站姿坐姿·工具
+   可以設定按鈕在上方　所以就會是第一列動作　第二列姿勢按鈕　第三列工具按鈕
+   再來是第一組次數x重量　下面[+]可以新增另外一組」
+   ⚠ 級距鈕（.wpe-* 的 ±1／±5）隨「組數」欄位一起退場：現在每一組直接打數字。
+     單位切換仍沿用 .wpe-unit 那組樣式。 */
 const R=fn('tleRender');
-ok('★★★ 用 .wpe-* 與 WP_STEPS（kg ±1／±0.5、lb ±5 —— 0909 定案，不另寫一份）',
-   /class="wpe-row"/.test(R) && /WP_STEPS\[u\]/.test(R) && /WP_UNITS\.map/.test(R));
-ok('★★ 名稱、次數、組數、重量、單位、備註都能改', ['tle-name','tle-${field}','tle-note','tleUnit'].every(k=>R.indexOf(k)>=0)
-   && /stepRow\('reps'/.test(R) && /stepRow\('sets'/.test(R) && /stepRow\('weight'/.test(R));
-{
-  const W={_tle:{reps:10,sets:3,weight:40.2,unit:'kg'}};
-  const step=new Function('window','document', fn('tleStep')+'return tleStep;')(W,{getElementById:()=>null});
-  step('weight',0.1); eq('★★ 小數四捨五入到一位（不會跑出 40.300000000000004）', W._tle.weight, 40.3);
-  W._tle.weight=0.5; step('weight',-0.5); eq('★★ 重量減到 0 以下＝徒手（留空）', W._tle.weight, '');
-  W._tle.reps=1; step('reps',-1); eq('★★ 次數最少 1', W._tle.reps, 1);
-  step('sets',1); eq('　　組數 +1', W._tle.sets, 4);
-}
+ok('★★★ 版面順序：動作 → 姿勢 → 工具 → 逐組 → [+]',
+   (()=>{ const i=[R.indexOf('id="tle-name"'), R.indexOf("optRow('posture'"), R.indexOf("optRow('tool'"),
+          R.indexOf('class="ae-sets-head"'), R.indexOf('tleAddSet()')];
+      return i.every(x=>x>0) && i.every((x,k)=>k===0||x>i[k-1]); })());
+ok('★★★ 每一組都是輸入框（不是只有最後一組可改）',
+   /id="tle-r-\$\{i\}"/.test(R) && /id="tle-w-\$\{i\}"/.test(R)
+   && /sets\.map\(\(s,i\)=>`<div class="ae-set-cur">/.test(R));
+ok('★★ 沿用逐組列那套四欄 grid 與 .ae-opt 白底卡（不另做一套樣式）',
+   /class="ae-sets-head"/.test(R) && /class="ae-cur-fields"/.test(R)
+   && /class="ae-opt\$\{E\[field\]===x\?' active':''\}"/.test(R)
+   && /class="ae-grid ae-grid-\$\{cols\}"/.test(R));
+ok('★★ 每一組可以單獨刪掉；刪到一組不剩補一組空的',
+   /onclick="tleDelSet\(\$\{i\}\)"/.test(R)
+   && /if\(!E\.sets\.length\) E\.sets\.push\(\{reps:'',weight:''\}\);/.test(src));
+ok('★★★ 重畫前一定先把輸入框收回 state（否則剛打的數字會被洗掉）',
+   /function tleReadSets\(\)\{/.test(src)
+   && ['tleUnit','tleSetOpt','tleAddSet','tleDelSet'].every(f=>new RegExp('function '+f+'\\([^)]*\\)\\{\\s*\\n?\\s*tleReadSets\\(\\);').test(src)));
 
 console.log('\n③ 存檔');
 const S=fn('_tleSave');
-ok('★★★ 數字沒動 → 逐組明細原封不動；動了才改成統一的次數×組數×重量',
-   /if\(JSON\.stringify\(\[E\.reps,E\.sets,E\.weight,E\.unit\]\)!==E\.orig\)\{/.test(S) && /sets_detail:null/.test(S));
-ok('★★ 重量留空存 null（0 會被讀成空槓，0909 規則）', /weight:\(w!=null&&w>0\)\?w:null/.test(S));
+ok('★★★ 一律寫 sets_detail（不再有「數字沒動就不碰」那條分支）',
+   /sets_detail:JSON\.stringify\(valid\.map\(s=>\(\{reps:String/.test(S)
+   && !/sets_detail:null/.test(S));
+ok('★★★⚠ 彙總欄位要跟著同步 —— 三大項 PR 是從 l.weight 推導的，只寫逐組明細會讓 PR 停在舊數字',
+   /weight:ws\.length\?Math\.max\.apply\(null,ws\):null,/.test(S)
+   && /sets:valid\.length,/.test(S)
+   && /reps:\(rf!=null&&isFinite\(rf\)\)\?rf:null,/.test(S));
+ok('★★ 徒手（沒有任何重量）存 null，連單位也不留', /weight_unit:ws\.length\?_su:null,/.test(S));
+ok('★★ 姿勢與工具也要存回去（原本視窗裡根本沒得改）',
+   /posture:E\.posture\|\|null, tool:E\.tool\|\|null,/.test(S));
+ok('★★ 一組都沒填就擋下', /if\(!valid\.length\)\{ showToast\('請至少記錄一組的次數或重量'\); return; \}/.test(S));
 ok('★★ 名稱必填', /if\(!name\)\{ showToast\('請填動作名稱'\); return; \}/.test(S));
 ok('★★ 防連點', /async function tleSave\(\)\{ return onceAct\('tlesave', _tleSave\); \}/.test(src));
-ok('★ 逐組本來就不一樣的，視窗上先講一句', /原本每組數字不同；改了數字會變成統一的組數 × 次數 × 重量/.test(R));
 
 console.log('\n'+pass+' 過 / '+fail+' 敗');
 process.exit(fail?1:0);
