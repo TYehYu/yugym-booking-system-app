@@ -94,8 +94,16 @@ function mkWorld(){
                querySelector:()=>null },
   };
   /* 真的那四支 */
+  /* ⚠⚠ grpFollowAsk 的依賴清單 —— 2026-09-17 多了兩支：
+     它現在會呼叫 gfDaysHtml（畫「這位實際會約到的那幾堂」），而 gfDaysHtml 又呼叫 gfPickDates。
+     grab 只抽出「那一支」，**不會**跟著把它呼叫的東西帶進來，
+     所以每次 grpFollowAsk 裡多呼叫一個函式，這個陣列就要同步加。
+     ⚠ 漏掉的症狀不只是 ReferenceError：沙盒會炸在半路、流程繼續往下走，
+       讓後面的斷言得到莫名其妙的結果（0917 那次「這時候什麼都還沒寫」卻得到 ["M"]）。
+       看到那種「數字對不上」的紅，先確認是不是有東西沒餵進沙盒。 */
   const code=[grab('_saveGroupMembers'),grab('saveGroupMembers'),grab('grpFollowPre'),
               grab('grpFollowOnce'),grab('grpFollowAsk'),grab('grpFollowBack'),
+              grab('gfPickDates'),grab('gfDaysHtml'),
               grab('_grpFollowRun'),grab('grpFollowRun')].join('\n');
   const api=new Function(...Object.keys(env),
     code+'\nreturn {saveGroupMembers,grpFollowOnce,grpFollowBack,grpFollowRun,_grpFollowRun};')(...Object.values(env));

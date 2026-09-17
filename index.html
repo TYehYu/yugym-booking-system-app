@@ -3279,6 +3279,11 @@ body.mc-mode #tl-sheet,body.mc-mode #tl-add-sheet{top:60px;}
 .gfa-left{font-size:11.5px;color:var(--green);margin-left:auto;flex:none;}
 /* 兩條常駐說明收成一行灰字（條件式的那兩條仍留在 .mk-pts 條列） */
 .gfa-auto{font-size:11.5px;color:var(--t3);line-height:1.8;margin:10px 0 0;}
+/* 日期前面的編號（2026-09-17 使用者：「就出現 11 個日期(帶編號)」）——
+   ⚠ 用 <b> 不用 <i>：.gfa-day i 已經被「本堂」那個標記佔走了（它是 margin-left 靠右），
+     編號在左邊，兩者的位置相反，共用會打架。 */
+.gfa-no{font-weight:800;color:var(--t3);margin-right:6px;font-size:10.5px;font-variant-numeric:tabular-nums;}
+.gfa-none{font-size:12px;color:var(--t3);padding:2px 0 8px;}
 /* 兩種展延的標籤（2026-08-30 使用者指示：方案下方新增「教練展延」與「展延（不退費）」）——
    顏色語彙不同是因為後果不同：教練展延不影響退費（綠＝一般提示），
    櫃檯展延之後這張票不能退（金＝可以做但要知道）。 */
@@ -13475,8 +13480,8 @@ function tbl(s){return TABLE_ALIAS[s]||s;}
 let sb=null;
 // ── 版本號（日期+時間格式：年後兩碼+月+日.時分，例 26620.1058 = 26年6/20 10:58）──
 // 每次改版手動更新這一行即可，畫面與 title 會一起更新
-const APP_VERSION = '260917.1019';
-const APP_VERSION_LABEL = 'v260917.1019';
+const APP_VERSION = '260917.1035';
+const APP_VERSION_LABEL = 'v260917.1035';
 const CLOUD = !!(window.YUGYM_CONFIG && window.YUGYM_CONFIG.url && window.YUGYM_CONFIG.anonKey);
 if(CLOUD){ sb = supabase.createClient(window.YUGYM_CONFIG.url, window.YUGYM_CONFIG.anonKey); }
 
@@ -38966,6 +38971,63 @@ async function _grpTimeRun(){
       }).join('')+'</div>'
     +'<div class="modal-foot"><button class="btn btn-ghost" onclick="closeModal();navTo(CUR_PAGE)">知道了</button></div>');
 }
+/* 這位會員實際會約到哪幾堂（2026-09-17 使用者：「可以顯示該會員會預約的時間就好，
+   例如這個客人是 11 張票 所以就出現 11 個日期(帶編號)」）——
+   ⚠⚠ **不可以直接把清單截成前 N 筆**：真正跑的時候會「滿員或已足額就跳過、往後遞補」，
+     所以第 11 堂未必落在第 11 個日期。截前 N 筆會顯示一組不會發生的日期，
+     而每個日期看起來都很合理，錯了幾乎不可能被發現。
+   ⚠⚠ 判準與 _grpFollowRun 逐條對應（先算 need、再看 room）——
+     **那邊改了這裡要一起改**，否則畫面講的和實際做的會分岔。
+   ⚠ has 要用「這次指定的那張票／那位使用人」去數，不能用會員數
+     （0829 許佳慈案例：姊姊的名額被本人的算掉，整串被跳過）。
+   ⚠ 這裡不讀 DB：later 是開視窗時就取好的完整 booking 物件，欄位都在。 */
+function gfPickDates(mid, want){
+  const p=window._gfPend; if(!p) return [];
+  const later=p.later||[], tkAll=p.tkAll||[];
+  const seats=Math.max(1,(p.seats||{})[mid]||1);
+  const _wf=(p.fam||{})[mid], _wtk=(p.tk||{})[mid];
+  const out=[]; let done=0;
+  for(const x of later){
+    if(done>=want) break;
+    const cur=(typeof mids==='function')?mids(x):[];
+    const _stk=(x.seat_tickets&&typeof x.seat_tickets==='object')?x.seat_tickets:{};
+    const _mine=cur.filter(m=>String(m)===String(mid)).length;
+    let has=_mine;
+    if(_wtk || (_wf!==undefined && _wf!==null)){
+      has=0;
+      for(let k=0;k<_mine;k++){
+        const _k=(k>0)?(mid+'#'+(k+1)):mid;
+        const _tid=_stk[_k]; if(!_tid) continue;
+        if(_wtk){ if(String(_tid)===String(_wtk)) has++; }
+        else { const _t=tkAll.find(t=>String(t.id)===String(_tid));
+               if(_t && String(_t.family_user||'')===String(_wf)) has++; }
+      }
+    }
+    if(seats-has<=0) continue;                                   // 已經足額 → 跳過
+    const room=Math.max(1,Number(x.max_heads)||5)
+      -(cur.length-((typeof grpLeaveSeats==='function')?grpLeaveSeats(x):0));
+    if(room<=0) continue;                                        // 滿員 → 跳過往後遞補
+    out.push(x); done++;
+  }
+  return out;
+}
+/* 日期清單的 HTML（帶編號）—— 編號是「這位會員的第幾堂」，不是場次序號。 */
+function gfDaysHtml(mid, n){
+  const WD=['日','一','二','三','四','五','六'];
+  const list=gfPickDates(mid, Math.max(0,Number(n)||0));
+  if(!list.length) return '<div class="gfa-none">這個堂數不會約到任何場次。</div>';
+  return `<div class="gfa-days">${list.map((x,i)=>`<span class="gfa-day"><b class="gfa-no">${i+1}</b>${
+    String(x.date).slice(5).replace('-','/')}（${WD[(parseYmd(x.date)||new Date()).getDay()]}）${
+    String(x.start_time||'').slice(0,5)}</span>`).join('')}</div>`;
+}
+/* 改「要約幾堂」就重畫日期（2026-09-17 使用者選「要即時連動」）——
+   不連動的話，改完數字那份清單就是錯的，而它看起來仍然很合理。
+   ⚠ 只有單一會員時才有這個區塊（使用者定案）；多人時 box 不存在，直接 return。 */
+function gfSyncDays(){
+  const box=document.getElementById('gfa-days-box'); if(!box) return;
+  const p=window._gfPend; if(!p||!p.soloMid) return;
+  box.innerHTML=gfDaysHtml(p.soloMid, (document.getElementById('gf-n-0')||{}).value);
+}
 async function grpFollowAsk(id, addedIds, addedCnt, addedFam, pending, addedTk){
   const b=await dbGet('bookings',id);
   /* 加人時採寬鬆判準（2026-09-16 使用者定案）——櫃檯單獨補開、但落在同一個
@@ -39021,8 +39083,14 @@ async function grpFollowAsk(id, addedIds, addedCnt, addedFam, pending, addedTk){
     const def=Math.min(seats>1?Math.floor(left/seats):left, cap);
     return {mid, left, def, cap, seats, plan:(_oneTk&&_oneTk.plan_name)||''};
   });
+  /* ⚠ later（完整 booking 物件）與 tkAll 也要留著：gfPickDates 要靠它們算出
+       「這位實際會約到哪幾堂」，而且改數字時要能就地重算、不再讀一次 DB。
+     ⚠ 存的是參考不是複本（兩者本來就在記憶體裡），沒有額外的複製成本。
+     ⚠ soloMid：只有單一會員時才畫日期清單（2026-09-17 使用者定案）——
+       多人時每人堂數不同，列出一份清單會讓人以為那些日期對每個人都成立。 */
   window._gfPend={id, laterIds:later.map(x=>x.id), seats:Object.fromEntries(rows.map(r=>[r.mid,r.seats])),
-    fam:Object.assign({}, addedFam||{}), tk:Object.assign({}, addedTk||{}), pending:!!pending};
+    fam:Object.assign({}, addedFam||{}), tk:Object.assign({}, addedTk||{}), pending:!!pending,
+    later, tkAll:allTk, soloMid:(rows.length===1?rows[0].mid:null)};
   const WD=['日','一','二','三','四','五','六'];
   const dowLbl=WD[(parseYmd(b.date)||new Date()).getDay()];
   /* 標題與副標不重複（2026-09-16 使用者：「太多文字 內容雜亂」）——
@@ -39041,16 +39109,23 @@ async function grpFollowAsk(id, addedIds, addedCnt, addedFam, pending, addedTk){
          才知道會排到哪裡。整串轉正那張視窗 0804 就是這樣列的，同一套。
        ⚠ 2026-09-16 改成「前 3 堂常駐、其餘收進 details」：13 顆膠囊佔掉近半個視窗，
          把真正要決定的「約幾堂」擠到畫面外。日期沒有不見，要核對的人點得開。 */''}
-    <div class="gfa-days">${pending?`<span class="gfa-day gfa-day-now">${
+    ${pending?`<div class="gfa-days"><span class="gfa-day gfa-day-now">${
         String(b.date).slice(5).replace('-','/')}（${WD[(parseYmd(b.date)||new Date()).getDay()]}）${
-        String(b.start_time||'').slice(0,5)}<i>本堂</i></span>`:''}${
-      later.slice(0,3).map(x=>`<span class="gfa-day">${String(x.date).slice(5).replace('-','/')}（${
-        WD[(parseYmd(x.date)||new Date()).getDay()]}）${String(x.start_time||'').slice(0,5)}</span>`).join('')}</div>
-    ${later.length>3?`<details class="gfa-more"><summary>還有 ${later.length-3} 堂，點開核對</summary>
-      <div class="gfa-days" style="margin-top:8px;">${
-        later.slice(3).map(x=>`<span class="gfa-day">${String(x.date).slice(5).replace('-','/')}（${
-          WD[(parseYmd(x.date)||new Date()).getDay()]}）${String(x.start_time||'').slice(0,5)}</span>`).join('')}</div>
-    </details>`:''}
+        String(b.start_time||'').slice(0,5)}<i>本堂</i></span></div>`:''}
+    ${/* 單一會員：只列「這位實際會約到的那幾堂」，帶編號，且跟著堂數即時變
+         （2026-09-17 使用者：「可以顯示該會員會預約的時間就好…就出現 11 個日期(帶編號)」）。
+         多位會員：維持整串場次的列法（前 3 堂＋點開核對）——每人堂數不同，
+         列一份清單會讓人以為那些日期對每個人都成立。 */''}
+    ${rows.length===1
+      ? `<div id="gfa-days-box">${gfDaysHtml(rows[0].mid, rows[0].def)}</div>`
+      : `<div class="gfa-days">${
+          later.slice(0,3).map(x=>`<span class="gfa-day">${String(x.date).slice(5).replace('-','/')}（${
+            WD[(parseYmd(x.date)||new Date()).getDay()]}）${String(x.start_time||'').slice(0,5)}</span>`).join('')}</div>
+        ${later.length>3?`<details class="gfa-more"><summary>還有 ${later.length-3} 堂，點開核對</summary>
+          <div class="gfa-days" style="margin-top:8px;">${
+            later.slice(3).map(x=>`<span class="gfa-day">${String(x.date).slice(5).replace('-','/')}（${
+              WD[(parseYmd(x.date)||new Date()).getDay()]}）${String(x.start_time||'').slice(0,5)}</span>`).join('')}</div>
+        </details>`:''}`}
     ${/* 會員那一列重排（2026-09-16 使用者：「內容雜亂」）——
          原本名字、方案、剩幾堂、輸入框、/N 堂 五樣擠成一行，
          「剩 11 堂」被推到行首、離輸入框很遠，看不出它正是在解釋那個數字最多能填多少。
@@ -39059,7 +39134,7 @@ async function grpFollowAsk(id, addedIds, addedCnt, addedFam, pending, addedTk){
     ${rows.map((r,i)=>`<div class="gfa-row">
       <div class="gfa-who">${nameOf(r.mid)}${((addedFam||{})[r.mid])?`<span style="font-weight:700;color:var(--t2);">（${escH((addedFam||{})[r.mid])}）</span>`:''}${r.seats>1?`<span class="tag" style="font-size:10.5px;margin-left:6px;">每堂 ${r.seats} 個名額</span>`:''}${r.plan?`<span class="gfa-plan">${escH(r.plan)}</span>`:''}</div>
       <div class="gfa-pick">
-        <input type="number" id="gf-n-${i}" value="${r.def}" min="0" max="${r.cap}">
+        <input type="number" id="gf-n-${i}" value="${r.def}" min="0" max="${r.cap}" oninput="gfSyncDays()">
         <span class="gfa-cap">／ ${r.cap} 堂</span>
         <span class="gfa-left">票剩 ${r.left} 堂</span>
       </div>

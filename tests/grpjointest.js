@@ -215,11 +215,59 @@ console.log('① 同系列後續場次的判斷（grpSeriesOf 實跑）');
          ⚠ 日期**不是拿掉**：0829 使用者要求「要顯示預約的日期跟時間」，櫃檯要核對排到哪裡。
            改成前 3 堂常駐、其餘收進 <details>，要核對的人點得開。
          ⚠ 原本超過 12 筆才寫「還有 N 堂」，那條 .gfa-day-more 的路現在由 details 取代。 */
-      ok('★★ 日期前 3 堂常駐，其餘收進可展開的 details（不是不顯示）',
+      ok('★★ 多人時：日期前 3 堂常駐，其餘收進可展開的 details（不是不顯示）',
          /<div class="gfa-days">/.test(src)
          && /later\.slice\(0,3\)\.map\(x=>`<span class="gfa-day">/.test(src)
          && /<details class="gfa-more"><summary>還有 \$\{later\.length-3\} 堂，點開核對<\/summary>/.test(src)
          && /later\.slice\(3\)\.map\(x=>`<span class="gfa-day">/.test(src));
+
+      /* ══ 單人時只列「這位實際會約到的那幾堂」（2026-09-17）══════════════════
+         使用者：「可以顯示該會員會預約的時間就好 例如這個客人是11張票
+                   所以就出現11個日期(帶編號)」
+         ⚠⚠ **不可以把清單截成前 N 筆**：真正跑的時候會「滿員或已足額就跳過、往後遞補」，
+           第 11 堂未必落在第 11 個日期。截前 N 筆會顯示一組不會發生的日期，
+           而每個日期看起來都很合理 —— 這種錯幾乎不可能被發現，所以下面用實跑驗證。
+         ⚠⚠ gfPickDates 的判準必須與 _grpFollowRun 逐條對應（先算 need、再看 room），
+           那邊改了這裡要一起改，否則畫面講的和實際做的會分岔。 */
+      {
+        const B=(id,date,ids,max,att)=>({id,date,start_time:'11:00',member_ids:ids||[],
+          max_heads:max||5,attendance:att||{},seat_tickets:{}});
+        const later2=[
+          B('w1','2026-09-26',['M']),                                  // 已足額 → 跳過
+          B('w2','2026-10-03',['A','B','C','D','E']),                  // 滿員 → 跳過
+          B('w3','2026-10-10',[]),
+          B('w4','2026-10-17',[]),
+          B('w5','2026-10-24',['A','B','C','D','E'],5,{A:'leave'}),    // 一人請假 → 空出一位
+        ];
+        const W={_gfPend:{later:later2, tkAll:[], seats:{M:1}, fam:{}, tk:{}, soloMid:'M'}};
+        const pick=new Function('window','mids','grpLeaveSeats',
+          grabFn('gfPickDates')+'\nreturn gfPickDates;')(W,
+            b=>Array.isArray(b&&b.member_ids)?b.member_ids:[],
+            b=>Object.values((b&&b.attendance)||{}).filter(v=>v==='leave').length);
+        eq('★★★ 跳過「已足額」與「滿員」，往後遞補', pick('M',2).map(x=>x.id), ['w3','w4']);
+        eq('★★★ 要 3 堂 → 請假空出位子的那一堂也算得進來', pick('M',3).map(x=>x.id), ['w3','w4','w5']);
+        eq('★★ 要 1 堂就只給 1 堂', pick('M',1).map(x=>x.id), ['w3']);
+        eq('★★ 要 0 堂 → 空的（不是整串）', pick('M',0).map(x=>x.id), []);
+        eq('★★ 想要的比可約的多 → 有幾堂給幾堂，不會憑空生出日期',
+           pick('M',99).map(x=>x.id), ['w3','w4','w5']);
+        /* 反面對照：這就是「偷懶截前 N 筆」會顯示出來的東西 —— 兩堂都不會約到 */
+        eq('★★★ 反面對照：截前 2 筆得到的是完全不同、而且錯誤的兩堂',
+           later2.slice(0,2).map(x=>x.id), ['w1','w2']);
+      }
+      ok('★★★ 單人走 gfDaysHtml；多人維持整串場次的列法（每人堂數不同，一份清單會誤導）',
+         /rows\.length===1\s*\n\s*\? `<div id="gfa-days-box">\$\{gfDaysHtml\(rows\[0\]\.mid, rows\[0\]\.def\)\}<\/div>`/.test(src));
+      ok('★★★ 改堂數就即時重畫日期（不連動的話那份清單會是錯的，而且看起來很合理）',
+         /oninput="gfSyncDays\(\)"/.test(src)
+         && /function gfSyncDays\(\)\{/.test(src)
+         && /box\.innerHTML=gfDaysHtml\(p\.soloMid, \(document\.getElementById\('gf-n-0'\)\|\|\{\}\)\.value\);/.test(src));
+      ok('★★ 日期帶編號，用 <b> 不用 <i>（.gfa-day i 已被「本堂」那個標記佔走，位置相反）',
+         /<b class="gfa-no">\$\{i\+1\}<\/b>/.test(src)
+         && /\.gfa-no\{font-weight:800;/.test(src));
+      ok('★★★ 原地標明「兩邊的判準要一起改」（這份模擬與 _grpFollowRun 分岔就會騙人）',
+         /判準與 _grpFollowRun 逐條對應/.test(src)
+         && /那邊改了這裡要一起改/.test(src));
+      ok('★★ later 與 tkAll 留在 _gfPend（改數字要能就地重算，不再讀一次 DB）',
+         /later, tkAll:allTk, soloMid:\(rows\.length===1\?rows\[0\]\.mid:null\)\}/.test(src));
       /* ⚠⚠ 反面斷言的範圍要限縮到這一支函式，不可以掃全檔 ——
          「後面還有 <b>${later.length}</b> 堂」在**另一張視窗**（改時間那支，36950 附近）
          合法地存在著，掃全檔永遠是紅的。
