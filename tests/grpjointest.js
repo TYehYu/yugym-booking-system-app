@@ -260,14 +260,55 @@ console.log('① 同系列後續場次的判斷（grpSeriesOf 實跑）');
          /oninput="gfSyncDays\(\)"/.test(src)
          && /function gfSyncDays\(\)\{/.test(src)
          && /box\.innerHTML=gfDaysHtml\(p\.soloMid, \(document\.getElementById\('gf-n-0'\)\|\|\{\}\)\.value\);/.test(src));
+      /* 2026-09-17 二改：編號改由 cell() 產生（本堂要當第 1 堂），所以不再是 ${i+1}。
+         ⚠ 這一條守的本意沒變：編號用 <b> 不用 <i> —— .gfa-day i 已被「本堂」那個
+           標記佔走（它是 margin-left 靠右），編號在左邊，共用會打架。
+         ⚠ 別再把序號的算式抄進正則：它會隨排法改動，釘住它等於每次調版面都誤觸。 */
       ok('★★ 日期帶編號，用 <b> 不用 <i>（.gfa-day i 已被「本堂」那個標記佔走，位置相反）',
-         /<b class="gfa-no">\$\{i\+1\}<\/b>/.test(src)
+         /<b class="gfa-no">\$\{no\}<\/b>/.test(src)
          && /\.gfa-no\{font-weight:800;/.test(src));
       ok('★★★ 原地標明「兩邊的判準要一起改」（這份模擬與 _grpFollowRun 分岔就會騙人）',
          /判準與 _grpFollowRun 逐條對應/.test(src)
          && /那邊改了這裡要一起改/.test(src));
       ok('★★ later 與 tkAll 留在 _gfPend（改數字要能就地重算，不再讀一次 DB）',
-         /later, tkAll:allTk, soloMid:\(rows\.length===1\?rows\[0\]\.mid:null\)\}/.test(src));
+         /later, tkAll:allTk, soloMid:\(rows\.length===1\?rows\[0\]\.mid:null\),/.test(src));
+
+      /* ══ 本堂也會吃票（2026-09-17 使用者回報）══════════════════════════════
+         「這個會員只有 11 張票 但加本堂卻是 12」「卻有 12 個日期」「所以本堂就要給編號1」
+         ⚠⚠ pending＝本堂還沒建立，按下去時 _saveGroupMembers 會先建本堂並扣 seats 堂，
+           **然後**才跑後續。原本 def 只看票餘額與後續場次數，沒扣掉本堂那一堂，
+           於是 11 張票被排成「本堂 1 ＋ 後續 11」＝ 12 堂 ——
+           要跑到最後一堂才會因為票不夠停下來，櫃檯當下看不出來。
+         ⚠ 正式庫實例：林柏辰團體課票 MTK-6BC0CB212E3F 剩 11 堂（總數也是 11）。 */
+      ok('★★★ 預設堂數要扣掉本堂會吃的那幾堂（pending 時）',
+         /const _selfUse=pending\?seats:0;/.test(src)
+         && /const _forLater=Math\.max\(0,left-_selfUse\);/.test(src)
+         && /const def=Math\.min\(seats>1\?Math\.floor\(_forLater\/seats\):_forLater, cap\);/.test(src));
+      {
+        /* 照抄修好後的算式，驗「11 張票 ＋ 本堂未建」這個實際案例 */
+        const defOf=(left,cap,seats,pending)=>{
+          const selfUse=pending?seats:0;
+          const forLater=Math.max(0,left-selfUse);
+          return Math.min(seats>1?Math.floor(forLater/seats):forLater, cap);
+        };
+        eq('★★★ 林柏辰案例：票剩 11、後續 12 場、本堂未建 → 預設後續 10（本堂 1 ＋ 10 ＝ 11）',
+           defOf(11,12,1,true), 10);
+        eq('★★ 本堂已經建好（不吃票）→ 維持原本的 11', defOf(11,12,1,false), 11);
+        eq('★★ 兩個名額：本堂吃 2，剩 9 堂只夠再約 4 場（9÷2 無條件捨去）',
+           defOf(11,12,2,true), 4);
+        eq('★★ 票只夠本堂 → 後續 0（不會排出負數或多排一堂）', defOf(1,12,1,true), 0);
+        eq('★★ 一張票都沒有 → 0', defOf(0,12,1,true), 0);
+        eq('★★ 後續場次比票少時以場次為準（不會排到不存在的場次）', defOf(50,3,1,true), 3);
+      }
+      ok('★★★ 本堂編號 1、後續從 2 開始；沒有本堂時從 1 開始',
+         /const self=p\.selfCard;/.test(src)
+         && /\$\{self\?cell\(self,1,true\):''\}/.test(src)
+         && /list\.map\(\(x,i\)=>cell\(x,i\+\(self\?2:1\),false\)\)/.test(src));
+      ok('★★ 單人時本堂由 gfDaysHtml 畫（留在外面就會落在編號清單之外，看起來不算一堂）',
+         /\$\{\(pending && rows\.length!==1\)\?`<div class="gfa-days">/.test(src)
+         && /selfCard:\(pending\?\{date:b\.date,start_time:b\.start_time\}:null\)\}/.test(src));
+      ok('★★ 票剩那一格要寫出本堂會用掉幾堂（否則「票剩 11」與輸入框的 10 看起來矛盾）',
+         /票剩 \$\{r\.left\} 堂\$\{pending\?`（本堂用 \$\{r\.seats\}）`:''\}/.test(src));
       /* ⚠⚠ 反面斷言的範圍要限縮到這一支函式，不可以掃全檔 ——
          「後面還有 <b>${later.length}</b> 堂」在**另一張視窗**（改時間那支，36950 附近）
          合法地存在著，掃全檔永遠是紅的。
@@ -278,9 +319,11 @@ console.log('① 同系列後續場次的判斷（grpSeriesOf 實跑）');
            const body=GFA.replace(/\/\*[\s\S]*?\*\//g,'');
            return /<b>週\$\{dowLbl\} \$\{String\(b\.start_time\)\.slice\(0,5\)\}<\/b>　·　共 <b>\$\{later\.length\}<\/b> 堂/.test(body)
                && !/後面還有 <b>\$\{later\.length\}<\/b> 堂/.test(body); })());
+      /* 2026-09-17：票剩那一格後面多了「（本堂用 N）」，所以不再比對到收尾的 </span>。
+         這一條守的本意沒變：餘額自成一格、靠 margin-left:auto 貼到輸入框那一行的右端。 */
       ok('★★ 會員那列改成上下兩行，餘額緊貼輸入框',
          /<div class="gfa-row">/.test(src)
-         && /<span class="gfa-left">票剩 \$\{r\.left\} 堂<\/span>/.test(src)
+         && /<span class="gfa-left">票剩 \$\{r\.left\} 堂/.test(src)
          && /\.gfa-left\{[^}]*margin-left:auto;/.test(src));
       ok('★★★ 兩條常駐說明收成一行；條件式那兩條仍留在條列，且兩條都沒有時整個 ul 不畫',
          /<div class="gfa-auto">滿員或已在名單的場次會自動跳過、往後遞補；有票逐堂扣，不夠會停下來告訴你。<\/div>/.test(src)
@@ -297,9 +340,10 @@ console.log('① 同系列後續場次的判斷（grpSeriesOf 實跑）');
          && /\|\| \(\(!_wtk&&\(_wf===undefined\|\|_wf===null\)\)\?await findUsableTicket\(/.test(src));
       /* 2026-09-16：會員那一列改成上下兩行，方案名與餘額各自有了 class，
          不再是擠在 label 裡的兩段純文字。這一條守的本意沒變：看得出算的是哪一張票。 */
+      /* 2026-09-17：同上，票剩那一格後面多了「（本堂用 N）」，收尾的 </span> 不再緊接著。 */
       ok('★ 視窗上標出方案名（看得出來算的是哪一張）',
          /\$\{r\.plan\?`<span class="gfa-plan">\$\{escH\(r\.plan\)\}<\/span>`:''\}/.test(src)
-         && /<span class="gfa-left">票剩 \$\{r\.left\} 堂<\/span>/.test(src));
+         && /<span class="gfa-left">票剩 \$\{r\.left\} 堂/.test(src));
       /* 2026-08-29：「然後這邊沒有上一步可以退回」 */
       ok('★★ 還沒寫入的那條路要能退回去改，而且挑好的人與方案要留著',
          /function grpFollowBack\(id\)\{ window\._gfPend=null; try\{ closeModal\(\); \}catch\(_\)\{\} openGroupMembers\(id, true, true\); \}/.test(src)
@@ -364,8 +408,11 @@ console.log('① 同系列後續場次的判斷（grpSeriesOf 實跑）');
        /if\(_askRep && _addUniq\.length\)\{ try\{ await grpFollowAsk\(id,_addUniq,_addCnt,_addFam,false,_addTk\); return; \}/.test(src)
        && /const _askRep=\(!window\._grpAdd\) \|\| !!window\._grpRep;/.test(src)
        && /const _addCnt=\{\}; added\.forEach\(m=>\{ _addCnt\[m\]=\(_addCnt\[m\]\|\|0\)\+1; \}\);/.test(src));
-    ok('★ 預設堂數＝票券剩餘 ÷ 名額數（買 8 堂 2 名額預設 4）',
-       /const def=Math\.min\(seats>1\?Math\.floor\(left\/seats\):left, cap\);/.test(src));
+    /* 2026-09-17：算式改吃 _forLater（＝票餘額扣掉本堂會用掉的那幾堂），不再直接吃 left。
+       ⚠ 這一條守的本意沒變：「÷ 名額數、無條件捨去，並以場次數封頂」。
+         本堂要不要扣由上面那條「預設堂數要扣掉本堂會吃的那幾堂」專門守。 */
+    ok('★ 預設堂數＝可用堂數 ÷ 名額數（買 8 堂 2 名額預設 4）',
+       /const def=Math\.min\(seats>1\?Math\.floor\(_forLater\/seats\):_forLater, cap\);/.test(src));
     ok('★ 防連點', /async function grpFollowRun\(mids2\)\{ return onceAct\('gfrun', \(\)=>_grpFollowRun\(mids2\)\); \}/.test(src));
     /* 2026-09-16：加人改採寬鬆判準（第三參數 true）之後，這條路上的 solo 恆為空陣列，
        原本那句「後面 N 堂是單獨建立的課，不在連續系列裡」永遠不會觸發 ——

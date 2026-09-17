@@ -13480,8 +13480,8 @@ function tbl(s){return TABLE_ALIAS[s]||s;}
 let sb=null;
 // ── 版本號（日期+時間格式：年後兩碼+月+日.時分，例 26620.1058 = 26年6/20 10:58）──
 // 每次改版手動更新這一行即可，畫面與 title 會一起更新
-const APP_VERSION = '260917.1035';
-const APP_VERSION_LABEL = 'v260917.1035';
+const APP_VERSION = '260917.1053';
+const APP_VERSION_LABEL = 'v260917.1053';
 const CLOUD = !!(window.YUGYM_CONFIG && window.YUGYM_CONFIG.url && window.YUGYM_CONFIG.anonKey);
 if(CLOUD){ sb = supabase.createClient(window.YUGYM_CONFIG.url, window.YUGYM_CONFIG.anonKey); }
 
@@ -39014,11 +39014,20 @@ function gfPickDates(mid, want){
 /* 日期清單的 HTML（帶編號）—— 編號是「這位會員的第幾堂」，不是場次序號。 */
 function gfDaysHtml(mid, n){
   const WD=['日','一','二','三','四','五','六'];
+  const p=window._gfPend||{};
   const list=gfPickDates(mid, Math.max(0,Number(n)||0));
-  if(!list.length) return '<div class="gfa-none">這個堂數不會約到任何場次。</div>';
-  return `<div class="gfa-days">${list.map((x,i)=>`<span class="gfa-day"><b class="gfa-no">${i+1}</b>${
+  /* 本堂也算一堂（2026-09-17 使用者：「所以本堂就要給編號1」）——
+     它還沒建立、按下去會一起扣票，所以它就是這一串的第 1 堂，後面跟著從 2 開始編。
+     ⚠ 不把它編進去的話，畫面上數得出來的日期會比實際扣的票少一堂
+       —— 那正是「只有 11 張票卻排了 12 堂」看不出來的原因。
+     ⚠ 本堂沿用 .gfa-day-now（淡綠）與尾巴的「本堂」標記，與多人版的畫法一致。 */
+  const self=p.selfCard;
+  const cell=(x,no,now)=>`<span class="gfa-day${now?' gfa-day-now':''}"><b class="gfa-no">${no}</b>${
     String(x.date).slice(5).replace('-','/')}（${WD[(parseYmd(x.date)||new Date()).getDay()]}）${
-    String(x.start_time||'').slice(0,5)}</span>`).join('')}</div>`;
+    String(x.start_time||'').slice(0,5)}${now?'<i>本堂</i>':''}</span>`;
+  if(!self && !list.length) return '<div class="gfa-none">這個堂數不會約到任何場次。</div>';
+  return `<div class="gfa-days">${self?cell(self,1,true):''}${
+    list.map((x,i)=>cell(x,i+(self?2:1),false)).join('')}</div>`;
 }
 /* 改「要約幾堂」就重畫日期（2026-09-17 使用者選「要即時連動」）——
    不連動的話，改完數字那份清單就是錯的，而它看起來仍然很合理。
@@ -39080,7 +39089,17 @@ async function grpFollowAsk(id, addedIds, addedCnt, addedFam, pending, addedTk){
        堂數預設＝票剩 ÷ 名額數（兩個名額約一堂要扣兩堂票）。 */
     const seats=Math.max(1,(addedCnt||{})[mid]||1);
     const cap=later.length;
-    const def=Math.min(seats>1?Math.floor(left/seats):left, cap);
+    /* ⚠⚠ 本堂也會吃票（2026-09-17 使用者：「這個會員只有 11 張票 但加本堂卻是 12」）——
+       pending＝本堂還沒建立，按下「連續預約」時 _saveGroupMembers 會先把本堂建起來
+       並扣掉 seats 堂，**然後**才跑後續那幾堂。
+       原本 def 只看 left（票券餘額）與 cap（後續場次數），沒把本堂那一堂扣掉，
+       於是 11 張票被排成「本堂 1 ＋ 後續 11」＝ 12 堂 —— 要跑到最後一堂
+       才會因為票不夠停下來回報，櫃檯當下看不出來。
+       ⚠ 改的是**預設值**不是上限：cap 仍是後續場次數，櫃檯要往上調照樣調得動
+         （真的不夠時執行端本來就會停）。這裡修的是「預設就排到超扣」。 */
+    const _selfUse=pending?seats:0;
+    const _forLater=Math.max(0,left-_selfUse);
+    const def=Math.min(seats>1?Math.floor(_forLater/seats):_forLater, cap);
     return {mid, left, def, cap, seats, plan:(_oneTk&&_oneTk.plan_name)||''};
   });
   /* ⚠ later（完整 booking 物件）與 tkAll 也要留著：gfPickDates 要靠它們算出
@@ -39090,7 +39109,10 @@ async function grpFollowAsk(id, addedIds, addedCnt, addedFam, pending, addedTk){
        多人時每人堂數不同，列出一份清單會讓人以為那些日期對每個人都成立。 */
   window._gfPend={id, laterIds:later.map(x=>x.id), seats:Object.fromEntries(rows.map(r=>[r.mid,r.seats])),
     fam:Object.assign({}, addedFam||{}), tk:Object.assign({}, addedTk||{}), pending:!!pending,
-    later, tkAll:allTk, soloMid:(rows.length===1?rows[0].mid:null)};
+    later, tkAll:allTk, soloMid:(rows.length===1?rows[0].mid:null),
+    /* 本堂（還沒建立的那一堂）也要留著：gfDaysHtml 要把它畫成第 1 堂。
+       ⚠ 只在 pending 時才有 —— 本堂已經建好的話，它本來就不在這次要扣的範圍裡。 */
+    selfCard:(pending?{date:b.date,start_time:b.start_time}:null)};
   const WD=['日','一','二','三','四','五','六'];
   const dowLbl=WD[(parseYmd(b.date)||new Date()).getDay()];
   /* 標題與副標不重複（2026-09-16 使用者：「太多文字 內容雜亂」）——
@@ -39109,7 +39131,10 @@ async function grpFollowAsk(id, addedIds, addedCnt, addedFam, pending, addedTk){
          才知道會排到哪裡。整串轉正那張視窗 0804 就是這樣列的，同一套。
        ⚠ 2026-09-16 改成「前 3 堂常駐、其餘收進 details」：13 顆膠囊佔掉近半個視窗，
          把真正要決定的「約幾堂」擠到畫面外。日期沒有不見，要核對的人點得開。 */''}
-    ${pending?`<div class="gfa-days"><span class="gfa-day gfa-day-now">${
+    ${/* ⚠ 單人時本堂改由 gfDaysHtml 一起畫（它要當第 1 堂、跟著編號）——
+         留在這裡的話它會落在編號清單外面，看起來就不算一堂。
+         多人時沒有編號清單，本堂仍在這裡自己畫一格。 */''}
+    ${(pending && rows.length!==1)?`<div class="gfa-days"><span class="gfa-day gfa-day-now">${
         String(b.date).slice(5).replace('-','/')}（${WD[(parseYmd(b.date)||new Date()).getDay()]}）${
         String(b.start_time||'').slice(0,5)}<i>本堂</i></span></div>`:''}
     ${/* 單一會員：只列「這位實際會約到的那幾堂」，帶編號，且跟著堂數即時變
@@ -39136,7 +39161,9 @@ async function grpFollowAsk(id, addedIds, addedCnt, addedFam, pending, addedTk){
       <div class="gfa-pick">
         <input type="number" id="gf-n-${i}" value="${r.def}" min="0" max="${r.cap}" oninput="gfSyncDays()">
         <span class="gfa-cap">／ ${r.cap} 堂</span>
-        <span class="gfa-left">票剩 ${r.left} 堂</span>
+        ${/* 本堂會先吃掉幾堂，要寫出來（2026-09-17）——
+             不寫的話「票剩 11」跟輸入框的 10 看起來就是矛盾的。 */''}
+        <span class="gfa-left">票剩 ${r.left} 堂${pending?`（本堂用 ${r.seats}）`:''}</span>
       </div>
     </div>`).join('')}
     ${/* 單獨建立的那幾堂講清楚（2026-08-07 使用者定案：不算在連續系列裡）——
