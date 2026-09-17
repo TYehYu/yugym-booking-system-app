@@ -13,7 +13,11 @@ console.log('① 三顆手動鈕');
 ok('★ 有［續約］鈕（標中＝綠）',
    /setRenewStatus\('\$\{it\.tkid\}','renewed'\)">續約<\/button>/.test(src)
    && /\.tdl-b-ok\.on\{background:var\(--green,#1f6f54\);border-color:var\(--green,#1f6f54\);\}/.test(src));
-ok('★ 已標續約後按鈕仍在（可取消或改標）', /const acts=\(it\)=>\(kind!=='sign'\|\|!it\.tkid\)\?'':/.test(src));
+/* 2026-09-17：acts 多服務一種名單（待補發票資料的「不再提醒」），所以外層包了一層
+   kind 判斷，收款提醒那條退到 return 後面。這一條守的本意沒變：
+   已標續約之後按鈕仍然在（可取消或改標），不是標完就消失。 */
+ok('★ 已標續約後按鈕仍在（可取消或改標）',
+   /return \(kind!=='sign'\|\|!it\.tkid\)\?'':/.test(src));
 ok('★ setRenewStatus 支援 renewed 提示', /renewed:'已標記「續約」'/.test(src));
 ok('　　按同一顆＝取消標記（原本的 toggle 沒動）', /const next=\(t\.renew_status===st\)\?null:st;/.test(src));
 

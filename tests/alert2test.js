@@ -18,6 +18,69 @@ ok('★★ 放在左欄、三顆快捷鈕下面',
    && /alertBox=alertBox\.replace\('<!--ALERTS-->', alertCards\);/.test(src)
    && /<div class="mc-quick-left">\$\{quickCard\}<\/div>\s*\n\s*\$\{alertBox\}/.test(src));
 ok('★★ KPI 條裡不再有它們', !/mc-kpistrip"><!--ALERTS-->/.test(src));
+
+/* ══ 待補發票資料可以逐筆「不再提醒」（2026-09-17）══════════════════════════
+   使用者：「首頁的 待補發票通知可以關閉 有些客人應該不會再出現
+             這樣這個通知會一直存在」
+   定案兩件事：① 記在會員資料上（不是 localStorage）② 下次來上課就重新提醒
+   ⚠⚠ 所以存的是**日期**不是布林值 —— 布林值答不出「收起來之後他有沒有再來」。
+   ⚠ 這一欄刻意**不**放進 fn_members_guard 的會員自助白名單：
+     那份白名單是「會員自己能改的欄位」，這個旗標是櫃檯的判斷。
+     正式庫實查：欄位型別 date、guard 觸發器仍在、白名單不含這一欄。 */
+console.log('\n待補發票資料：不再提醒');
+ok('★★★ 判定改看「最後上課日」而不是布林（要能答出收起來之後有沒有再來）',
+   /if\(!_seen\[b\.member_id\] \|\| d>_seen\[b\.member_id\]\) _seen\[b\.member_id\]=d;/.test(src));
+ok('★★★ 收起來的不列；但之後又來上課就回到名單',
+   /const _sk=String\(m\.invoice_skip_date\|\|''\)\.slice\(0,10\);/.test(src)
+   && /return !_sk \|\| String\(_seen\[m\.id\]\|\|''\)>_sk;/.test(src));
+{
+  /* 照抄那兩段的邏輯實跑 —— 這是整件事唯一會出錯的地方：
+     判斷寫反的話，不是「永遠不消失」就是「按了之後再也不出現」，兩種都很難發現。 */
+  const cut='2026-06-19';
+  const lastSeen=(bks)=>{ const s={};
+    (bks||[]).forEach(b=>{ if(!b||!b.member_id||b.status==='cancelled') return;
+      const d=String(b.date||''); if(d<cut) return;
+      if(!s[b.member_id] || d>s[b.member_id]) s[b.member_id]=d; });
+    return s; };
+  const listed=(m,seen)=>{ const sk=String(m.invoice_skip_date||'').slice(0,10);
+    return !sk || String(seen[m.id]||'')>sk; };
+  const seen=lastSeen([
+    {member_id:'A',date:'2026-09-10',status:'booked'},
+    {member_id:'A',date:'2026-09-16',status:'booked'},   // A 最後一次 9/16
+    {member_id:'B',date:'2026-09-02',status:'booked'},
+    {member_id:'C',date:'2026-05-01',status:'booked'},   // 90 天前 → 不算
+    {member_id:'D',date:'2026-09-16',status:'cancelled'},// 取消 → 不算
+  ]);
+  const eq=(n,a,e)=>ok(n+'　→ '+JSON.stringify(a), JSON.stringify(a)===JSON.stringify(e));
+  eq('★★ 最後上課日取最大那一筆（不是第一筆）', seen.A, '2026-09-16');
+  eq('★ 90 天前的不算', seen.C, undefined);
+  eq('★ 取消的不算', seen.D, undefined);
+  ok('★★★ 沒按過「不再提醒」→ 照列', listed({id:'A'},seen)===true);
+  ok('★★★ 9/16 按下收起、之後沒再來 → 不列', listed({id:'A',invoice_skip_date:'2026-09-16'},seen)===false);
+  ok('★★★ 9/10 按下收起、9/16 又來上課 → 回到名單（使用者定案：下次來上課就重新提醒）',
+     listed({id:'A',invoice_skip_date:'2026-09-10'},seen)===true);
+  ok('★★ 用 > 不是 >=：忽略當天的課不算重新提醒（櫃檯就是今天問過才按的）',
+     listed({id:'B',invoice_skip_date:'2026-09-02'},seen)===false);
+}
+ok('★★★ 名單每一列給一顆「不再提醒」，沿用收款提醒那套 .tdl-acts／.tdl-b（不另做一套）',
+   /if\(kind==='invpref'\) return it\.id/.test(src)
+   && /onclick="event\.stopPropagation\(\);invPrefSkip\('\$\{it\.id\}'\)">不再提醒<\/button>/.test(src));
+ok('★★★ 只有櫃檯以上能按，且前端先擋一次（不擋的話會員會拿到看不懂的 MEM.GUARD 例外）',
+   /async function _invPrefSkip\(mid\)\{\s*\n\s*if\(!isDeskLike\(\)\)\{ showToast\('只有管理員或櫃台可以收起提醒'\); return; \}/.test(src));
+ok('★★ 存的是日期、防連點、重繪沿用 setRenewStatus 那一套（navTo(CUR_PAGE) 不寫死首頁）',
+   /rec\.invoice_skip_date=ymd\(TODAY\);/.test(src)
+   && /async function invPrefSkip\(mid\)\{ return onceAct\('ipskip:'\+mid, \(\)=>_invPrefSkip\(mid\)\); \}/.test(src)
+   && /dbCacheClear\('members'\);\s*\n\s*showToast\('已收起，這位之後再來上課會重新提醒'\);\s*\n\s*closeModal\(\);\s*\n\s*navTo\(CUR_PAGE\);/.test(src));
+{
+  const p=process.env.HOME+'/Projects/yugym-booking-system-app/docs/migrations/20260917_members_invoice_skip.sql';
+  ok('★ migration 留檔', fs.existsSync(p));
+  const m=fs.existsSync(p)?fs.readFileSync(p,'utf8'):'';
+  ok('★★ 欄位是 date（比較對象是 bookings.date，混時間戳會有邊界問題）',
+     /add column if not exists invoice_skip_date date;/.test(m));
+  ok('★★★ 原地寫明「不要加進 fn_members_guard 白名單」的理由',
+     /不要\*\*把這一欄加進 fn_members_guard 的白名單/.test(m)
+     && /這個旗標是\*\*櫃檯的判斷\*\*/.test(m));
+}
 ok('　　數字要等名單算完才知道，所以先留插點、算完再塞回來',
    /這裡先留插點，算完再塞回來/.test(src));
 ok('★ 外型仍是那套直式卡片（底色、圓角、內距）',

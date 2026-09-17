@@ -13480,8 +13480,8 @@ function tbl(s){return TABLE_ALIAS[s]||s;}
 let sb=null;
 // ── 版本號（日期+時間格式：年後兩碼+月+日.時分，例 26620.1058 = 26年6/20 10:58）──
 // 每次改版手動更新這一行即可，畫面與 title 會一起更新
-const APP_VERSION = '260917.1053';
-const APP_VERSION_LABEL = 'v260917.1053';
+const APP_VERSION = '260917.1104';
+const APP_VERSION_LABEL = 'v260917.1104';
 const CLOUD = !!(window.YUGYM_CONFIG && window.YUGYM_CONFIG.url && window.YUGYM_CONFIG.anonKey);
 if(CLOUD){ sb = supabase.createClient(window.YUGYM_CONFIG.url, window.YUGYM_CONFIG.anonKey); }
 
@@ -23172,16 +23172,29 @@ PAGES.g_dashboard=async function(){
      ⚠ 點一列＝進會員資料頁（帶 id），那裡的「發票」欄就是同一個 invPrefModal。 */
   const _invPrefList=(()=>{
     const _cut=ymd(new Date(TODAY.getTime()-90*86400000));
+    /* ⚠ 2026-09-17：這裡改存「近 90 天內的**最後**上課日」而不是布林值 ——
+       「不再提醒」之後要判斷「他有沒有再來過」，只有布林值答不出這個問題。 */
     const _seen={};
     (bookings||[]).forEach(b=>{
       if(!b||!b.member_id||b.status==='cancelled') return;
-      if((b.date||'')<_cut) return;
-      _seen[b.member_id]=true;
+      const d=String(b.date||'');
+      if(d<_cut) return;
+      if(!_seen[b.member_id] || d>_seen[b.member_id]) _seen[b.member_id]=d;
     });
     return Object.keys(_seen)
       .map(id=>memMap[id]).filter(m=>m&&m.status==='active')
       /* ⚠ 2026-09-15：判準只看 Email 與載具 —— 統編已不存會員資料（每次手動輸入）。 */
       .filter(m=>!((m.email||'').trim()||(m.invoice_carrier||'').trim()))
+      /* 櫃檯按過「不再提醒」的收起來（2026-09-17 使用者：「有些客人應該不會再出現
+         這樣這個通知會一直存在」）——
+         ⚠ 使用者同時定案「下次來上課就重新提醒」，所以不是永久關閉：
+           比對「他近 90 天的最後上課日」與「按下去那一天」，之後又來過就自動回到名單。
+           櫃檯不必記得回頭取消，人回來了系統自己會再問一次。
+         ⚠ 用 > 不是 >=：忽略當天的課不算重新提醒 —— 櫃檯就是今天問過了才按的。 */
+      .filter(m=>{
+        const _sk=String(m.invoice_skip_date||'').slice(0,10);
+        return !_sk || String(_seen[m.id]||'')>_sk;
+      })
       .sort((a,b)=>String(a.name||'').localeCompare(String(b.name||''),'zh-Hant'))
       .map(m=>({id:m.id,name:m.name,sub:'還沒有 Email 與載具'}));
   })();
@@ -23642,12 +23655,24 @@ function openTodoList(kind){
   };
   const body=(it)=>`${ava(it.name)}<span class="tdl-tx"><span class="tdl-n">${it.name||'—'}${co(it)}${tm(it)}${tag(it)}</span>${it.sub?`<span class="tdl-s">${it.sub}</span>`:''}</span>`;
   /* 三顆都手動（2026-08-03 使用者指示）：續約也用按的，按同一顆＝取消標記。 */
-  const acts=(it)=>(kind!=='sign'||!it.tkid)?'':
+  /* 待補發票資料：每一列給一顆「不再提醒」（2026-09-17 使用者：「有些客人應該不會再出現
+     這樣這個通知會一直存在」）—— 沿用收款提醒那一套 .tdl-acts／.tdl-b，不另做一套。
+     ⚠ 不是永久關閉：按下去記的是日期，這位之後又來上課就會自動回到名單（使用者定案）。
+     ⚠ 只有帶 id 的列才給（沒有 id 就沒有人可以標記）。 */
+  const acts=(it)=>{
+    if(kind==='invpref') return it.id
+      ? `<span class="tdl-acts">
+           <button class="tdl-b" title="收起這位；他之後再來上課會重新出現"
+             onclick="event.stopPropagation();invPrefSkip('${it.id}')">不再提醒</button>
+         </span>`
+      : '';
+    return (kind!=='sign'||!it.tkid)?'':
     `<span class="tdl-acts">
        <button class="tdl-b tdl-b-ok${it.rs==='renewed'?' on':''}" onclick="event.stopPropagation();setRenewStatus('${it.tkid}','renewed')">續約</button>
        <button class="tdl-b${it.rs==='considering'?' on':''}" onclick="event.stopPropagation();setRenewStatus('${it.tkid}','considering')">考慮中</button>
        <button class="tdl-b${it.rs==='declined'?' on':''}" onclick="event.stopPropagation();setRenewStatus('${it.tkid}','declined')">不續約</button>
      </span>`;
+  };
   /* 收款提醒改成一列三個按鈕（2026-07-30 使用者指示）：櫃檯是「掃一眼、挑一個點進去」，
      格狀按鈕比一列一人的清單好抓。其他名單維持原本的清單。 */
   const cell=(it,grpTime)=>{
@@ -23784,6 +23809,29 @@ function tdlApply(){
   document.querySelectorAll('.tdl-row').forEach(r=>{ r.style.display=(hitQ(r,'.tdl-n')&&hitCo(r))?'':'none'; });
 }
 /* 標記續約狀態（2026-07-29）：考慮中／不續約寫在票券上，再按一次同一顆＝取消標記 */
+/* 待補發票資料：把這一位收起來（2026-09-17 使用者：「首頁的 待補發票通知可以關閉
+   有些客人應該不會再出現 這樣這個通知會一直存在」）——
+   ⚠ 存的是**日期**不是布林值：使用者同時定案「下次來上課就重新提醒」，
+     布林值答不出「收起來之後他有沒有再來」。判斷見 _invPrefList 的 filter。
+   ⚠ 只有櫃檯以上能按：這一欄不在 fn_members_guard 的會員自助白名單裡（刻意的），
+     會員自己不該關得掉催補發票的提醒。前端也擋一次，錯誤訊息才講得清楚
+     —— 不擋的話會員按下去會拿到資料庫的 MEM.GUARD 例外，看不懂。
+   ⚠ 重繪沿用 setRenewStatus 那一套：dbCacheClear → closeModal → navTo(CUR_PAGE)。
+     用 CUR_PAGE 不寫死首頁 —— 這張名單從別的頁面也開得到。 */
+async function invPrefSkip(mid){ return onceAct('ipskip:'+mid, ()=>_invPrefSkip(mid)); }
+async function _invPrefSkip(mid){
+  if(!isDeskLike()){ showToast('只有管理員或櫃台可以收起提醒'); return; }
+  try{
+    const rec=await dbGet('members',mid);
+    if(!rec){ showToast('找不到會員'); return; }
+    rec.invoice_skip_date=ymd(TODAY);
+    await dbPut('members',rec);
+    dbCacheClear('members');
+    showToast('已收起，這位之後再來上課會重新提醒');
+    closeModal();
+    navTo(CUR_PAGE);
+  }catch(e){ showToast('收起失敗：'+((e&&e.message)||e)); }
+}
 async function setRenewStatus(tkid, st){
   if(!isDeskLike()){ showToast('只有管理員或櫃台可標記'); return; }
   try{
