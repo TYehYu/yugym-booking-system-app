@@ -19,6 +19,19 @@ const src=fs.readFileSync(path,'utf8');
 let pass=0,fail=0;
 const ok=(n,c,x)=>{ if(c){pass++;console.log('  ✓ '+n);} else {fail++;console.log('  ✗ '+n+(x!==undefined?'  → '+x:''));} };
 
+/* ⚠⚠ 全檔只能有**一個** <style> 標籤（2026-09-17）——
+   有 5 支測試用 src.indexOf('<style>') 抓「第一個」style 區塊
+   （cardstyletest／memweekbartest／slotcardtest／tkshnametest／inkpermtest），
+   另有 11 支用 match(/<style>…/g) 把全部 style 合併起來比對。
+   只要有人為了「一小段樣式」多插一個 <style>，那 5 支會靜默抓到那一小段 ——
+   **測試仍然是綠的，但已經完全失去意義**。假綠比紅燈危險得多，所以在這裡擋住。
+   要加樣式就加進既有那一個 <style>；真的必須早於它（例如載入畫面），
+   寫成 inline style 屬性（見 #boot-splash）。 */
+{
+  const n=(src.match(/^<style>[ \t]*$/gm)||[]).length;
+  ok('★★★ 全檔只有一個 <style>（多一個會讓 16 支抽 CSS 的測試靜默失效）', n===1, n);
+}
+
 /* 行首、獨佔一行的 script 標籤 */
 const starts=[...src.matchAll(/^<script(?:\s[^>]*)?>[ \t]*$/gm)].map(m=>m.index+m[0].length);
 const ends=[...src.matchAll(/^<\/script>[ \t]*$/gm)].map(m=>m.index);

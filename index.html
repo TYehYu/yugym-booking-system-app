@@ -13276,6 +13276,30 @@ body.ink .tcard-row .tcard-co:not(.tcard-leavetag){display:none;}
 </head>
 <body>
 
+<!-- ════════ 載入畫面（2026-09-17 使用者：「最近在載入新版的時候都很慢」）════════
+     原本這裡直接接登入頁，而登入頁的樣式在那 1MB 的樣式表裡，
+     所以要下載到那裡才看得到東西，中間就是一片白。這一塊讓畫面提早出現。
+
+     ⚠⚠ 樣式一律寫成 inline 屬性，**絕對不可以為它新增一個樣式表標籤**：
+       有 5 支測試靠「檔案裡的第一個樣式表區塊」抓 CSS
+       （cardstyletest／memweekbartest／slotcardtest／tkshnametest／inkpermtest），
+       另有 11 支把全部樣式表合併起來比對。多插一個就會讓它們抓到這幾行 ——
+       **測試仍然是綠的，卻已經完全失去意義**。假綠比紅燈危險得多。
+       syntaxtest 有一條守門會擋下（全檔只能有一個樣式表標籤）。
+     ⚠⚠ 這段註解裡**不要逐字寫出樣式表的開頭標籤**：csssyntaxtest 是用
+       indexOf 找那個字串來切區塊的，寫出來會讓它把後面整段 JavaScript 當成 CSS 檢查，
+       噴出一堆對不上的錯（2026-09-17 就是這樣紅的）。用文字描述代替。
+     ⚠ 顏色與登入頁同一個品牌綠漸層（見 #login-screen），載完銜接得上、不會閃一下。
+     ⚠ 這一塊在 bootYugym() 開頭就移除 —— 那時 CSS 已經套用，登入頁自己會蓋滿整屏。 -->
+<div id="boot-splash" style="position:fixed;inset:0;z-index:99999;display:flex;flex-direction:column;
+  align-items:center;justify-content:center;gap:14px;
+  background:linear-gradient(165deg,#0a4438 0%,#003d32 55%,#062a21 100%);
+  font-family:-apple-system,'PingFang TC','Noto Sans TC',sans-serif;">
+  <div style="font-size:34px;font-weight:700;letter-spacing:.18em;color:#fff;">YUGYM</div>
+  <div style="font-size:13px;letter-spacing:.32em;color:rgba(255,255,255,.72);">有 肌 訓 練</div>
+  <div style="margin-top:10px;font-size:12px;color:rgba(255,255,255,.5);">載入中…</div>
+</div>
+
 <!-- ════════ 登入頁 ════════ -->
 <div id="login-screen">
   <div class="login-card">
@@ -13480,8 +13504,8 @@ function tbl(s){return TABLE_ALIAS[s]||s;}
 let sb=null;
 // ── 版本號（日期+時間格式：年後兩碼+月+日.時分，例 26620.1058 = 26年6/20 10:58）──
 // 每次改版手動更新這一行即可，畫面與 title 會一起更新
-const APP_VERSION = '260917.1104';
-const APP_VERSION_LABEL = 'v260917.1104';
+const APP_VERSION = '260917.1126';
+const APP_VERSION_LABEL = 'v260917.1126';
 const CLOUD = !!(window.YUGYM_CONFIG && window.YUGYM_CONFIG.url && window.YUGYM_CONFIG.anonKey);
 if(CLOUD){ sb = supabase.createClient(window.YUGYM_CONFIG.url, window.YUGYM_CONFIG.anonKey); }
 
@@ -18149,7 +18173,18 @@ function bodyFontGuard(){
     root.style.setProperty('--fz', String(Math.round(r*100)/100));
   }catch(_){}
 }
+/* 收掉載入畫面（2026-09-17）——走到這裡表示整份 JS 都已下載並解析完，
+   CSS 也早就套用了，登入頁／首頁自己會蓋滿整屏。
+   ⚠ 放在 bootYugym 的**最前面**，不要等後面的 async 流程（查 session、抓資料）：
+     那些可能要等好幾秒，甚至因為網路問題卡住 —— splash 一直不收，
+     使用者會以為系統當掉，比原本的白畫面更糟。
+   ⚠ 用 remove() 不是 display:none：它是 position:fixed z-index 99999，
+     留著萬一有 CSS 讓它重新顯示就會整片蓋住畫面。 */
+function bootSplashOff(){
+  try{ const el=document.getElementById('boot-splash'); if(el) el.remove(); }catch(_){}
+}
 function bootYugym(){
+  bootSplashOff();
   try{ bodyFontGuard(); }catch(_){}
   /* 使用者在 LINE 或系統設定裡改了字級再切回來 —— 重新量一次（免得要重開 app）。 */
   try{ window.addEventListener('pageshow', bodyFontGuard);

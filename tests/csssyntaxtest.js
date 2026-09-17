@@ -20,16 +20,27 @@ const src=fs.readFileSync(process.env.HOME+'/Projects/yugym-booking-system-app/i
 let pass=0,fail=0;
 const ok=(n,c,x)=>{ if(c){pass++;console.log('  ✓ '+n);} else {fail++;console.log('  ✗ '+n+(x!==undefined?'  → '+JSON.stringify(x):''));} };
 
-/* 取出每一段 <style>…</style>，連同它在檔案裡的起始行號（報錯要能指位置） */
+/* 取出每一段樣式表，連同它在檔案裡的起始行號（報錯要能指位置）。
+
+   ⚠⚠ 2026-09-17 改成「行首、獨佔一行」的匹配 —— 原本用 indexOf 找開頭標籤，
+     結果被**註解裡提到那個標籤**騙了：當天在 body 加載入畫面時，我在 HTML 註解裡
+     逐字寫出開頭標籤（正是為了警告後人不要新增它），indexOf 就把註解當成第二段樣式表，
+     再往後找到 JavaScript 字串裡的結尾標籤，於是**把六萬行 JS 當成 CSS 檢查**，
+     噴出「孤兒結尾符號」「大括號 -4」「中文掉進選擇器」一整串對不上的錯。
+     （報的行號在 CSS 區塊外三百萬位元組處，那就是切錯位置的特徵。）
+   ⚠ 真正的標籤都獨佔一行且頂格，字串與註解裡的不會 —— 這與 syntaxtest 切
+     script 區塊用的是同一招，兩支的切法一致比較不會各自壞掉。
+   ⚠ 這也表示：日後真的要寫出那個標籤來說明時，寫在**行中**就不會被誤抓；
+     但更保險的做法仍是用文字描述（見 index.html 裡 #boot-splash 那段註解）。 */
 const BLOCKS=[];
 {
-  let i=0;
-  while((i=src.indexOf('<style',i))>=0){
-    const a=src.indexOf('>',i)+1, b=src.indexOf('</style>',a);
-    if(b<0) break;
+  const starts=[...src.matchAll(/^<style(?:\s[^>]*)?>[ \t]*$/gm)].map(m=>m.index+m[0].length);
+  const ends=[...src.matchAll(/^<\/style>[ \t]*$/gm)].map(m=>m.index);
+  starts.forEach(a=>{
+    const b=ends.find(x=>x>a);
+    if(b==null) return;
     BLOCKS.push({ line: src.slice(0,a).split('\n').length, css: src.slice(a,b) });
-    i=b+8;
-  }
+  });
 }
 console.log(`① 抓到 ${BLOCKS.length} 段 <style>，共 ${BLOCKS.reduce((s,b)=>s+b.css.length,0)} 字元`);
 ok('★★★ 至少有一段樣式表（抓法沒壞）', BLOCKS.length>=1 && BLOCKS[0].css.length>10000);
