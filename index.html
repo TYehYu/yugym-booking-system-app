@@ -3625,6 +3625,25 @@ body.mc-mode #tl-sheet,body.mc-mode #tl-add-sheet{top:60px;}
 .mck-dot.locked{background:#f0ece3;border:1.5px dashed #cfc7b8;font-size:12px;filter:grayscale(0.3);opacity:0.75;}
 /* 預約明細：票券圓圈進度卡 */
 .bkd-tkcard{background:var(--card2);border:1px solid var(--bd);border-radius:12px;padding:12px 13px;margin-top:2px;}
+/* 待審核卡的約別浮水印（2026-09-17 使用者：「用浮水印的方式?」）——
+   規格照抄方案卡那顆 .gt-c2-seq：靠右、垂直置中、大字、低透明度、pointer-events:none。
+   ⚠ 另開一個 class 而不是共用：.gt-c2-seq 綁在 .gt-card.gt-card2 底下，
+     而且還帶著「上下兩列（人數形式／方案類型）」的直向 flex，這裡只有一列。
+   ⚠⚠ 內容一定要墊到浮水印上面：浮水印是 absolute＋z-index:0，
+     在同一個堆疊裡會蓋過**沒有定位**的兄弟元素 —— 不墊的話字會被壓在底下。
+     .gt-c2-seq 那邊也是靠內容自己有 z-index:1 才成立的，同一個坑。
+   ⚠ overflow:hidden：「續約」兩個字往左伸到卡片外會破版；被左邊的內容蓋住是刻意的
+     （0908 使用者對方案卡浮水印的定案：「浮水印是視覺提醒」，不是要讀完的資訊）。
+   ⚠ 顏色吃該約別的語意色，與營收明細的約別章（.rev-kind-*）同一套，不另調一組。 */
+.grw-card{position:relative;overflow:hidden;}
+.grw-card>*:not(.grw-seq){position:relative;z-index:1;}
+.grw-seq{position:absolute;right:10px;top:50%;transform:translateY(-50%);
+  z-index:0;pointer-events:none;user-select:none;white-space:nowrap;
+  font-size:30px;font-weight:800;line-height:1;letter-spacing:-.02em;opacity:.30;}
+.grw-seq-new{color:#8a5e28;}
+.grw-seq-renewal{color:#1f6f54;}
+.grw-seq-installment{color:#6e3a86;}
+.grw-seq-gift{color:#6e665c;}
 .bkd-tkcard-head{display:flex;align-items:center;justify-content:space-between;margin-bottom:9px;flex-wrap:wrap;gap:6px;}
 .bkd-tkcard-name{font-size:13.5px;font-weight:700;color:var(--text);}
 .bkd-tkcard-prog{font-size:12px;color:var(--t2);font-family:var(--num);}
@@ -13446,8 +13465,8 @@ function tbl(s){return TABLE_ALIAS[s]||s;}
 let sb=null;
 // ── 版本號（日期+時間格式：年後兩碼+月+日.時分，例 26620.1058 = 26年6/20 10:58）──
 // 每次改版手動更新這一行即可，畫面與 title 會一起更新
-const APP_VERSION = '260916.2322';
-const APP_VERSION_LABEL = 'v260916.2322';
+const APP_VERSION = '260917.1012';
+const APP_VERSION_LABEL = 'v260917.1012';
 const CLOUD = !!(window.YUGYM_CONFIG && window.YUGYM_CONFIG.url && window.YUGYM_CONFIG.anonKey);
 if(CLOUD){ sb = supabase.createClient(window.YUGYM_CONFIG.url, window.YUGYM_CONFIG.anonKey); }
 
@@ -48496,7 +48515,19 @@ function ppRecordHtml(){
         const grCard=r=>{
           const signed=!!(c.ctSigned||{})[r.contract_id];
           const amt=Number(r.amount)||0;
-          return `<div class="bkd-tkcard" style="margin-bottom:10px;border:1.5px dashed #e0a8a2;background:#fdf6f5;">
+          /* 約別浮水印（2026-09-17 使用者：「這邊可以顯示該合約是什麼約別嗎」＋「用浮水印的方式?」）——
+             約別在**建約當下**就選好了（gt-salekind 那個下拉），整包存進 payload，
+             所以這裡不是新增欄位，只是把已經存在的值顯示出來。
+             ⚠ 只有教練課系才有約別（gtSaleKindNeed 只在「私人教練」時才畫那一欄），
+               payload 沒有 sale_kind 就不畫 —— 團課／運動按摩不該憑空長出一個章。
+             ⚠ 用全名（續約／新約／分期／贈送）不用單字：浮水印是大字背景，
+               營收明細那顆縮成一個字是因為欄位只有一格寬，這裡沒有那個限制。
+             ⚠ 分期的首期照票券自己的約別顯示（0815 定的規則：「分期」只標在後續各期的
+               收款列上）—— 蔡美芬那筆是 renewal＋isInstall，浮水印要寫「續約」。 */
+          const _sk=String((r.payload||{}).sale_kind||'');
+          const _skLb=SALE_KIND_LB[_sk]||'';
+          return `<div class="bkd-tkcard grw-card" style="margin-bottom:10px;border:1.5px dashed #e0a8a2;background:#fdf6f5;">
+            ${_skLb?`<span class="grw-seq grw-seq-${_sk}" aria-hidden="true">${_skLb}</span>`:''}
             <div class="bkd-tkcard-head"><span class="bkd-tkcard-name" style="display:flex;align-items:center;gap:6px;flex-wrap:wrap;">
               <span style="font-size:10.5px;font-weight:800;color:#b5372e;background:#fbeceb;border:1px solid #e8b6b0;border-radius:999px;padding:2px 8px;flex:none;">待審核</span>
               ${escH(r.plan_name||'票券')}</span>

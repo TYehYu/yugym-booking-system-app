@@ -672,6 +672,33 @@ console.log('\n⑦ 會員資料票券頁的「待審核」卡（2026-08-09 使�
   const R=grabFn('ppRecordHtml');
   ok('★★ 票券頁畫「待審核」卡（紅色系＝要櫃檯動作）',
      /const grCard=r=>\{/.test(R) && /待審核<\/span>/.test(R));
+  /* 2026-09-17 使用者：「這邊可以顯示該合約是什麼約別嗎」＋「用浮水印的方式?」——
+     約別在**建約當下**就選好了（gt-salekind 那個下拉），整包存進 payload，
+     所以這是「把已經存在的值顯示出來」，不是新增欄位。
+     正式庫查證：5 筆 pending 全都有 sale_kind，沒有 null；
+     蔡美芬那筆是 renewal＋isInstall=true，依 0815 的規則首期照票券約別 → 顯示「續約」。
+     ⚠ 沒有 sale_kind 就不畫：團課／運動按摩本來就沒有約別欄（gtSaleKindNeed 只在
+       「私人教練」時才畫），憑空長出一個章會讓櫃檯以為漏設定。
+     ⚠⚠ 內容一定要墊到浮水印上面：浮水印是 absolute＋z-index:0，同一堆疊裡會蓋過
+       **沒有定位**的兄弟元素 —— 不墊的話卡片的字會被壓在底下（.gt-c2-seq 同一個坑）。 */
+  ok('★★★ 待審核卡畫約別浮水印（讀 payload 既有的 sale_kind，不新增欄位）',
+     /const _sk=String\(\(r\.payload\|\|\{\}\)\.sale_kind\|\|''\);/.test(R)
+     && /const _skLb=SALE_KIND_LB\[_sk\]\|\|'';/.test(R)
+     && /\$\{_skLb\?`<span class="grw-seq grw-seq-\$\{_sk\}" aria-hidden="true">\$\{_skLb\}<\/span>`:''\}/.test(R));
+  ok('★★ 用全名不用單字（浮水印是大字背景，不是營收明細那種只有一格寬的欄位）',
+     /SALE_KIND_LB\[_sk\]/.test(R) && !/SALE_KIND_AB\[_sk\]/.test(R));
+  ok('★★★ 卡片 relative＋overflow:hidden，且內容墊到浮水印上面',
+     /\.grw-card\{position:relative;overflow:hidden;\}/.test(src)
+     && /\.grw-card>\*:not\(\.grw-seq\)\{position:relative;z-index:1;\}/.test(src));
+  ok('★★ 浮水印規格照抄方案卡那顆 .gt-c2-seq（靠右垂直置中、大字、低透明度、不吃點擊）',
+     /\.grw-seq\{position:absolute;right:10px;top:50%;transform:translateY\(-50%\);/.test(src)
+     && /pointer-events:none;user-select:none;/.test(src)
+     && /opacity:\.30;\}/.test(src));
+  ok('★★ 四種約別的語意色都有（與營收明細的約別章 .rev-kind-* 同一套，不另調一組）',
+     /\.grw-seq-new\{color:#8a5e28;\}/.test(src)
+     && /\.grw-seq-renewal\{color:#1f6f54;\}/.test(src)
+     && /\.grw-seq-installment\{color:#6e3a86;\}/.test(src)
+     && /\.grw-seq-gift\{color:#6e665c;\}/.test(src));
   ok('★ 用申請的方案反查分頁（與票券同一支 tkClass5 分類器）',
      /tkClass5\(\{ticket_type_id:pl\.ticket_type_id, plan_name:r\.plan_name\|\|pl\.name\}, typeMap\)/.test(R));
   /* 2026-09-04：未簽回再分兩種 —— 還沒選簽署方式／已選電子等會員簽。 */
