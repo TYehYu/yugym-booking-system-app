@@ -19,58 +19,58 @@ ok('★★ 放在左欄、三顆快捷鈕下面',
    && /<div class="mc-quick-left">\$\{quickCard\}<\/div>\s*\n\s*\$\{alertBox\}/.test(src));
 ok('★★ KPI 條裡不再有它們', !/mc-kpistrip"><!--ALERTS-->/.test(src));
 
-/* ══ 待補發票資料可以逐筆「不再提醒」（2026-09-17）══════════════════════════
-   使用者：「首頁的 待補發票通知可以關閉 有些客人應該不會再出現
-             這樣這個通知會一直存在」
-   定案兩件事：① 記在會員資料上（不是 localStorage）② 下次來上課就重新提醒
-   ⚠⚠ 所以存的是**日期**不是布林值 —— 布林值答不出「收起來之後他有沒有再來」。
-   ⚠ 這一欄刻意**不**放進 fn_members_guard 的會員自助白名單：
-     那份白名單是「會員自己能改的欄位」，這個旗標是櫃檯的判斷。
-     正式庫實查：欄位型別 date、guard 觸發器仍在、白名單不含這一欄。 */
-console.log('\n待補發票資料：不再提醒');
-ok('★★★ 判定改看「最後上課日」而不是布林（要能答出收起來之後有沒有再來）',
-   /if\(!_seen\[b\.member_id\] \|\| d>_seen\[b\.member_id\]\) _seen\[b\.member_id\]=d;/.test(src));
-ok('★★★ 收起來的不列；但之後又來上課就回到名單',
-   /const _sk=String\(m\.invoice_skip_date\|\|''\)\.slice\(0,10\);/.test(src)
-   && /return !_sk \|\| String\(_seen\[m\.id\]\|\|''\)>_sk;/.test(src));
+/* ══ 待補發票的提醒改放會員資料列（2026-09-17 下午，推翻同日上午的做法）══════════
+   使用者：「直接移除待補發票資料按鈕，在會員資料列顯示提醒就好」
+   ⚠ 同一天上午做的是「首頁卡＋名單視窗＋逐筆不再提醒」，下午整組換掉：
+     首頁兩個入口（那張卡、待辦列那一行）都收起來，提醒改成
+     ①會員清單的列尾標記 ②會員資料頁的發票欄轉提醒色。
+   ⚠ 「不再提醒」跟著退場（使用者：「不需要了，直接拿掉」）——
+     它本來就是為了關掉首頁那張天天出現的卡；改成「開到那位才提醒」之後，
+     提醒不會一直杵在眼前，收起來這件事就失去意義。
+   ⚠ members.invoice_skip_date 欄位**留著不刪**：刪欄位是不可逆的破壞性操作，
+     而它閒置著不影響任何判定。但判定裡那段過濾一定要拿掉 ——
+     留著就是「沒有任何地方設定得了、卻仍在生效」的死邏輯。 */
+console.log('\n待補發票：首頁入口移除、改在會員資料列提醒');
+ok('★★★ 首頁那張卡已移除（連同它的 openTodoList 入口）',
+   !/<span class="mc-a2-t">待補發票資料<\/span>/.test(src.replace(/\/\*[\s\S]*?\*\//g,'')));
+ok('★★★ 待辦列那一行也移除（同一份名單，留一個等於還是天天出現在首頁）',
+   !/_todoItems\.push\(_todoRow\(OPS_TODO_IC\.money,'待補發票資料'/.test(src.replace(/\/\*[\s\S]*?\*\//g,'')));
+ok('★★★ 「不再提醒」整組退場（按鈕與 invPrefSkip 都不留死碼）',
+   !/invPrefSkip/.test(src.replace(/\/\*[\s\S]*?\*\//g,''))
+   && !/kind==='invpref'/.test(src.replace(/\/\*[\s\S]*?\*\//g,'')));
+ok('★★★ 判定裡的 skip 過濾也拿掉（沒地方設定卻還在生效＝死邏輯）',
+   !/invoice_skip_date\|\|''\)\.slice\(0,10\)/.test(src.replace(/\/\*[\s\S]*?\*\//g,'')));
+ok('★★ 但名單本身保留（清單標記共用同一套判定，日後要調回入口只是一行）',
+   /invpref:\{title:'待補發票資料'/.test(src));
+
+console.log('\n提醒的兩個新位置');
+ok('★★★ 會員資料頁：兩格都空才轉提醒色（缺其中一格仍收得到發票，標警示等於喊狼來了）',
+   /const _invMiss = isM && !\(\(r\.email\|\|''\)\.trim\(\)\|\|\(r\.invoice_carrier\|\|''\)\.trim\(\)\);/.test(src)
+   && /<div class="pp-meta-i\$\{_invMiss\?' pp-warn':''\}/.test(src));
+ok('★★ 提醒用金色不是紅色（收費時順手問的待辦，不是該擋下的錯誤）',
+   /\.pp-meta-i\.pp-warn \.pp-meta-l,\.pp-meta-i\.pp-warn \.pp-meta-v\{color:var\(--gold-d,#b48a56\);\}/.test(src));
+ok('★★ 提醒列下面寫出後果（「發票開出去收不到」），不是只有變色',
+   /pp-warn-note">發票開出去收不到，收費時順便問一下</.test(src));
+ok('★★★ 會員清單列尾標記：判定與首頁那份名單同一條（近 90 天有來＋兩格都空）',
+   /const _invMiss=m=>!!m && !\(\(m\.email\|\|''\)\.trim\(\)\|\|\(m\.invoice_carrier\|\|''\)\.trim\(\)\)\s*\n\s*&& String\(lastClassMap\[m\.id\]\|\|''\)>=_invCut;/.test(src));
+ok('★★ 用現成的 lastClassMap，不為了標記多抓一次 bookings（會員清單本來就重）',
+   /const _invCut=ymd\(new Date\(TODAY\.getTime\(\)-90\*86400000\)\);/.test(src)
+   && !/_invMiss[\s\S]{0,200}?dbGetAll\('bookings'\)/.test(src));
+ok('★★ 沿用清單列既有的 .tk-chip 語彙（同一頁的「無有效票券」就是這個），只換配色',
+   /<span class="tk-chip" style="background:#f7efe0;color:#8a5e28;[^"]*" title="Email 與載具都沒有，發票開出去收不到">待補發票<\/span>/.test(src));
 {
-  /* 照抄那兩段的邏輯實跑 —— 這是整件事唯一會出錯的地方：
-     判斷寫反的話，不是「永遠不消失」就是「按了之後再也不出現」，兩種都很難發現。 */
+  /* 實跑：標記的判定只在「近期來過 ＋ 兩格都空」時成立 */
   const cut='2026-06-19';
-  const lastSeen=(bks)=>{ const s={};
-    (bks||[]).forEach(b=>{ if(!b||!b.member_id||b.status==='cancelled') return;
-      const d=String(b.date||''); if(d<cut) return;
-      if(!s[b.member_id] || d>s[b.member_id]) s[b.member_id]=d; });
-    return s; };
-  const listed=(m,seen)=>{ const sk=String(m.invoice_skip_date||'').slice(0,10);
-    return !sk || String(seen[m.id]||'')>sk; };
-  const seen=lastSeen([
-    {member_id:'A',date:'2026-09-10',status:'booked'},
-    {member_id:'A',date:'2026-09-16',status:'booked'},   // A 最後一次 9/16
-    {member_id:'B',date:'2026-09-02',status:'booked'},
-    {member_id:'C',date:'2026-05-01',status:'booked'},   // 90 天前 → 不算
-    {member_id:'D',date:'2026-09-16',status:'cancelled'},// 取消 → 不算
-  ]);
+  const miss=(m,last)=>!!m && !((m.email||'').trim()||(m.invoice_carrier||'').trim())
+    && String(last||'')>=cut;
   const eq=(n,a,e)=>ok(n+'　→ '+JSON.stringify(a), JSON.stringify(a)===JSON.stringify(e));
-  eq('★★ 最後上課日取最大那一筆（不是第一筆）', seen.A, '2026-09-16');
-  eq('★ 90 天前的不算', seen.C, undefined);
-  eq('★ 取消的不算', seen.D, undefined);
-  ok('★★★ 沒按過「不再提醒」→ 照列', listed({id:'A'},seen)===true);
-  ok('★★★ 9/16 按下收起、之後沒再來 → 不列', listed({id:'A',invoice_skip_date:'2026-09-16'},seen)===false);
-  ok('★★★ 9/10 按下收起、9/16 又來上課 → 回到名單（使用者定案：下次來上課就重新提醒）',
-     listed({id:'A',invoice_skip_date:'2026-09-10'},seen)===true);
-  ok('★★ 用 > 不是 >=：忽略當天的課不算重新提醒（櫃檯就是今天問過才按的）',
-     listed({id:'B',invoice_skip_date:'2026-09-02'},seen)===false);
+  eq('★★★ 近期來過且兩格都空 → 標', miss({id:'A'},'2026-09-16'), true);
+  eq('★★★ 有 Email → 不標（收得到就不是待補）', miss({id:'A',email:'a@b.c'},'2026-09-16'), false);
+  eq('★★★ 有載具 → 不標', miss({id:'A',invoice_carrier:'/ABC1234'},'2026-09-16'), false);
+  eq('★★ 90 天沒來 → 不標（近期不會進門，標了也問不到）', miss({id:'A'},'2026-05-01'), false);
+  eq('★★ 從來沒上過課 → 不標', miss({id:'A'},''), false);
+  eq('★★ 空字串與空白也算沒填', miss({id:'A',email:'  ',invoice_carrier:' '},'2026-09-16'), true);
 }
-ok('★★★ 名單每一列給一顆「不再提醒」，沿用收款提醒那套 .tdl-acts／.tdl-b（不另做一套）',
-   /if\(kind==='invpref'\) return it\.id/.test(src)
-   && /onclick="event\.stopPropagation\(\);invPrefSkip\('\$\{it\.id\}'\)">不再提醒<\/button>/.test(src));
-ok('★★★ 只有櫃檯以上能按，且前端先擋一次（不擋的話會員會拿到看不懂的 MEM.GUARD 例外）',
-   /async function _invPrefSkip\(mid\)\{\s*\n\s*if\(!isDeskLike\(\)\)\{ showToast\('只有管理員或櫃台可以收起提醒'\); return; \}/.test(src));
-ok('★★ 存的是日期、防連點、重繪沿用 setRenewStatus 那一套（navTo(CUR_PAGE) 不寫死首頁）',
-   /rec\.invoice_skip_date=ymd\(TODAY\);/.test(src)
-   && /async function invPrefSkip\(mid\)\{ return onceAct\('ipskip:'\+mid, \(\)=>_invPrefSkip\(mid\)\); \}/.test(src)
-   && /dbCacheClear\('members'\);\s*\n\s*showToast\('已收起，這位之後再來上課會重新提醒'\);\s*\n\s*closeModal\(\);\s*\n\s*navTo\(CUR_PAGE\);/.test(src));
 {
   const p=process.env.HOME+'/Projects/yugym-booking-system-app/docs/migrations/20260917_members_invoice_skip.sql';
   ok('★ migration 留檔', fs.existsSync(p));

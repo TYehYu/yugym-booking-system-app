@@ -8292,6 +8292,14 @@ body.memh2-shell .bottom-nav .bn-lb{color:inherit;}
 /* 全域線條小圖示（LNI）：行內對齊、跟隨文字色 */
 .lni{width:15px;height:15px;display:inline-block;vertical-align:-3px;flex-shrink:0;}
 /* 資料表欄位點擊即編輯（2026-07-20）：可編輯欄位游標＋hover 提示 */
+/* 待補發票的提醒色（2026-09-17 使用者：「在會員資料列顯示提醒就好」）——
+   ⚠ 用金色不是紅色：這是「收費時順手問一下」的待辦，不是該擋下的錯誤
+     （紅>金>綠 的階級裡輪不到紅）。與先前待辦列那一行同一個色階。
+   ⚠ 只有「載具與 Email 都空」時才掛：缺其中一格仍然收得到發票，
+     標成警示等於天天喊狼來了。 */
+.pp-meta-i.pp-warn .pp-meta-l,.pp-meta-i.pp-warn .pp-meta-v{color:var(--gold-d,#b48a56);}
+.pp-meta-i.pp-warn .pp-meta-v span{color:var(--gold-d,#b48a56) !important;}
+.pp-warn-note{font-size:11px;color:var(--gold-d,#b48a56);opacity:.9;}
 .pp-f-click{cursor:pointer;border-radius:8px;transition:background .12s;}
 .pp-f-click:hover{background:var(--sage-bg,#eef3ec);}
 .pp-f-click:hover .pp-f-l::after{content:'✎';margin-left:6px;color:var(--t3);font-size:11px;}
@@ -13504,8 +13512,8 @@ function tbl(s){return TABLE_ALIAS[s]||s;}
 let sb=null;
 // ── 版本號（日期+時間格式：年後兩碼+月+日.時分，例 26620.1058 = 26年6/20 10:58）──
 // 每次改版手動更新這一行即可，畫面與 title 會一起更新
-const APP_VERSION = '260917.1126';
-const APP_VERSION_LABEL = 'v260917.1126';
+const APP_VERSION = '260917.1137';
+const APP_VERSION_LABEL = 'v260917.1137';
 const CLOUD = !!(window.YUGYM_CONFIG && window.YUGYM_CONFIG.url && window.YUGYM_CONFIG.anonKey);
 if(CLOUD){ sb = supabase.createClient(window.YUGYM_CONFIG.url, window.YUGYM_CONFIG.anonKey); }
 
@@ -23220,16 +23228,12 @@ PAGES.g_dashboard=async function(){
       .map(id=>memMap[id]).filter(m=>m&&m.status==='active')
       /* ⚠ 2026-09-15：判準只看 Email 與載具 —— 統編已不存會員資料（每次手動輸入）。 */
       .filter(m=>!((m.email||'').trim()||(m.invoice_carrier||'').trim()))
-      /* 櫃檯按過「不再提醒」的收起來（2026-09-17 使用者：「有些客人應該不會再出現
-         這樣這個通知會一直存在」）——
-         ⚠ 使用者同時定案「下次來上課就重新提醒」，所以不是永久關閉：
-           比對「他近 90 天的最後上課日」與「按下去那一天」，之後又來過就自動回到名單。
-           櫃檯不必記得回頭取消，人回來了系統自己會再問一次。
-         ⚠ 用 > 不是 >=：忽略當天的課不算重新提醒 —— 櫃檯就是今天問過了才按的。 */
-      .filter(m=>{
-        const _sk=String(m.invoice_skip_date||'').slice(0,10);
-        return !_sk || String(_seen[m.id]||'')>_sk;
-      })
+      /* 〔已移除〕「不再提醒」的過濾（2026-09-17 使用者：提醒改到會員資料列之後
+         「不需要了，直接拿掉」）—— 原本是為了首頁那張天天出現的卡才需要收起來；
+         現在只有開到那位會員時才提醒，不會一直杵在眼前，就沒有收起來的必要了。
+         ⚠ members.invoice_skip_date 這一欄**留著不刪**：刪欄位是不可逆的破壞性操作，
+           而它閒置著不影響任何判定。日後要用不必再開一次 migration。
+         ⚠ 但這段過濾一定要拿掉 —— 留著就是「沒有任何地方設定得了、卻仍在生效」的死邏輯。 */
       .sort((a,b)=>String(a.name||'').localeCompare(String(b.name||''),'zh-Hant'))
       .map(m=>({id:m.id,name:m.name,sub:'還沒有 Email 與載具'}));
   })();
@@ -23242,11 +23246,9 @@ PAGES.g_dashboard=async function(){
      ⚠ 0 筆就不列：待辦列每天看，永遠掛一行 0 會讓整列失去意義。
      ⚠ 金色不是紅色：這是「收費時順手問」的待辦，不是警示（紅留給真正該擋下的事）。
      ⚠ 這一行一定要放在 _invPrefList 宣告（上方）之後 —— const 在宣告前引用會落在 TDZ 直接爆。 */
-  if(_invPrefList.length){
-    const _lInv=_invPrefList.slice(0,6).map(x=>x.name).join('、')
-      +(_invPrefList.length>6?` 等 ${_invPrefList.length} 人`:'');
-    _todoItems.push(_todoRow(OPS_TODO_IC.money,'待補發票資料',_lInv,_invPrefList.length,'gold',"openTodoList('invpref')"));
-  }
+  /* 〔已移除〕待辦列的「待補發票資料」那一行（2026-09-17 使用者定案：兩個首頁入口一起收）——
+     與上面那張卡同一份名單，留一個等於同一件事還是天天出現在首頁。
+     提醒改在會員清單的列尾與會員資料頁的發票欄，收費時遇到才講。 */
   /* 今日未打卡名單（2026-07-21 使用者指示）：含上班未打卡＋下班未打卡。
      對象＝當日有排班（非請假）且需打卡（need_punch）的在職員工：
      班已開始仍無 clock_in＝上班未打卡；有 clock_in 無 clock_out 且班已結束＝下班未打卡。
@@ -23300,8 +23302,11 @@ PAGES.g_dashboard=async function(){
       <span class="mc-a2-t">今日收款提醒</span><b class="mc-a2-n">${_signByTime.length}</b></button>
     <button class="card mc-card mc-a2" onclick="openTodoList('demote')">
       <span class="mc-a2-t">即將降級名單</span><b class="mc-a2-n">${_demoteNames.length}</b></button>
-    ${_invPrefList.length?`<button class="card mc-card mc-a2" onclick="openTodoList('invpref')">
-      <span class="mc-a2-t">待補發票資料</span><b class="mc-a2-n">${_invPrefList.length}</b></button>`:''}
+    ${/* 〔已移除〕第三張「待補發票資料」卡（2026-09-17 使用者：「直接移除待補發票資料按鈕
+         在會員資料列顯示提醒就好」）—— 提醒改成在會員清單的列尾與會員資料頁的發票欄出現，
+         收費時本來就會開到那兩個地方，遇到才提醒，不必天天佔著首頁。
+         ⚠ 名單本身（_invPrefList／_todoLists.invpref）沒有拿掉：清單那邊的標記共用同一套
+           判定，而且日後若要把入口調回來只是一行。 */''}
   </div>`;
   alertBox=alertBox.replace('<!--ALERTS-->', alertCards);
   /* 原本左欄那張「收款提醒＋降級名單」合併紅卡退場（內容已拆成上面兩張，
@@ -23694,13 +23699,10 @@ function openTodoList(kind){
      這樣這個通知會一直存在」）—— 沿用收款提醒那一套 .tdl-acts／.tdl-b，不另做一套。
      ⚠ 不是永久關閉：按下去記的是日期，這位之後又來上課就會自動回到名單（使用者定案）。
      ⚠ 只有帶 id 的列才給（沒有 id 就沒有人可以標記）。 */
+  /* 〔已移除〕待補發票名單那顆「不再提醒」（2026-09-17 使用者：「不需要了，直接拿掉」）——
+     首頁兩個入口都收掉之後，這顆鈕原本的位置已經按不到；而提醒改成「開到那位才出現」，
+     本來就不會一直杵在眼前，沒有收起來的必要。 */
   const acts=(it)=>{
-    if(kind==='invpref') return it.id
-      ? `<span class="tdl-acts">
-           <button class="tdl-b" title="收起這位；他之後再來上課會重新出現"
-             onclick="event.stopPropagation();invPrefSkip('${it.id}')">不再提醒</button>
-         </span>`
-      : '';
     return (kind!=='sign'||!it.tkid)?'':
     `<span class="tdl-acts">
        <button class="tdl-b tdl-b-ok${it.rs==='renewed'?' on':''}" onclick="event.stopPropagation();setRenewStatus('${it.tkid}','renewed')">續約</button>
@@ -23844,29 +23846,11 @@ function tdlApply(){
   document.querySelectorAll('.tdl-row').forEach(r=>{ r.style.display=(hitQ(r,'.tdl-n')&&hitCo(r))?'':'none'; });
 }
 /* 標記續約狀態（2026-07-29）：考慮中／不續約寫在票券上，再按一次同一顆＝取消標記 */
-/* 待補發票資料：把這一位收起來（2026-09-17 使用者：「首頁的 待補發票通知可以關閉
-   有些客人應該不會再出現 這樣這個通知會一直存在」）——
-   ⚠ 存的是**日期**不是布林值：使用者同時定案「下次來上課就重新提醒」，
-     布林值答不出「收起來之後他有沒有再來」。判斷見 _invPrefList 的 filter。
-   ⚠ 只有櫃檯以上能按：這一欄不在 fn_members_guard 的會員自助白名單裡（刻意的），
-     會員自己不該關得掉催補發票的提醒。前端也擋一次，錯誤訊息才講得清楚
-     —— 不擋的話會員按下去會拿到資料庫的 MEM.GUARD 例外，看不懂。
-   ⚠ 重繪沿用 setRenewStatus 那一套：dbCacheClear → closeModal → navTo(CUR_PAGE)。
-     用 CUR_PAGE 不寫死首頁 —— 這張名單從別的頁面也開得到。 */
-async function invPrefSkip(mid){ return onceAct('ipskip:'+mid, ()=>_invPrefSkip(mid)); }
-async function _invPrefSkip(mid){
-  if(!isDeskLike()){ showToast('只有管理員或櫃台可以收起提醒'); return; }
-  try{
-    const rec=await dbGet('members',mid);
-    if(!rec){ showToast('找不到會員'); return; }
-    rec.invoice_skip_date=ymd(TODAY);
-    await dbPut('members',rec);
-    dbCacheClear('members');
-    showToast('已收起，這位之後再來上課會重新提醒');
-    closeModal();
-    navTo(CUR_PAGE);
-  }catch(e){ showToast('收起失敗：'+((e&&e.message)||e)); }
-}
+/* 〔已移除〕invPrefSkip（2026-09-17 上午加、同日下午移除）——
+   它是為了關掉首頁那張天天出現的「待補發票資料」卡而做的。
+   使用者改成「提醒放在會員資料列就好」之後，那張卡與待辦列都收掉了，
+   提醒只在開到那位會員時才出現，於是「收起來」這件事本身失去意義（使用者：「不需要了」）。
+   ⚠ members.invoice_skip_date 欄位留著不刪（刪欄位不可逆，而它閒置不影響任何判定）。 */
 async function setRenewStatus(tkid, st){
   if(!isDeskLike()){ showToast('只有管理員或櫃台可標記'); return; }
   try{
@@ -41602,6 +41586,17 @@ PAGES.members=async function(){
      （tkCatCell）之後就沒有呼叫點了。袋子的圓形卡邏輯仍活在 tkRowHtml。 */
 ;
   /* 2026-07-21 清單簡化：頭像列、空欄位留白、最近上課改相對時間 */
+  /* 待補發票的列尾標記（2026-09-17 使用者：「在會員資料列顯示提醒就好」）——
+     ⚠ 判定沿用首頁那份名單同一條（近 90 天有來上課、Email 與載具都空），
+       不是「所有沒填的人都標」：358 位裡沒填的上百位，全標會吵到沒人看，
+       而提醒的意義本來就是「這個人近期會進門，收費時順手問」。
+     ⚠ 直接用現成的 lastClassMap（上面算好的），不為了這個標記多抓一次 bookings ——
+       會員清單本來就是重頁面，使用者才剛反映過載入慢。
+     ⚠ 沿用清單列既有的 .tk-chip 語彙（同一頁的「無有效票券」就是這個），
+       只換配色為金（紅>金>綠 的階級裡，這是待辦不是警示）。 */
+  const _invCut=ymd(new Date(TODAY.getTime()-90*86400000));
+  const _invMiss=m=>!!m && !((m.email||'').trim()||(m.invoice_carrier||'').trim())
+    && String(lastClassMap[m.id]||'')>=_invCut;
   const rows=pageRows.map(m=>({
     /* 左緣色條＝會員等級（2026-07-31 使用者指示，比照員工列表的聘僱類型色條） */
     lc:(TIER_DEFS[effTier(m)]||{}).color||'#8a8478',
@@ -41610,7 +41605,7 @@ PAGES.members=async function(){
       /* 已停用的帳號在列表要看得出來（2026-08-01）——列表刻意不篩 status，
          停用後仍找得到人、點得開明細再啟用回來。 */
       lpPerson(m.gender, m.name||'—',
-        `${((m.status||'active')!=='active')?'<span class="tag tag-danger" style="font-size:10px;padding:0 5px;">已停用</span>　':''}${tierLabel(effTier(m))}${m.phone?'　'+fmtPhone(m.phone):''}`,
+        `${((m.status||'active')!=='active')?'<span class="tag tag-danger" style="font-size:10px;padding:0 5px;">已停用</span>　':''}${tierLabel(effTier(m))}${m.phone?'　'+fmtPhone(m.phone):''}${_invMiss(m)?'　<span class="tk-chip" style="background:#f7efe0;color:#8a5e28;font-size:11px;padding:2px 8px;" title="Email 與載具都沒有，發票開出去收不到">待補發票</span>':''}`,
         m.default_coach_id ? (()=>{const cl=coachTagColor(m.default_coach_id);   // 2026-07-28：主教練用教練 tag 色
           return `<i class="lp-coach" style="background:${cl.bg};color:${cl.fg};">${coachMap[m.default_coach_id]||''}</i>`;})() : '',
         m.avatar_url),   // 大頭貼（2026-08-12）
@@ -47461,12 +47456,18 @@ function ppHeaderHtml(){
      統編已不存會員資料（每次手動輸入），這一格現在只會是手機條碼，
      叫「發票」名不符實（旁邊的 Email 也是發票用的，兩個都叫發票更亂）。
      ⚠ 標籤改了，但 onclick 仍是 ppCarrierEdit —— 點進去是同一個發票設定視窗。 */
+  /* 兩格都空＝發票開出去沒有任何送達管道 → 整列轉提醒色（2026-09-17 使用者：
+     「在會員資料列顯示提醒就好」）。收費時本來就會開這一頁，遇到才提醒。
+     ⚠ 只在**兩格都空**時才警示：只缺其中一格仍然收得到發票（載具或 Email 有一個就夠），
+       那不是待補，標成警示會變成天天喊狼來了。
+     ⚠ 判準與首頁那份名單同一條（email 與載具都空），不另立一套。 */
+  const _invMiss = isM && !((r.email||'').trim()||(r.invoice_carrier||'').trim());
   const carrierItem = isM
-    ? `<div class="pp-meta-i${_canBG?' pp-f-click':''}"${_canBG?` onclick="ppCarrierEdit(event)"`:''}><span class="pp-meta-l">載具</span><span class="pp-meta-v">${r.invoice_carrier||'<span style="color:var(--t3);">'+(_canBG?'＋ 設定':'未填')+'</span>'}</span></div>`
+    ? `<div class="pp-meta-i${_invMiss?' pp-warn':''}${_canBG?' pp-f-click':''}"${_canBG?` onclick="ppCarrierEdit(event)"`:''}><span class="pp-meta-l">載具</span><span class="pp-meta-v">${r.invoice_carrier||'<span style="color:var(--t3);">'+(_canBG?'＋ 設定':'未填')+'</span>'}</span></div>`
     : '';
   /* Email 獨立一列（2026-09-14）：電子發票的主要送達管道，值得自己的位置。
      點下去開的是同一個 invPrefModal（發票設定四格都在那裡），不另做一套。 */
-  const emailItem = isM ? `<div class="pp-meta-i${_canBG?' pp-f-click':''}"${_canBG?` onclick="ppCarrierEdit(event)"`:''}><span class="pp-meta-l">Email</span><span class="pp-meta-v">${r.email||'<span style="color:var(--t3);">'+(_canBG?'＋ 設定':'未填')+'</span>'}</span></div>` : '';
+  const emailItem = isM ? `<div class="pp-meta-i${_invMiss?' pp-warn':''}${_canBG?' pp-f-click':''}"${_canBG?` onclick="ppCarrierEdit(event)"`:''}><span class="pp-meta-l">Email</span><span class="pp-meta-v">${r.email||'<span style="color:var(--t3);">'+(_canBG?'＋ 設定':'未填')+'</span>'}</span></div>${_invMiss?`<div class="pp-meta-i pp-warn-note">發票開出去收不到，收費時順便問一下</div>`:''}` : '';
   /* 2026-07-28 使用者指示：會員表頭固定兩列——
      第一列 姓名/電話/性別/生日；第二列 等級/教練/緊急聯絡人/LINE 開關 */
   const phoneItem = isM ? mvA('電話',fmtPhone(r.phone),'','未填') : '';

@@ -76,8 +76,12 @@ ok('★★★ Email 自己一列，不再被載具吃掉',
    /const emailItem = isM \? `<div class="pp-meta-i/.test(src)
    && /<span class="pp-meta-l">Email<\/span>/.test(src)
    && !/else if\(r\.email\) _b\.push/.test(src));
+/* 2026-09-17：class 那串中間多了 ${_invMiss?' pp-warn':''}（兩格都空時轉提醒色），
+   所以不再一字不差比對整組 class 組合。
+   ⚠ 這一條守的本意是「Email 那列點下去開的是同一個發票設定視窗」——
+     釘的應該是那個 onclick，不是它前面有哪些 class。 */
 ok('★★ Email 那列點下去也是同一個發票設定視窗（不另做一套）',
-   /const emailItem = isM \? `<div class="pp-meta-i\$\{_canBG\?' pp-f-click':''\}"\$\{_canBG\?` onclick="ppCarrierEdit\(event\)"/.test(src));
+   /const emailItem = isM \? `<div class="pp-meta-i[^"]*"\$\{_canBG\?` onclick="ppCarrierEdit\(event\)"/.test(src));
 ok('★★ 舊入口保留成薄包裝（那一列的 onclick 一個字沒改）',
    /function ppCarrierEdit\(ev\)\{[\s\S]{0,220}?invPrefModal\(PP\.id/.test(src));
 {
