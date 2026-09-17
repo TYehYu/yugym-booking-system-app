@@ -187,6 +187,23 @@ ok('★★★ 自動預選也不再因為分期就選 installment（那會默默
    && /if\(gtIsZeroDeal\(\)\)\{ sel\.value='gift'; return; \}\s*\n\s*sel\.value=_hasPt\?'renewal':'new';/.test(src));
 ok('★★ 分期時提示行要講清楚「第一期算續約」',
    /<b>分期繳費的第一期算續約<\/b>（後面各期的收款列系統會自動標「分期」）/.test(src));
+/* 2026-09-17 使用者：「下面分期底下這些文字太多了」，選「只留一句結論」——
+   拿掉的是後面那句解釋欄位語義的話，**結論本身一個字沒動**（上面那條仍然通過）。
+   ⚠⚠ 反面斷言先剝註解：原地留的說明就寫著那句被拿掉的話，
+     不剝的話會命中自己的墓誌銘（這個坑昨天踩過好幾次）。 */
+ok('★★ 不再附「這一格填的是…不是…」那句元說明（結論講完就停）',
+   !/這一格填的是「這張票怎麼成立」，不是「怎麼付錢」/.test(src.replace(/\/\*[\s\S]*?\*\//g,'')));
+/* 上方摘要卡：標籤靠左、值靠右（2026-09-17 使用者：「有些內容可以靠右 方便閱讀」）。
+   ⚠ 桌機那條原本是 flex row + wrap，橫排下 space-between 推不開（項目寬度＝內容寬度），
+     所以必須改成兩欄 grid，「值靠右」在桌機才有效果。 */
+ok('★★ 摘要卡標籤靠左、值靠右，且期限與到期拆成兩項',
+   /<span><i>方案類型<\/i><b>/.test(src)
+   && /<span><i>期限<\/i><b>\$\{plan\.valid_days\} 天<\/b><\/span>/.test(src)
+   && /<span><i>到期<\/i><b>\$\{expire\}<\/b><\/span>/.test(src)
+   && /\.gt-pv-meta>span\{display:flex;align-items:baseline;justify-content:space-between;/.test(src)
+   && /\.gt-pv-meta>span>b\{[^}]*text-align:right;\}/.test(src));
+ok('★★ 桌機改兩欄 grid（橫排 flex 的 space-between 推不開）',
+   /\.modal-wide \.gt-pv-meta\{display:grid;grid-template-columns:1fr 1fr;/.test(src));
 ok('★★ 「分期」仍然是合法選項（陳瀚竣那種手動定的）',
    /\['installment','分期'\]/.test(src));
 ok('　　期數一改就跟著（不是只有進到那一步才算一次）',

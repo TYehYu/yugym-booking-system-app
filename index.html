@@ -461,6 +461,13 @@ body:has(#login-screen:not(.hidden)){background:#003d32;}
 .gt-pv-name{font-size:14.5px;font-weight:700;color:var(--text);display:flex;align-items:center;flex-wrap:wrap;}
 .gt-pv-count b{font-size:22px;font-weight:800;font-feature-settings:'tnum';}
 .gt-pv-meta{display:flex;flex-direction:column;gap:4px;font-size:12.5px;color:var(--t2);line-height:1.7;margin-top:6px;padding-top:10px;border-top:1px solid var(--bd);}
+/* 標籤靠左、值靠右（2026-09-17 使用者：「有些內容可以靠右 方便閱讀」）——
+   ⚠ 標籤 flex:none：不縮，五列的標籤才會從同一條線開始。
+   ⚠ 值要 min-width:0＋text-align:right：長字（到期日、含贈送 N 堂）才不會把標籤擠掉，
+     而且右緣對齊才是「方便閱讀」真正的來源 —— 數字都落在同一條垂直線上。 */
+.gt-pv-meta>span{display:flex;align-items:baseline;justify-content:space-between;gap:12px;}
+.gt-pv-meta>span>i{font-style:normal;color:var(--t3);flex:none;}
+.gt-pv-meta>span>b{font-weight:700;color:var(--text);min-width:0;text-align:right;}
 /* 分期選擇醒目切換按鈕 */
 .ap-install-toggle{display:inline-flex;gap:6px;background:#f0ece3;padding:3px;border-radius:10px;vertical-align:middle;}
 .ap-inst-btn{padding:5px 14px;border-radius:8px;border:none;background:transparent;color:var(--t2);font-size:13px;font-weight:700;cursor:pointer;font-family:inherit;transition:.12s;}
@@ -834,7 +841,10 @@ body:has(#login-screen:not(.hidden)){background:#003d32;}
    （2026-07-30 使用者回報「銷售視窗下方出現左右捲軸」）滿版是刻意的，直接切掉即可。 */
 /* 步驟2 摘要卡壓縮：圓圈縮小、明細橫排（原直排四行把按鈕推出畫面） */
 .modal-wide .gt-preview-card .tkc-dot{width:18px;height:18px;}
-.modal-wide .gt-pv-meta{flex-direction:row;flex-wrap:wrap;gap:4px 20px;margin-top:4px;padding-top:8px;}
+/* 桌機兩欄（2026-09-17 改）——⚠ 原本是 flex-direction:row + wrap，
+   但橫排下 space-between **推不開**：flex 項目的寬度等於內容寬度，左右之間沒有餘裕，
+   所以「值靠右」在桌機會完全沒效果。改成兩欄等寬 grid，每一格才有固定寬度可推。 */
+.modal-wide .gt-pv-meta{display:grid;grid-template-columns:1fr 1fr;gap:4px 24px;margin-top:4px;padding-top:8px;}
 .modal-wide .gt-preview-card{padding:12px 14px;}
 .modal-wide .tkc-grid{margin:8px 0 !important;}
 /* 方案卡三張一列（2026-08-01 使用者指示）——
@@ -13465,8 +13475,8 @@ function tbl(s){return TABLE_ALIAS[s]||s;}
 let sb=null;
 // ── 版本號（日期+時間格式：年後兩碼+月+日.時分，例 26620.1058 = 26年6/20 10:58）──
 // 每次改版手動更新這一行即可，畫面與 title 會一起更新
-const APP_VERSION = '260917.1012';
-const APP_VERSION_LABEL = 'v260917.1012';
+const APP_VERSION = '260917.1019';
+const APP_VERSION_LABEL = 'v260917.1019';
 const CLOUD = !!(window.YUGYM_CONFIG && window.YUGYM_CONFIG.url && window.YUGYM_CONFIG.anonKey);
 if(CLOUD){ sb = supabase.createClient(window.YUGYM_CONFIG.url, window.YUGYM_CONFIG.anonKey); }
 
@@ -52983,9 +52993,13 @@ function gtSaleKindSync(){
   note.style.display='none';
   if(hint){
     hint.style.display='';
+    /* 2026-09-17 使用者：「下面分期底下這些文字太多了」，選「只留一句結論」——
+       拿掉後面那句解釋欄位語義的話（「這一格填的是…，不是…」）：
+       前一句已經把櫃檯要做的決定講完了（第一期算續約、後面各期系統自己標），
+       再補一層「這一格在問什麼」是寫給設計者看的，不是櫃檯當下需要的。
+       ⚠ 前半段一個字都沒動：那是 0907 定案的結論本身，salekindtest 也釘著它。 */
     if(inst) hint.innerHTML=(hint.dataset.base||hint.textContent||'')
-      +'<br><b>分期繳費的第一期算續約</b>（後面各期的收款列系統會自動標「分期」）——'
-      +'這一格填的是「這張票怎麼成立」，不是「怎麼付錢」。';
+      +'<br><b>分期繳費的第一期算續約</b>（後面各期的收款列系統會自動標「分期」）。';
     else if(hint.dataset.base) hint.textContent=hint.dataset.base;
   }
 }
@@ -53455,11 +53469,19 @@ async function refreshGrantInfo(){
          <div class="gt-pv-count"><b style="color:${col};">${total}</b><span style="color:var(--t3);font-weight:600;font-size:13px;"> 堂</span></div>
        </div>
        <div class="tkc-grid" style="margin:10px 0;">${circles}</div>
+       ${/* label 靠左、值靠右（2026-09-17 使用者：「有些內容可以靠右 方便閱讀」）——
+            原本標籤與值連著排，每一行的值從不同位置開始，眼睛要一路掃過去才找得到數字。
+            拆成「<i>標籤</i><b>值</b>」兩格，靠 space-between 推開，就有一條對齊軸。
+          ⚠ 「期限」與「到期」原本用「·」擠在同一項裡，拆成兩項才對得齊
+            —— 它們本來就是兩個獨立的值（天數／日期）。
+          ⚠ 「含贈送 N 堂」與「單堂 $N」仍附在各自的值後面：它們是那個值的補充說明，
+            不是獨立欄位，拆出去反而多兩列。 */''}
        <div class="gt-pv-meta">
-         <span>方案類型 <b>${PT[plan.plan_type]||'一般'}</b>${plan.sessions_bonus?`　·　含贈送 ${plan.sessions_bonus} 堂`:''}</span>
-         <span>定價 <b style="color:${col};">$${listPrice.toLocaleString()}</b>${plan.unit_price?`（單堂 $${plan.unit_price}）`:''}</span>
-         <span>期限 ${plan.valid_days} 天　·　到期 <b>${expire}</b></span>
-         <span>分期 ${plan.installment?`<b style="color:var(--green);">可分期</b>`:'不可分期'}</span>
+         <span><i>方案類型</i><b>${PT[plan.plan_type]||'一般'}${plan.sessions_bonus?`　含贈送 ${plan.sessions_bonus} 堂`:''}</b></span>
+         <span><i>定價</i><b style="color:${col};">$${listPrice.toLocaleString()}${plan.unit_price?`　<span style="font-weight:600;color:var(--t3);">單堂 $${plan.unit_price}</span>`:''}</b></span>
+         <span><i>期限</i><b>${plan.valid_days} 天</b></span>
+         <span><i>到期</i><b>${expire}</b></span>
+         <span><i>分期</i>${plan.installment?`<b style="color:var(--green);">可分期</b>`:'<b>不可分期</b>'}</span>
        </div>
      </div>`;
   /* 成交金額預設帶入定價
