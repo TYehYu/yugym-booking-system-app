@@ -50,12 +50,25 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
+      # 減肥（2026-09-18）：註解佔 index.html 的 37.6%、佔壓縮後的 52%。
+      # 實測 GitHub 到台灣只有約 35 KB/s，整份抓完要 48 秒，剝掉註解之後是 23 秒。
+      # 原始碼裡的註解一個都不動，只有發佈出去的那份被剝。
+      # ⚠ build/slim.js 會自我驗證（移除的每一段都必須真的是註解、剝完的 JS 不可被後續
+      #   處理動到、識別字與字串序列一致…），任何一項不過就結束碼 1 → 整個部署中止。
+      #   那是刻意的：寧可線上停在舊版，也不要發一個「解析得過、測試全綠、卻安靜少了
+      #   東西」的版本（開發時就踩過一次：樣板字串裡的 <!--ALERTS--> 佔位標記被剝掉）。
+      - name: 減肥（剝掉註解，會自我驗證）
+        run: |
+          set -e
+          mkdir -p _site
+          node build/slim.js index.html _site/index.html
+
       - name: 組出要發佈的檔案（只有執行期需要的）
         run: |
           set -e
           mkdir -p _site
-          # 執行檔本體＋雲端設定
-          cp index.html config.js _site/
+          # 雲端設定（index.html 已由上一步產生，不要再覆蓋回未減肥的版本）
+          cp config.js _site/
           # PWA 三件組（manifest / service worker / 圖示）
           cp manifest.json sw.js icon-192.png icon-512.png _site/
           # 小管家插圖（index.html 會讀 img/butler/）
@@ -68,11 +81,20 @@ jobs:
       - name: 確認沒有把不該公開的東西帶進去
         run: |
           set -e
-          for f in docs tests CLAUDE.md README.md; do
+          for f in docs tests CLAUDE.md README.md build; do
             if [ -e "_site/$f" ]; then echo "❌ _site 裡不該有 $f"; exit 1; fi
           done
           test -f _site/index.html
           test -f _site/config.js
+          # 確認發佈的是「減肥過」的那份（防止哪天有人手滑把原始檔 cp 回去蓋掉）
+          a=$(wc -c < index.html); b=$(wc -c < _site/index.html)
+          echo "  index.html $a → $b bytes"
+          if [ "$b" -ge "$a" ]; then echo "❌ _site/index.html 沒有比原始檔小，減肥步驟可能被蓋掉了"; exit 1; fi
+          # 版本號必須一致（發佈的版本與原始碼對得上，線上才查得動）
+          va=$(grep -o "const APP_VERSION = '[0-9.]*'" index.html | head -1)
+          vb=$(grep -o "const APP_VERSION = '[0-9.]*'" _site/index.html | head -1)
+          if [ "$va" != "$vb" ] || [ -z "$va" ]; then echo "❌ 版本號對不上：'$va' vs '$vb'"; exit 1; fi
+          echo "  版本 $va"
           echo "✓ 內容檢查通過"
 
       - uses: actions/configure-pages@v5
