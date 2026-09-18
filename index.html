@@ -1,5 +1,21 @@
 ﻿<!DOCTYPE html>
-<html lang="zh-Hant">
+<!-- ════════ 開場第一眼（2026-09-18 使用者回報「開啟介面很久才進入」）════════
+     #boot-splash 已經是為了這件事加的，但它在檔案的 21% 處（樣式表約 1MB 排在它前面），
+     而實測 GitHub 到台灣只有 35 KB/s —— 推新版之後那一次要先看 10 秒白畫面才輪到它。
+
+     瀏覽器是邊下載邊解析的，所以「最先看到的東西」必須是**檔案最前面的位元組**。
+     這裡把品牌底色與字標直接畫在 <html> 的背景上：第 50 個位元組就生效，
+     不需要樣式表、不需要 JS、不多一個請求，白畫面就此消失。
+
+     ⚠ 用 background-attachment:fixed —— 根元素的背景會被提升成整個畫布，
+       但圖片仍以根元素的「盒子」定位；開場時那個盒子還很矮，字標會黏在最上面。
+       fixed 讓定位改以視窗為準，才會真的置中。
+     ⚠ 顏色與 #boot-splash 同一個漸層，兩者銜接時不會閃一下。
+     ⚠ 這是 inline 樣式，權重高過樣式表，所以 bootSplashOff() 會把它清掉 ——
+       留著的話整個 App 期間都墊在底下，萬一哪個頁面底色是透明的就會透出字標。
+     ⚠ 字標用 SVG data URI，裡面的單引號一律寫成 %27、空白寫成 %20：
+       CSS 不加引號的 url() 不允許出現原始的引號、空白與括號。 -->
+<html lang="zh-Hant" style="background-color:#003d32;background-image:url(data:image/svg+xml,%3Csvg%20xmlns=%27http://www.w3.org/2000/svg%27%20width=%27300%27%20height=%2796%27%3E%3Ctext%20x=%27150%27%20y=%2744%27%20text-anchor=%27middle%27%20font-family=%27sans-serif%27%20font-size=%2734%27%20font-weight=%27700%27%20letter-spacing=%276%27%20fill=%27%23ffffff%27%3EYUGYM%3C/text%3E%3Ctext%20x=%27150%27%20y=%2778%27%20text-anchor=%27middle%27%20font-family=%27sans-serif%27%20font-size=%2712%27%20letter-spacing=%272%27%20fill=%27%23ffffff%27%20fill-opacity=%27.5%27%3ELoading%3C/text%3E%3C/svg%3E),linear-gradient(165deg,#0a4438 0%,#003d32 55%,#062a21 100%);background-repeat:no-repeat;background-position:center;background-attachment:fixed;">
 <head>
 <meta charset="UTF-8">
 <!-- 鎖定縮放（2026-07-20 使用者回報：行事曆誤觸 pinch-zoom 後日期被 sticky 標題列遮住）：
@@ -13512,8 +13528,8 @@ function tbl(s){return TABLE_ALIAS[s]||s;}
 let sb=null;
 // ── 版本號（日期+時間格式：年後兩碼+月+日.時分，例 26620.1058 = 26年6/20 10:58）──
 // 每次改版手動更新這一行即可，畫面與 title 會一起更新
-const APP_VERSION = '260918.1642';
-const APP_VERSION_LABEL = 'v260918.1642';
+const APP_VERSION = '260918.2118';
+const APP_VERSION_LABEL = 'v260918.2118';
 const CLOUD = !!(window.YUGYM_CONFIG && window.YUGYM_CONFIG.url && window.YUGYM_CONFIG.anonKey);
 if(CLOUD){ sb = supabase.createClient(window.YUGYM_CONFIG.url, window.YUGYM_CONFIG.anonKey); }
 
@@ -18190,6 +18206,16 @@ function bodyFontGuard(){
      留著萬一有 CSS 讓它重新顯示就會整片蓋住畫面。 */
 function bootSplashOff(){
   try{ const el=document.getElementById('boot-splash'); if(el) el.remove(); }catch(_){}
+  /* 連同畫在 <html> 上的開場底色一起收掉（2026-09-18）——
+     那是 inline 樣式、權重高過樣式表，留著會整個 App 期間墊在最底下，
+     哪一頁的底色是透明的就會透出 YUGYM 字標。只清背景那幾個屬性，
+     不用 removeAttribute('style')：字級調整（bodyFontGuard）也寫在同一個元素上。 */
+  try{
+    const de=document.documentElement;
+    de.style.backgroundImage=''; de.style.backgroundColor='';
+    de.style.backgroundRepeat=''; de.style.backgroundPosition='';
+    de.style.backgroundAttachment='';
+  }catch(_){}
 }
 function bootYugym(){
   bootSplashOff();
