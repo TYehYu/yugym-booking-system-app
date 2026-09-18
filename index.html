@@ -13512,8 +13512,8 @@ function tbl(s){return TABLE_ALIAS[s]||s;}
 let sb=null;
 // ── 版本號（日期+時間格式：年後兩碼+月+日.時分，例 26620.1058 = 26年6/20 10:58）──
 // 每次改版手動更新這一行即可，畫面與 title 會一起更新
-const APP_VERSION = '260917.1137';
-const APP_VERSION_LABEL = 'v260917.1137';
+const APP_VERSION = '260918.1050';
+const APP_VERSION_LABEL = 'v260918.1050';
 const CLOUD = !!(window.YUGYM_CONFIG && window.YUGYM_CONFIG.url && window.YUGYM_CONFIG.anonKey);
 if(CLOUD){ sb = supabase.createClient(window.YUGYM_CONFIG.url, window.YUGYM_CONFIG.anonKey); }
 
@@ -26811,7 +26811,19 @@ async function openGroupScheduleModal(){
   });
   /* 停課也要上課表（2026-08-15 使用者回報：「停課的課程沒有跟著顯示停課」）——
      取消的團課照排進格子、掛深紅「停課」章，會員才知道那一班沒了；
-     同一時段若已另開新班（改期/換教練重建）只畫新班，不重複；同時段多筆取消只畫一次。 */
+     同一時段若已另開新班（改期/換教練重建）只畫新班，不重複；同時段多筆取消只畫一次。
+     2026-09-18 使用者定案「整組停掉就不畫」：停課章的前提是「這一班平常有在開，只是這週沒了」。
+     若同一個星期幾＋同一時段，從本週起再也找不到正常開的課，代表整組收掉了 ——
+     再蓋章就變成每週海報都出現、永遠不會消失的幽靈（週二 16:30 那一班一路排到 11 月共 8 週，
+     全部 0 人報名、同時段也沒有新班）。臨時停一週、下週照常的班仍然會蓋章，
+     因為未來還找得到同星期幾同時段的課。 */
+  const _gsWd=s=>new Date(String(s)+'T00:00:00').getDay();
+  const _gsAlive=new Set();
+  bookings.forEach(b=>{
+    if(!bkIsGroup(b)||b.status==='cancelled') return;
+    if(String(b.date||'')<from) return;
+    _gsAlive.add(_gsWd(b.date)+' '+String(b.start_time||'').slice(0,5));
+  });
   const _gsSeen=new Set();
   bookings.filter(b=>bkIsGroup(b)&&b.status==='cancelled'&&b.date>=from&&b.date<=to)
     .sort((a,b)=>((a.date+a.start_time).localeCompare(b.date+b.start_time)))
@@ -26819,6 +26831,7 @@ async function openGroupScheduleModal(){
       const t5=String(b.start_time||'').slice(0,5), key=b.date+' '+t5;
       if(_gsSeen.has(key)) return; _gsSeen.add(key);
       if(list.some(a=>a.date===b.date&&String(a.start_time||'').slice(0,5)===t5)) return;
+      if(!_gsAlive.has(_gsWd(b.date)+' '+t5)) return;   // 整組收掉的班不畫（2026-09-18）
       (byDay[b.date]=byDay[b.date]||[]).push({
         time:b.start_time, name:(typeof bookingTypeName==='function'?bookingTypeName(b,typeMap):'團體課'),
         coach:cMap[bkCoachId(b)]||'', heads:0, max:1, closed:true});

@@ -1,6 +1,8 @@
 /* 2026-08-15 使用者回報：「停課的課程沒有跟著顯示停課」——
    團課課表（IG 限動圖）原本直接濾掉 cancelled，會員看不出哪一班停課。
-   改成：停課照排格子、整格轉灰、掛深紅「停課」章；同時段已另開新班或重複取消不重畫。 */
+   改成：停課照排格子、整格轉灰、掛深紅「停課」章；同時段已另開新班或重複取消不重畫。
+   2026-09-18 收斂：整組收掉（同星期幾＋同時段往後再也沒有正常開的課）就不畫，
+   否則週期班一停，往後每一週的海報都會掛著同一個停課章。 */
 const fs=require('fs');
 const src=fs.readFileSync(process.env.HOME+'/Projects/yugym-booking-system-app/index.html','utf8');
 let pass=0,fail=0;
@@ -12,6 +14,8 @@ ok('★★ 取消的團課也組進 byDay（closed:true）',
 ok('★★ 同時段已另開新班就只畫新班（不重複）',
    /if\(list\.some\(a=>a\.date===b\.date&&String\(a\.start_time\|\|''\)\.slice\(0,5\)===t5\)\) return;/.test(src));
 ok('★ 同時段多筆取消只畫一次', /if\(_gsSeen\.has\(key\)\) return; _gsSeen\.add\(key\);/.test(src));
+ok('★★ 整組收掉的班不畫停課章（2026-09-18 使用者定案「整組停掉就不畫」）',
+   /const _gsAlive=new Set\(\);/.test(src) && /if\(!_gsAlive\.has\(/.test(src));
 ok('★★ 章配色（2026-08-15 使用者指定）：停課紅底白字、滿班金底、即將滿班綠底、整格轉灰',
    /const tag = it\.closed \? \{t:'停課',chip:true,bg:'#b5372e',fg:'#ffffff'\}/.test(src)
    && /it\.heads>=it\.max \? \{t:'滿班',chip:true,bg:'#b48a56',fg:'#3d2b12'\}/.test(src)
