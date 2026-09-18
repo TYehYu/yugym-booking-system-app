@@ -1,4 +1,9 @@
-/* 2026-08-07 兩件事：
+/* ⚠ 2026-09-18 更新：②的判準已從 tkIsGift() 改成直接比 amount_paid（劉忠緯案例）——
+   合約開出來的 $0 贈送堂數備註不寫「加贈」、source 也不是 lottery，tkIsGift 認不出來，
+   於是「付費先用」整條靜默失效。①仍然有效，但它現在只是記錄「不能只看金額 0」這個
+   教訓與 tkZeroWhy 的來源分類，不再是挑票順序的判準。
+
+   2026-08-07 兩件事：
 
    ① 使用者指示：「加上付費票優先的規則」——
       楊采妮 4/26 同一天建立兩張：24 堂 $38,400 與 3 堂加贈（$0），系統卻先吃了加贈那張，
@@ -43,6 +48,21 @@ console.log('\n② 挑票排序：同一天買的，付費先用');
   eq('★★ 同一天買：付費的排前面（即使加贈那張建立時間更早）',
      box([GIFT,PAID]).map(t=>t.id), ['PAID','GIFT']);
   eq('　　反過來放也一樣', box([PAID,GIFT]).map(t=>t.id), ['PAID','GIFT']);
+
+  /* 2026-09-18 劉忠緯案例：合約「自訂方案」開出來的 $0 贈送堂數，備註是效期異動紀錄、
+     source 是 purchase —— tkIsGift 兩個條件都不符，整條「付費先用」靜默跳過，
+     退回 created_at 比較，而櫃檯往往先建 $0 那張（早 7 分鐘）→ $0 反而排到付費前面。
+     第④關改成直接比實收金額後才修正。這一組就是當初漏掉的形狀。 */
+  const C_GIFT={id:'C_GIFT',purchase_date:'2026-08-31',amount_paid:0,source:'purchase',
+    note:'2026-08-31 首堂取消，效期改依新首堂 2026/10/12 起算',created_at:'2026-08-31T10:56:16Z'};
+  const C_PAID={id:'C_PAID',purchase_date:'2026-08-31',amount_paid:15000,source:'purchase',
+    note:null,created_at:'2026-08-31T11:03:10Z'};
+  eq('★★★ 合約開的 $0 贈送（備註沒有「加贈」）也要排在付費票後面',
+     box([C_GIFT,C_PAID]).map(t=>t.id), ['C_PAID','C_GIFT']);
+  eq('　　反過來放也一樣', box([C_PAID,C_GIFT]).map(t=>t.id), ['C_PAID','C_GIFT']);
+  ok('★★ 第④關改用實收金額，不再問 tkIsGift（它認不得合約開的 $0）',
+     /const va=Number\(a\.amount_paid\|\|0\), vb=Number\(b\.amount_paid\|\|0\);/.test(sortSrc)
+     && /if\(va!==vb\) return vb-va;/.test(sortSrc));
 
   const OLDGIFT={id:'OLDGIFT',purchase_date:'2026-01-01',amount_paid:0,note:'加贈',created_at:'2026-01-01T00:00:00Z'};
   eq('★ 跨日期仍照購買順序先進先出（不因為是加贈就跳過早買的那張）',

@@ -13512,8 +13512,8 @@ function tbl(s){return TABLE_ALIAS[s]||s;}
 let sb=null;
 // ── 版本號（日期+時間格式：年後兩碼+月+日.時分，例 26620.1058 = 26年6/20 10:58）──
 // 每次改版手動更新這一行即可，畫面與 title 會一起更新
-const APP_VERSION = '260918.1050';
-const APP_VERSION_LABEL = 'v260918.1050';
+const APP_VERSION = '260918.1642';
+const APP_VERSION_LABEL = 'v260918.1642';
 const CLOUD = !!(window.YUGYM_CONFIG && window.YUGYM_CONFIG.url && window.YUGYM_CONFIG.anonKey);
 if(CLOUD){ sb = supabase.createClient(window.YUGYM_CONFIG.url, window.YUGYM_CONFIG.anonKey); }
 
@@ -19889,12 +19889,19 @@ async function listUsableTickets(member_id,type_id,bookDate,bookTime){
       if(sa===1) {   // 兩張都不急（soon 旗標 0=急、1=不急）→ 購買順序
         const pa=String(a.purchase_date||a.created_at||'9999'), pb=String(b.purchase_date||b.created_at||'9999');
         if(pa!==pb) return pa.localeCompare(pb);
-        /* ④ 同一天買的：付費的先用、$0 加贈的留最後（2026-08-07 使用者指示，
-           楊采妮案例：24 堂 $38,400 與 3 堂加贈同一天建立，系統卻先吃了加贈那張）。
+        /* ④ 同一天買的：實收金額高的先用、$0 的留最後
+           （2026-08-07 楊采妮案例定調「付費的先用」，2026-09-18 劉忠緯案例改成比金額）。
+           原本這一關問的是 tkIsGift()，但它只認得抽獎票與備註寫「加贈」的舊票 ——
+           合約裡開出來的 $0 贈送堂數兩者都不是（source 是 purchase、備註是效期異動紀錄），
+           於是整條規則靜默跳過、退回 created_at 比較，而櫃檯往往先建 $0 那張
+           （劉忠緯的 4 堂 $0 比 10 堂 $15,000 早 7 分鐘建立）→ $0 反而排到付費的前面。
+           改成直接比實收金額，就不必先判斷「算不算贈送」：贈送票實收本來就是 0、
+           自然排最後，而 2026-09-05 定過的「先開發票、事後補收款」那批 $0 新約
+           也該排後面，一併涵蓋，且不必把它們誤標成贈送而動到約別與獎金口徑。
            只在購買日相同時比 —— 跨日期仍照「編號順序」先進先出（2026-08-03 定案），
            而且快到期的票在上一關（30 天內）就已經被排到前面，不會因此放到過期。 */
-        const ga=tkIsGift(a)?1:0, gb=tkIsGift(b)?1:0;
-        if(ga!==gb) return ga-gb;
+        const va=Number(a.amount_paid||0), vb=Number(b.amount_paid||0);
+        if(va!==vb) return vb-va;
         return String(a.created_at||'').localeCompare(String(b.created_at||''));
       }
       return String(a.expire_date||'9999-12-31').localeCompare(String(b.expire_date||'9999-12-31'));
@@ -19977,7 +19984,14 @@ function tkIsTimeRestricted(t){
   const tt=(window._ttCache||[]).find(x=>x.id===(t&&t.ticket_type_id));
   return !!(tt && tt.time_restricted);
 }
-/* 「這張是隨方案加贈的（$0）嗎」（2026-08-07 使用者指示：挑票要付費票優先）——
+/* 「這張是隨方案加贈的（$0）嗎」——
+   ⚠⚠ 2026-09-18 起這支**不再決定挑票順序**。原本 listUsableTickets 的第④關問它
+     「算不算贈送」，但它只認得抽獎票與備註寫「加贈」的舊票；合約裡開出來的 $0 贈送堂數
+     兩者都不是（劉忠緯案例），於是整條規則靜默失效。那一關已改成直接比 amount_paid，
+     不必先回答「算不算贈送」。現在真正在防「付費票還沒用完就先用 $0」的是
+     bkGiftGuard／bkPaidLeftSameType（2026-09-05），判準同樣不看備註。
+     這支目前沒有呼叫端，留著是因為 tkordertest／tkpickgifttest 還用它記錄
+     「不能只看金額 0」這個仍然成立的教訓 —— 要改判準請去上面那兩處，不是這裡。
    ⚠ 不能只看金額 0：全庫還有堂數的 $0 教練課票有 35 張，其中「舊系統匯入，未帶收款金額」
    與「金額待確認（購買當日查無收款紀錄）」都不是加贈，只是金額不明；
    把它們當加贈延後使用會挑錯票。判準沿用票券卡上「$0・加贈」那一套（見 tkMoneyHtml）：
