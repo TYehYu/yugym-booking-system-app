@@ -68,10 +68,21 @@ console.log('\n⑤ 工具列排成穩定的兩列');
         列2＝課程 chips ＋ [預約模式][今天] 日期列
    實測（Ink、真實 CSS）：列1 1319、列2 1240 —— 連 1366 的舊機都放得下，
    是四種排法裡唯一全過的。 */
-ok('★★★ 列1＝教練 chips ＋ 團課課表 ＋ 新增預約',
-   /\$\{opts\.coachFilter\?`<div class="cal-head-right" style="display:flex;gap:8px;margin:0 0 0 auto;flex:none;">\s*\n\s*<button class="btn" style="background:var\(--course-group-soft\)[\s\S]{0,200}?團課課表<\/button>\s*\n\s*<button class="btn btn-green" onclick="openBookingModal\(\)">＋ 新增預約<\/button>/.test(src));
-ok('★★★ 列2＝課程 chips ＋ 預約模式 ＋ 日期導覽',
-   /id="cal-bookmode-btn"[\s\S]{0,220}?<\/button>\s*\n\s*<\/div>\s*\n\s*\$\{_calNavHtml\}/.test(src));
+/* 2026-09-21 使用者：「這個在行事曆的［+新增預約］很少使用 可以移除
+   把［預約模式］的按鈕改到這邊」—— 列1 的第二顆從〔＋新增預約〕換成〔預約模式〕，
+   列2 因此只剩日期導覽。
+   ⚠ 寬度只會更鬆：〔預約模式〕比〔＋新增預約〕短，列2 還少一顆。
+   ⚠ 移除不等於功能消失 —— openBookingModal() 還有首頁快捷、空狀態，
+     以及「直接點時間格」那條（那正是預約模式在做的事）。 */
+ok('★★★ 列1＝教練 chips ＋ 團課課表 ＋ 預約模式',
+   /\$\{opts\.coachFilter\?`<div class="cal-head-right" style="display:flex;gap:8px;margin:0 0 0 auto;flex:none;">\s*\n\s*<button class="btn" style="background:var\(--course-group-soft\)[\s\S]{0,200}?團課課表<\/button>[\s\S]{0,700}?id="cal-bookmode-btn"/.test(src));
+ok('★★★ 列2＝課程 chips ＋ 日期導覽（預約模式已搬走）',
+   /<div class="cal-chip-row">\$\{calCourseChips\(chipN\.course\)\}<\/div>[\s\S]{0,900}?\$\{_calNavHtml\}/.test(src)
+   && !/id="cal-bookmode-btn"[\s\S]{0,220}?<\/button>\s*\n\s*<\/div>\s*\n\s*\$\{_calNavHtml\}/.test(src));
+ok('★★★ 行事曆工具列不再有〔＋新增預約〕（但別處的入口還在）',
+   (()=>{ const i=src.indexOf('return `<div class="cal-wrap'), j=src.indexOf('<div class="cal-body-wrap">', i);
+     return (src.slice(i,j).match(/＋ 新增預約/g)||[]).length===0; })()
+   && (src.match(/onclick="openBookingModal\(\)">＋ 新增預約/g)||[]).length>=1);
 /* 2026-09-21：字面改成「回到今天／回到當週」（跟著檢視模式），位置不變 */
 ok('★★★ 「回到當週」在日期列左邊（使用者：「[預約模式][今天]日期列」）',
    /const _calNavHtml=`<div class="cal-nav">[\s\S]{0,400}?<button class="btn btn-ghost cal-today-btn"[\s\S]{0,140}?回到當週'\}<\/button>\s*\n\s*<div class="cal-arrow"/.test(src));
@@ -81,7 +92,7 @@ ok('★★ 工具列的每顆鈕只有一份（不是複製過去、原地忘了
    (src.match(/onclick="openGroupScheduleModal\(\)">團課課表<\/button>/g)||[]).length===1
    && (src.match(/id="cal-bookmode-btn"/g)||[]).length===1
    && (() => { const i=src.indexOf('return `<div class="cal-wrap'), j=src.indexOf('<div class="cal-body-wrap">', i);
-       return (src.slice(i,j).match(/＋ 新增預約/g)||[]).length===1; })());
+       return (src.slice(i,j).match(/＋ 新增預約/g)||[]).length===0; })());
 ok('★★★ 量出來的數字寫在原地（下次再往工具列加東西，先看這筆帳）',
    /拆開之後列1 約 1328、列2 約 1242，兩列都站得住/.test(src));
 ok('★★ 沒有 coachFilter 的呼叫端（教練端／唯讀檢視）仍在列1 放日期導覽',
