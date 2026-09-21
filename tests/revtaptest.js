@@ -44,7 +44,18 @@ ok('★ 每一列：歸屬 tag（上）／姓名／品項／付款方式／金�
 /* 2026-09-15 使用者：「今天兩筆 魚先森 點選進去的時候應該要直接跳選到
    會員資料的[其他]這一個頁面」——票券列仍跳票券頁，商品／場租／票券重啟跳〔其他〕。
    判斷用 r.tk（票券列一定有、純收款列只有 r.pur），不用 category。 */
-ok('★ 有綁會員的列點下去跳到他的會員資料', /onclick="closeModal\(\);revRowGo\('\$\{r\.mid\}','\$\{r\.tk\?\(r\.cls\|\|'pt'\):'other'\}'\)"/.test(src));
+/* 2026-09-21 使用者：「點取向左展出一個小視窗 把功能都收在這個小視窗裡面」——
+   整列不再直接跳會員資料，改開 revRowPanel；「會員資料」變成視窗裡的第一顆鈕，
+   底下仍是同一支 revRowGo（分頁邏輯沒動，下面兩條照樣釘著）。 */
+ok('★★ 整列點下去開側滑小視窗（兩處清單都是）',
+   (src.match(/onclick="revRowPanel\('\$\{revRowKey\(r\)\}'\)"/g)||[]).length===2
+   && !/onclick="closeModal\(\);revRowGo\(/.test(src));
+ok('★★★ 視窗的「會員資料」那顆仍走 revRowGo，帶著票券分頁',
+   /if\(what==='mem'\)\{ closeModal\(\); revRowGo\(r\.mid, r\.tk\?\(r\.cls\|\|'pt'\):'other'\); return; \}/.test(src));
+ok('★★★ 用票號／收款號當鍵值查列，不是傳索引（兩處排序若不同，索引會指到別人的收款）',
+   /function revRowKey\(r\)\{/.test(src)
+   && /if\(r\.tk\) return 'tk:'\+r\.tk;/.test(src)
+   && /\.find\(r=>revRowKey\(r\)===key\)/.test(src));
 /* 2026-09-15 二修（使用者：「這一筆點選可以直接進去團體課的頁面嗎」）——
    票券列不只跳票券頁，還要切到**對應的分頁**（團課／自主訓練／按摩／折抵券／教練課）。 */
 ok('★★★ 商品／場租／重啟跳〔其他〕，票券列跳票券頁並切到對應分頁',
@@ -55,8 +66,10 @@ ok('★★★ 分頁鍵用 tkClass5（票券夾分頁 TK5 由同一份 TK_POCKET
    /cls:tkClass5\(t,typeMap\),/.test(src)
    && /const TK5=Object\.keys\(TK_POCKETS\)\.map/.test(src)
    && /const _tkTabs=TK5;/.test(src));
-ok('　　兩個列表都帶了種類（不是只有彈窗改）',
-   (src.match(/revRowGo\('\$\{r\.mid\}','\$\{r\.tk\?\(r\.cls\|\|'pt'\):'other'\}'\)/g)||[]).length===2);
+/* 2026-09-21：分頁種類的計算搬進 rvpAct（視窗的「會員資料」那顆），
+   兩處清單只負責開視窗，所以這裡改成釘那一支。 */
+ok('　　分頁種類的算法只有一份（視窗裡的會員資料鈕）',
+   (src.match(/r\.tk\?\(r\.cls\|\|'pt'\):'other'/g)||[]).length===1);
 ok('★ 有合計，以及有發票／無發票的拆分', /<div class="nl-sum"><span>合計<\/span><b>\$\{money\(d\.total\)\}<\/b><\/div>/.test(src)
    && /有發票 \$\{money\(d\.inv\)\}　·　無發票 \$\{money\(d\.noInv\)\}/.test(src));
 ok('★ 沒有收款時給空狀態，不是空白視窗（截圖那天就是 $0）',
@@ -77,20 +90,38 @@ console.log('\n實跑：彈窗組裝');
   const _revAmtDup=new Function('return '+g('function revAmtDup(r){','}'))();
   /* 2026-08-24：列的最左邊多了一欄直式卡（revKindCell：新約／續約／分期／抽獎），
      沙箱一併給替身。 */
-  const fn=new Function('showModal','window','revAttribChip','revPayChip','saleKindChip','revUndoChip','revAmtDup','revKindCell',
-    g('function openTodayRevList(){','\n}\n')+'\nreturn openTodayRevList;')(h=>{shown=h;}, globalThis, ()=>'', r=>r.pay?`<span class="mc-rev-pay">${r.pay}</span>`:'', ()=>'', ()=>'', _revAmtDup, r=>r.kind?`<span class="mc-rev-kv">${r.kind}</span>`:'');
+  /* 2026-09-21：列的可點條件改吃 revRowKey（整列開側滑視窗）——
+     ⚠ 沙箱要餵**真的那一支**，不要用替身：它決定哪些列點得下去，
+       用替身等於把要驗的東西換掉。（在 index.html 幫某支函式加新依賴時，
+       記得回頭搜 tests/ 找出所有抽取點，不然會像這次一樣炸在半路。） */
+  const _revRowKey=new Function('return '+g('function revRowKey(r){','\n}'))();
+  const fn=new Function('showModal','window','revAttribChip','revPayChip','saleKindChip','revUndoChip','revAmtDup','revKindCell','revRowKey',
+    g('function openTodayRevList(){','\n}\n')+'\nreturn openTodayRevList;')(h=>{shown=h;}, globalThis, ()=>'', r=>r.pay?`<span class="mc-rev-pay">${r.pay}</span>`:'', ()=>'', ()=>'', _revAmtDup, r=>r.kind?`<span class="mc-rev-kv">${r.kind}</span>`:'', _revRowKey);
 
   globalThis._gdRev={date:'2026-08-01',total:12000,inv:9000,noInv:3000,rows:[
-    {nm:'王小明',mid:'m1',it:'私人教練課 1V1',amt:9000,inv:true,pay:'現金'},
-    {nm:'散客',mid:null,it:'場地租借',amt:3000,inv:false,pay:'匯款'},
+    {nm:'王小明',mid:'m1',tk:'TK-a',it:'私人教練課 1V1',amt:9000,inv:true,pay:'現金'},
+    {nm:'散客',mid:null,pur:'PUR-b',it:'場地租借',amt:3000,inv:false,pay:'匯款'},
   ]};
   fn();
   ok('★ 兩筆都畫出來', /王小明/.test(shown) && /場地租借/.test(shown));
   ok('★ 標題帶日期與筆數', /08\/01 營收（2 筆）/.test(shown));
   ok('★ 列上沒有發票標籤、有付款方式（0803 兩修）',
      !/mc-rev-inv/.test(shown) && /現金/.test(shown) && /匯款/.test(shown));
-  ok('★ 有會員的可點、散客不可點',
-     /revRowGo\('m1','other'\)/.test(shown) && (shown.match(/mc-rev-go/g)||[]).length===1);
+  /* 2026-09-21：可點條件從「有綁會員」改成「有鍵值」——
+     沒綁會員的收款列（場租、商品）一樣有付款方式與退回要處理，現在也進得去。 */
+  ok('★★ 兩列都點得開，各自帶自己的鍵值',
+     /revRowPanel\('tk:TK-a'\)/.test(shown) && /revRowPanel\('pur:PUR-b'\)/.test(shown)
+     && (shown.match(/mc-rev-go/g)||[]).length===2);
+  {
+    /* 真的沒有鍵值的列（既不是票券也不是收款）仍然不可點 —— 不能因為改版就變成
+       每一列都掛一個點了沒反應的 onclick。 */
+    const keep=globalThis._gdRev;
+    globalThis._gdRev={date:'2026-08-01',total:0,inv:0,noInv:0,
+      rows:[{nm:'無來源',mid:'m9',it:'—',amt:0}]};
+    fn();
+    ok('★★ 沒有鍵值的列不可點', !/mc-rev-go/.test(shown) && !/revRowPanel/.test(shown));
+    globalThis._gdRev=keep; fn();
+  }
   ok('★ 合計與拆分正確', /\$12,000/.test(shown) && /有發票 \$9,000　·　無發票 \$3,000/.test(shown));
 
   globalThis._gdRev={date:'2026-08-01',total:0,inv:0,noInv:0,rows:[]};

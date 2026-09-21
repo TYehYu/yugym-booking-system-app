@@ -287,8 +287,11 @@ ok('★★ 第二欄兩列：姓名｜教練標籤 ／ 品項｜金額（現金�
    (src.match(/<div class="rv-r1">/g)||[]).length===2
    && (src.match(/<div class="rv-r2">/g)||[]).length===2
    && /\.mc-rev-r\{flex:none;display:flex;flex-direction:column;align-items:flex-end;gap:2px;\}/.test(src));
+/* 2026-09-21：可點條件改成「有鍵值就可點」（整列開側滑視窗），抽獎仍走 lottoFixAsk。
+   原本是 r.mid —— 沒綁會員的收款列（場租、商品）因此整列不能點，但它們一樣有
+   付款方式與退回要處理，現在也進得去視窗。 */
 ok('　　首頁名單卡與營收彈窗兩處都要改（同一份資料兩個地方畫）',
-   (src.match(/class="mc-rev-row\$\{\(r\.mid\|\|r\.lot\)\?' mc-rev-go':''\}"/g)||[]).length===2);
+   (src.match(/class="mc-rev-row\$\{\(r\.lot\|\|revRowKey\(r\)\)\?' mc-rev-go':''\}"/g)||[]).length===2);
 
 /* 2026-08-24 使用者指示：獎項順序照實際籤筒排。 */
 ok('★★ 獎項順序：筋膜球 → 運動按摩折抵300 → 教練課折抵300 → 運動按摩 → 教練課 → 蛋白粉',
