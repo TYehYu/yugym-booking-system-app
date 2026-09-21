@@ -53,7 +53,7 @@ ok('★ 付款方式疊在金額上方（2026-08-03 使用者指示：並排會�
    && (src.match(/<span class="mc-rev-r">\$\{revPayChip\(r\)\}/g)||[]).length===2
    /* ⚠ 2026-09-15 二修：教練標籤也搬走了（移到最左欄、約別章下方）。
       ⚠ 首頁版與彈窗版不對稱：彈窗版沒有發票標記（那一份只有姓名＋退回）。 */
-   && /<div class="rv-r1"><span class="mc-rev-nm">\$\{r\.nm\}<\/span>\$\{revUndoChip\(r\)\}\$\{revInvChip\(r\)\}<\/div>/.test(src)
+   && /<div class="rv-r1"><span class="mc-rev-nm">\$\{r\.nm\}<\/span>\$\{revInvChip\(r\)\}<\/div>/.test(src)
    && /\.mc-rev-r\{flex:none;display:flex;flex-direction:column;align-items:flex-end;gap:2px;\}/.test(src));
 /* 2026-08-03 使用者指示：「不要列出刷卡，我們沒提供刷卡功能」。
    2026-08-12 拆帳改版：第三顆改成「現金+匯款」拆帳入口（openRevPaySplit），刷卡仍不列 */

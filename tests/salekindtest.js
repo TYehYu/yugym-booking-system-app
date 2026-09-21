@@ -47,7 +47,7 @@ ok('★ 首頁右欄名單卡（約別標籤在列最左，沒有約別也佔住
    /* 2026-09-15 二修：教練標籤搬到最左欄，姓名那行只剩姓名＋發票標記。
       2026-09-15 三修：退回鈕也搬上來了，排在發票左邊（使用者：「這樣就不會多一列了」），
       所以右側那格只剩付款＋金額兩層。 */
-   && /<div class="rv-r1"><span class="mc-rev-nm">\$\{r\.nm\}<\/span>\$\{revUndoChip\(r\)\}\$\{revInvChip\(r\)\}<\/div>/.test(src));
+   && /<div class="rv-r1"><span class="mc-rev-nm">\$\{r\.nm\}<\/span>\$\{revInvChip\(r\)\}<\/div>/.test(src));
 ok('★ 營收彈窗也走同一支（約別也在最左邊那一欄）',
    (src.match(/\$\{revKindCell\(r\)\}/g)||[]).length===2
    && /<span class="mc-rev-r">\$\{revPayChip\(r\)\}\$\{\(revAmtDup\(r\)\|\|r\.lot\)\?'':`<span class="mc-rev-amt">\$\{money\(r\.amt\)\}/.test(src));
@@ -101,7 +101,6 @@ ok('　　可點的才有 hover 與手指游標', /button\.rev-kind\{cursor:poin
 ok('★★ 按下去有回饋（手機沒有 hover，:active 才是有感的那個）',
    /button\.rev-kind:active\{transform:scale\(\.88\);\}/.test(src)
    && /\.rev-att-tap:active\{transform:scale\(\.90\);\}/.test(src)
-   && /\.rev-undo:active\{transform:scale\(\.90\);\}/.test(src)
    && /\.mc-rev-pay-btn:active\{transform:scale\(\.92\);\}/.test(src)
    && /\.mc-rev-row\.mc-rev-go:active\{transform:scale\(\.995\);\}/.test(src));
 /* 2026-09-15 使用者：「約別章 教練 現金/匯款 滑鼠擺上去的時候可以有稍微放大的動畫嗎」 */

@@ -38,7 +38,7 @@ ok('★ 每一列：歸屬 tag（上）／姓名／品項／付款方式／金�
 /* 2026-09-15：教練標籤搬到最左欄（約別章下方），姓名那一行只剩姓名。 */
 /* 2026-09-15 三修：退回鈕移到姓名那一行（使用者：「退回的按鈕可以改在發票左邊
    這樣就不會多一列了」）。彈窗版沒有發票標記，所以那一行是「姓名＋退回」。 */
-   /<div class="rv-r1"><span class="mc-rev-nm">\$\{esc\(r\.nm\)\}<\/span>\$\{revUndoChip\(r\)\}<\/div>/.test(src)
+   /<div class="rv-r1"><span class="mc-rev-nm">\$\{esc\(r\.nm\)\}<\/span><\/div>/.test(src)
    && /<div class="rv-r2"><span class="mc-rev-it">\$\{esc\(r\.it\)\}<\/span>/.test(src)
    && !/mc-rev-inv">發票/.test(src));
 /* 2026-09-15 使用者：「今天兩筆 魚先森 點選進去的時候應該要直接跳選到
@@ -47,8 +47,8 @@ ok('★ 每一列：歸屬 tag（上）／姓名／品項／付款方式／金�
 /* 2026-09-21 使用者：「點取向左展出一個小視窗 把功能都收在這個小視窗裡面」——
    整列不再直接跳會員資料，改開 revRowPanel；「會員資料」變成視窗裡的第一顆鈕，
    底下仍是同一支 revRowGo（分頁邏輯沒動，下面兩條照樣釘著）。 */
-ok('★★ 整列點下去開側滑小視窗（兩處清單都是）',
-   (src.match(/onclick="revRowPanel\('\$\{revRowKey\(r\)\}'\)"/g)||[]).length===2
+ok('★★ 整列點下去開小浮層（兩處清單都是，並把事件傳進去算錨點）',
+   (src.match(/onclick="revRowPanel\('\$\{revRowKey\(r\)\}',event\)"/g)||[]).length===2
    && !/onclick="closeModal\(\);revRowGo\(/.test(src));
 ok('★★★ 視窗的「會員資料」那顆仍走 revRowGo，帶著票券分頁',
    /if\(what==='mem'\)\{ closeModal\(\); revRowGo\(r\.mid, r\.tk\?\(r\.cls\|\|'pt'\):'other'\); return; \}/.test(src));
@@ -110,7 +110,7 @@ console.log('\n實跑：彈窗組裝');
   /* 2026-09-21：可點條件從「有綁會員」改成「有鍵值」——
      沒綁會員的收款列（場租、商品）一樣有付款方式與退回要處理，現在也進得去。 */
   ok('★★ 兩列都點得開，各自帶自己的鍵值',
-     /revRowPanel\('tk:TK-a'\)/.test(shown) && /revRowPanel\('pur:PUR-b'\)/.test(shown)
+     /revRowPanel\('tk:TK-a',event\)/.test(shown) && /revRowPanel\('pur:PUR-b',event\)/.test(shown)
      && (shown.match(/mc-rev-go/g)||[]).length===2);
   {
     /* 真的沒有鍵值的列（既不是票券也不是收款）仍然不可點 —— 不能因為改版就變成

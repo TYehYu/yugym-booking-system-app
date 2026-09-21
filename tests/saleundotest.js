@@ -36,39 +36,32 @@ console.log('① 是不是今天建立的（2026-09-15 由 30 分鐘放寬成「
      /return ymd\(t\)===ymd\(new Date\(\)\);/.test(grabFn('saleUndoOk')));
 }
 
-console.log('\n② 按鈕在今日營收名單上');
+console.log('\n② 退回的入口（2026-09-21 起在點出來的小視窗裡，不在卡片上）');
 {
-  const F=grabFn('revUndoChip');
-  ok('★ 只有櫃檯／管理員看得到', /if\(!r \|\| !isDeskLike\(\)\) return '';/.test(F));
-  ok('★★ 不是今天的就不畫（不是畫了按下去才說不行）', /if\(!saleUndoOk\(r\.at\)\) return '';/.test(F));
-  /* 改成「當天」後不再顯示剩餘分鐘 —— 早上打錯到晚上還有幾百分鐘，寫「退回 640′」很莫名 */
-  ok('★★ 按鈕不再寫剩餘分鐘（當天制之下那個數字沒有意義）',
-     /↩ 退回<\/button>/.test(F) && !/\$\{left\}′/.test(F));
+  /* 2026-09-21 使用者：「把退回的按鈕從卡片拿掉 已經在點出的視窗有按鈕了」——
+     卡片上那顆膠囊鈕（連同它的樣式）整個移除，退回改由 revRowPanel 的第五顆鈕進入。
+     ⚠ 退回的**邏輯**完全沒動：能不能退仍由 saleUndoOk 決定（見上面 ①），
+       按下去走的也還是同一支 openSaleUndo（見下面 ③）。 */
+  const P=grabFn('revRowPanel'), A=grabFn('rvpAct');
+  ok('★★ 只有櫃檯／管理員按得動', /const desk=\(typeof isDeskLike==='function'\)&&isDeskLike\(\);/.test(P)
+     && /const _undoOk=desk && /.test(P));
+  ok('★★ 不是今天的就按不動（沿用同一支判準）',
+     /typeof saleUndoOk!=='function' \|\| saleUndoOk\(r\.at\)/.test(P));
   ok('★ 票券與純收款兩種都認（場租／商品／重啟）',
-     /const ref=r\.tk\?\('tk:'\+r\.tk\):\(r\.pur\?\('pur:'\+r\.pur\):''\);/.test(F));
-  /* 2026-09-15 使用者：「營收明細退回的按鈕可以改在發票左邊　這樣就不會多一列了」——
-     退回鈕從右側直欄（.mc-rev-r）搬到姓名那一行，排在發票標記左邊。
-     ⚠ 兩份不對稱：首頁版姓名那行是「姓名＋退回＋發票」，彈窗版沒有發票標記（只到退回）。
-       所以不能只用一條正則數兩處，兩邊各釘各的。 */
-  ok('★★ 首頁右欄名單卡與今日營收彈窗都有（0915 起放在姓名那一行）',
-     (src.match(/<\/span>\$\{revUndoChip\(r\)\}/g)||[]).length===2
-     && /<div class="rv-r1"><span class="mc-rev-nm">\$\{r\.nm\}<\/span>\$\{revUndoChip\(r\)\}\$\{revInvChip\(r\)\}<\/div>/.test(src)
-     && /<div class="rv-r1"><span class="mc-rev-nm">\$\{esc\(r\.nm\)\}<\/span>\$\{revUndoChip\(r\)\}<\/div>/.test(src));
-  ok('★ 列資料帶上建立時間（沒有它就算不出剩幾分鐘）',
+     /!!\(r\.tk\|\|r\.pur\)/.test(P)
+     && /openSaleUndo\(r\.tk\?\('tk:'\+r\.tk\):\('pur:'\+r\.pur\)\)/.test(A));
+  /* 不能退的時候要暗化＋寫原因，不是整顆消失（yugym-disabled-with-reason）——
+     櫃檯看不到按鈕會以為功能壞了。 */
+  ok('★★★ 不能退時仍然畫出來，只是暗化並寫明原因',
+     /btn\('undo','退回'/.test(P) && /只能在收款當天退回/.test(P));
+  ok('★ 列資料帶上建立時間（沒有它就判不出是不是今天）',
      /at:t\.created_at\|\|null,   \/\/ 30 分鐘完整退回用（2026-08-08）/.test(src)
      && /pur:p\.id, at:p\.created_at\|\|null,   \/\/ 30 分鐘完整退回用（2026-08-08）/.test(src));
-  ok('　　點退回不會順便觸發整列的「開啟會員票券」', /event\.stopPropagation\(\);openSaleUndo/.test(F));
+  /* 卡片上那顆已經不存在了 —— 用剝過註解的版本比對，否則會命中說明文字本身 */
+  const codeOnly=src.replace(/\/\*[\s\S]*?\*\//g,'').replace(/^[ \t]*\/\/.*$/gm,'');
+  ok('★★★ 卡片上不再有退回鈕（連樣式一起清掉，不留死碼）',
+     !/revUndoChip/.test(codeOnly) && !/rev-undo/.test(codeOnly));
 }
-
-console.log('\n②-2 Ink 模式下的份量（2026-09-15 使用者：「這個退回的標籤很突兀」）');
-/* 突兀的根源不是位置，是只有它漏掉了 Ink 的扁平化 —— 同一列的「匯款」與教練名
-   早就被退成純文字，只剩它還是粉紅底＋紅框＋圓角膠囊。 */
-ok('★★★ 〔退回〕併進 Ink 的扁平化規則（與 .mc-rev-pay／.rev-att 同一條）',
-   /body\.ink \.mc-revlist-card \.mc-rev-pay,\s*\n\s*body\.ink \.mc-revlist-card \.rev-undo,\s*\n\s*body\.ink \.mc-revlist-card \.rev-att\{/.test(src));
-ok('★★ 紅色保留（那是語意：這顆會扣掉東西），只是不再用色塊喊話',
-   /body\.ink \.mc-revlist-card \.rev-undo\{font-size:11px;color:#b5372e !important;\}/.test(src));
-ok('★ 非 Ink 的原始膠囊樣式留著（只有 Ink 那層被扁平化）',
-   /\.rev-undo\{font-size:10px;font-weight:800;border-radius:999px;/.test(src));
 
 console.log('\n③ 按下去之前先擋掉不乾淨的情況');
 {

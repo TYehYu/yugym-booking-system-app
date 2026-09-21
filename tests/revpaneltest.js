@@ -16,19 +16,23 @@ const g=(a,b)=>{const i=src.indexOf(a);return src.slice(i,src.indexOf(b,i)+b.len
 /* 沙箱：餵真的 revRowKey／revRowFind，其餘給最小替身。
    desk 決定「有沒有櫃檯權限」，用來驗兩種身分看到的按鈕狀態。 */
 function build(row, desk){
-  let shown='';
+  let shown='', placed='none';
   const win={_gdRev:{rows:[row]}, _revCoachTag:{c1:'小曾'}};
+  /* rvpPlace 給替身：真正的定位要量 DOM，這裡只確認「有被呼叫、而且帶著錨點」。
+     ⚠ 沒餵的話整支會 ReferenceError —— 在 index.html 幫函式加新依賴時，
+       記得回頭搜 tests/ 把每個抽取點都補上。 */
   const fn=new Function('showModal','window','escH','isDeskLike','SALE_KIND_LB','saleUndoOk',
-    'revRowKey','revRowFind',
-    g('function revRowPanel(key){','\n}\n')+'\nreturn revRowPanel;')(
+    'revRowKey','revRowFind','rvpPlace','closeModal',
+    g('function revRowPanel(key, ev){','\n}\n')+'\nreturn revRowPanel;')(
     h=>{shown=h;}, win,
     t=>String(t==null?'':t), ()=>desk,
     {new:'新約',renewal:'續約',installment:'分期'},
     at=>at==='today',
     new Function('return '+g('function revRowKey(r){','\n}'))(),
-    r=>row);
+    r=>row,
+    a=>{placed=a?'anchored':'centered';}, ()=>{});
   fn('k');
-  return {html:shown, win};
+  return {html:shown, win, placed};
 }
 /* 從產出的 HTML 抓某顆鈕：回傳 {on, sub}
    ⚠ 中間那段要寫成「不可以跨過下一個 <button」——用單純的惰性比對 [\s\S]*? 的話，
@@ -102,10 +106,15 @@ console.log('\n④ 權限：非櫃檯只看得到「會員資料」');
   }
 }
 
-console.log('\n⑤ 側滑與派工');
+console.log('\n⑤ 小浮層與派工');
 {
-  const {html,win}=build(FULL, true);
-  ok('★★★ 開的時候設成側滑（使用者：「向左展出」）', win._modalSideUntilClose===true);
+  const {html,win,placed}=build(FULL, true);
+  /* 2026-09-21 二修（使用者：「視窗太大了吧 幫我改成小視窗 從卡片往左放大縮放」）——
+     不再用 .modal-side（560px 滿高抽屜），改成貼著卡片的小浮層。 */
+  ok('★★★ 不是滿高的側滑抽屜', win._modalSideUntilClose===false);
+  ok('★★★ 開完會去定位（從卡片長出來）', placed!=='none');
+  ok('★★ 關閉鈕在標題列右上角，不佔一整列',
+     /<button class="rvp-x" onclick="closeModal\(\)"/.test(html) && !/modal-foot/.test(html));
   ok('★★ 每顆鈕都帶著同一個鍵值去派工', (html.match(/rvpAct\('[a-z]+','k'\)/g)||[]).length===5);
   const act=g('function rvpAct(what, key){','\n}');
   ok('★★★ 派工前先關掉側滑 —— 接著開的選擇視窗要是置中彈窗，不是滿高的滑出視窗',
