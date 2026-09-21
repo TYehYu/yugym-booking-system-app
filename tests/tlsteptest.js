@@ -95,8 +95,33 @@ ok('★★★ 格子內距收到 0 2px，± 才貼得住兩邊',
 ok('★★ 數字置中（兩邊各一顆鈕時靠左會看起來歪掉）', /\.ae-set-in\{[\s\S]{0,260}?text-align:center;/.test(src));
 ok('★★ 關掉數字框原生上下箭頭（桌機會再吃掉寬度，而且與 ± 重複）',
    /\.ae-set-in::-webkit-outer-spin-button,\.ae-set-in::-webkit-inner-spin-button\{-webkit-appearance:none;margin:0;\}/.test(src));
-ok('★ 寬度算過並寫在原地（375px 實算：每格 118px＝兩顆 29px ＋ 中間 54px）',
-   /每格 118px＝兩顆 29px ＋ 中間 54px 的輸入框/.test(src));
+ok('★ 寬度是量的不是算的，數字寫在原地（375px：每格 113px＝兩顆 24px ＋ 內寬 55px）',
+   /＝ ± 兩顆各 24px ＋ 中間輸入框內寬 55px/.test(src)
+   && /最寬的「100\.5」是 49px，還剩 6px/.test(src));
+
+/* 2026-09-21 二修（使用者附截圖：「畫面擠在一起了」，數字 10 被切成「1(」）——
+   根因是 .modal:has(.ash-sheetmk) input 這條 !important 規則：
+   它給視窗內每一個 input 塞 padding:12px 13px ＋ 白底圓角陰影，
+   套到 113px 寬的逐組格子上光內距就吃掉 26px。
+   ⚠ 「記錄訓練」沒有 .ash-sheetmk，所以同一組元件只有「修改紀錄」壞掉 ——
+     下次遇到「同一個元件只有一張視窗長得不一樣」先查這條。 */
+console.log('\n⑦ 逐組格子要從跳視窗那條 !important 豁免出來');
+ok('★★★ 有豁免規則，而且 padding／陰影／白底都蓋回去',
+   /\.modal:has\(\.ash-sheetmk\) \.ae-set-field \.ae-set-in\{\s*\n?\s*padding:12px 2px !important;border-radius:0 !important;\s*\n?\s*border:none !important;box-shadow:none !important;background:transparent !important;\}/.test(src));
+ok('★★★ 選擇器要寫滿四段才壓得過來源那條（0,2,1＋!important）',
+   /只寫 \.ae-set-in 或 \.modal \.ae-set-in 都會輸/.test(src));
+ok('★★ 只豁免逐組格子，同一張視窗的「動作」「備註」仍是大白框',
+   /只豁免 \.ae-set-in 一個：同一張視窗的「動作」「備註」仍要維持那個大白框的樣子/.test(src)
+   && /\.modal:has\(\.ash-sheetmk\) input,\.modal:has\(\.ash-sheetmk\) select\{/.test(src));
+ok('★★★ 四欄的欄寬與間距三行一起改（只改一行就回到 0915「沒有對齊」）',
+   /\.ae-sets-head,\.ae-set-done,\.ae-set-cur\{\s*\n?\s*display:grid;grid-template-columns:26px 1fr 1fr 20px;gap:8px;align-items:center;\}/.test(src)
+   && /\.ae-sets-head\{display:flex;align-items:center;gap:8px;/.test(src)
+   && /\.ae-set-done\{display:flex;align-items:center;gap:8px;/.test(src)
+   && /\.ae-set-cur\{display:flex;align-items:center;gap:8px;/.test(src)
+   && /\.ae-sets-head span:first-child\{width:26px;/.test(src));
+ok('★★ 組別圓圈縮到 26px（使用者：「前面的編號可以小一點呢」）',
+   /\.ae-set-no\{width:26px;height:26px;/.test(src));
+ok('★★ 三行一起改的理由寫在原地', /表頭／已完成組／輸入組三行\*\*一定要一起改\*\*/.test(src));
 
 console.log('\n'+(fail?'✗ ':'✓ ')+pass+' 通過 / '+fail+' 失敗');
 process.exit(fail?1:0);
