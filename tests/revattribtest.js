@@ -19,8 +19,13 @@ console.log('① tag 的顯示');
     id=>({bg:'#CFE0EF',fg:'#35617F'}));
   const f=mk(true,{c1:'MANGO'});
   ok('★ 顯示歸屬教練的名字', /MANGO/.test(f({attKind:'tk',attRef:'T1',att:'c1'})));
-  ok('★ 點一下開更改視窗（stopPropagation，不會連帶開會員票券）',
-     /event\.stopPropagation\(\);openRevAttribPick\('tk','T1'\)/.test(f({attKind:'tk',attRef:'T1',att:'c1'})));
+  /* 2026-09-21 使用者：「原本卡片上的互動按鈕 可以移除了」—— 歸屬標籤改成純顯示，
+     要改歸屬走 revRowPanel 的〔業績歸屬〕那顆（底下仍是 openRevAttribPick）。 */
+  ok('★ 標籤純顯示、不再掛 onclick',
+     !/onclick/.test(f({attKind:'tk',attRef:'T1',att:'c1'}))
+     && /<span class="rev-att"/.test(f({attKind:'tk',attRef:'T1',att:'c1'})));
+  ok('★★ 改歸屬的入口改到視窗那顆（同一支 openRevAttribPick）',
+     /openRevAttribPick\(r\.attKind, r\.attRef\)/.test(src));
   ok('★ 沒歸屬的顯示「未歸屬」金色提醒（比留白更醒目，這筆的獎金正懸空）',
      /未歸屬/.test(f({attKind:'pur',attRef:'P1',att:null}))
      && /rev-att-none/.test(f({attKind:'pur',attRef:'P1',att:null})));

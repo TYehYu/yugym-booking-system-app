@@ -34,7 +34,7 @@ console.log('\n兩個畫面都要有（首頁名單卡＋點開的彈窗）');
 /* 2026-09-15：教練名搬進同一格（疊在約別章下方），所以 revKindCell 的回傳
    從三元字面改成 _chip＋_att 的組合；「約別在列最左、由 revKindCell 統一畫」沒變。 */
 ok('★ 首頁右欄名單卡（約別標籤在列最左，沒有約別也佔住那一格）',
-   /const _chip=r\.kind \? saleKindChip\(r\.tk,r\.kind\) : '';/.test(src)
+   /let _chip=r\.kind \? saleKindChip\(r\.tk,r\.kind\) : '';/.test(src)
    && /if\(!_chip && !_att\) return `<span class="mc-rev-kv mc-rev-kv-none" aria-hidden="true"><\/span>`;/.test(src)
    && /\$\{revKindCell\(r\)\}\s*\n\s*<div class="mc-rev-b">/.test(src)
 /* 2026-08-24：抽獎那一列不畫金額（它是 $0 的贈品紀錄，不是收款），
@@ -55,10 +55,15 @@ ok('　　列上帶了票券 id，改的時候才知道改哪一張', /amt:_tkDa
 
 console.log('\n可以就地更改');
 ok('★ 有選擇視窗與寫入函式', /async function openSaleKindPick\(tkId\)\{/.test(src) && /async function setSaleKind\(tkId, kind\)\{/.test(src));
-ok('★ 只有櫃檯／管理員點得動（教練看得到但不能改）',
-   /const can=\(typeof isDeskLike==='function'\) && isDeskLike\(\);/.test(src)
+/* 2026-09-21 使用者：「原本卡片上的互動按鈕 可以移除了 統一從點開卡片小視窗修改資料」——
+   約別章改成純顯示，改約別走 revRowPanel 的〔約別〕那顆；
+   權限把關搬到那裡（desk 才給按）＋ openSaleKindPick 自己那道，沒有變鬆。 */
+ok('★ 約別章改成純顯示（不再是按鈕）',
+   /return `<span class="rev-kind rev-kind-\$\{k\}" title="\$\{SALE_KIND_LB\[k\]\}">/.test(src)
+   && !/openSaleKindPick\('\$\{tkId\}'\)/.test(src));
+ok('★ 權限把關還在（視窗那顆看 desk，openSaleKindPick 自己也擋）',
+   /btn\('kind','約別'[\s\S]{0,120}desk&&r\.tk&&r\.kind/.test(src)
    && /if\(!isDeskLike\(\)\) return;/.test(src));
-ok('★ 點標籤不會連帶觸發整列的「開啟會員票券」', /event\.stopPropagation\(\);openSaleKindPick/.test(src));
 /* 2026-09-11：獨立成金色一條（這張視窗唯一的防線，要比夾在句子裡更醒目） */
 ok('★ 視窗有講清楚後果（續約獎金只認「續約」）',
    /<div class="mk-key gold"[^>]*>續約獎金只認「續約」<small>改了會即時反映在教練的薪資計算上<\/small><\/div>/.test(src));
@@ -97,19 +102,16 @@ ok('★★ 續約用綠', /\.rev-kind-renewal\{background:#eef5f1;color:#1f6f54;
 ok('　　分期另一色（與前兩者分得開）', /\.rev-kind-installment\{background:#efe7f3;/.test(src));
 /* 2026-09-15 使用者：「把營收明細這一區域按鈕互動的動作做出來，
    這樣在操作的時候才知道自己點到什麼物件」—— 多了 transition 與 :active 縮放。 */
-ok('　　可點的才有 hover 與手指游標', /button\.rev-kind\{cursor:pointer;transition:/.test(src));
-ok('★★ 按下去有回饋（手機沒有 hover，:active 才是有感的那個）',
-   /button\.rev-kind:active\{transform:scale\(\.88\);\}/.test(src)
-   && /\.rev-att-tap:active\{transform:scale\(\.90\);\}/.test(src)
-   && /\.mc-rev-pay-btn:active\{transform:scale\(\.92\);\}/.test(src)
+/* 2026-09-21：三顆章都改成唯讀，0915 那組「游標／hover 放大／:active 壓縮」
+   連同 button 選擇器整組移除 —— 留著會變成「看起來可以點、其實點不動」的殘影。
+   按壓與滑過的回饋現在由**整張卡片**承擔。 */
+ok('★★★ 三顆章的可點殘影都清乾淨',
+   !/button\.rev-kind\{cursor:pointer/.test(src)
+   && !/\.rev-att-tap\{/.test(src)
+   && !/\.mc-rev-pay-btn\{/.test(src));
+ok('★★ 回饋改由整張卡片承擔（滑過放大、按下去縮回）',
+   /\.mc-rev-row\.mc-rev-go:hover\{[\s\S]{0,160}transform:scale\(1\.012\);z-index:1;\}/.test(src)
    && /\.mc-rev-row\.mc-rev-go:active\{transform:scale\(\.995\);\}/.test(src));
-/* 2026-09-15 使用者：「約別章 教練 現金/匯款 滑鼠擺上去的時候可以有稍微放大的動畫嗎」 */
-ok('★★ 滑鼠移上去微放大（三顆都要，桌機才有的效果）',
-   /button\.rev-kind:hover\{[^}]*transform:scale\(1\.10\);\}/.test(src)
-   && /\.rev-att-tap:hover\{filter:brightness\(\.94\);transform:scale\(1\.10\);\}/.test(src)
-   && /\.mc-rev-pay-btn:hover\{filter:brightness\(\.95\);transform:scale\(1\.07\);\}/.test(src));
-ok('★★★ 付款標籤要有 transition，否則 hover 是瞬間跳動不是動畫',
-   /\.mc-rev-pay-btn\{border:none;cursor:pointer;font-family:inherit;\s*\n\s*transition:filter \.12s,transform \.1s var\(--ease-out\);\}/.test(src));
 
 console.log('\n獎金口徑沒有被動到');
 ok('★ 續約獎金仍只認 sale_kind===\'renewal\'',

@@ -237,7 +237,7 @@ console.log('\n今日營收那一列的「抽獎」標籤＋當天限定');
   ok('★★ 寫入前要再擋一次（入口有兩個，視窗開著跨過午夜也會變成隔天）',
      /視窗開著跨過午夜就會從「當天」變成「隔天」/.test(src));
   ok('★ 不能改的時候要說原因，不是只讓卡按不動（0823 的語彙）',
-     /button\.rev-kind\.rev-kind-off\{opacity:\.5;\}/.test(src)
+     /\.rev-kind\.rev-kind-off\{opacity:\.5;\}/.test(src)
      && /<div class="modal-title">這一筆不能改<\/div>/.test(src)
      && /過了當天就不能自己改了/.test(src));
   ok('　　從今日營收進來的，改完關窗並重畫那一頁（標籤與品名要跟著更新）',

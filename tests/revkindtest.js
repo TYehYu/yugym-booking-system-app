@@ -37,17 +37,18 @@ console.log('\n② 約別＝一個字的正圓框章（2026-09-03 二修＋三�
    三修：「[新][續][分] 跟首頁課卡出席章的大小一樣」 */
 ok('★★★ 只顯示一個字（全名留在 title 與 SALE_KIND_LB）',
    /const SALE_KIND_AB=\{new:'新', renewal:'續', installment:'分', gift:'贈'\};/.test(src)
-   && /\$\{SALE_KIND_AB\[k\]\}<\/\$\{can\?'button':'span'\}>/.test(src)
+   && />\$\{SALE_KIND_AB\[k\]\}<\/span>`;/.test(src)
    && /const SALE_KIND_LB=\{new:'新約', renewal:'續約', installment:'分期', gift:'贈送'\};/.test(src));
 /* 2026-09-05 使用者指示：「設定 0 的方案 約別要多一個贈送」。兩張表都要同步加，
    少一邊 saleKindChip 會畫出空白（SALE_KIND_AB[k] 是 undefined）或退回「新」。 */
 ok('★★ 贈送章有自己的顏色，而且刻意最淡（不跟新約／續約搶注意力）',
    /\.rev-kind-gift\{background:#f2efe9;/.test(src)
    && /贈送既不是警示也不是成交/.test(src));
-ok('★★★ 抽獎也是一個字', />獎<\/button>`/.test(src) && />獎<\/span>`;/.test(src));
+ok('★★★ 抽獎也是一個字', />獎<\/span><\/span>`;/.test(src));
+/* 2026-09-21：章改成唯讀之後，title 不再寫「點一下更改」——只留全名。 */
 ok('★★ 全名放進 title（滑過去讀得到，報讀器也唸得出來）',
-   /const tt=can\?`\$\{SALE_KIND_LB\[k\]\}　點一下更改約別（影響續約獎金）`:SALE_KIND_LB\[k\];/.test(src)
-   && /title="抽獎　\$\{_off\?'過了當天只有管理員能改':'點一下改抽獎項目'\}"/.test(src));
+   /title="\$\{SALE_KIND_LB\[k\]\}"/.test(src)
+   && /title="抽獎"/.test(src));
 /* ⚠ 「正圓」＝寬高相等，所以是固定尺寸＋padding:0。靠 padding 撐出來的是膠囊不是圓
    （左右內距永遠比上下大）—— 二修第一版就是這樣寫的。 */
 ok('★★★ 正圓：寬高相等、padding 歸零',
@@ -88,20 +89,48 @@ ok('★★★ 四種約別的顏色沒動（新約金／續約綠／分期紫／
 ok('★★ 顏色的理由還寫在原地（0808：新約＝新客人值得注意、續約＝好消息也是常態）',
    /新約＝金（這筆是新客人，值得注意）、續約＝綠（既有客人回頭，是好消息也是常態）/.test(src));
 
-console.log('\n④ 抽獎那一顆仍然可以點');
-/* 抽獎列的約別格是一顆 <button>（點了改獎品），改造型不能把它變成純文字。 */
-ok('★★ 抽獎仍是按鈕，且過了當天非管理員只是淡化、不是消失',
-   /<button class="rev-kind rev-kind-lottery\$\{_off\?' rev-kind-off':''\}"/.test(src)
-   && /button\.rev-kind\.rev-kind-off\{opacity:\.5;\}/.test(src));
-/* 2026-09-15 使用者：「約別章 教練 現金/匯款 滑鼠擺上去的時候可以有稍微放大的動畫嗎」——
-   hover 宣告尾巴多了 transform:scale(1.10)，所以不再逐字比對到收尾的大括號。
-   這條守的語意（可點的要有 hover 看得出來）沒變，而且變得更明顯。 */
-ok('★ hover 效果還在（它是可點的，要看得出來）',
-   /button\.rev-kind:hover\{filter:brightness\(\.96\);box-shadow:0 1px 4px rgba\(60,50,38,\.18\);/.test(src));
-ok('★★ 滑鼠移上去還會微放大（桌機才有的效果，:active 那條給手機）',
-   /button\.rev-kind:hover\{[^}]*transform:scale\(1\.10\);\}/.test(src));
+console.log('\n④ 抽獎那一顆（2026-09-21 起改成唯讀）');
+/* 使用者：「原本卡片上的互動按鈕 可以移除了 統一從點開卡片小視窗修改資料」——
+   抽獎列改成**整列**點下去就開改獎項視窗，格子裡不再放一顆各自 stopPropagation 的鈕。
+   ⚠ 「過了當天只有管理員能改」的限制沒有變鬆，只是移到 lottoFixAsk 裡面把關。 */
+ok('★★ 抽獎章是純顯示，且過了當天非管理員仍然淡化、不是消失',
+   /<span class="rev-kind rev-kind-lottery\$\{_off\?' rev-kind-off':''\}"/.test(src)
+   && /\.rev-kind\.rev-kind-off\{opacity:\.5;\}/.test(src)
+   && !/button\.rev-kind\.rev-kind-off/.test(src));
+/* 2026-09-21：章不再可點，0915 那組 hover／:active 放大樣式跟著整組移除 ——
+   留著就會變成「看起來可以點、其實點不動」的殘影。 */
+ok('★★★ 可點的殘影都清乾淨（游標、hover 放大、:active 壓縮）',
+   !/button\.rev-kind\{cursor:pointer/.test(src)
+   && !/\.rev-att-tap\{/.test(src)
+   && !/\.mc-rev-pay-btn\{/.test(src));
 ok('★★ 改首頁出席章尺寸時要記得同步這裡（沒有共用變數）',
    /改首頁那顆章的尺寸時，這裡要跟著改（兩處，沒有共用變數）/.test(src));
+
+console.log('\n⑤ 團／商圓章（2026-09-21 使用者：「才不會讓左邊那麼空白」）');
+{
+  /* 使用者：「圓章要新增幾個 才不會讓左邊那麼空白〔團〕表示團課〔商〕表示其他商品」——
+     原本只有教練課類的票有約別章，團課方案與商品那幾列左邊整格是空的。 */
+  /* 這支測試本來只比對字串、沒有抽函式的工具，這裡自備一個 */
+  const grabFn=n=>{const i=src.indexOf('function '+n+'(');let d=0;
+    for(let k=src.indexOf('{',i);k<src.length;k++){if(src[k]==='{')d++;
+      else if(src[k]==='}'){d--;if(!d)return src.slice(i,k+1);}}};
+  const K=new Function('saleKindChip','revAttribChip',
+    grabFn('revKindCell')+'\nreturn revKindCell;')(
+    (tk,k)=>`<KIND:${k}>`, ()=>'');
+  ok('★★ 團課票 → 團', />團</.test(K({tk:'T1',cls:'group'})) && /rev-kind-group/.test(K({tk:'T1',cls:'group'})));
+  ok('★★ 商品收款 → 商', />商</.test(K({pur:'P1',src:'merchandise'})) && /rev-kind-goods/.test(K({pur:'P1',src:'merchandise'})));
+  /* ⚠ 不能蓋掉真正的約別：有約別的列還是要畫新／續／分 */
+  ok('★★★ 有約別時仍畫約別，不會被團／商蓋掉',
+     /<KIND:renewal>/.test(K({tk:'T1',cls:'group',kind:'renewal'})));
+  ok('★ 教練課票不會被誤標成團', !/rev-kind-group/.test(K({tk:'T1',cls:'pt'})));
+  /* 使用者只指名團課與商品兩種；其餘維持空格子（那一格是為了讓姓名對齊才存在的） */
+  ok('★ 場租／重啟仍是空格子（只指名了團與商）',
+     /mc-rev-kv-none/.test(K({pur:'P1',src:'facility_rental'}))
+     && /mc-rev-kv-none/.test(K({pur:'P2',src:'reactivate'})));
+  ok('★ 兩個新章有自己的顏色（不跟約別搶）',
+     /\.rev-kind-group\{background:#e9f0f6;/.test(src)
+     && /\.rev-kind-goods\{background:#f0eee9;/.test(src));
+}
 
 console.log('\n'+(fail?'✗ ':'✓ ')+pass+' 通過 / '+fail+' 失敗');
 process.exit(fail?1:0);

@@ -25,8 +25,12 @@ console.log('\n② 標籤（實跑 revPayChip）');
 {
   const mk=desk=>new Function('isDeskLike','return '+grabFn('revPayChip'))(()=>desk);
   const f=mk(true), g=mk(false);
-  ok('★ 櫃檯看到的是可點的按鈕（點開修正）',
-     /openRevPayPick\('P1'\)/.test(f({pay:'現金',payRef:'P1'})) && /<button/.test(f({pay:'現金',payRef:'P1'})));
+  /* 2026-09-21 使用者：「原本卡片上的互動按鈕 可以移除了」—— 付款標籤改成純顯示，
+     要修正走 revRowPanel 的〔付款方式〕那顆（底下仍是 openRevPayPick）。 */
+  ok('★ 標籤純顯示、不再是按鈕',
+     !/<button/.test(f({pay:'現金',payRef:'P1'})) && !/onclick/.test(f({pay:'現金',payRef:'P1'})));
+  ok('★★ 修正付款的入口改到視窗那顆（同一支 openRevPayPick）',
+     /openRevPayPick\(r\.payRef\)/.test(src));
   ok('★ 匯款用金色（要對帳，醒目一階）', /mc-rev-pay-tr/.test(f({pay:'匯款',payRef:'P1'})));
   ok('★ 有收款但沒標付款方式 → 櫃檯看到「—」可補標', f({pay:'',payRef:'P1'}).includes('—'));
   ok('★ 教練／會員看得到但點不動', !/onclick/.test(g({pay:'現金',payRef:'P1'})) && /現金/.test(g({pay:'現金',payRef:'P1'})));
