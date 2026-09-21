@@ -21,10 +21,11 @@ ok('★★ 成因寫在原地（原本 .cag-slots 自己有 max-height:52vh，fo
 
 console.log('\n② 時段格放大、字放大');
 ok('★★★ 格子內距與字級都用 clamp+cqw（不寫死、不加斷點）',
-   has(Q+' \\.cag-slots \\.cag-slot\\{\\s*\\n?\\s*padding:clamp\\(12px,3\\.4cqw,20px\\) 6px;font-size:clamp\\(20px,5\\.6cqw,27px\\);'));
+   has(Q+' \\.cag-slots \\.cag-slot\\{[\\s\\S]{0,140}?padding:clamp\\(10px,3cqw,18px\\) 4px;font-size:clamp\\(30px,9\\.5cqw,38px\\);'));
 ok('★★★ 容器要先宣告 container-type，cqw 才有意義',
    has(Q+' \\.cag-slots\\{container-type:inline-size;\\}'));
-ok('★★ 場地標籤（團課教室／跑步機）跟著放大', has(Q+' \\.cag-slot-tag\\{font-size:clamp\\(13px,3\\.8cqw,18px\\);'));
+ok('★★ 場地標籤（團課教室／跑步機）跟著放大',
+   has(Q+' \\.cag-slot-tag\\{\\s*\\n?\\s*font-size:clamp\\(13px,4cqw,17px\\);'));
 ok('★★ 標題、當日摘要、按鈕都升一階',
    has(Q+' \\.modal-title\\{font-size:21px;font-weight:900;\\}')
    && has(Q+' \\.qs-head-t\\{font-size:15px;\\}')
@@ -58,6 +59,26 @@ ok('★ 退路也寫清楚（百分比解析不到就退回內容高度，所以
    /\.cag-slot 的 padding 就是這條退路的最小高度，所以不能拿掉/.test(src));
 ok('★★ 只掛在 .chvqs2（兩欄那一種），沒有動到別處的 .cag-slots',
    !new RegExp(Q+' \\.cag-slots\\{[^}]*align-content').test(src));
+
+/* 2026-09-21 使用者附截圖：「跑步機被斷行了」→「跑步機剩幾台直接放第二列置中」
+   →「時間放大一點第一列　場地第二列」→「既然格子已經放大了　應該可以更清楚標示時間」
+   ⚠ 原本兩段是同一行的行內文字：「19:00 跑步機 剩 2 台」在 147px 的格子裡一定折行，
+     而且折在哪由字數決定，每一格斷點都不同。改成直向兩列就不會再有這個問題。
+   ⚠ 實測（375px）：格子 147×122px、時間 30px（「19:00」74.5px／內寬 138px）、
+     場地 13px 不折行、內容不溢出、一頁仍是 8 格。 */
+console.log('\n⑤ 時間第一列放大、場地第二列置中（2026-09-21）');
+ok('★★★ 格子改直向兩列並置中（不再是行內文字，就不會斷在奇怪的地方）',
+   has(Q+' \\.cag-slots \\.cag-slot\\{\\s*\\n?\\s*display:flex;flex-direction:column;align-items:center;justify-content:center;gap:4px;'));
+ok('★★★ 場地標籤的 margin-left 要歸零（行內排版的遺留，直向時會讓第二列偏右）',
+   has(Q+' \\.cag-slot-tag\\{[\\s\\S]{0,120}?margin-left:0;'));
+ok('★★ 第二列置中', has(Q+' \\.cag-slot-tag\\{[\\s\\S]{0,140}?text-align:center;'));
+ok('★★★ 時間是這一頁唯一要做的決定 → 最大字級＋最重字重',
+   has(Q+' \\.cag-slots \\.cag-slot\\{[\\s\\S]{0,200}?font-weight:800;'));
+ok('★★ 手機上生效的是 clamp 的**下限**，理由寫在原地（免得有人以為 cqw 在作用）',
+   /clamp 的下限才是手機上實際生效的值/.test(src) && /9\.5cqw 只有 29px，所以下限寫 30px/.test(src));
+ok('★★ 只吃 .qs-mtop 這一支，行事曆與 msb-sheet 的時段維持單行',
+   /只吃 \.qs-mtop 這一支；行事曆的時段面板、msb-sheet 那兩處維持單行/.test(src)
+   && !/^\.cag-slot\{[^}]*flex-direction:column/m.test(src));
 
 console.log('\n'+pass+' 通過 / '+fail+' 失敗');
 process.exit(fail?1:0);
