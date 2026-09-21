@@ -127,9 +127,14 @@ console.log('\n⑤ 團／商圓章（2026-09-21 使用者：「才不會讓左�
   ok('★ 場租／重啟仍是空格子（只指名了團與商）',
      /mc-rev-kv-none/.test(K({pur:'P1',src:'facility_rental'}))
      && /mc-rev-kv-none/.test(K({pur:'P2',src:'reactivate'})));
-  ok('★ 兩個新章有自己的顏色（不跟約別搶）',
-     /\.rev-kind-group\{background:#e9f0f6;/.test(src)
+  /* 2026-09-21 使用者：「團課張改成橘色 跟課卡一樣」——
+     團＝行事曆／課卡上團課的那個橘（--course-group-accent #9a5a1e），三處同一個色。
+     ⚠ Ink 模式只吃 color（框線 currentColor、背景透明），所以那一層自動跟著變。 */
+  ok('★★ 團章用課卡同一個橘，商章用中性灰米',
+     /\.rev-kind-group\{background:#fbeee0;color:#9a5a1e;/.test(src)
      && /\.rev-kind-goods\{background:#f0eee9;/.test(src));
+  ok('★★ 那個橘就是課卡的團課色（BK_ACCENT.group）',
+     /group:'var\(--course-group-accent,#9a5a1e\)'/.test(src));
 }
 
 console.log('\n'+(fail?'✗ ':'✓ ')+pass+' 通過 / '+fail+' 失敗');
