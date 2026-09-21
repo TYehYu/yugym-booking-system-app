@@ -15,6 +15,21 @@ ok('★ 鍵盤也能開（Enter／空白鍵）',
 ok('★ 標題後面有小箭頭當「點得開」的提示', /今日營收<span class="mc-kpi-tapmark">›<\/span>/.test(src));
 ok('★ 有可點的樣式與按壓回饋', /\.mc-kpi-tap\{cursor:pointer;/.test(src) && /\.mc-kpi-tap:active\{transform:scale\(\.975\);\}/.test(src));
 
+console.log('\n翻到別天時的標題（2026-09-21 使用者指示）');
+/* 「這個今日營收 如果已經不是當天的時候 改成[回到今日] 用綠底按鈕
+   滑鼠移上去的時候稍微放大按鈕」——
+   標題寫死「今日營收」在看別天的資料時是騙人的。 */
+ok('★★★ 當天顯示標題、非當天換成「回到今日」按鈕（二選一，不會同時出現）',
+   /\$\{isTodayView\s*\n?\s*\? `<span class="mc-revhd-t">今日營收<\/span>`\s*\n?\s*: `<button class="mc-revhd-back"/.test(src));
+ok('★★ 按鈕走既有的 dashBackToday（它同時把週偏移歸零，不另寫一份）',
+   /onclick="dashBackToday\(\)"/.test(src)
+   && /function dashBackToday\(\)\{ _dashViewDate=null; _dashWeekOffset=0; dashRepaint\(\); \}/.test(src));
+ok('★★ 綠底白字（綠＝可以按的一般操作）',
+   /\.mc-revhd-back\{[\s\S]{0,120}color:#fff;background:var\(--green\);/.test(src));
+ok('★★ 滑鼠移上去放大、按下去縮回',
+   /\.mc-revhd-back:hover\{filter:brightness\(1\.08\);transform:scale\(1\.06\);\}/.test(src)
+   && /\.mc-revhd-back:active\{transform:scale\(\.96\);\}/.test(src));
+
 console.log('\n資料同源（三個地方不能各算各的）');
 ok('★ 彈窗吃的是首頁算好的那一份', /window\._gdRev=\{date, rows:_revRows, total:_revTotal, inv:_revInv, noInv:_revNoInv\};/.test(src));
 ok('★ _revRows 同時餵給桌機右欄的收款名單卡（同一個變數）',

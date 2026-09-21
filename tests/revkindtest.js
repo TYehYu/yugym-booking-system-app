@@ -19,7 +19,8 @@ console.log('① 沒有約別的列也要佔住左欄');
    佔位格的規則沒變：兩者都空才畫空格子。 */
 ok('★★★ 不再回空字串，改回一個空的佔位格',
    /if\(!_chip && !_att\) return `<span class="mc-rev-kv mc-rev-kv-none" aria-hidden="true"><\/span>`;/.test(src)
-   && /return `<span class="mc-rev-kv">\$\{_chip\}\$\{_att\}<\/span>`;/.test(src));
+   /* 2026-09-21：沒有教練名時多帶一個 solo 標記（圓章放大用），欄本身不變 */
+   && /return `<span class="mc-rev-kv\$\{_att\?'':' mc-rev-kv-solo'\}">\$\{_chip\}\$\{_att\}<\/span>`;/.test(src));
 ok('★★★ 教練名在約別章**下方**（同一格、直向堆疊）',
    /const _att=revAttribChip\(r\);/.test(src)
    && /\.mc-rev-kv\{flex:none;align-self:stretch;display:flex;flex-direction:column;/.test(src));
@@ -117,6 +118,10 @@ console.log('\n⑤ 團／商圓章（2026-09-21 使用者：「才不會讓左�
   const K=new Function('saleKindChip','revAttribChip',
     grabFn('revKindCell')+'\nreturn revKindCell;')(
     (tk,k)=>`<KIND:${k}>`, ()=>'');
+  /* 對照組：有教練名的那一種（revAttribChip 回傳非空） */
+  const K2=new Function('saleKindChip','revAttribChip',
+    grabFn('revKindCell')+'\nreturn revKindCell;')(
+    (tk,k)=>`<KIND:${k}>`, ()=>'<span class="rev-att">RANDY</span>');
   ok('★★ 團課票 → 團', />團</.test(K({tk:'T1',cls:'group'})) && /rev-kind-group/.test(K({tk:'T1',cls:'group'})));
   ok('★★ 商品收款 → 商', />商</.test(K({pur:'P1',src:'merchandise'})) && /rev-kind-goods/.test(K({pur:'P1',src:'merchandise'})));
   /* ⚠ 不能蓋掉真正的約別：有約別的列還是要畫新／續／分 */
@@ -130,6 +135,16 @@ console.log('\n⑤ 團／商圓章（2026-09-21 使用者：「才不會讓左�
   /* 2026-09-21 使用者：「團課張改成橘色 跟課卡一樣」——
      團＝行事曆／課卡上團課的那個橘（--course-group-accent #9a5a1e），三處同一個色。
      ⚠ Ink 模式只吃 color（框線 currentColor、背景透明），所以那一層自動跟著變。 */
+  /* 2026-09-21 使用者：「圓形章 沒有業績歸屬人的時候可以放大一點」——
+     左欄固定 46px 寬、分兩層（章在上、教練名在下）；沒有教練名時上下都空著，
+     22px 的章看起來很小。加一個標記讓 CSS 把它放大，欄寬與對齊線都不動。 */
+  ok('★★ 沒有教練名的列給 solo 標記（有的話不給）',
+     /mc-rev-kv-solo/.test(K({pur:'P1',src:'merchandise'}))
+     && !/mc-rev-kv-solo/.test(K2({tk:'T1',cls:'group'})));
+  ok('★★ solo 時圓章放大，字級跟著放大（不要大圈圈配小字）',
+     /body\.ink \.mc-revlist-card \.mc-rev-kv-solo \.rev-kind\{\s*\n\s*width:30px;height:30px;font-size:15px;/.test(src));
+  ok('★ 欄寬沒有被動到（姓名的垂直對齊線要維持）',
+     /body\.ink \.mc-revlist-card \.mc-rev-kv\{flex:0 0 46px;/.test(src));
   ok('★★ 團章用課卡同一個橘，商章用中性灰米',
      /\.rev-kind-group\{background:#fbeee0;color:#9a5a1e;/.test(src)
      && /\.rev-kind-goods\{background:#f0eee9;/.test(src));
