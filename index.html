@@ -5066,7 +5066,15 @@ body.wp-dragging-on .wp-item{cursor:grabbing;}
 .cal-density{display:inline-flex;align-items:center;gap:6px;}
 .cal-density-lbl{font-size:12px;color:var(--t2);}
 .cal-density-btn{border:1px solid var(--bd);border-radius:8px;padding:4px 10px;}
-.cal-today-btn{font-weight:600;}
+/* 「今天」＝綠底白字＋hover 微放大（2026-09-21 使用者：「這邊的今天 也要套用剛剛前面的
+   ［回到今天］」）—— 全站第三處「回到現在」的按鈕，與月曆的「當月」、日期列的「今天」、
+   營收卡的「回到今日」統一成同一套語彙：綠＝有事可做。
+   ⚠ 它掛著 .btn.btn-ghost（素面），所以這裡要把底色與字色一起蓋掉，不然只會變成綠字白底。 */
+.cal-today-btn{font-weight:700;background:var(--green);border-color:var(--green);color:#fff;
+  transition:transform .13s var(--ease-out),filter .13s;}
+.cal-today-btn:hover{background:var(--green);border-color:var(--green);color:#fff;
+  filter:brightness(1.08);transform:scale(1.06);}
+.cal-today-btn:active{transform:scale(.96);}
 .cal-arrow{width:34px;height:34px;border-radius:9px;background:var(--card);border:1.5px solid var(--bd);display:flex;align-items:center;justify-content:center;font-size:18px;font-weight:600;color:var(--green);transition:.15s;cursor:pointer;flex-shrink:0;}
 /* Filter Chips（Notion/Apple Mail 風 Tag）：更薄、選中用 dot */
 .cal-chips-bar{display:flex;flex-direction:column;gap:5px;padding:0 2px 8px;flex-shrink:0;}
@@ -13634,8 +13642,8 @@ function tbl(s){return TABLE_ALIAS[s]||s;}
 let sb=null;
 // ── 版本號（日期+時間格式：年後兩碼+月+日.時分，例 26620.1058 = 26年6/20 10:58）──
 // 每次改版手動更新這一行即可，畫面與 title 會一起更新
-const APP_VERSION = '260921.1730';
-const APP_VERSION_LABEL = 'v260921.1730';
+const APP_VERSION = '260921.1739';
+const APP_VERSION_LABEL = 'v260921.1739';
 const CLOUD = !!(window.YUGYM_CONFIG && window.YUGYM_CONFIG.url && window.YUGYM_CONFIG.anonKey);
 if(CLOUD){ sb = supabase.createClient(window.YUGYM_CONFIG.url, window.YUGYM_CONFIG.anonKey); }
 
@@ -28844,6 +28852,17 @@ async function ashEditAsk(id){
      原因直接寫在副標上 —— 比點下去才跳吐司少一步。
      ⚠ 教練請假的課仍然整列不畫 —— 那張卡的主軸是「復原請假」，改時間沒有意義。 */
   const _mvBlk=_leave?'教練請假中的課不能改時間，請先復原請假':bkMoveBlockReason(b);
+  /* 為什麼這張卡什麼都改不了（2026-09-21 使用者：「就算不能選也要顯示 在副標說明」）——
+     A.venue／A.sub 都是從 _editable 推出來的，而 _editable 把四個原因揉成一個布林值，
+     到了這裡就印不出人話。這支把它拆回一句可以寫在副標上的說明。
+     ⚠ 順序＝由重到輕：先講「這堂已經結束／過期」，那是最常見也最好懂的；
+       權限不足放最後（大部分人不會碰到）。 */
+  const _lockWhy = (()=>{
+    if(A.closed) return '這堂已經結束，不能再調整';
+    if(String(b.date)<ymd(TODAY)) return '課程日已過，不能再調整';
+    if(!(A.staff||A.own)) return '只有櫃檯以上或這堂的教練可以調整';
+    return '';
+  })();
   if(!_leave && (A.staff||A.own))
     rows += _mvBlk
       ? row('','調整日期／時間',_mvBlk,'ash-ei-off')
@@ -28854,8 +28873,13 @@ async function ashEditAsk(id){
      openVenueChange 的返回鈕是 openBookingDetail，先立旗標讓它回到課卡。 */
   /* 副標寫「能做什麼」（2026-09-11 使用者：「更改場地·更改跑步機人數」），跟這張清單其他列同一個寫法；
      目前場地已經在上面的標題卡。只有自主訓練（bkOrbitVenue）能選跑步機人數，其他課別只寫「更改場地」。 */
+  /* ⚠ 2026-09-21 使用者：「標題卡裡面是不是有被隱藏的選項 就算不能選也要顯示 在副標說明」——
+     A.venue 在 _editable 為 false 時是 null（課程日已過／已結課／沒權限），
+     原本整列直接消失，使用者只看到「這裡沒有這個功能」。
+     改成沿用「調整日期／時間」早就在用的那一套：不能改時照樣列出、淡化、原因寫副標。 */
   if(!_leave && A.venue==='self') rows+=row(`closeModal();bkOrbitVenue('${b.id}')`,'更換場地','更改場地・更改跑步機人數');
   else if(!_leave && A.venue==='any') rows+=row(`ashBackArm('${b.id}');closeModal();openVenueChange('${b.id}','ash')`,'更換場地','更改場地');
+  else if(!_leave) rows+=row('','更換場地',_lockWhy||'這堂目前不能更換場地','ash-ei-off');
   /* 團課不給「指派代課教練」（2026-09-08 使用者：「團課就不用代課教練了　更換授課教練」）——
      團課是「一個班」，不是「某位會員的課」：這一堂換誰上，就是這個班換誰帶。
      代課只會讓課表與薪資出現兩個教練，而 0908 新做的〔更換授課教練〕已經涵蓋這件事
@@ -28863,12 +28887,17 @@ async function ashEditAsk(id){
      ⚠ 但 0821 把「教練請假」收進了代課那張清單 —— 團課一收掉代課，
        櫃檯會連請假入口一起失去。所以團課這邊直接給「教練請假」那一列。
        （團課的教練請假＝整堂取消、逐名額退票、效期 +7 天，那是櫃檯真的需要的動作。） */
+  /* ⚠ 同上（2026-09-21）：A.sub／A.subLeave 兩個都是 null 時（_editable false，
+     或自主訓練本來就沒有教練）整列消失。自主訓練不列是對的 —— 那種課沒有教練可代；
+     其餘情況要列出來並說明。 */
   if(!_leave && !A.isGroup && A.sub==='sub')
     rows+=row(`closeModal();ashSubPick('${b.id}')`,'指派代課教練','從教練名單挑一位，或清除代課');
   else if(!_leave && (A.subLeave==='leave' || (A.isGroup && A.sub==='sub'))
           && typeof canCoachLeave==='function' && canCoachLeave(b) && !bkIsCoachLeave(b))
     rows+=row(`closeModal();bkCoachLeave('${b.id}')`,'教練請假',
       (typeof bkCoachLeaveSub==='function')?bkCoachLeaveSub(b):'','ash-ei-danger');
+  else if(!_leave && !A.isGroup && !(typeof bkIsSelf==='function' && bkIsSelf(b)))
+    rows+=row('','指派代課教練',_lockWhy||'這堂目前不能指派代課','ash-ei-off');
   /* 更換授課教練（2026-09-08 使用者：「連續修改授課教練」）——
      與「指派代課」是兩件事：代課＝這一堂臨時換人上、主責不變；
      這一項改的是**主責**（這個班從此由誰帶），而且可以一路套用到後面的場次。
@@ -28904,9 +28933,17 @@ async function ashEditAsk(id){
   /* 待簽約／分期待繳費保留：名字有了但還沒付錢，票也還沒綁上來 */
   const _pendNoTk = !!b.pending_contract && !b.ticket_id && _rosterEmpty;
   const _futureOk = A.staff && !A.closed && String(b.date)>=ymd(TODAY);
+  const _curCourse=(typeof bookingTypeName==='function')?bookingTypeName(b,window._ttMapCache||window._memTypeMap):(b.category||'課程');
   if(!_leave && (_nobody || _pendNoTk) && _futureOk)
     rows+=row(`closeModal();ashCourseAsk('${b.id}')`,'更換課程',
-      `目前是${(typeof bookingTypeName==='function')?bookingTypeName(b,window._ttMapCache||window._memTypeMap):(b.category||'課程')}・${_nobody?'這張卡還沒有人，可以直接換':'還沒收款綁票，可以直接換'}`);
+      `目前是${_curCourse}・${_nobody?'這張卡還沒有人，可以直接換':'還沒收款綁票，可以直接換'}`);
+  /* ⚠ 2026-09-21：不能換的時候也要列出來並說明為什麼（原本整列消失）。
+     最常見的原因是「已經綁到票券」—— 那不是壞掉，是換課別得連帶退補堂數，
+     必須走刪除重建。把這句話寫出來，櫃檯才不會以為功能不見了。 */
+  else if(!_leave)
+    rows+=row('','更換課程',
+      `目前是${_curCourse}・${b.ticket_id?'已綁票券，換課別要連帶退補堂數（請刪除後重建）'
+        :(_lockWhy||'這堂目前不能換課程')}`,'ash-ei-off');
   /* 「更換票券」2026-08-25 移出這張清單（使用者：「那更換票券的按鈕是應該在標題卡嗎?」
      「還是改成用觸發的」）——
      這裡其他每一項講的都是**這一堂課本身**（日期時間／場地／代課／刪除），
@@ -28918,6 +28955,10 @@ async function ashEditAsk(id){
      快到期的沒先用、限定票種扣成一般票、分期票與正式票混——觸發永遠不會發生。 */
   if(!_leave && b.status==='booked' && !A.isGroup && (A.staff||A.coachCk) && bkDatePast(b))
     rows+=row(`ashBackArm('${b.id}');closeModal();openMakeupModal('${b.id}','ash')`,'補簽','補登這堂未簽到的課；自主訓練點數的效期自課程當天起算');
+  /* ⚠ 2026-09-21：課程日還沒到的時候也要列出來 —— 不然櫃檯會以為「這張卡沒有補簽」。
+     ⚠ 只對「還沒簽到的單人課」列：已簽到的沒有補簽可言，團課的補簽走名單那邊。 */
+  else if(!_leave && b.status==='booked' && !A.isGroup && (A.staff||A.coachCk))
+    rows+=row('','補簽','課程日還沒到；當天請直接用課卡上的〔簽到〕','ash-ei-off');
   /* 團課「改人數」（2026-08-07 既有功能）搬進標題卡（2026-08-20 使用者指示）——
      2026-08-29 再簡化：「在這裡新增調整人數的功能就好　就不用再點開視窗了」。
      這一項只是一個 1–12 的數字，開一張視窗、按儲存、再關掉，四個動作換一個加一。
