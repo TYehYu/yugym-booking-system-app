@@ -426,8 +426,17 @@ console.log('\n⑧ 首頁三修：定色 #556B45 ＋ 左欄／中欄對齊參考
   /* 2026-09-02 使用者回報：「日期列的今天　可以互動的時候滑鼠移上去沒有變成綠色」——
      hover 那條寫的是 .twk-bar>.tl-daynav（直接子層），只涵蓋 ‹ ›；
      「今天」包在 .twk-today-slot 裡面，吃不到。 */
-  ok('★★ 「回到今天」也要有 hover 綠（它不是 .twk-bar 的直接子層）',
-     /body\.ink \.twk-bar>\.twk-today-slot button\.tl-daynav-today:hover\{\s*\n\s*background:var\(--olive,#556B45\);color:#F2EFE4;border-color:var\(--olive,#556B45\);\}/.test(src));
+  /* 2026-09-21 使用者：「這邊也有［當月］［今日］ 也改剛剛那顆［回到今日］的按鈕一樣」——
+     可點的狀態改成綠底白字，hover 從「換底色」改成「微放大」（底色已經是綠的了）。 */
+  ok('★★ 「回到今天」可點時是綠底白字（與營收卡的「回到今日」同一套語彙）',
+     /body\.ink \.twk-bar>\.twk-today-slot \.tl-daynav-today\{\s*\n\s*background:var\(--green\);border:1px solid var\(--green\);color:#fff;/.test(src));
+  ok('★★ hover 改成微放大（它不是 .twk-bar 的直接子層，選擇器要自己寫一條）',
+     /body\.ink \.twk-bar>\.twk-today-slot button\.tl-daynav-today:hover\{\s*\n\s*filter:brightness\(1\.08\);transform:scale\(1\.06\);\}/.test(src));
+  ok('★★★ 「正在看今天」維持虛線淡化 —— 綠＝有事可做，不可點的不該是綠的',
+     /body\.ink \.twk-bar>\.twk-today-slot \.tl-daynav-today\.is-today\{\s*\n\s*background:transparent;color:var\(--t3\);border:1px dashed var\(--bd\);/.test(src));
+  ok('★★ 月曆的「當月」跟著同一套（這一組語彙有兩處，改一邊要記得改另一邊）',
+     /body\.ink \.cal-side \.mcal-btn\.mcal-btn-now\{background:var\(--green\);/.test(src)
+     && /body\.ink \.cal-side \.mcal-btn\.mcal-btn-now\.is-now\{background:transparent;/.test(src));
   ok('★★ 用 button:hover —— 正在看今天時那顆是 <span>，不能點就不該有 hover 回饋',
      /用 button:hover 而不是 \.tl-daynav-today:hover：正在看今天時那顆是 <span>/.test(src));
   ok('★★ 日期列外面不包卡，也不再有底線',
@@ -438,8 +447,10 @@ console.log('\n⑧ 首頁三修：定色 #556B45 ＋ 左欄／中欄對齊參考
      && /body\.ink \.twk-barin \.twk-day\.today \.twk-md,body\.ink \.twk-barin \.twk-day\.today \.twk-w\{color:#F2EFE4;\}/.test(src));
   ok('　 日期數字等寬（日期列才不會左右跳動）',
      /body\.ink \.twk-day \.twk-md\{font-family:var\(--font-en\);font-variant-numeric:tabular-nums;/.test(src));
-  ok('★ 翻頁鈕與「回到今天」從品牌紅退成素面細框（紅色留給真的要處理的事）',
-     /body\.ink \.twk-bar>\.tl-daynav,body\.ink \.twk-bar>\.twk-today-slot \.tl-daynav-today\{/.test(src));
+  /* 2026-09-21：「回到今天」從素面細框再改成綠底（見上面那組）；
+     ‹ › 兩顆翻頁鈕維持素面細框不變 —— 它們只是翻頁，沒有「回到現在」的語意。 */
+  ok('★ 翻頁鈕仍是素面細框（品牌紅只留給真的要處理的事）',
+     /body\.ink \.twk-bar>\.tl-daynav\{\s*\n\s*background:var\(--card2\);border:1px solid var\(--bd\);color:var\(--t2\);/.test(src));
   ok('　 原本的紅底沒被刪掉（關掉 Ink 就回去）',
      /\.twk-bar>\.tl-daynav:hover\{background:#5E0303;\}/.test(src));
 

@@ -421,8 +421,25 @@ ok('　　取消與改完都回課卡，不跳已退役的預約明細',
    && /setBkFamUser 收尾的 openBookingDetail\s*\n\s*會被 ashBackTake 接走/.test(src));
 
 console.log('\n更換課程（使用者：這張課卡還沒有會員預約的時候方便調整）');
-ok('★ 只在「完全沒有人」的卡上給：沒會員、沒名單、也沒散客姓名',
-   /const _nobody = !b\.member_id && \(typeof mids==='function'\?mids\(b\)\.length===0:true\)\s*\n\s*&& !String\(b\.trial_name\|\|''\)\.trim\(\);/.test(src));
+/* 2026-09-21 使用者：「標題卡是不是可以新增一個更改課程 如果尚未安排使用會員的話」——
+   判準從「完全沒有人」放寬成「沒綁到票」：待簽約卡（人指定了、還沒買、沒綁票）
+   也要看得到。_ashCourseSet 完全不碰票券，所以沒票就沒有東西要退補。
+   ⚠ 已經綁到票的卡仍然擋掉 —— 那才是原本那條規則真正要防的。 */
+ok('★★ 空堂（完全沒有人）看得到',
+   /const _nobody = !b\.member_id && _rosterEmpty && !String\(b\.trial_name\|\|''\)\.trim\(\);/.test(src));
+ok('★★★ 待簽約且沒綁票也看得到（這次放寬的重點）',
+   /const _pendNoTk = !!b\.pending_contract && !b\.ticket_id && _rosterEmpty;/.test(src)
+   && /if\(!_leave && \(_nobody \|\| _pendNoTk\) && _futureOk\)/.test(src));
+ok('★★★ 已經綁到票的卡仍然不給（換課別要連帶退補堂數，那是另一件事）',
+   /&& !b\.ticket_id &&/.test(src)
+   && /有票的課要換課別得連帶換票、退補堂數/.test(src));
+ok('★★ 為什麼待簽約卡最需要它，理由寫在原地（promoteHeldBooking 用 category 配票）',
+   /promoteHeldBooking 是拿 category 去比對配票的/.test(src)
+   && /&& x\.category===tk\.category\)/.test(src));
+ok('★ 視窗抬頭分兩種（空堂／待簽約），不會對待簽約卡說「沒有安排任何人」',
+   /\$\{b\.pending_contract\?'尚未收款綁票，換課別不會動到票券':'這張卡目前沒有安排任何人'\}/.test(src));
+ok('★ 自主訓練仍然整個不列（待簽約卡一樣沒有點數可扣）',
+   /待簽約卡也看得到這張清單，\s*\n\s*但自主訓練仍然整個不列/.test(src));
 ok('★ 不能用 A.editable（待簽約那條路刻意設成 false），自己判日期',
    /const _futureOk = A\.staff && !A\.closed && String\(b\.date\)>=ymd\(TODAY\);/.test(src)
    && /不能用 A\.editable：待簽約／空堂那條路刻意把它設成 false/.test(src));
