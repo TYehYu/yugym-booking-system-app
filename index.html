@@ -3904,7 +3904,15 @@ tr.pe-row:hover td{background:var(--sage-bg,#eef4ee);}
 /* 課表張數頁籤（2026-09-16）：沿用上面 1V2 頁籤的語彙（同樣的圓角、綠底選中），
    但張數會變動，所以不用 flex:1 平分 —— 平分會讓按鈕寬度隨張數增減而跳動。
    ⚠ 末端那顆 [+] 用虛線框：它是「新增」不是「某一張」，跟數字鈕要分得出來。 */
+/* 前面那個「課表」小標（2026-09-21 使用者：「上面的 1 2 資訊是不是重複了啊」）——
+   兩排頁籤本來都畫成一模一樣的數字鈕，上面那排是「哪一位學員」、
+   這一排是「第幾張紙」，長得一樣就會被當成同一件事重複出現。
+   上面那排改成「會員 A／會員 B」、這一排補一個「課表」小標，兩排就分得開了。
+   ⚠ 不能把這一排移除（使用者問「是不是可以移除了」）：它是 0916 指定的功能
+     「一堂課教練會拿兩份課表分別記錄不同的訓練」，跟 1V2 是正交的兩個維度 ——
+     1V1 的課沒有學員頁籤，但照樣可以開兩張課表。 */
 .tl-sheets{display:flex;gap:6px;margin:0 18px 10px;flex:none;align-items:center;flex-wrap:wrap;}
+.tl-sheets-lb{font-size:11.5px;color:var(--t3);font-weight:700;letter-spacing:.04em;margin-right:2px;}
 .tl-sheets .tl-sheet{flex:0 0 auto;min-width:42px;padding:7px 12px;border-radius:9px;
   border:1px solid var(--bd);background:var(--card);font-family:inherit;font-size:13.5px;
   font-weight:700;color:var(--t2);cursor:pointer;font-variant-numeric:tabular-nums;transition:.12s;}
@@ -13778,8 +13786,8 @@ function tbl(s){return TABLE_ALIAS[s]||s;}
 let sb=null;
 // ── 版本號（日期+時間格式：年後兩碼+月+日.時分，例 26620.1058 = 26年6/20 10:58）──
 // 每次改版手動更新這一行即可，畫面與 title 會一起更新
-const APP_VERSION = '260921.2255';
-const APP_VERSION_LABEL = 'v260921.2255';
+const APP_VERSION = '260921.2308';
+const APP_VERSION_LABEL = 'v260921.2308';
 const CLOUD = !!(window.YUGYM_CONFIG && window.YUGYM_CONFIG.url && window.YUGYM_CONFIG.anonKey);
 if(CLOUD){ sb = supabase.createClient(window.YUGYM_CONFIG.url, window.YUGYM_CONFIG.anonKey); }
 
@@ -63296,17 +63304,24 @@ async function renderTrainingLogSheet(){
       </div>
       ${/* 1V2 的兩份課表（2026-09-15 使用者：「上方用兩個標籤頁1跟2 不用填名字
            教練自己會知道就好」）—— 只有 1V2 才畫，其他課完全不變。
-           ⚠ 三大項紀錄（overview）只算第一位，切到「2」時不跟著換：
-             第二位沒有自己的會員身分，算不出屬於他的 PR。 */''}
+           ⚠ 三大項紀錄（overview）只算第一位，切到 B 時不跟著換：
+             第二位沒有自己的會員身分，算不出屬於他的 PR。
+           ⚠⚠ 為什麼標的是「會員 A／會員 B」而不是真名（2026-09-21 使用者提問
+             「比較大的 1 跟 2 是因為這堂課是 1V2 所出現的嗎　可以改成會員A跟會員B」）——
+             **第二位根本沒有存在資料裡**：0921 查過正式庫，646 組 1V2 全部都是單張
+             booking，member_ids 是空的，同時段的另一張 1V2 是別位教練的課。
+             所以真名查不到，A／B 是唯一誠實的標法。
+             A ＝ 這張 booking 綁的會員（就是抬頭那位），B ＝ 現場的另一位。
+             ⚠ 別再試著「找出配對的另一張 booking」—— 沒有那張。 */''}
       ${_is1v2?`<div class="tl-slots">${[1,2].map(s=>
-        `<button type="button" class="tl-slot${_slot===s?' on':''}" onclick="tlSetSlot(${s})">${s}</button>`).join('')}</div>`:''}
+        `<button type="button" class="tl-slot${_slot===s?' on':''}" onclick="tlSetSlot(${s})">會員 ${s===1?'A':'B'}</button>`).join('')}</div>`:''}
       ${/* 課表張數頁籤（2026-09-16 使用者：「先設計1頁 旁邊是[+]點了可以多一頁」）——
            一張時就是「1」＋「＋」，按了長出第二張並直接切過去。
            ⚠ 位置就是原本三大項那一列（凍結區內、會員資料下方），捲動時仍看得到，
              教練隨時能換張。
            ⚠ 與上面 1V2 的 1／2 頁籤是兩列不同的東西：那一列選「哪一位學員」，
              這一列選「第幾張紙」。1V2 的課兩列都會出現。 */''}
-      <div class="tl-sheets">${Array.from({length:_sheetN},(_,i)=>i+1).map(n=>
+      <div class="tl-sheets"><span class="tl-sheets-lb">課表</span>${Array.from({length:_sheetN},(_,i)=>i+1).map(n=>
         `<button type="button" class="tl-sheet${_sheet===n?' on':''}" onclick="tlSetSheet(${n})">${n}</button>`).join('')
       }${/* 刪掉這張課表（2026-09-16 使用者：「我剛剛測試按新增第二分頁 但沒有刪除按鈕」）——
            ⚠ 只在「總數 > 1 且正看著最後一張」時出現：允許刪中間那張的話，後面的編號

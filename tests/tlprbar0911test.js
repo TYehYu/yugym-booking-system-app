@@ -50,9 +50,23 @@ ok('★★ 三組專屬 CSS 也收掉（.tlh-prb-*／.tlh-pr-*／.prh-*）',
    !/\.tlh-prb/.test(codeOnly) && !/\.tlh-pr-/.test(codeOnly)
    && !/\.prh-lift|\.prh-row|\.prh-vol|\.prh-body/.test(codeOnly));
 ok('★★★ 頁籤列：每張一顆數字鈕，末端一顆 [+]',
-   /<div class="tl-sheets">\$\{Array\.from\(\{length:_sheetN\}/.test(S)
+   /<div class="tl-sheets"><span class="tl-sheets-lb">課表<\/span>\$\{Array\.from\(\{length:_sheetN\}/.test(S)
    && /onclick="tlSetSheet\(\$\{n\}\)"/.test(S)
    && /onclick="tlAddSheet\(\)" title="再開一張課表"/.test(S));
+/* 2026-09-21 使用者：「上面的 1 2 資訊是不是重複了啊」——
+   上排（哪一位學員）與這排（第幾張紙）原本都是一模一樣的數字鈕，看起來像重複顯示。
+   上排改標「會員 A／會員 B」、這排前面補一個「課表」小標，兩排就分得開了。
+   ⚠ 使用者同時問「那這樣下面的 1 2 + 是不是可以移除了」—— **不能移除**：
+     這排是 0916 指定的「一堂課兩份課表」，與 1V2 正交；
+     1V1 沒有學員頁籤，但照樣要能開兩張課表。這一條就是擋住它被順手拿掉。 */
+ok('★★★ 兩排頁籤要分得開（同一種長相＝看起來重複）',
+   /<span class="tl-sheets-lb">課表<\/span>/.test(S)
+   && /\.tl-sheets-lb\{font-size:11\.5px;/.test(src)
+   && /會員 \$\{s===1\?'A':'B'\}/.test(src));
+ok('★★★ 課表頁籤不可以被移除（與 1V2 是正交的兩件事）',
+   /<div class="tl-sheets">/.test(S)
+   && /onclick="tlAddSheet\(\)"/.test(S)
+   && /跟 1V2 是正交的兩個維度/.test(src));
 /* ⚠⚠ sheet 與 slot 是兩個正交的維度，混用會出事：
    slot=2 的意思是「這筆不屬於這位會員」（全站八處必須濾掉，漏一處別人的 PR 就算到我頭上）；
    sheet>=2 只是「記在第幾張紙上」，**每一張都屬於這位會員，任何讀取端都不可以濾掉**。 */
