@@ -99,5 +99,33 @@ ok('★★ 一組都沒填就擋下', /if\(!valid\.length\)\{ showToast\('請至
 ok('★★ 名稱必填', /if\(!name\)\{ showToast\('請填動作名稱'\); return; \}/.test(S));
 ok('★★ 防連點', /async function tleSave\(\)\{ return onceAct\('tlesave', _tleSave\); \}/.test(src));
 
+/* 2026-09-21 使用者：「每次更新一個項目　儲存後畫面又會回到最上面　又要重新往下拉　有點麻煩」
+   ⚠ 這不是存檔的 bug，是 renderTrainingLogSheet 整塊 innerHTML 重建：.tl-scroll 換了新節點。
+   ⚠ 守「用 viewKey 判斷」而不是守「某幾個呼叫端有還原」—— render 有十個入口，
+     靠旗標的寫法遲早漏一個，而且新增入口的人不會知道要加。 */
+console.log('\n④ 存檔後停在原處（2026-09-21）');
+{
+  const R2=src.slice(src.indexOf('async function renderTrainingLogSheet()'),
+                     src.indexOf('// ── P1-2 一鍵套用歷史課表'));
+  ok('★★★ 重畫前先記下 .tl-scroll 的捲動位置',
+     /const _keepTop=\(window\._tlViewKey===_viewKey\)\s*\n?\s*\? \(\(\(host\.querySelector\('\.tl-scroll'\)\|\|\{\}\)\.scrollTop\)\|\|0\) : 0;/.test(R2));
+  ok('★★★ 重畫後還原（這一行沒了就會回到最上面）',
+     /if\(_keepTop>0\)\{ const _sc=host\.querySelector\('\.tl-scroll'\); if\(_sc\) _sc\.scrollTop=_keepTop; \}/.test(R2));
+  ok('★★★ 判準是「同一堂課＋同一位＋同一張紙」，不是旗標',
+     /const _viewKey=\[b\.id,_slot,_sheet\]\.join\('\|'\);/.test(R2));
+  ok('★★ 切人／切頁要回到頂端（換內容本來就該從頭看）',
+     /切到別位／別張紙是換內容，本來就該從頭看/.test(src)
+     /* tlSetSlot／tlSetSheet 改的是 window._tlSlot／_tlSheet，viewKey 就跟著變 → _keepTop=0 */
+     && /function tlSetSlot\(s\)\{\s*\n\s*window\._tlSlot=/.test(src)
+     && /function tlSetSheet\(n\)\{\s*\n\s*window\._tlSheet=/.test(src));
+  ok('★★★ 記錄點要在 innerHTML **之前**、還原要在**之後**（順序反了就永遠是 0）',
+     R2.indexOf('const _keepTop=') < R2.indexOf('host.innerHTML=')
+     && R2.indexOf('host.innerHTML=') < R2.indexOf('_sc.scrollTop=_keepTop'));
+  ok('★★ 還原不可以丟進 setTimeout（會先畫出捲到頂那一格，看起來閃一下）',
+     !/setTimeout\([^)]*scrollTop=_keepTop/.test(R2)
+     && /丟進 setTimeout\(\.\.\.,0\) 的話瀏覽器會先把「捲到頂」那一格/.test(src));
+  ok('★ 使用者的原話寫在原地', /儲存後畫面又會回到最上面/.test(src));
+}
+
 console.log('\n'+pass+' 過 / '+fail+' 敗');
 process.exit(fail?1:0);

@@ -13670,8 +13670,8 @@ function tbl(s){return TABLE_ALIAS[s]||s;}
 let sb=null;
 // ── 版本號（日期+時間格式：年後兩碼+月+日.時分，例 26620.1058 = 26年6/20 10:58）──
 // 每次改版手動更新這一行即可，畫面與 title 會一起更新
-const APP_VERSION = '260921.2145';
-const APP_VERSION_LABEL = 'v260921.2145';
+const APP_VERSION = '260921.2153';
+const APP_VERSION_LABEL = 'v260921.2153';
 const CLOUD = !!(window.YUGYM_CONFIG && window.YUGYM_CONFIG.url && window.YUGYM_CONFIG.anonKey);
 if(CLOUD){ sb = supabase.createClient(window.YUGYM_CONFIG.url, window.YUGYM_CONFIG.anonKey); }
 
@@ -63163,6 +63163,20 @@ async function renderTrainingLogSheet(){
         </div>`;
       }).join('');
 
+  /* ══ 重畫後停在原處（2026-09-21 使用者：「每次更新一個項目　儲存後畫面又會回到最上面
+       又要重新往下拉　有點麻煩」）══
+     整個抽屜是 host.innerHTML 整塊重建的，.tl-scroll 是全新的節點，捲動位置當然歸零。
+     ⚠ 判斷「要不要還原」用的是**看的是不是同一份**，不是讓各個呼叫端自己記旗標 ——
+       renderTrainingLogSheet 有十個入口（存檔、刪除、套用方案、套用歷史、新增動作、
+       切人、切頁、加頁、刪頁、開啟），靠旗標遲早漏掉一個，而且新增入口的人不會知道要加。
+       同一堂課＋同一位學員＋同一張紙才還原；切到別位／別張紙是換內容，本來就該從頭看。
+     ⚠ 開抽屜時 _tlViewKey 還是上一堂課的（或 undefined），所以第一次畫一定從頂端開始，
+       不必另外處理。 */
+  const _viewKey=[b.id,_slot,_sheet].join('|');
+  const _keepTop=(window._tlViewKey===_viewKey)
+    ? (((host.querySelector('.tl-scroll')||{}).scrollTop)||0) : 0;
+  window._tlViewKey=_viewKey;
+
   host.innerHTML=`<div class="ms-backdrop" onclick="closeTrainingLog()"></div>
     <div class="ms-panel tls-panel">
       ${/* 2026-09-11 簡化：會員卡併進標題列 —— 標題就是會員，副標是時間與第幾堂。
@@ -63214,6 +63228,13 @@ async function renderTrainingLogSheet(){
         ${sec4}
       </div>
     </div>`;
+
+  /* ⚠⚠ 還原必須在**這一個同步任務裡**做完 —— innerHTML 是同步掛上 DOM 的，
+     這裡量得到也設定得到。丟進 setTimeout(...,0) 的話瀏覽器會先把「捲到頂」那一格
+     畫出來、下一格才跳回去，看起來就是閃一下
+     （與 .qs-days 的 scrollLeft、0822 首頁教練篩選列是同一個坑）。
+     ⚠ 存檔後內容可能變短，scrollTop 會被瀏覽器自動夾到最大值，不必自己算。 */
+  if(_keepTop>0){ const _sc=host.querySelector('.tl-scroll'); if(_sc) _sc.scrollTop=_keepTop; }
 }
 // ── P1-2 一鍵套用歷史課表：把某次的所有動作複製成今日紀錄（重量保留供微調）──
 async function tlApplyHist(srcBid){
