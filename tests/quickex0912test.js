@@ -49,9 +49,10 @@ console.log('\n①-2 重量單位 kg／lb（2026-09-15 使用者：「重量只�
      /* 2026-09-21：格子裡的單位字拿掉換成 ± 兩顆（見 tlsteptest），
         「不寫死 kg」改由表頭與級距守 —— 表頭寫的是目前單位，
         級距也是從 _u 推出來的（lb 主級距就是 5），兩處都寫死不了。 */
-     /* 2026-09-21 三修：表頭的重量欄多了［0.5］級距鈕，所以外面包了一層 .ae-head-unit */
-     && /<span class="ae-head-unit">重量 \$\{_u\}<span class="wpe-unit ae-head-step">/.test(S)
-     && /const _ws=tlStepPick\(_u, st\.wstep\); st\.wstep=_ws;/.test(S)
+     /* 2026-09-21 四修：表頭的［0.5］級距鈕收掉了（改成每一列的〔+0.5〕動作鈕，
+        見 tlsteptest ⑧），表頭回到單純一個 span；「不寫死 kg」改由表頭與 ± 的級距守。 */
+     && /<span>重量 \$\{_u\}<\/span>/.test(S)
+     && /const _sr=1, _sw=tlStepSize\('weight',_u\);/.test(S)
      && /'×'\+s\.weight\+_su/.test(S)                          /* 備註字串 */
      && /return w\.length\?_su:null;/.test(S));                /* 存檔的 weight_unit */
   ok('★★ 表單狀態帶 unit，預設 kg', /unit:'kg', sets:\[\{reps:'',weight:''\}\]\}/.test(S));

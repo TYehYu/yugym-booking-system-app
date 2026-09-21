@@ -18,8 +18,7 @@ const grab=n=>{let i=src.indexOf('function '+n+'(');if(src.slice(i-6,i)==='async
    ⚠ 在 index.html 幫它們加新依賴時記得回來補，少餵一個就 ReferenceError。 */
 const F=new Function('WP_STEPS','wpUnitOf',
   grab('tlStepSize')+'\n'+grab('tlStepVal')+'\n'+grab('tlStepFieldHTML')
-  +'\n'+grab('tlStepList')+'\n'+grab('tlStepPick')
-  +'\nreturn {tlStepSize,tlStepVal,tlStepFieldHTML,tlStepList,tlStepPick};')
+  +'\nreturn {tlStepSize,tlStepVal,tlStepFieldHTML};')
   ({kg:[1,0.5],lb:[5]}, x=>x==='lb'?'lb':'kg');
 
 console.log('① 級距（沿用 0909 的 WP_STEPS，不另訂一套）');
@@ -71,8 +70,9 @@ console.log('\n④ 兩支都要有（同一個手勢不能只做一半）');
   ok('★★★ 記錄訓練：當前那一組接上 tlStepCur',
      /dec:`tlStepCur\('reps',-\$\{_sr\}\)`/.test(R2)
      && /inc:`tlStepCur\('weight',\$\{_sw\}\)`/.test(R2), 'renderAddExerciseSheet');
-  ok('★★★ 重量用的是表頭選的那個級距（次數固定 1）',
-     /const _sr=1, _sw=_ws;/.test(R1) && /const _sr=1, _sw=_ws;/.test(R2));
+  ok('★★★ 次數固定 ±1，重量吃這個單位的主級距（見 ⑧）',
+     /const _sr=1, _sw=tlStepSize\('weight',u\);/.test(R1)
+     && /const _sr=1, _sw=tlStepSize\('weight',_u\);/.test(R2));
   ok('★★★ 兩支都用同一個版型函式（不各畫一套）',
      /tlStepFieldHTML\(\{/.test(R1) && /tlStepFieldHTML\(\{/.test(R2));
   ok('★★ 單位字從格子裡拿掉了（表頭已經寫著，重複只會擠掉 ± 的位置）',
@@ -100,12 +100,12 @@ console.log('\n⑥ 樣式');
 ok('★★ ± 有自己的 class，沒有去改共用的 .ae-set-del／.wpe-b', /\.ae-set-pm\{/.test(src));
 ok('★★ 按下去要有回饋（手機沒有 hover）', /\.ae-set-pm:active\{background:var\(--sage-bg\);\}/.test(src));
 ok('★★★ 格子內距收到 0 1px，± 才貼得住兩邊',
-   /\.ae-set-field\{display:flex;align-items:center;gap:0;background:#fff;border:1px solid var\(--bd\);border-radius:9px;padding:0 1px;flex:1;\}/.test(src));
+   /\.ae-set-field\{display:flex;align-items:center;gap:0;background:#fff;border:1px solid var\(--bd\);border-radius:9px;padding:0 1px;flex:1 1 0;\}/.test(src));
 ok('★★ 數字置中（兩邊各一顆鈕時靠左會看起來歪掉）', /\.ae-set-in\{[\s\S]{0,260}?text-align:center;/.test(src));
 ok('★★ 關掉數字框原生上下箭頭（桌機會再吃掉寬度，而且與 ± 重複）',
    /\.ae-set-in::-webkit-outer-spin-button,\.ae-set-in::-webkit-inner-spin-button\{-webkit-appearance:none;margin:0;\}/.test(src));
 ok('★ 寬度是量的不是算的，數字寫在原地',
-   /＝ ± 兩顆各 26px ＋ 中間輸入框內寬 56px/.test(src));
+   /± 兩顆各 24px；次數內寬 34px、重量內寬 58px（「100\.5」49px，\*\*餘 9px\*\*）/.test(src));
 
 /* 2026-09-21 二修（使用者附截圖：「畫面擠在一起了」，數字 10 被切成「1(」）——
    根因是 .modal:has(.ash-sheetmk) input 這條 !important 規則：
@@ -121,11 +121,11 @@ ok('★★★ 選擇器要寫滿四段才壓得過來源那條（0,2,1＋!import
 ok('★★ 只豁免逐組格子，同一張視窗的「動作」「備註」仍是大白框',
    /只豁免 \.ae-set-in 一個：同一張視窗的「動作」「備註」仍要維持那個大白框的樣子/.test(src)
    && /\.modal:has\(\.ash-sheetmk\) input,\.modal:has\(\.ash-sheetmk\) select\{/.test(src));
-ok('★★★ 四欄的欄寬與間距三行一起改（只改一行就回到 0915「沒有對齊」）',
-   /\.ae-sets-head,\.ae-set-done,\.ae-set-cur\{\s*\n?\s*display:grid;grid-template-columns:20px 1fr 1fr 20px;gap:8px;align-items:center;\}/.test(src)
-   && /\.ae-sets-head\{display:flex;align-items:center;gap:8px;/.test(src)
-   && /\.ae-set-done\{display:flex;align-items:center;gap:8px;/.test(src)
-   && /\.ae-set-cur\{display:flex;align-items:center;gap:8px;/.test(src)
+ok('★★★ 欄寬與間距三行一起改（只改一行就回到 0915「沒有對齊」）',
+   /\.ae-sets-head,\.ae-set-done,\.ae-set-cur\{\s*\n?\s*display:grid;grid-template-columns:20px 0\.78fr 1fr 28px 20px;gap:6px;align-items:center;\}/.test(src)
+   && /\.ae-sets-head\{display:flex;align-items:center;gap:6px;/.test(src)
+   && /\.ae-set-done\{display:flex;align-items:center;gap:6px;/.test(src)
+   && /\.ae-set-cur\{display:flex;align-items:center;gap:6px;/.test(src)
    && /\.ae-sets-head>span:first-child\{width:20px;/.test(src));
 
 /* 2026-09-21 使用者：「前面的編號改簡單一點　1. 2.就好」——
@@ -150,50 +150,60 @@ ok('★★★ 表頭欄位規則只吃直接子層（沒有「>」會壓到巢�
 ok('★★ 這個坑的成因寫在原地', /會把\*\*巢狀的\*\* span 也當成「組」欄/.test(src));
 ok('★★ 三行一起改的理由寫在原地', /表頭／已完成組／輸入組三行\*\*一定要一起改\*\*/.test(src));
 
-/* 2026-09-21 三修：「然後在重量上方新增按鈕［0.5］　快速加減的按鈕可以改成圓形鈕嗎」
-   ⚠ 兩件事綁在一起：圓形鈕裝不下「−0.5」，所以級距一定要有地方顯示 → 就是這顆［0.5］。
-   ⚠ 只放一顆不是偷懶：表頭那一格實測 112px，三顆 40px 的鈕就會折行（見 ⑧ 最後一條）。 */
-console.log('\n⑧ 重量級距［0.5］切換（2026-09-21）');
-eq('★★★ kg 的清單本來就有 0.5（0909 定案），不會變成三顆', JSON.stringify(F.tlStepList('kg')), '[1,0.5]');
-eq('★★★ lb 補一顆 0.5（現場的片是 5 磅，但教練要按得到 0.5）', JSON.stringify(F.tlStepList('lb')), '[5,0.5]');
-eq('★★ 沒選過＝主級距（kg 1）', F.tlStepPick('kg',undefined), 1);
-eq('★★ 沒選過＝主級距（lb 5）', F.tlStepPick('lb',undefined), 5);
-eq('★★★ 選了 0.5 之後切單位仍保留（兩個單位都有 0.5）', F.tlStepPick('lb',0.5), 0.5);
-eq('★★★ 選了 ±1 之後切到 lb → 退回 5（lb 沒有 ±1，不能留著無效值）', F.tlStepPick('lb',1), 5);
-eq('★★★ 選了 ±5 之後切回 kg → 退回 1', F.tlStepPick('kg',5), 1);
+/* ══ 2026-09-21 四修：〔+0.5〕的位置 ══
+   先做成表頭的「級距切換」，使用者看到實機後指正：
+     「0.5 要放在每一組的重量上面　應該不是跟著標題吧?　他是拿來幫每一組重量
+       快速增加 0.5 用的」
+   使用者在兩種做法之間選了「按一下就 +0.5（直接加）」，所以：
+   ・表頭那套級距切換整組收掉（tlStepList／tlStepPick／tleWStep／tlWStepCur）
+   ・每一列的重量右邊多一顆〔+0.5〕**動作鈕**，按一下就是那一組 +0.5
+   ・± 維持這個單位的正常級距（kg 1、lb 5）
+   ⚠ 這支守的是「不要兩個地方都能改級距」—— 表頭那套復活的話這裡會擋下來。 */
+console.log('\n⑧〔+0.5〕在每一列，不在表頭（2026-09-21 四修）');
 {
+  const codeOnly=src.replace(/\/\*[\s\S]*?\*\//g,'').replace(/^[ \t]*\/\/.*$/gm,'');
+  ok('★★★ 表頭那套級距切換整組收掉，不留死碼',
+     !/tlStepList/.test(codeOnly) && !/tlStepPick/.test(codeOnly)
+     && !/tleWStep/.test(codeOnly) && !/tlWStepCur/.test(codeOnly)
+     && !/ae-head-step/.test(codeOnly) && !/wstep/.test(codeOnly));
+  ok('★★ 收掉的理由與使用者原話留在註解裡（免得有人再做一次）',
+     /0\.5 要放在每一組的重量上面/.test(src) && /〔已移除〕表頭的級距切換/.test(src));
+
   const R1=grab('tleRender'), R2=grab('renderAddExerciseSheet');
-  ok('★★★ 退回的值要寫回 state（不寫回去下次重畫又會跳一次）',
-     /const _ws=tlStepPick\(u, E\.wstep\); E\.wstep=_ws;/.test(R1)
-     && /const _ws=tlStepPick\(_u, st\.wstep\); st\.wstep=_ws;/.test(R2));
-  ok('★★★ 兩支表頭都有那顆［0.5］，而且是切換（再按一次回到正常級距）',
-     /onclick="tleWStep\(\$\{_ws===0\.5\?tlStepList\(u\)\[0\]:0\.5\}\)">0\.5<\/button>/.test(R1)
-     && /onclick="tlWStepCur\(\$\{_ws===0\.5\?tlStepList\(_u\)\[0\]:0\.5\}\)">0\.5<\/button>/.test(R2));
-  ok('★★ 選取＝品牌綠實心（與旁邊 kg／lb 同一組語彙）',
-     /class="wpe-u\$\{_ws===0\.5\?' on':''\}"/.test(R1) && /class="wpe-u\$\{_ws===0\.5\?' on':''\}"/.test(R2));
-  ok('★★ title 寫出目前每次加減多少', /title="每次加減 \$\{_ws\}"/.test(R1));
-  ok('★★ 換級距要重畫（表頭才看得出選了哪顆），而且先收值',
-     /function tleWStep\(v\)\{ tleReadSets\(\); [\s\S]{0,90}tleRender\(\); \}/.test(src)
-     && /function tlWStepCur\(v\)\{ tlReadCur\(\); [\s\S]{0,110}renderAddExerciseSheet\(\); \}/.test(src));
+  ok('★★★ 修改紀錄：每一列都有一顆〔+0.5〕，打的是那一列的重量',
+     /class="ae-set-half"[\s\S]{0,160}?onclick="tleStep\(\$\{i\},'weight',0\.5\)">\+0\.5<\/button>/.test(R1));
+  ok('★★★ 記錄訓練：當前那一組也有',
+     /class="ae-set-half"[\s\S]{0,160}?onclick="tlStepCur\('weight',0\.5\)">\+0\.5<\/button>/.test(R2));
+  ok('★★★ 是動作不是模式：按一下直接 +0.5，沒有「先切換」那一步',
+     /aria-label="這一組重量加 0\.5"/.test(R1));
+  ok('★★ 次數沒有 0.5（次數不會有半下）',
+     !/ae-set-half[\s\S]{0,160}?'reps'/.test(R1) && !/ae-set-half[\s\S]{0,160}?'reps'/.test(R2));
+  ok('★★★ ± 回到這個單位的正常級距（kg 1、lb 5）',
+     /const _sr=1, _sw=tlStepSize\('weight',u\);/.test(R1)
+     && /const _sr=1, _sw=tlStepSize\('weight',_u\);/.test(R2));
+  ok('★★ 表頭回到只有 kg／lb（修改紀錄）與純文字（記錄訓練）',
+     /<span class="ae-head-unit">重量<span class="wpe-unit">/.test(R1)
+     && /<span>重量 \$\{_u\}<\/span>/.test(R2));
+  ok('★★★ 唯讀列與當前組要補佔位格，五欄才對得起來',
+     /<span class="ae-set-pad"><\/span>/.test(R2)
+     && /\.ae-set-pad\{flex:none;width:28px;\}/.test(src));
 }
 ok('★★★ 圓形鈕：寬＝高，align-self 不能是 stretch（會被拉成膠囊）',
-   /\.ae-set-pm\{flex:none;width:26px;height:26px;align-self:center;/.test(src)
+   /\.ae-set-pm\{flex:none;width:24px;height:24px;align-self:center;/.test(src)
    && /border-radius:50%;/.test(src));
 ok('★★ 白格子裡的圓鈕要用米底，不然白對白看不見', /\.ae-set-pm\{[^}]*background:var\(--card2\);/.test(src));
-ok('★★★ 表頭鈕要壓掉 .wpe-u 的 min-width:40px（三顆 40px 排不進 112px）',
-   /\.ae-head-unit \.wpe-u\{padding:2px 7px;font-size:10\.5px;min-width:32px;\}/.test(src));
-/* 2026-09-21 使用者附截圖：「擠在一起了　中間加一行吧」 */
-ok('★★★ ［0.5］自己一行（四樣東西排同一行會互相壓到）',
-   /\.ae-head-step\{flex:0 0 100%;justify-content:center;margin:0;\}/.test(src));
-ok('★★★ 容器要 display:flex＋width:100%，inline-flex 的百分比算不出來',
-   /\.ae-head-unit\{display:flex;width:100%;flex-wrap:wrap;align-items:center;justify-content:center;gap:6px;row-gap:5px;\}/.test(src));
-ok('★★ inline-flex 為什麼不行，寫在原地',
-   /inline-flex 的寬度是由內容撐出來的（shrink-to-fit），百分比算不出來/.test(src));
-ok('★★ 實測數字寫在原地（表頭第一行 98px／格子 112px；數字餘 7px）',
-   /實測第一行：「重量」22 ＋ kg 32 ＋ lb 32 ＋ 兩道 6px ＝ 98px，格子 112px，排得下/.test(src)
-   && /最寬的「100\.5」是 49px，\*\*還剩 7px\*\*/.test(src));
-ok('★★ 為什麼只放一顆，理由寫在原地（免得有人好心補成一對）',
-   /四顆鈕會折成三行、表頭從 28px 變 77px/.test(src));
+ok('★★〔+0.5〕長得跟 ± 不一樣（方角，不是圓）—— 它不是同一種東西',
+   /\.ae-set-half\{flex:none;width:28px;[\s\S]{0,240}?border-radius:8px;/.test(src)
+   && !/\.ae-set-half\{[^}]*border-radius:50%/.test(src));
+ok('★★★⚠ 兩欄不等寬（0.78:1）—— 等寬的話重量一定被切掉',
+   /grid-template-columns:20px 0\.78fr 1fr 28px 20px;gap:6px;/.test(src)
+   && /\.ae-cur-fields \.ae-set-field:first-child\{flex:0\.78 1 0;\}/.test(src));
+ok('★★ 不等寬的理由與實測數字寫在原地',
+   /重量會出現「100\.5」這種四五個字元的值（49px），次數幾乎只有兩位數（「12」22px）/.test(src)
+   && /次數內寬 34px（「100」32\.9px）、重量內寬 58px（「100\.5」49px，餘 9px）/.test(src));
+ok('★★ 表頭欄位規則只吃直接子層（沒有「>」會壓到巢狀的鈕）',
+   /\.ae-sets-head>span:first-child\{/.test(src)
+   && !/\.ae-sets-head span:first-child\{/.test(src));
 
 console.log('\n'+(fail?'✗ ':'✓ ')+pass+' 通過 / '+fail+' 失敗');
 process.exit(fail?1:0);
