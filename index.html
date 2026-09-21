@@ -4178,9 +4178,25 @@ body.cxe-dragging-on .cxe-row{cursor:grabbing;}
 /* 當前輸入組 */
 .ae-set-cur{display:flex;align-items:center;gap:12px;padding:12px 4px;}
 .ae-cur-fields{display:flex;gap:10px;flex:1;}
-.ae-set-field{display:flex;align-items:center;gap:5px;background:#fff;border:1px solid var(--bd);border-radius:9px;padding:0 10px;flex:1;}
-.ae-set-in{flex:1;border:none;outline:none;padding:12px 0;font-size:18px;font-family:var(--num);font-weight:700;color:var(--green);background:transparent;width:100%;min-width:0;}
-.ae-set-field span{font-size:12px;color:var(--t3);}
+/* ══ 逐組的 ± 快速調整（2026-09-21 使用者：「修改紀錄次數跟重量可以有+-符號　快速調整嗎」）══
+   ⚠ 兩支一起加：「修改紀錄」與「記錄訓練」的逐組列本來就是同一組 .ae-set-*，
+     只加一邊會讓同一個手勢在兩個畫面長得不一樣。
+   ⚠ 塞得下的關鍵是**拿掉格子裡的單位字**（次／kg）—— 表頭本來就寫著「次數」「重量 kg」，
+     每一列再寫一次只是重複，讓出來的寬度剛好給 ± 兩顆（375px 實算過：
+     每格 118px＝兩顆 29px ＋ 中間 54px 的輸入框，「22.5」還放得下）。
+   ⚠ padding 從 0 10px 收到 0 2px：± 要貼著格子邊，中間才留得住數字。
+   ⚠ 數字置中：兩邊各一顆鈕的時候靠左會看起來歪掉。
+   ⚠ 關掉數字框的原生上下箭頭：桌機上它會再吃掉一截寬度，而且與 ± 是重複的東西。 */
+.ae-set-field{display:flex;align-items:center;gap:0;background:#fff;border:1px solid var(--bd);border-radius:9px;padding:0 2px;flex:1;}
+.ae-set-in{flex:1;border:none;outline:none;padding:12px 0;font-size:18px;font-family:var(--num);font-weight:700;color:var(--green);background:transparent;width:100%;min-width:0;
+  text-align:center;-moz-appearance:textfield;appearance:textfield;}
+.ae-set-in::-webkit-outer-spin-button,.ae-set-in::-webkit-inner-spin-button{-webkit-appearance:none;margin:0;}
+.ae-set-pm{flex:none;width:29px;align-self:stretch;border:none;background:transparent;padding:0;
+  color:var(--green);font-family:var(--num),inherit;font-size:11.5px;font-weight:700;
+  cursor:pointer;border-radius:8px;-webkit-tap-highlight-color:transparent;}
+.ae-set-pm:active{background:var(--sage-bg);}
+/* 〔已移除〕.ae-set-field span —— 格子裡的單位字（次／kg）整組拿掉換成 ± 兩顆，
+   全檔沒有其他地方用到 .ae-set-field 裡的 span，所以整條收掉不留死碼。 */
 /* 重量單位切換（2026-09-15）：整張表單一個單位，擺在組別列下方靠右 */
 /* 姿勢／工具的摘要鈕（2026-09-16）：左邊欄位名、右邊目前選的值。
    ⚠ 沿用 .ae-opt 的底與圓角，只改內部排法 —— 它跟其他選項鈕是同一種東西（可點的卡）。 */
@@ -13670,8 +13686,8 @@ function tbl(s){return TABLE_ALIAS[s]||s;}
 let sb=null;
 // ── 版本號（日期+時間格式：年後兩碼+月+日.時分，例 26620.1058 = 26年6/20 10:58）──
 // 每次改版手動更新這一行即可，畫面與 title 會一起更新
-const APP_VERSION = '260921.2153';
-const APP_VERSION_LABEL = 'v260921.2153';
+const APP_VERSION = '260921.2207';
+const APP_VERSION_LABEL = 'v260921.2207';
 const CLOUD = !!(window.YUGYM_CONFIG && window.YUGYM_CONFIG.url && window.YUGYM_CONFIG.anonKey);
 if(CLOUD){ sb = supabase.createClient(window.YUGYM_CONFIG.url, window.YUGYM_CONFIG.anonKey); }
 
@@ -63396,20 +63412,57 @@ function tleRender(){
     <div class="ae-sets-head"><span>組</span><span>次數</span>
       <span class="ae-head-unit">重量<span class="wpe-unit">${WP_UNITS.map(x=>
         `<button type="button" class="wpe-u${u===x?' on':''}" onclick="tleUnit('${x}')">${x}</button>`).join('')}</span></span></div>
-    ${sets.map((s,i)=>`<div class="ae-set-cur">
+    ${/* 每一組兩格，各自夾著 ±（2026-09-21）——
+         ⚠ 單位字（次／kg）從格子裡拿掉了：上面的表頭已經寫著「次數」與「重量 kg／lb」，
+           那 30px 讓給 ± 兩顆。placeholder 也從「留空＝徒手」縮成「徒手」，
+           格子變窄之後長句本來就顯示不完整。 */''}
+    ${sets.map((s,i)=>{
+      const _sr=tlStepSize('reps',u), _sw=tlStepSize('weight',u);
+      return `<div class="ae-set-cur">
       <div class="ae-set-no">${i+1}</div>
       <div class="ae-cur-fields">
-        <div class="ae-set-field"><input type="number" inputmode="numeric" id="tle-r-${i}" class="ae-set-in" placeholder="次數" value="${s.reps==null?'':s.reps}"><span>次</span></div>
-        <div class="ae-set-field"><input type="number" inputmode="decimal" id="tle-w-${i}" class="ae-set-in" placeholder="留空＝徒手" value="${s.weight==null?'':s.weight}"><span>${u}</span></div>
+        ${tlStepFieldHTML({id:'tle-r-'+i, step:_sr, mode:'numeric', ph:'次數', val:(s.reps==null?'':s.reps),
+          dec:`tleStep(${i},'reps',-${_sr})`, inc:`tleStep(${i},'reps',${_sr})`})}
+        ${tlStepFieldHTML({id:'tle-w-'+i, step:_sw, mode:'decimal', ph:'徒手', val:(s.weight==null?'':s.weight),
+          dec:`tleStep(${i},'weight',-${_sw})`, inc:`tleStep(${i},'weight',${_sw})`})}
       </div>
       <button class="ae-set-del" onclick="tleDelSet(${i})" title="刪掉這一組">✕</button>
-    </div>`).join('')}
+    </div>`;}).join('')}
     <button class="ae-add-set" onclick="tleAddSet()">＋ 新增一組</button>
     ${/* 〔已移除〕獨立的「重量單位」那一列 —— 切換鈕已經搬到表頭的重量欄（見上方）。 */''}
     <div class="form-row" style="margin-top:6px;"><label>備註（可留空）</label>
       <input type="text" id="tle-note" value="${escH(E.note)}" autocomplete="off" oninput="tleSet('note',this.value)"></div>
     <div class="modal-foot"><button class="btn btn-ghost" onclick="closeModal()">取消</button>
       <button class="btn btn-green" onclick="tleSave()">儲存</button></div>`);
+}
+/* ══ 逐組的 ± 快速調整（2026-09-21 使用者：「修改紀錄次數跟重量可以有+-符號　快速調整嗎」）══
+   「修改紀錄」與「記錄訓練」兩支共用這三支小工具 —— 逐組列本來就是同一組 .ae-set-*，
+   分開寫遲早會變成兩種級距、兩種夾邊規則。
+
+   ⚠ 級距沿用 0909 為訓練方案定下的 WP_STEPS（kg [1,0.5]、lb [5]），不另訂一套：
+     那是照現場的槓片規格訂的，兩邊不一致只會讓教練記兩套數字。
+   ⚠ 只取主級距（陣列第一個）：一格每邊只放得下一顆鈕，kg 的 ±0.5 是細調，
+     要 0.5 直接打字 —— 輸入框本來就還在。
+   ⚠ 鈕上寫出級距（−5／＋5）而不是只畫符號：手機沒有 hover，寫在 title 等於沒寫，
+     而 lb 一跳就是 5，不寫的話按下去會嚇一跳。 */
+function tlStepSize(field,unit){
+  if(field!=='weight') return 1;                       // 次數永遠 ±1
+  return ((WP_STEPS[wpUnitOf(unit)]||[1])[0])||1;
+}
+/* ⚠ 夾在 0 以上：負的次數／重量沒有意義，而且存檔時 weight<=0 本來就一律當徒手。
+   ⚠ 一定要收到小數兩位：0.5 的片連按幾次會跑出 22.499999999999996。
+   ⚠ 空白當 0 起算，所以徒手的格子按一下＋就會變成一個級距（kg 1、lb 5）。 */
+function tlStepVal(cur,d){
+  const t=String(cur==null?'':cur).trim();
+  const n=t===''?0:(Number(t)||0);
+  return String(Math.max(0, Math.round((n+d)*100)/100));
+}
+function tlStepFieldHTML(o){
+  return `<div class="ae-set-field">
+      <button type="button" class="ae-set-pm" tabindex="-1" onclick="${o.dec}">−${o.step}</button>
+      <input type="number" inputmode="${o.mode}" id="${o.id}" class="ae-set-in" placeholder="${o.ph}" value="${o.val}">
+      <button type="button" class="ae-set-pm" tabindex="-1" onclick="${o.inc}">＋${o.step}</button>
+    </div>`;
 }
 function tleSet(f,v){ const E=window._tle; if(!E) return; E[f]=v; }
 /* ⚠ 任何會重畫視窗的動作（切單位、加組、刪組、選姿勢工具）都要先把輸入框的值收回 state，
@@ -63422,6 +63475,18 @@ function tleReadSets(){
   });
   const nm=document.getElementById('tle-name'); if(nm) E.name=nm.value;
   const n=document.getElementById('tle-note'); if(n) E.note=n.value;
+}
+/* ⚠ 先 tleReadSets()：使用者可能先用鍵盤改了別組、再回頭按這一組的 ±，
+     不先收值的話那幾組會被舊 state 蓋掉（與切單位／加組同一個道理）。
+   ⚠ 只改那一格的 value，**不整張重畫** —— 重畫會關掉輸入法鍵盤、連按幾下會一直閃。
+     state 與畫面在這裡一起更新，不會走掉。 */
+function tleStep(i,f,d){
+  tleReadSets();
+  const E=window._tle; if(!E||!Array.isArray(E.sets)||!E.sets[i]) return;
+  const v=tlStepVal(E.sets[i][f], d);
+  E.sets[i][f]=v;
+  const el=document.getElementById((f==='reps'?'tle-r-':'tle-w-')+i);
+  if(el) el.value=v;
 }
 function tleUnit(u){ tleReadSets(); const E=window._tle; if(!E) return; E.unit=wpUnitOf(u); tleRender(); }
 /* 再點一次＝取消選擇（姿勢與工具本來就可以不填，與 cxeSet 同一個手勢） */
@@ -63686,11 +63751,16 @@ async function renderAddExerciseSheet(){
       <button class="ae-set-del" onclick="tlDelSet(${i})">✕</button>
     </div>`).join('');
     const curNo=done.length+1;
+    /* ± 快速調整（2026-09-21）—— 與「修改紀錄」用同一組 tlStepSize／tlStepFieldHTML，
+       單位字從格子裡拿掉：下面的 .ae-sets-head 本來就寫著「重量」加上目前的單位。 */
+    const _sr=tlStepSize('reps',_u), _sw=tlStepSize('weight',_u);
     const curHtml=`<div class="ae-set-cur">
       <div class="ae-set-no">${curNo}</div>
       <div class="ae-cur-fields">
-        <div class="ae-set-field"><input type="number" inputmode="numeric" id="ae-cur-reps" class="ae-set-in" placeholder="次數" value="${cur.reps}"><span>次</span></div>
-        <div class="ae-set-field"><input type="number" inputmode="decimal" id="ae-cur-weight" class="ae-set-in" placeholder="重量" value="${cur.weight}"><span>${_u}</span></div>
+        ${tlStepFieldHTML({id:'ae-cur-reps', step:_sr, mode:'numeric', ph:'次數', val:cur.reps,
+          dec:`tlStepCur('reps',-${_sr})`, inc:`tlStepCur('reps',${_sr})`})}
+        ${tlStepFieldHTML({id:'ae-cur-weight', step:_sw, mode:'decimal', ph:'徒手', val:cur.weight,
+          dec:`tlStepCur('weight',-${_sw})`, inc:`tlStepCur('weight',${_sw})`})}
       </div>
     </div>
     ${/* 單位切換（2026-09-15 使用者：「重量只有kg可以設定 沒有lb」）——
@@ -63756,6 +63826,16 @@ function tlReadCur(){
   const r=document.getElementById('ae-cur-reps'), w=document.getElementById('ae-cur-weight');
   if(r)cur.reps=r.value; if(w)cur.weight=w.value;
   const n=document.getElementById('ae-note'); if(n)st.note=n.value;
+}
+/* 與 tleStep 同一套（見那支的說明）：先收值、只改那一格、不重畫整張表 */
+function tlStepCur(f,d){
+  tlReadCur();
+  const st=window._tlState; if(!st||!Array.isArray(st.sets)||!st.sets.length) return;
+  const cur=st.sets[st.sets.length-1];
+  const v=tlStepVal(cur[f], d);
+  cur[f]=v;
+  const el=document.getElementById(f==='reps'?'ae-cur-reps':'ae-cur-weight');
+  if(el) el.value=v;
 }
 function tlAddSet(){
   tlReadCur();

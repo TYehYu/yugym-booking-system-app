@@ -52,9 +52,11 @@ ok('★★★ 挑選視窗的「返回」是 tleRender（不是 closeModal —�
 ok('★★ 單位切換在表頭的重量欄，不再自己佔一列',
    /<span class="ae-head-unit">重量<span class="wpe-unit">/.test(R)
    && !/class="ae-unit-row"/.test(R));
+/* 2026-09-21：逐組列改由 tlStepFieldHTML 畫（多了 ± 兩顆），
+   id 從行內樣板變成參數傳入。這一條守的本意沒變：每一組都要有自己的輸入框。 */
 ok('★★★ 每一組都是輸入框（不是只有最後一組可改）',
-   /id="tle-r-\$\{i\}"/.test(R) && /id="tle-w-\$\{i\}"/.test(R)
-   && /sets\.map\(\(s,i\)=>`<div class="ae-set-cur">/.test(R));
+   /id:'tle-r-'\+i/.test(R) && /id:'tle-w-'\+i/.test(R)
+   && /sets\.map\(\(s,i\)=>\{/.test(R) && /<div class="ae-set-cur">/.test(R));
 /* 2026-09-16 二修：平鋪的 optRow 退場（姿勢工具改成兩顆摘要鈕），
    所以不再有 ae-opt${E[field]===x…} 與 ae-grid-${cols} 這兩個動態字串。
    這一條守的本意沒變：逐組列仍用那套四欄 grid，摘要鈕仍是 .ae-opt 白底卡，不另做一套樣式。 */

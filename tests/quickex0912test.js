@@ -46,7 +46,11 @@ console.log('\n①-2 重量單位 kg／lb（2026-09-15 使用者：「重量只�
      ⚠ 這一條要守的沒變：重量後面接的仍是 ${_u}，不是寫死的 kg。 */
   ok('★★★ 四處不再寫死 kg：摘要／輸入框／備註／存檔',
      /\$\{s\.weight\|\|'-'\} \$\{_u\}<\/span>/.test(S)          /* 已完成組摘要 */
-     && /value="\$\{cur\.weight\}"><span>\$\{_u\}<\/span>/.test(S)  /* 當前輸入框 */
+     /* 2026-09-21：格子裡的單位字拿掉換成 ± 兩顆（見 tlsteptest），
+        「不寫死 kg」改由表頭與級距守 —— 表頭寫的是目前單位，
+        ± 的級距也是從 _u 推出來的（lb 就是 ±5），兩處都寫死不了。 */
+     && /<span>重量 \$\{_u\}<\/span>/.test(S)                  /* 表頭 */
+     && /const _sr=tlStepSize\('reps',_u\), _sw=tlStepSize\('weight',_u\);/.test(S)
      && /'×'\+s\.weight\+_su/.test(S)                          /* 備註字串 */
      && /return w\.length\?_su:null;/.test(S));                /* 存檔的 weight_unit */
   ok('★★ 表單狀態帶 unit，預設 kg', /unit:'kg', sets:\[\{reps:'',weight:''\}\]\}/.test(S));
