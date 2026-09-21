@@ -71,6 +71,20 @@ ok('★★★ 重畫前一定先把輸入框收回 state（否則剛打的數字
 
 console.log('\n③ 存檔');
 const S=fn('_tleSave');
+/* 2026-09-21 使用者回報：「只有第一個項目可以修改　後面的項目修改儲存都沒有變」——
+   根因不是「第幾個項目」，是 _tleSave **沒有先呼叫 tleReadSets()**：
+   逐組的次數／重量輸入框沒有 oninput，打完直接按儲存，寫回去的是開視窗時展開的舊值。
+   動作名稱與備註有 oninput，所以那兩欄一直改得動 —— 才會像是「有的行、有的不行」。
+   ⚠ 上面 ② 那條只守了「會重畫視窗的動作」有收值，獨獨漏掉儲存；這條補的就是那個缺口。
+   ⚠ 順序也要守：收值必須在 await dbGet 之前 —— await 之後視窗可能已關，輸入框就沒了。 */
+ok('★★★ 存檔前先把輸入框收回 state（漏掉＝逐組數字改了存不進去）',
+   /\btleReadSets\(\);/.test(S));
+ok('★★★ 收值要在第一個 await 之前（await 之後視窗可能已經關掉，讀不到輸入框）',
+   S.indexOf('tleReadSets();')>=0
+   && S.indexOf('tleReadSets();') < S.indexOf('await dbGet('), 
+   {read:S.indexOf('tleReadSets();'), get:S.indexOf('await dbGet(')});
+ok('★★ 使用者的原話與成因寫在原地（下次有人想精簡這行時看得到）',
+   /只有第一個項目可以修改/.test(src) && /逐組的次數／重量輸入框\*\*沒有 oninput\*\*/.test(src));
 ok('★★★ 一律寫 sets_detail（不再有「數字沒動就不碰」那條分支）',
    /sets_detail:JSON\.stringify\(valid\.map\(s=>\(\{reps:String/.test(S)
    && !/sets_detail:null/.test(S));
