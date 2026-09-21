@@ -46,8 +46,9 @@ console.log('\n③ 事後改約別也擋');
 }
 
 console.log('\n④ 不用簽約那條沒有被動到');
+/* 2026-09-21：課種改成先算再比（自訂銷售要由票種反推），但仍然只有「私人教練」要簽約 */
 ok('★★★ 仍然只對「私人教練」這一類生效',
-   /if\(!\(s && s\.cat==='私人教練'\)\) return false;/.test(g('function gtNeedsContract(sales, plan){','\n}')));
+   /if\(_cat!=='私人教練'\) return false;/.test(g('function gtNeedsContract(sales, plan){','\n}')));
 ok('★★ 免簽約的那條路才當場問付款方式（gtPaySync）',
    /const need=gtNeedsContract\(\);/.test(g('function gtPaySync(){','\n}')));
 

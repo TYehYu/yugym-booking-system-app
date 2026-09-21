@@ -13528,8 +13528,8 @@ function tbl(s){return TABLE_ALIAS[s]||s;}
 let sb=null;
 // ── 版本號（日期+時間格式：年後兩碼+月+日.時分，例 26620.1058 = 26年6/20 10:58）──
 // 每次改版手動更新這一行即可，畫面與 title 會一起更新
-const APP_VERSION = '260918.2118';
-const APP_VERSION_LABEL = 'v260918.2118';
+const APP_VERSION = '260921.1425';
+const APP_VERSION_LABEL = 'v260921.1425';
 const CLOUD = !!(window.YUGYM_CONFIG && window.YUGYM_CONFIG.url && window.YUGYM_CONFIG.anonKey);
 if(CLOUD){ sb = supabase.createClient(window.YUGYM_CONFIG.url, window.YUGYM_CONFIG.anonKey); }
 
@@ -23110,6 +23110,13 @@ PAGES.g_dashboard=async function(){
     if(tk.status&&tk.status!=='usable') return;
     if(tk.expire_date&&String(tk.expire_date).slice(0,10)<date) return;
     const _tt=_typeMapD[tk.ticket_type_id]||{}; const cat=_tt.category||'';
+    /* ⚠ 折抵券要先擋（2026-09-21 使用者：「林秋香是不是因為他有一張教練課抵用券
+       所以被誤判了」—— 正是如此）：tt-discount-pt300 的 category 也是「私人教練」，
+       但它是折 $300 的券、不是一堂課。算進「還有課可以上」就會把該收的錢壓掉 ——
+       她的 7 堂票已排光、今天就是最後一堂，卻因為這張券而不進名單。
+       ⚠ 同一個陷阱在 bkAllowCross（19677）與 26025 都攔過了（2026-08-14 陳秀蘭案例），
+         這份首頁索引是後來自己寫的、沒跟著擋。判準一律用 bkIsPtVoucherType。 */
+    if(typeof bkIsPtVoucherType==='function' && bkIsPtVoucherType(_tt)) return;
     let g=null;
     if(cat==='私人教練') g='pt';
     else if(cat==='小班肌力'||cat==='團體課') g='grp';
@@ -23164,11 +23171,20 @@ PAGES.g_dashboard=async function(){
         if(left===0 && !(_futGrpByMem[mid]>0)) kind='renew';
       }
       if(!kind) return;
-      /* 續課提醒的最後一道防線（2026-08-29）：還有沒排的堂數、或之後還有已付款的課
+      /* 最後一道防線（2026-08-29）：還有沒排的堂數、或之後還有已付款的課
          → 今天就不是他的最後一堂，不要叫櫃檯去收款。
-         ⚠ 分期繳費（install）不受此限 —— 那筆錢本來就到期了，
-           手上還有沒有別的堂數是另一回事。 */
-      if(kind==='renew'){
+
+         ⚠ 2026-09-21 使用者定案：分期繳費（install）也要吃這一條。
+           原本刻意不吃（舊註解：「那筆錢本來就到期了，手上還有沒有別的堂數是另一回事」），
+           但陳秀蘭有兩張各開通 4 堂的分期票：其中一張的開通段上完時，
+           另一張還有 4 堂**已付款**的課沒上，她卻收到 LINE 繳費通知。
+           使用者：「如果該會員本身有兩份可用上課票券 其中一份要結束了還不用跳提醒」。
+           客人還上得了課就先不催，等那些堂數快用完再提醒 —— 錢沒有少收，只是往後延。
+
+         ⚠ 團課與教練課分開判斷（2026-09-21 使用者指示：「如果該會員團課今天是最後一堂
+           但是他還有教練課 那就要提醒團課 反之亦然」）——
+           _memGrpLeft 與 _fut 本來就依 g（pt／grp）各算各的，互不影響，這裡照用同一套。 */
+      {
         const _left=((_memGrpLeft[mid]||{})[g])||0;
         const _fut=isGrp?(_futGrpByMem[mid]||0):(_futPtByMem[mid]||0);
         if(_left>0 || _fut>0) return;
@@ -42350,7 +42366,11 @@ async function submitBackofficeMember(){
     // 同手機是否已存在會員 → 避免重複建立（比對正規化後的號碼，與登入時的組法一致）
     const dup=(await sb.from('members').select('id,name').eq('phone',phone).maybeSingle()).data;
     if(dup){ showErr('此手機已有會員資料（'+(dup.name||'')+'），請改用搜尋找到該會員。'); if(btn){btn.disabled=false;btn.textContent='建立會員';} return; }
-    const m={id:uid('m'),name,phone,email:v('bo-email')||null,birthday:readBirthday('bo'),
+    /* ⚠ invoice_carrier 一定要跟著寫（2026-09-21 使用者回報：「用桌機新增會員的時候
+       輸入了信箱跟載具 只有信箱被建立進去」）—— 上面 boCar 有讀、也驗了格式，
+       但建立物件時漏了這一欄，於是載具被檢查完就丟掉，櫃檯以為存進去了。
+       Email 這裡改用已經 trim 過的 boMail，與驗證吃的是同一個值。 */
+    const m={id:uid('m'),name,phone,email:boMail||null,invoice_carrier:boCar||null,birthday:readBirthday('bo'),
       default_coach_id:document.getElementById('bo-coach').value||null,status:'active',level:'regular',
       must_setup:true,tier_epoch:false,created_at:new Date().toISOString()};   /* 新客＝會員起點（2026-07-29） */
     await dbPut('members',m);
@@ -51311,7 +51331,22 @@ function gtIsSingle(plan){
 }
 function gtNeedsContract(sales, plan){
   const s=sales||window._grantSalesActive||null;
-  if(!(s && s.cat==='私人教練')) return false;
+  if(!s) return false;
+  /* 自訂銷售的課種要由「選到的票種」反推（2026-09-21 使用者回報：
+     「自訂銷售沒辦法建立合約嗎? 這邊按到底就結帳了」）——
+     salesCustom() 建的是 {cat:null, custom:true}：那個入口在步驟 1 才選票種，
+     建物件的當下根本沒有課種可填，而**全檔沒有任何地方回填 cat**。
+     於是這裡的 cat==='私人教練' 永遠不成立，自訂銷售一路跳過簽約直接結帳。
+     ⚠ 2026-08-05 使用者就回報過「今天的自訂方案怎麼沒有出現合約？」，
+       但那次只改了註解與步驟 3 的文案，判斷條件沒跟著改 —— 所以一直沒真的生效。
+     ⚠ 用票種而不是自己記一份白名單：教練課與友善教練課的 category 都是「私人教練」，
+       團體課／自主訓練不是，剛好就是要的結果，日後加票種也不必回來改。 */
+  const _p=plan||window._grantPlanCache||null;
+  const _cat = s.custom
+    ? ((_p && _p.ticket_type_id && typeof categoryOfTypeId==='function')
+        ? categoryOfTypeId(_p.ticket_type_id) : null)
+    : s.cat;
+  if(_cat!=='私人教練') return false;
   /* 單堂不用開合約（2026-09-08 使用者：「幫我新增一個單堂教練課 1v1 1700 1v2 2000
      這種不需要開合約」）—— 合約談的是「一包課的權利義務」（效期、展延、退費、
      分期），一堂課沒有這些東西可談，逼客人簽一份只會拖慢櫃檯。
@@ -53059,7 +53094,11 @@ async function openGrantModal(){
     </div>
     ${sales?`<!-- 步驟3（僅銷售彈窗入口）：業績歸屬教練，點卡後進簽約；預設會員主責教練 -->
     <div class="gt-step" data-gtstep="3" style="display:none;">
-      <div style="font-size:12px;color:var(--t2);margin-bottom:10px;">${(sales&&sales.cat==='私人教練')?'點選業績歸屬教練，接著進行簽約。':'點選業績歸屬教練即完成銷售發放（本類別免簽約）。'}</div>
+      <!-- 這句要跟 gtNeedsContract 同一個判斷（2026-09-21）：原本自己寫 sales.cat==='私人教練'，
+           自訂銷售的 cat 是 null，選了教練課也會顯示「本類別免簽約」，與實際流程對不上。
+           ⚠ 真正的文字由 grantGoStep(3) 填 —— 視窗是一次渲染完的，自訂銷售在渲染當下
+             還沒選票種，寫死在這裡一定不準。 -->
+      <div style="font-size:12px;color:var(--t2);margin-bottom:10px;" id="gt-step3-hint">${gtNeedsContract(sales)?'點選業績歸屬教練，接著進行簽約。':'點選業績歸屬教練即完成銷售發放（本類別免簽約）。'}</div>
       <div class="form-row"><label>業績歸屬教練</label><div class="bk-cards" id="gt-attrib"></div></div>
       ${/* 2026-08-28 使用者指示：「左下是上一步 右下是確認，但是確認的按鈕要等選定教練
            以後才可以點選」—— 原本是點卡之後在卡片牆下方長出一條「確定嗎？重選／確認，繼續」，
@@ -53274,6 +53313,13 @@ function gtCreditHint(){
 }
 function grantGoStep(n){
   document.querySelectorAll('.gt-step').forEach(s=>s.style.display=(Number(s.dataset.gtstep)===n)?'':'none');
+  /* 步驟 3 的提示到「真的走進這一步」才算得準（2026-09-21）——
+     視窗是一次渲染完的，自訂銷售在渲染當下還沒選票種（_grantPlanCache 是空的）；
+     步驟 2 跑完 refreshGrantInfo 才有方案，那時才問得到會不會簽約。 */
+  if(n===3){ try{ const _h=document.getElementById('gt-step3-hint');
+    if(_h) _h.textContent=gtNeedsContract()
+      ? '點選業績歸屬教練，接著進行簽約。'
+      : '點選業績歸屬教練即完成銷售發放（本類別免簽約）。'; }catch(_){} }
   /* ⚠⚠ 2026-09-15：invSync 一定要等 refreshGrantInfo 完成才跑 ——
      refreshGrantInfo 是 async 且負責設定 window._grantPlanCache，而 invSync 裡的
      gtNeedsContract() 沒傳 plan、會往下問 gtIsSingle() 讀那個快取。

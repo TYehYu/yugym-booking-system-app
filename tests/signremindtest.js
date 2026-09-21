@@ -23,8 +23,15 @@ console.log('① 規則寫在原地');
      && /if\(b\.category!=='私人教練' \|\| b\.status==='cancelled' \|\| !b\.ticket_id\) return;/.test(src));
   ok('★★★ 只認有 ticket_id 的未來預約 —— 沒扣到票的那幾堂正是要收款的理由',
      /只認有 ticket_id 的未來預約：他 9\/19 之後那幾堂 ticket_id 是空的（還沒扣到票），\s*\n\s*那種正是要收款的理由，不能反過來當成「不用收款」。/.test(src));
-  ok('★★ 續課才擋，分期繳費不擋（那筆錢本來就到期了）',
-     /if\(kind==='renew'\)\{\s*\n\s*const _left=\(\(_memGrpLeft\[mid\]\|\|\{\}\)\[g\]\)\|\|0;\s*\n\s*const _fut=isGrp\?\(_futGrpByMem\[mid\]\|\|0\):\(_futPtByMem\[mid\]\|\|0\);\s*\n\s*if\(_left>0 \|\| _fut>0\) return;\s*\n\s*\}/.test(src));
+  /* 2026-09-21 使用者定案：分期繳費也要吃這一條（陳秀蘭案例，見下面 ② 的實跑）。
+     原本只擋 renew，所以兩張分期票的人會在其中一張開通段用完時被催款，
+     即使另一張還有已付款的課沒上。 */
+  ok('★★ 續課與分期繳費都要擋（2026-09-21 起分期也吃）',
+     /const _left=\(\(_memGrpLeft\[mid\]\|\|\{\}\)\[g\]\)\|\|0;\s*\n\s*const _fut=isGrp\?\(_futGrpByMem\[mid\]\|\|0\):\(_futPtByMem\[mid\]\|\|0\);\s*\n\s*if\(_left>0 \|\| _fut>0\) return;/.test(src)
+     && !/if\(kind==='renew'\)\{/.test(src));
+  ok('★★ 團課與教練課分開判斷（依 g 各算各的）',
+     /const _fut=isGrp\?\(_futGrpByMem\[mid\]\|\|0\):\(_futPtByMem\[mid\]\|\|0\);/.test(src)
+     && /\(_memGrpLeft\[mid\]\|\|\{\}\)\[g\]/.test(src));
   ok('★★ 「餘額是預約當下就扣的」寫在原地（下次不要又只看 sessions_remaining）',
      /sessions_remaining 是\*\*預約當下\*\*就扣的、不是上完才扣/.test(src));
   ok('★ 會員層的剩餘改吃 tkUnlockedLeft（分期沒開通的那幾堂今天用不到）',
@@ -70,10 +77,37 @@ console.log('\n② 實跑：把游昌憲那一天的形狀丟進去');
      run([today('M2')], {date:D, memMap:MM, _lastBk:{'bk-today-M2':'renew'},
          _memGrpLeft:{M2:{pt:3}}}),
      []);
-  eq('★★★ 分期繳費不受影響 —— 那筆錢到期了，手上有沒有別的堂數是另一回事',
+  /* 2026-09-21 使用者定案（陳秀蘭案例）：她有兩張各開通 4 堂的分期票，
+     其中一張的開通段上完時，另一張還有 4 堂已付款的課沒上，卻收到 LINE 繳費通知。
+     「如果該會員本身有兩份可用上課票券 其中一份要結束了還不用跳提醒」——
+     錢沒有少收，只是等那些已付款的堂數快用完再催。 */
+  eq('★★★ 陳秀蘭：分期開通段結束，但另一張票還有已付款的課 → 不催款',
      run([today('M1'), fut('M1','2026-09-05','TK-b')],
          {date:D, memMap:MM, _lastBk:{'bk-today-M1':'install'}}),
-     ['游昌憲']);
+     []);
+  eq('★★★ 分期：真的沒有別的已付款堂數 → 照樣催（該收的錢不能因此漏掉）',
+     run([today('M2')], {date:D, memMap:MM, _lastBk:{'bk-today-M2':'install'}}),
+     ['真的最後一堂']);
+  eq('★★ 分期：之後那幾堂沒扣到票（待繳費保留）→ 照樣催',
+     run([today('M2'), fut('M2','2026-09-05',null)],
+         {date:D, memMap:MM, _lastBk:{'bk-today-M2':'install'}}),
+     ['真的最後一堂']);
+
+  /* 2026-09-21 使用者指示：「團課跟教練課要分開提醒 如果該會員團課今天是最後一堂
+     但是他還有教練課 那就要提醒團課 反之亦然」 */
+  {
+    const grpToday=(mid)=>({id:'bk-g-'+mid, date:D, start_time:'19:00', status:'checked_in',
+      category:'小班肌力', member_ids:[mid], ticket_id:null});
+    eq('★★★ 團課是最後一堂、但教練課還有課 → 仍要提醒團課',
+       run([grpToday('M2'), fut('M2','2026-09-05','TK-b')],
+           {date:D, memMap:MM, _lastBk:{'bk-g-M2':'renew'}, _memGrpLeft:{M2:{pt:5}}}),
+       ['真的最後一堂']);
+    eq('★★★ 反過來：教練課是最後一堂、但團課還有 → 仍要提醒教練課',
+       run([today('M2')],
+           {date:D, memMap:MM, _lastBk:{'bk-today-M2':'renew'},
+            _memGrpLeft:{M2:{grp:5}}, _futGrpByMem:{M2:3}}),
+       ['真的最後一堂']);
+  }
   eq('　 今天以前／以後的課不會被當成「今天」',
      run([Object.assign(today('M2'),{date:'2026-08-28'})],
          {date:D, memMap:MM, _lastBk:{'bk-today-M2':'renew'}}),

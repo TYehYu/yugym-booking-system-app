@@ -44,10 +44,15 @@ console.log('① 前兩版都退乾淨了');
      /\$\{sales\?'':`<div class="form-2col">/.test(src)
      && /<label>付款狀態<\/label><select id="gt-pay"/.test(src));
 /* 2026-09-08 二修：改成看方案 —— 單堂（總堂數 ≤ 1）的教練課不簽約 */
+  /* 2026-09-21：判斷改成先算出課種再比（自訂銷售的 sales.cat 是 null，
+     要由選到的票種反推，否則自訂銷售永遠跳過簽約直接結帳）。 */
   ok('★★★ 「會不會簽約」只有一份判斷，賣票與業績歸屬那一步共用',
      /function gtNeedsContract\(sales, plan\)\{/.test(src)
-     && /if\(!\(s && s\.cat==='私人教練'\)\) return false;/.test(src)
+     && /if\(_cat!=='私人教練'\) return false;/.test(src)
      && /const needContract = gtNeedsContract\(s\);/.test(src));
+  ok('★★★ 自訂銷售由票種反推課種（cat 是 null，不然永遠不簽約）',
+     /const _cat = s\.custom/.test(src)
+     && /categoryOfTypeId\(_p\.ticket_type_id\)/.test(src));
   /* 2026-09-08：判準抽成共用的 gtIsSingle（「不用簽約」與「不用約別」同一支）。 */
   ok('★★★ 單堂不簽約，而且判準是堂數不是方案名稱',
      /if\(gtIsSingle\(plan\)\) return false;/.test(src)
