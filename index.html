@@ -12621,6 +12621,15 @@ body.ink .btn-green{background:var(--green);color:#FFFDF8;box-shadow:none;}
 body.ink .btn-green:hover{background:var(--green-l);box-shadow:none;}
 body.ink .btn-ghost{background:var(--card);color:var(--t2);border:1px solid var(--bd);}
 body.ink .btn-ghost:hover{background:var(--card2);color:var(--text);border-color:var(--green);}
+/* ⚠ 行事曆的「回到當週」要綠底，但它掛著 .btn-ghost —— 上面那條是 (0,2,0)，
+   壓得過基本樣式裡的 .cal-today-btn (0,1,0)，所以 2026-09-21 第一版改完還是白的。
+   這裡在 Ink 區補同階的一條（同分、位置在後 → 這條贏）。
+   ⚠ 與月曆「當月」、日期列「今天」、營收卡「回到今日」同一套語彙：綠＝有事可做。 */
+body.ink .cal-today-btn{background:var(--green);border-color:var(--green);color:#fff;font-weight:700;
+  transition:transform .13s var(--ease-out),filter .13s;}
+body.ink .cal-today-btn:hover{background:var(--green);border-color:var(--green);color:#fff;
+  filter:brightness(1.08);transform:scale(1.06);}
+body.ink .cal-today-btn:active{transform:scale(.96);}
 
 /* ── 三、篩選列：教練＝小色點＋名稱；課程＝細框分段選單 ─────────────────── */
 /* 兩排各自加一個欄位標題（純 CSS，不動 DOM） */
@@ -13642,8 +13651,8 @@ function tbl(s){return TABLE_ALIAS[s]||s;}
 let sb=null;
 // ── 版本號（日期+時間格式：年後兩碼+月+日.時分，例 26620.1058 = 26年6/20 10:58）──
 // 每次改版手動更新這一行即可，畫面與 title 會一起更新
-const APP_VERSION = '260921.1739';
-const APP_VERSION_LABEL = 'v260921.1739';
+const APP_VERSION = '260921.1744';
+const APP_VERSION_LABEL = 'v260921.1744';
 const CLOUD = !!(window.YUGYM_CONFIG && window.YUGYM_CONFIG.url && window.YUGYM_CONFIG.anonKey);
 if(CLOUD){ sb = supabase.createClient(window.YUGYM_CONFIG.url, window.YUGYM_CONFIG.anonKey); }
 
@@ -26907,7 +26916,10 @@ async function renderCalendar(opts){
   /* 順序：今天 → ‹ → 日期 → ›（2026-09-03 使用者附截圖：「[預約模式][今天]日期列」）。
      「今天」是回到基準點，日期列是相對移動 —— 基準在前、移動在後，跟閱讀順序一致。 */
   const _calNavHtml=`<div class="cal-nav">
-        <button class="btn btn-ghost cal-today-btn" onclick="calToToday();navTo(CUR_PAGE)">今天</button>
+        ${''/* 2026-09-21 使用者：「這顆要改成［回到當週］」—— 行事曆有 1／3／5／7 日檢視，
+             單日檢視回的是「今天」、多日檢視回的是「這一週」，calToToday() 本來就分兩條路，
+             字面跟著模式走才不會名實不符。 */}
+        <button class="btn btn-ghost cal-today-btn" onclick="calToToday();navTo(CUR_PAGE)">${nDays===1?'回到今天':'回到當週'}</button>
         <div class="cal-arrow" onclick="${nDays===1?`calStep(-1)`:`calStepWeek(-1)`}" title="前一週">‹</div>
         <div class="cal-title" onclick="openCalJump()" style="cursor:pointer;" title="點擊選擇日期">${title} ▾</div>
         <div class="cal-arrow" onclick="${nDays===1?`calStep(1)`:`calStepWeek(1)`}" title="下一週">›</div>
@@ -28933,17 +28945,18 @@ async function ashEditAsk(id){
   /* 待簽約／分期待繳費保留：名字有了但還沒付錢，票也還沒綁上來 */
   const _pendNoTk = !!b.pending_contract && !b.ticket_id && _rosterEmpty;
   const _futureOk = A.staff && !A.closed && String(b.date)>=ymd(TODAY);
-  const _curCourse=(typeof bookingTypeName==='function')?bookingTypeName(b,window._ttMapCache||window._memTypeMap):(b.category||'課程');
   if(!_leave && (_nobody || _pendNoTk) && _futureOk)
     rows+=row(`closeModal();ashCourseAsk('${b.id}')`,'更換課程',
-      `目前是${_curCourse}・${_nobody?'這張卡還沒有人，可以直接換':'還沒收款綁票，可以直接換'}`);
+      _nobody?'這張卡還沒有人，可以直接換':'還沒收款綁票，可以直接換');
   /* ⚠ 2026-09-21：不能換的時候也要列出來並說明為什麼（原本整列消失）。
      最常見的原因是「已經綁到票券」—— 那不是壞掉，是換課別得連帶退補堂數，
      必須走刪除重建。把這句話寫出來，櫃檯才不會以為功能不見了。 */
+  /* ⚠ 副標要短（2026-09-21 使用者：「副標文字太多了」）——
+     視窗抬頭已經寫著課別了（「友善教練課 · 2026/09/21 11:00」），
+     副標再寫一次「目前是友善教練課」只是把字擠到折行。只留「為什麼不能按」。 */
   else if(!_leave)
     rows+=row('','更換課程',
-      `目前是${_curCourse}・${b.ticket_id?'已綁票券，換課別要連帶退補堂數（請刪除後重建）'
-        :(_lockWhy||'這堂目前不能換課程')}`,'ash-ei-off');
+      b.ticket_id?'已綁票券，請刪除後重建':(_lockWhy||'這堂目前不能換課程'),'ash-ei-off');
   /* 「更換票券」2026-08-25 移出這張清單（使用者：「那更換票券的按鈕是應該在標題卡嗎?」
      「還是改成用觸發的」）——
      這裡其他每一項講的都是**這一堂課本身**（日期時間／場地／代課／刪除），
@@ -28958,7 +28971,7 @@ async function ashEditAsk(id){
   /* ⚠ 2026-09-21：課程日還沒到的時候也要列出來 —— 不然櫃檯會以為「這張卡沒有補簽」。
      ⚠ 只對「還沒簽到的單人課」列：已簽到的沒有補簽可言，團課的補簽走名單那邊。 */
   else if(!_leave && b.status==='booked' && !A.isGroup && (A.staff||A.coachCk))
-    rows+=row('','補簽','課程日還沒到；當天請直接用課卡上的〔簽到〕','ash-ei-off');
+    rows+=row('','補簽','課程日還沒到，當天請用〔簽到〕','ash-ei-off');
   /* 團課「改人數」（2026-08-07 既有功能）搬進標題卡（2026-08-20 使用者指示）——
      2026-08-29 再簡化：「在這裡新增調整人數的功能就好　就不用再點開視窗了」。
      這一項只是一個 1–12 的數字，開一張視窗、按儲存、再關掉，四個動作換一個加一。

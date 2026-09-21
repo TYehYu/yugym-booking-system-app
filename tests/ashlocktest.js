@@ -71,6 +71,9 @@ console.log('\n② 待簽約（沒綁票）→ 更換課程要可以按');
   const rs=rowsOf(run(Object.assign({},BASE,{pending_contract:true}), AFULL));
   const c=find(rs,'更換課程');
   ok('★★★ 可按，而且副標寫的是「還沒收款綁票」', !!c && !c.off && /還沒收款綁票/.test(c.sub), c);
+  /* 2026-09-21 使用者：「副標文字太多了」—— 視窗抬頭已經寫著課別，
+     副標不再重複「目前是XXX」，只留「為什麼」。 */
+  ok('★★ 副標不重複課別（抬頭已經有了，重複只會折行）', !/目前是/.test(c.sub), c.sub);
 }
 
 console.log('\n③ 課程日已過（_editable=false → venue／sub 變 null）');

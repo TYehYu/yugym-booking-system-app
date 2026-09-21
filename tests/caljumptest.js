@@ -72,8 +72,9 @@ ok('★★★ 列1＝教練 chips ＋ 團課課表 ＋ 新增預約',
    /\$\{opts\.coachFilter\?`<div class="cal-head-right" style="display:flex;gap:8px;margin:0 0 0 auto;flex:none;">\s*\n\s*<button class="btn" style="background:var\(--course-group-soft\)[\s\S]{0,200}?團課課表<\/button>\s*\n\s*<button class="btn btn-green" onclick="openBookingModal\(\)">＋ 新增預約<\/button>/.test(src));
 ok('★★★ 列2＝課程 chips ＋ 預約模式 ＋ 日期導覽',
    /id="cal-bookmode-btn"[\s\S]{0,220}?<\/button>\s*\n\s*<\/div>\s*\n\s*\$\{_calNavHtml\}/.test(src));
-ok('★★★ 「今天」在日期列左邊（使用者：「[預約模式][今天]日期列」）',
-   /const _calNavHtml=`<div class="cal-nav">\s*\n\s*<button class="btn btn-ghost cal-today-btn"[\s\S]{0,120}?今天<\/button>\s*\n\s*<div class="cal-arrow"/.test(src));
+/* 2026-09-21：字面改成「回到今天／回到當週」（跟著檢視模式），位置不變 */
+ok('★★★ 「回到當週」在日期列左邊（使用者：「[預約模式][今天]日期列」）',
+   /const _calNavHtml=`<div class="cal-nav">[\s\S]{0,400}?<button class="btn btn-ghost cal-today-btn"[\s\S]{0,140}?回到當週'\}<\/button>\s*\n\s*<div class="cal-arrow"/.test(src));
 /* ⚠ 「＋ 新增預約」全站有三處（首頁快捷、舊的 filter-row、行事曆工具列），
    數量不能拿來當「有沒有重複」的判準。改成看**工具列那一段裡**只有一顆。 */
 ok('★★ 工具列的每顆鈕只有一份（不是複製過去、原地忘了刪）',

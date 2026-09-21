@@ -434,6 +434,14 @@ console.log('\n⑧ 首頁三修：定色 #556B45 ＋ 左欄／中欄對齊參考
      /body\.ink \.twk-bar>\.twk-today-slot button\.tl-daynav-today:hover\{\s*\n\s*filter:brightness\(1\.08\);transform:scale\(1\.06\);\}/.test(src));
   ok('★★★ 「正在看今天」維持虛線淡化 —— 綠＝有事可做，不可點的不該是綠的',
      /body\.ink \.twk-bar>\.twk-today-slot \.tl-daynav-today\.is-today\{\s*\n\s*background:transparent;color:var\(--t3\);border:1px dashed var\(--bd\);/.test(src));
+  /* 2026-09-21 使用者：「行事曆這顆還沒改 這顆要改成［回到當週］」——
+     第一版只改了基本樣式的 .cal-today-btn (0,1,0)，被 body.ink .btn-ghost (0,2,0) 壓掉，
+     畫面上還是白的。這條釘住「Ink 區要有同階的一條，而且排在 .btn-ghost 後面」。 */
+  ok('★★★ 行事曆的「回到當週」在 Ink 區有同階規則（否則被 .btn-ghost 壓掉）',
+     /body\.ink \.cal-today-btn\{background:var\(--green\);/.test(src)
+     && src.indexOf('body.ink .cal-today-btn{') > src.indexOf('body.ink .btn-ghost{'));
+  ok('★★ 字面跟著檢視模式走（單日＝回到今天、多日＝回到當週）',
+     /\$\{nDays===1\?'回到今天':'回到當週'\}/.test(src));
   ok('★★ 月曆的「當月」跟著同一套（這一組語彙有兩處，改一邊要記得改另一邊）',
      /body\.ink \.cal-side \.mcal-btn\.mcal-btn-now\{background:var\(--green\);/.test(src)
      && /body\.ink \.cal-side \.mcal-btn\.mcal-btn-now\.is-now\{background:transparent;/.test(src));
