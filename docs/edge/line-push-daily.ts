@@ -46,6 +46,13 @@
 //   （coach_leave=true 且已簽到／已結課 —— 與前端 bkLeaveRefunded 同一條）。
 //   那一堂到場簽到當下就退回了，票上沒有少一堂；留著會把收款提醒提早一堂發給教練
 //   （吳宜玲 8/21 請假 → 第 4 格落在 9/11，實際開通區最後一堂是 9/18）。
+// v27（2026-09-21 使用者回報：陳秀蘭「明明還有一份課程卻收到 line 繳費通知提醒」）：
+//   收款提醒（教練那則）與會員那則的續約話術，加上「會員層還有沒有課可以上」的防線 ——
+//   手上還有已付款、上得了的教練課堂數就先不催（她有兩張各開通 4 堂的分期票，
+//   其中一張的開通段 9/18 上完時，另一張的 4 堂 9/22 起都還沒上）。
+//   判準與前端 index.html 的 _memGrpLeft／_futPtByMem 同一套，同日一起改；
+//   折抵券（tt-discount-pt300，category 也是「私人教練」）要擋掉，它不是一堂課。
+//   ⚠ 「第幾堂」照舊顯示 —— 那是事實，不該跟著消失。
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2'
 
 const corsHeaders = {
@@ -262,6 +269,63 @@ Deno.serve(async (req) => {
       }
     }
 
+    /* ── v27（2026-09-21 使用者回報：陳秀蘭「明明還有一份課程卻收到 line 繳費通知提醒」）──
+       會員層防線：這位會員在**同一類**（教練課）還有沒有「已付款、還上得了」的堂數。
+       有的話今天就不是他該掏錢的日子，收款提醒與會員那則續約話術都不發。
+
+       ⚠ 陳秀蘭有兩張各開通 4 堂的分期票：TK-msy55dzwwagz 的開通段最後一堂是 9/18，
+         而 TK-msy57a6g0jac 的 4 堂（9/22 起）都還沒上 —— 那 4 堂是已經付過錢的，
+         催她繳下一期並不合理。錢沒有少收，只是等這些堂數快用完再提醒。
+       ⚠ 判準與前端 index.html 的 _memGrpLeft／_futPtByMem 同一套（同日一起改）：
+         ① 已開通且還沒用掉的堂數（分期沒繳費開通的那幾堂今天用不到，不能算）
+         ② 今天之後還有「已扣到票」的教練課（沒扣到票的那幾堂正是要收款的理由，不算）
+       ⚠ 折抵券要擋掉：tt-discount-pt300 的 category 也是「私人教練」，但它是折 $300
+         的券、不是一堂課。算進去會把該收的錢壓掉（同日 index.html 也修了同一個洞）。
+       ⚠ 團課不在這裡：這支的收款提醒本來就只對 category==='私人教練' 的預約算，
+         團課與教練課各自獨立（使用者：「團課跟教練課要分開提醒」）。 */
+    const ptLeftByMem: Record<string, number> = {}
+    const futPtByMem: Record<string, number> = {}
+    if (memIds.size) {
+      const { data: ttypes, error: ttErr } = await admin.from('ticket_types').select('id,name,category')
+      if (ttErr) detectErrors.push('ttypes: ' + ttErr.message)
+      const ttMap: Record<string, any> = {}
+      for (const t of (ttypes || [])) ttMap[(t as any).id] = t
+      const isPtVoucher = (tt: any) => !!tt && (String(tt.id || '').indexOf('tt-discount-') === 0 || /折抵/.test(tt.name || ''))
+      /* 與前端 tkUnlockedLeft 同一條：非分期就是剩餘，分期取「還沒用掉的開通額度」 */
+      const unlockedLeft = (t: any): number => {
+        const remain = Number(t.sessions_remaining) || 0
+        if (!t.installment) return remain
+        const total = Number(t.sessions_total) || 0
+        const uRaw = Number(t.unlocked_sessions)
+        const unlocked = (t.unlocked_sessions !== null && t.unlocked_sessions !== undefined && Number.isFinite(uRaw)) ? uRaw : total
+        const used = Math.max(0, total - remain)
+        return Math.max(0, Math.min(remain, unlocked - used))
+      }
+      const { data: memTks, error: mtErr } = await admin.from('member_tickets')
+        .select('id,member_id,ticket_type_id,sessions_total,sessions_remaining,unlocked_sessions,installment,status,expire_date')
+        .in('member_id', [...memIds])
+      if (mtErr) detectErrors.push('memTks: ' + mtErr.message)
+      for (const t of (memTks || [])) {
+        if ((t as any).status && (t as any).status !== 'usable') continue
+        const tt = ttMap[(t as any).ticket_type_id]
+        if (!tt || tt.category !== '私人教練' || isPtVoucher(tt)) continue
+        const ed = (t as any).expire_date
+        if (ed && String(ed).slice(0, 10) < target) continue
+        const mid = (t as any).member_id
+        if (mid) ptLeftByMem[mid] = (ptLeftByMem[mid] || 0) + unlockedLeft(t)
+      }
+      const { data: futBks, error: fbErr } = await admin.from('bookings')
+        .select('member_id,date,ticket_id')
+        .eq('category', '私人教練').neq('status', 'cancelled').gt('date', target)
+        .in('member_id', [...memIds])
+      if (fbErr) detectErrors.push('futBks: ' + fbErr.message)
+      for (const b of (futBks || [])) {
+        if (!(b as any).ticket_id || !(b as any).member_id) continue
+        futPtByMem[(b as any).member_id] = (futPtByMem[(b as any).member_id] || 0) + 1
+      }
+    }
+    const stillHasPt = (mid: string | null) => !!mid && (((ptLeftByMem[mid] || 0) > 0) || ((futPtByMem[mid] || 0) > 0))
+
     let sent = 0; let skipNoLine = 0; let skipOptOut = 0; let skipLeave = 0; let failed = 0
     let coachSent = 0; let coachSkip = 0; let coachOptOutSkip = 0; let redirected = 0; let dedup = 0
     const failDetail: Array<{ member: string; reason: string }> = []
@@ -305,11 +369,16 @@ Deno.serve(async (req) => {
       if (info && info.total > 0) {
         const n = info.seq.findIndex((x: any) => x.id === b.id) + 1
         if (info.linkFull && n > 0) seqStr = `（第 ${n}/${info.total} 堂）`
+        /* v27：手上還有已付款、上得了的教練課堂數 → 今天不是該收款的日子。
+           「第幾堂」照舊顯示（那是事實），只是不催款、也不對會員講續約。 */
+        const _hasMore = stillHasPt(attendeeOf(b))
         if (info.instLastId === b.id) {
-          coachAlert = '分期款（這是本期已開通的最後一堂）'
+          if (!_hasMore) coachAlert = '分期款（這是本期已開通的最後一堂）'
         } else if (info.renewLastId === b.id) {
-          coachAlert = '續約（這是這張票的最後一堂）'
-          renewLine = `💬 這期課程接近尾聲，若想繼續訓練，歡迎與教練討論續約方案！`
+          if (!_hasMore) {
+            coachAlert = '續約（這是這張票的最後一堂）'
+            renewLine = `💬 這期課程接近尾聲，若想繼續訓練，歡迎與教練討論續約方案！`
+          }
         }
       }
       const line3 = coachName ? `🏋️ ${catName}･教練：${coachName}${seqStr}` : `🏋️ ${catName}${seqStr}`
@@ -352,6 +421,12 @@ Deno.serve(async (req) => {
           seq_len: info ? info.seq.length : null, linkFull: info ? info.linkFull : null,
           n: info ? info.seq.findIndex((x: any) => x.id === b.id) + 1 : null,
           seqStr, coachAlert, coach: coachName,
+          /* v27：把會員層防線的依據一起吐出來，試算模式才看得出「為什麼沒有催款」 */
+          inst_last: info ? info.instLastId === b.id : null,
+          renew_last: info ? info.renewLastId === b.id : null,
+          still_has_pt: stillHasPt(attendeeOf(b)),
+          pt_left: ptLeftByMem[attendeeOf(b) || ''] || 0,
+          fut_pt: futPtByMem[attendeeOf(b) || ''] || 0,
           coach_has_line: !!(coachId && coachLine[coachId]),
           coach_opt_out: !!(coachId && coachOptOut.has(coachId)),
           venue,
