@@ -56,9 +56,11 @@ ok('★★ 「訓練堂數／最近訓練」兩格與常練／部位退場；三
    !/<div class="tlh-ov-l">訓練堂數<\/div>/.test(S) && !/<div class="tlh-ov-l">最近訓練<\/div>/.test(S)
    && !/<span class="tlh-ov-k">常練<\/span>/.test(S) && !/<span class="tlh-ov-k">部位<\/span>/.test(S)
    /* 2026-09-11 三大項改成固定三格放進凍結區；2026-09-16 使用者要求整塊移除，
-      那個位置改放課表張數頁籤（見 tests/tlprbar0911test.js 的 ③ 區）。 */
+      那個位置改放課表張數頁籤；0921 連張數頁籤也收掉了
+      （見 tests/tlprbar0911test.js 的 ③ 區）。現在凍結區只剩會員資料，
+      1V2 才多一排學員頁籤。 */
    && !/const overview=`<div class="tlh-prb"/.test(S)
-   && /<div class="tl-sheets">/.test(S));
+   && !/<div class="tl-sheets">/.test(S));
 ok('★★ 沒有歷史課表 → 整區（含標題與動作查詢）不畫', /\$\{hist\.length\?`<div class="tlh-label"/.test(S) && !/尚無歷史課表/.test(S));
 ok('★ 空狀態一行', /'<div class="tls-empty">還沒有紀錄<\/div>'/.test(S));
 
