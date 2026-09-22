@@ -29,6 +29,25 @@ eq('★★★ 磅照樣帶重量（第二頁已可切單位，不再需要丟掉
 eq('★★ 徒手（沒重量）照樣帶組數次數', tlSetsFromLog({sets:2,reps:12}), [{reps:'12',weight:''},{reps:'12',weight:''}]);
 eq('★ 沒有上次 → 空陣列（呼叫端才會給一組空白）', tlSetsFromLog(null), []);
 
+/* ⚠⚠ 2026-09-22 使用者回報：「剛剛發現1v2的課表　沒看到會員A跟會員B」——
+   `bookings.format` 有 4006 筆是 null（1V1 1160／1V2 651／小寫各 91、42），
+   而票券上是有的。預約的 format 只有「建立預約時有選授課類型」那條路會寫；
+   連續預約、待簽約轉正、匯入的舊資料都是空的。
+   於是 0915 做的「1V2 兩份課表」**幾乎從來沒生效過** ——
+   查當天 22 堂教練課，有 format 的只有 4 堂。
+   ⚠ 不回填 bookings.format（4006 筆的回填風險遠大於在讀取端補一層）。 */
+console.log('\n①-3 1V2 判定要吃得到票券的 format（0922 修）');
+ok('★★★ 預約沒填 format 就用票券的',
+   /if\(tk && !fmtOfBk\) fmtOfBk=String\(tk\.format\|\|''\)\.toUpperCase\(\);/.test(src)
+   && /window\._tlFmt=fmtOfBk;/.test(src));
+ok('★★★ 課表讀的是補過的那一個，不是直接讀 b.format',
+   /const fmt=String\(window\._tlFmt\|\|b\.format\|\|''\)\.toUpperCase\(\);/.test(src));
+ok('★★ 大小寫都要認得（資料裡 1v2 與 1V2 都有）',
+   /\.toUpperCase\(\)/.test(src) && /const _is1v2 = fmt==='1V2';/.test(src));
+ok('★★ 成因與「為什麼不回填」寫在原地',
+   /`bookings\.format` 有 4006 筆是 null/.test(src)
+   && /不回填 bookings\.format：4006 筆的回填風險遠大於在讀取端補一層/.test(src));
+
 console.log('\n①-2 重量單位 kg／lb（2026-09-15 使用者：「重量只有kg可以設定 沒有lb」）');
 /* 系統本來就支援 lb（WP_UNITS／WP_STEPS／TL_LB2KG／wpUnitOf、資料庫也有 lb 紀錄），
    缺的只有「新增動作」第二頁這一條路 —— 四處寫死 kg：已完成組摘要、當前輸入框、

@@ -13801,8 +13801,8 @@ function tbl(s){return TABLE_ALIAS[s]||s;}
 let sb=null;
 // ── 版本號（日期+時間格式：年後兩碼+月+日.時分，例 26620.1058 = 26年6/20 10:58）──
 // 每次改版手動更新這一行即可，畫面與 title 會一起更新
-const APP_VERSION = '260922.1802';
-const APP_VERSION_LABEL = 'v260922.1802';
+const APP_VERSION = '260922.2011';
+const APP_VERSION_LABEL = 'v260922.2011';
 const CLOUD = !!(window.YUGYM_CONFIG && window.YUGYM_CONFIG.url && window.YUGYM_CONFIG.anonKey);
 if(CLOUD){ sb = supabase.createClient(window.YUGYM_CONFIG.url, window.YUGYM_CONFIG.anonKey); }
 
@@ -63484,10 +63484,21 @@ async function openTrainingLog(bookingId){
   window._tlAskedApply='';
   // 會員名 + 票券剩餘 + 是否友善課
   let memName='會員', tkText='', isFriendly=false;
+  let fmtOfBk=String(b.format||'').toUpperCase();   /* 空的話下面用票券的補（見 tk 那段） */
   try{ const m=await dbGet('members',b.member_id); if(m)memName=m.name; }catch(_){}
   try{
     if(b.ticket_id){
       const tk=await dbGet('member_tickets',b.ticket_id);
+      /* ⚠⚠ 1V2 要看**票券**的 format，不能只看預約（2026-09-22 使用者回報：
+           「剛剛發現1v2的課表　沒看到會員A跟會員B」）——
+         `bookings.format` 有 4006 筆是 null（1V1 1160／1V2 651／小寫各 91、42），
+         而票券上是有的（黃柏瑜那張 TK-mseo3fkypm63 就是 '1v2'）。
+         預約的 format 只有「建立預約時有選授課類型」那條路會寫；
+         連續預約、待簽約轉正、匯入的舊資料都是空的。
+         於是 0915 做的「1V2 兩份課表」幾乎從來沒生效過 —— 查 0922 那天 22 堂教練課，
+         有 format 的只有 4 堂。
+         ⚠ 不回填 bookings.format：4006 筆的回填風險遠大於在讀取端補一層。 */
+      if(tk && !fmtOfBk) fmtOfBk=String(tk.format||'').toUpperCase();
       if(tk){
         /* ⚠ 原本寫「剩餘　自訂方案 0/10」，使用者讀成「第 0 堂」（2026-09-09 回報）。
            那個 0 是 sessions_remaining，而預扣型票券的帳面剩餘很早就歸 0，
@@ -63518,6 +63529,7 @@ async function openTrainingLog(bookingId){
     if(!isFriendly && tkText.indexOf('友善')>=0) isFriendly=true;
   }catch(_){}
   window._tlMemName=memName; window._tlTkText=tkText; window._tlIsFriendly=isFriendly;
+  window._tlFmt=fmtOfBk;   /* 預約沒填就用票券的（見上方說明） */
   renderTrainingLogSheet();
 }
 function closeTrainingLog(){ const s=document.getElementById('tl-sheet'); if(s)s.remove(); document.querySelectorAll('.qb-fab').forEach(x=>x.style.display=''); }
@@ -63548,7 +63560,9 @@ async function renderTrainingLogSheet(){
 
   let allLogs=[];
   try{ allLogs=await dbGetAll('training_logs'); }catch(_){}
-  const fmt=b.format?b.format.toUpperCase():'';
+  /* 預約沒填 format 時用票券的（openTrainingLog 算好放在 _tlFmt，見那支的說明）。
+     ⚠ 兩個都空才是真的沒有 —— 只讀 b.format 會讓 1V2 的課表看不到「會員 A／B」。 */
+  const fmt=String(window._tlFmt||b.format||'').toUpperCase();
   /* 1V2 才有兩份課表（2026-09-15）。其他課維持單一份，畫面完全不變。
      ⚠ slot 的語意：null 或 1＝第一位（所有舊資料都是），2＝第二位。 */
   const _is1v2 = fmt==='1V2';
