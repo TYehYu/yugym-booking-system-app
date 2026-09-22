@@ -193,8 +193,17 @@ ok('　　不再有寫死的「（體驗）」直接接 trial_name',
 /* ── 課程類型清單：友善自主訓練／場租不列 ── */
 console.log('\n新增預約的課程類型清單');
 ok('★ 友善自主訓練已排除', /自主訓練'\s*&&\s*\/友善\/\.test\(t\.name\|\|''\)\) return false/.test(src));
-ok('★ 場租已排除', /if\(t\.category==='場租'\) return false/.test(src));
-ok('★ 場地租借不再合成進課程卡', !/activeTypes\.concat\(\[BK_FACILITY_TYPE\]\)/.test(src));
+/* 2026-09-22 推翻 0729：場地租借放回課程卡（使用者：「現在要新增預約場地租借」）。
+   0729 收掉的理由是「場租與自主訓練等同」，那個前提是錯的 ——
+   場租不計堂數、有自己的票種；自主訓練扣會員的點。 */
+ok('★ 場地租借要列在課程卡裡', /場地租借放回這張選單（2026-09-22/.test(src)
+   && /'體驗課','自主訓練','場地租借'\]/.test(src));
+ok('★ 友善自主訓練仍然不列（只是票種名不同，預約行為一樣）',
+   /if\(t\.category==='自主訓練' && \/友善\/\.test\(t\.name\|\|''\)\) return false;/.test(src));
+ok('★ 選了它要走場租那條步驟二（不是一般課程的步驟二）',
+   /if\(t && t\.category==='場租'\)\{ return bkStep2Facility\(\); \}/.test(src));
+ok('★ 場地租借不再合成進課程卡（它本來就是票種，不用另外合成）',
+   !/activeTypes\.concat\(\[BK_FACILITY_TYPE\]\)/.test(src));
 ok('場地租借的收款流程仍保留（改由銷售視窗進）', /async function bkStep2Facility\(/.test(src));
 
 

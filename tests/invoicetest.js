@@ -256,8 +256,10 @@ console.log('\n④-2 每一個收款入口都要能開發票（2026-09-15）');
   ok('★★ 自主訓練票券：開窗同步＋存檔開立', /function fvInvSync\(\)\{/.test(src)
      && /await invIssueForPurchase\(_tRow, _fm, _inv,/.test(src));
   /* ⚠ 2026-09-15 二修：場租改走 frInvSync（金額 0 要收合），它內部才呼叫 invSync。 */
+  /* 2026-09-22：場租多了「先卡位、之後再收」，所以 paid 還要看 _frHold
+     （先卡位＝這次不收錢 → 發票區一起收起來）。不傳 memberId 這件事沒變。 */
   ok('★★★ 場租是散客：invSync 不傳 memberId、開立時 mem 傳 null',
-     /try\{ invSync\(\{paid:fee>0\}\); \}catch\(_\)\{\}/.test(src)
+     /try\{ invSync\(\{paid:!window\._frHold && fee>0\}\); \}catch\(_\)\{\}/.test(src)
      && !/invSync\(\{paid:[^}]*memberId[^}]*\}\);[\s\S]{0,40}場租/.test(src)
      && /await invIssueForPurchase\(_fRow, null, _inv,/.test(src));
   ok('★★ 分期：每一期各開各的', /await invIssueForPurchase\(_pRow, _pm, _inv,/.test(src)
@@ -308,11 +310,11 @@ console.log('\n④-3 流程自我檢查抓到的三個洞（2026-09-15）');
      等於讓櫃檯白問一次載具／信箱，填了也不會開。三個入口都要跟著金額收合。 */
   ok('★★★ 金額 0 就把發票區收起來 —— 商品',
      /if\(document\.getElementById\('inv-wrap'\)\) msInvSync\(sum>0\);/.test(src));
-  ok('★★★ 金額 0 就把發票區收起來 —— 場租（含切換票券折抵）',
+  ok('★★★ 金額 0 就把發票區收起來 —— 場租（含切換票券折抵、先卡位）',
      /function frInvSync\(\)\{/.test(src)
-     && /try\{ invSync\(\{paid:fee>0\}\); \}catch\(_\)\{\}/.test(src)
+     && /try\{ invSync\(\{paid:!window\._frHold && fee>0\}\); \}catch\(_\)\{\}/.test(src)
      && /id="fr-fee" value="200" min="0" oninput="frInvSync\(\)"/.test(src)
-     && /else if\(fee\)\{ fee\.value=200; \}\s*\n\s*frInvSync\(\);/.test(src));
+     && /else if\(fee\)\{ fee\.value=200; \}\s*\n\s*frSyncMode\(\);/.test(src));
   ok('★★★ 金額 0 就把發票區收起來 —— 分期（含「下一期／剩餘全繳」快捷）',
      /function inxInvSync\(\)\{/.test(src)
      && /try\{ invSync\(\{paid:amt>0, memberId:window\._inxMemberId\|\|''/.test(src)

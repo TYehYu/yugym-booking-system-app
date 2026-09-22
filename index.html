@@ -13797,8 +13797,8 @@ function tbl(s){return TABLE_ALIAS[s]||s;}
 let sb=null;
 // ── 版本號（日期+時間格式：年後兩碼+月+日.時分，例 26620.1058 = 26年6/20 10:58）──
 // 每次改版手動更新這一行即可，畫面與 title 會一起更新
-const APP_VERSION = '260922.1343';
-const APP_VERSION_LABEL = 'v260922.1343';
+const APP_VERSION = '260922.1416';
+const APP_VERSION_LABEL = 'v260922.1416';
 const CLOUD = !!(window.YUGYM_CONFIG && window.YUGYM_CONFIG.url && window.YUGYM_CONFIG.anonKey);
 if(CLOUD){ sb = supabase.createClient(window.YUGYM_CONFIG.url, window.YUGYM_CONFIG.anonKey); }
 
@@ -31486,9 +31486,21 @@ async function openBookingModal(){
   const isCoach=SESSION.role==='coach' && !SESSION.is_manager;   // 店長比照櫃台（2026-07-27）
   const isMobileBk=isMobileLayout();
   // 課程類型過濾：
-  //  - 教練端：只能建「私人教練」「體驗」類（教練課/友善教練課/體驗課）；不可建自主訓練、團體課
+  //  - 教練端：只能建「私人教練」「體驗」「場租」類；不可建自主訓練、團體課
   //  - 手機版（含管理員教練視角）：不可建團體課（團體課僅後台桌機建立）
-  const coachAllowed=['私人教練','體驗'];
+  /* ══ 場租開放給教練自己建（2026-09-22 使用者指示）══
+     使用者：「因為現在教練可以卡位預約教練課，所以這次子安教練其實是先用教練課卡位」
+     —— 曹子安 0922 租場地被建成「體驗課」不是搞錯，是**沒有場租可選只好拿別的課別卡位**。
+
+     ⚠ 這不是放寬，是**堵一個更糟的洞**：用教練課卡位一旦簽到，
+       category 是私人教練＋狀態 checked_in 就會進 leaderClassCount，
+       算進教練堂數與主管獎金；場租在三份計堂清單裡都被排除，一堂都不會算。
+       給他場租，帳反而乾淨。
+     ⚠ 濫用的動機很低：場租不計堂數、不歸業績，而且三條付款路徑都留痕
+       （現場收款／先卡位進今日收款提醒／扣場租票），還會記下經手員工。
+     ⚠ 刻意**不**加「要有場租票才建得了」那道檢查 —— 那會讓「先卡位、之後再收」走不通，
+       而那正是使用者同一天要的功能。 */
+  const coachAllowed=['私人教練','體驗','場租'];
   const activeTypes=types.filter(t=>{
     if(t.active===false) return false;
     if(bkIsMergedPT(t)) return false;   // VIP/限定＝停售活動價舊票種，不再列選項（舊票由「教練課」配對承接）
@@ -31498,15 +31510,19 @@ async function openBookingModal(){
     if(window._bkCoachCourseOnly && t.category!=='私人教練') return false;
     if(isMobileBk && t.category==='小班肌力') return false;          // 手機：不建團體課
     if(isMobileBk && t.category==='自主訓練') return false;          // 手機：自主訓練由會員自約
-    /* 場租與友善自主訓練都等同「自主訓練」，不重複列（2026-07-29 使用者指示）：
-       場租票是銷售商品；友善自主訓練只是票種名不同，預約行為與自主訓練一致。
-       （場地租借的收款流程仍在，入口改由銷售視窗進；bkStep2Facility 保留。） */
-    if(t.category==='場租') return false;
+    /* ══ 場地租借放回這張選單（2026-09-22 使用者：「現在要新增預約場地租借」）══
+       0729 把它收掉的理由是「場租與自主訓練等同，不重複列」—— 那個前提是錯的：
+       場租是 category='場租'（收場地費、**不計堂數**、有自己的票種），
+       自主訓練是 category='自主訓練'（扣會員的點）。兩件不同的事。
+       使用者 0922 講清楚了：「自主訓練我們沒有單獨販售，但是預約的時候可以幫客戶
+       預約自主訓練，現在要新增預約場地租借」—— 兩張卡都要在。
+       ⚠ 友善自主訓練仍然不列：那只是票種名不同，預約行為與自主訓練完全一致，
+         列兩張只會讓櫃檯猶豫該選哪一張。 */
     if(t.category==='自主訓練' && /友善/.test(t.name||'')) return false;
     return true;
   });
   // 排序（2026-07-20 使用者指定）：第一列 教練課/友善教練課/團體課、第二列 運動按摩/體驗課/自主訓練
-  const _BK_ORDER=['教練課','友善教練課','團體課','運動按摩','體驗課','自主訓練'];
+  const _BK_ORDER=['教練課','友善教練課','團體課','運動按摩','體驗課','自主訓練','場地租借'];
   activeTypes.sort((a,b)=>{
     const ia=_BK_ORDER.indexOf(a.name), ib=_BK_ORDER.indexOf(b.name);
     return (ia<0?99:ia)-(ib<0?99:ib);
@@ -31891,11 +31907,28 @@ async function bkStep2Facility(pDate,pTime){
          場租票的天數。效期其實是照**方案的 valid_days** 算的（termExpire），
          只要賣一種 10 堂 180 天的場租方案，這句話就變成假的。
          下拉本身每一項已經寫著「效期至 M/D」，這裡不必再說一次天數。 */''}
-    <div style="font-size:11.5px;color:var(--t2);margin-bottom:12px;background:var(--card2);padding:10px 12px;border-radius:9px;">現場收費，或選擇會員的場租票券折抵（效期以票券上標示為準）。</div>
+    <div style="font-size:11.5px;color:var(--t2);margin-bottom:12px;background:var(--card2);padding:10px 12px;border-radius:9px;">現場收費、先卡位之後再收，或用會員的場租票券折抵（效期以票券上標示為準）。</div>
     <div class="form-row"><label>場租票折抵（選填）</label><select id="fr-ticket" onchange="frTicketPick()"><option value="">不使用票券（現場收費）</option>${await frVenueTicketOpts()}</select></div>
     <div class="form-row"><label>使用人姓名（必填）</label><input id="fr-name" placeholder="例：王媽媽"></div>
     <div class="form-row"><label>經手員工</label><select id="fr-emp">${opts||`<option value="${SESSION.id}">${SESSION.name||'我'}</option>`}</select></div>
-    <div class="form-2col">
+    ${/* ══ 先卡位、之後再收（2026-09-22 使用者指示）══
+         場租原本一律「建立當下就收錢」，但教練幫自己的會員身分卡位時常常是
+         「先把時段佔住、錢之後再收」（使用者：「就做先卡位之後再收的選項」）。
+         ⚠ 走的是既有的 pending_contract 機制 —— 那筆會自動出現在「今日收款提醒」，
+           顯示「待收款・場租」，收到款再結。不另外發明一套待收款。
+         ⚠ 場租的 category 不變，所以堂數／業績一律不算（場租在三份計堂清單裡都被排除），
+           不必為了這個功能在堂數規則上加例外。
+         ⚠ 與「場租票折抵」互斥：用票折抵＝已經付過了，不可能同時待收款。
+           選了票之後這顆會暗化並寫原因（不是消失，見 yugym-disabled-with-reason）。
+         ⚠ 按鈕三態語彙沿用 .qs-type（白＝可選、綠＝選取），不另做一套樣式。 */''}
+    <div class="form-row"><label>收款</label>
+      <div class="qs-types" style="margin:0;">
+        <button type="button" class="qs-type on" id="fr-pm-now" onclick="frSetHold(false)">現在收款</button>
+        <button type="button" class="qs-type" id="fr-pm-hold" onclick="frSetHold(true)">先卡位，之後再收</button>
+      </div>
+      <div class="qs-tnote" id="fr-pm-why" style="margin:6px 0 0;"></div>
+    </div>
+    <div class="form-2col" id="fr-paybox">
       <div class="form-row"><label>收費金額</label><input type="number" id="fr-fee" value="200" min="0" oninput="frInvSync()"></div>
       <div class="form-row"><label>付款方式</label><select id="fr-method"><option value="cash">現金</option><option value="transfer">匯款</option></select></div>
     </div>
@@ -31905,6 +31938,8 @@ async function bkStep2Facility(pDate,pTime){
 
     <div class="modal-foot"><button class="btn btn-ghost" onclick="${_backFn}">← ${window._facilityFromSales?'返回':'上一步'}</button><button class="btn btn-green" id="fr-go" onclick="submitFacilityBooking()">確認租借並收款</button></div>`);
   window._invGateBtn='fr-go';
+  window._frHold=false;   /* 每次開窗都回到「現在收款」—— 上一筆選過「先卡位」不該黏著 */
+  frSyncMode();
   /* 場租是現場收費 → 有金額才顯示發票區（用票券折抵時 fee=0，開不了發票）。
      ⚠ 不傳 memberId：這條路的收款紀錄 member_id 一律是 null（散客），
        沒有會員資料可預填，載具／信箱一律當場手打。 */
@@ -31929,7 +31964,7 @@ function frTicketPick(){
   const name=document.getElementById('fr-name');
   if(sel&&sel.value){ if(fee)fee.value=0; if(name&&!name.value)name.value=(opt&&opt.dataset.name)||''; }
   else if(fee){ fee.value=200; }
-  frInvSync();
+  frSyncMode();   /* 選了票要把「先卡位」切回來並暗化（見 frSyncMode） */
 }
 /* 場租的發票區同步（2026-09-15）——
    ⚠ 用票券折抵時 fee 會變 0，而 invIssueForPurchase 有 `amt<=0 return null`：
@@ -31938,7 +31973,34 @@ function frTicketPick(){
    ⚠ 場租一律散客（收款紀錄 member_id 是 null），不傳 memberId。 */
 function frInvSync(){
   const fee=Math.max(0,Number((document.getElementById('fr-fee')||{}).value)||0);
-  try{ invSync({paid:fee>0}); }catch(_){}
+  /* 先卡位＝這次不收錢 → 發票區一起收起來（invIssueForPurchase 對 amt<=0 本來就不開） */
+  try{ invSync({paid:!window._frHold && fee>0}); }catch(_){}
+}
+/* 切換「現在收款／先卡位」（2026-09-22）。
+   ⚠ 用票券折抵時不給切 —— 票已經是付過的錢，沒有待收款可言。 */
+function frSetHold(v){
+  const tk=document.getElementById('fr-ticket');
+  if(v && tk && tk.value) return;
+  window._frHold=!!v;
+  frSyncMode();
+}
+/* 把「收款方式」這個狀態一次同步到四個地方：兩顆鈕、原因那一行、金額區、送出鈕的字。
+   ⚠ 不重畫整張視窗 —— 使用者可能已經打了使用人姓名，重畫會洗掉。 */
+function frSyncMode(){
+  const tk=document.getElementById('fr-ticket'), useTk=!!(tk&&tk.value);
+  if(useTk) window._frHold=false;
+  const hold=!!window._frHold;
+  const bNow=document.getElementById('fr-pm-now'), bHold=document.getElementById('fr-pm-hold');
+  if(bNow) bNow.classList.toggle('on', !hold);
+  if(bHold){ bHold.classList.toggle('on', hold); bHold.disabled=useTk; }
+  const why=document.getElementById('fr-pm-why');
+  if(why) why.textContent = useTk ? '用場租票折抵就是已經付過了，不會有待收款。'
+        : (hold ? '這次只卡位不收錢：會出現在「今日收款提醒」，收到款再結。' : '');
+  const box=document.getElementById('fr-paybox');
+  if(box) box.style.display = hold ? 'none' : '';
+  const go=document.getElementById('fr-go');
+  if(go) go.textContent = hold ? '確認租借（先卡位）' : '確認租借並收款';
+  frInvSync();
 }
 /* 防連點（2026-08-01）：同一筆還在跑就跟著等同一個結果，不會扣兩次／建兩筆。 */
 async function submitFacilityBooking(){ return onceAct('facility:'+((_bkWizard&&_bkWizard.date)||'')+((_bkWizard&&_bkWizard.time)||''), ()=>_submitFacilityBooking()); }
@@ -31950,7 +32012,11 @@ async function _submitFacilityBooking(){
   const emp=document.getElementById('fr-emp').value||SESSION.id;
   const frTkSel=document.getElementById('fr-ticket');
   const frTkId=(frTkSel&&frTkSel.value)||null;
-  const fee=frTkId?0:Math.max(0,Number(document.getElementById('fr-fee').value)||0);
+  /* 先卡位（2026-09-22）：這次不收錢、不開發票，靠 pending_contract 進「今日收款提醒」。
+     ⚠ 用票券折抵時一律不算先卡位 —— 票已經是付過的錢（frSyncMode 也擋著，這裡再夾一次：
+       表單狀態與送出的判斷不可以只靠畫面，畫面可能被上一筆的殘留值帶壞）。 */
+  const hold=!!window._frHold && !frTkId;
+  const fee=(frTkId||hold)?0:Math.max(0,Number(document.getElementById('fr-fee').value)||0);
   const method=document.getElementById('fr-method').value||'cash';
   /* 2026-08-02 曾因「發票還沒串聯」把這裡的發票區拿掉、值一律記 'none'。
      2026-09-15 串好了，選單加回來（使用者：「只要有收款都要出現」）。
@@ -31961,7 +32027,12 @@ async function _submitFacilityBooking(){
   const frMid=frTkId?((frTkSel.selectedOptions[0]||{}).dataset||{}).mid||null:null;
   const bk={id:uid('BK'),member_id:frMid,member_ids:[],trial_name:name,trial_phone:null,
     coach_id:emp,ticket_id:frTkId,ticket_type_id:frTkId?'tt-venue-rental':null,category:'場租',format:null,
-    date,start_time:time,duration:60,status:'booked',recurring:false,venue_unit:null,
+    pending_contract:hold,   /* 先卡位＝待收款，會自動出現在「今日收款提醒」（顯示「待收款・場租」） */
+    /* ⚠ 場地：從課程卡進來的話步驟一已經選好了，要帶過來（2026-09-22）——
+       原本一律寫 null，那是「入口只在銷售視窗」時代的寫法（那條路沒有場地欄位）。
+       寫 null 會讓這筆場租不佔任何場地，別人照樣約得到同一台。 */
+    date,start_time:time,duration:60,status:'booked',recurring:false,
+    venue_unit:((document.getElementById('bk-venue')||{}).value)||null,
     created_by:SESSION.id,created_at:new Date().toISOString()};
   await dbPut('bookings',bk);
   if(frTkId){   // 場租票折抵：扣 1 次
@@ -31990,7 +32061,9 @@ async function _submitFacilityBooking(){
       catch(e){ console.error('facility invoice fail', e); }
     }else if(_fOk){ console.warn('發票區未顯示，場租這筆不開立發票：', _fRow.id); }
   }
-  closeModal(); showToast(`場地租借已建立（$${fee}）`); bkAfterSubmit();
+  closeModal();
+  showToast(hold?'已卡位（未收款）—— 已列入今日收款提醒':`場地租借已建立（$${fee}）`);
+  bkAfterSubmit();
  }catch(e){ showToast('建立失敗：'+(e&&e.message?e.message:e)); }
 }
 async function onBkTypeChange(){
@@ -32074,6 +32147,10 @@ async function _bkStep2(){
   const types=await dbGetAll('ticket_types');
   window._ttCache=types;
   const t=types.find(x=>x.id===type_id);
+  /* 從課程卡選「場地租借」也走同一條（2026-09-22）——
+     那張卡的 id 是票種 id（tt-venue-rental），不是 __facility，
+     但要去的是同一個「使用人／收費／發票」的步驟二。 */
+  if(t && t.category==='場租'){ return bkStep2Facility(); }
   const needCoach = bkNeedCoach(t);   // 與 onBkTypeChange() 共用同一判斷，避免兩處各寫一份而漂移
   const coachEl=document.getElementById('bk-coach');
   /* 教練端：永遠用自己；管理員/櫃台：一律取下拉值（自主訓練可留空，其餘下面會擋） */
@@ -36654,7 +36731,8 @@ async function ashCourseAsk(bid){
   const list=types.filter(t=>{
     if(!t || t.active===false) return false;
     if(typeof bkIsMergedPT==='function' && bkIsMergedPT(t)) return false;
-    if(t.category==='場租') return false;
+    /* 場地租借留著（2026-09-22 使用者：「這邊要新增場地租借」）——
+       曹子安 0922 那筆就是「建成體驗課、其實是場租」，櫃檯本來只能請人改資料庫。 */
     /* 課別判斷走口袋分類器（bkIsSelf／bkIsGroup），不再散裝比字串 —— 見 tests/pockettest 的棘輪 */
     if(bkIsSelf({category:t.category})){
       /* 自主訓練不能是空堂（2026-08-21 使用者確認）——它必須有票券（點數）才能建立，
@@ -51664,13 +51742,21 @@ const SL_COURSES=[
   {k:'pt',       name:'教練課',   sub:'簽約 → 業績歸屬',        col:'var(--course-pt-accent,#1f6f54)'},
   {k:'group',    name:'團體課',   sub:'售課 → 業績歸屬',        col:'var(--course-group-accent,#9a5a1e)'},
   {k:'massage',  name:'運動按摩', sub:'售課 → 業績歸屬',        col:'#2f8f83'},
-  /* 0801 使用者指示：「這邊方案卡場地租借改成自主訓練」——副標本來就寫著單次自主訓練，
-     兩個名字指的是同一件事，留兩個只會讓人以為是兩種商品。 */
-  {k:'facility', name:'自主訓練', sub:'單次 · 效期 7 天',       col:'#6a655c'},
+  /* ══ 0922 改回「場地租借」，而且把票種也換回來 ══
+     0801 曾依使用者指示改名成「自主訓練」，理由是「兩個名字指的是同一件事」；
+     那次連票種都從 tt-venue-rental 換成真的自主訓練票（tt-mqdt55uosz5n）。
+     0922 使用者講清楚了：「**自主訓練我們沒有單獨販售**」——
+     這張卡賣出去的 4 張票（最近 8/28）對到的正是那 4 筆 facility_rental 收款，
+     它一直都是場租在用，0801 只是名字與票種一起錯了方向。
+     ⚠ 換回 tt-venue-rental 才接得上「場地租借」視窗的『場租票折抵』下拉
+       （那支只認 tt-venue-rental）—— 0801 之後賣的票它根本看不到。
+     ⚠ 已經賣出的 4 張維持原樣（歷史不動），只影響之後賣的。 */
+  {k:'facility', name:'場地租借', sub:'單次 · 效期 7 天',       col:'#6a655c'},
   /* 0803 使用者指示：「團體課的預約體驗，幫我新增在銷售，團課體驗600」——
      走自訂銷售的殼、預填 1 堂 $600，欄位到了下一步仍可改。 */
   {k:'grptrial', name:'團課體驗', sub:'1 堂 · $600',            col:'var(--course-trial-accent,#7a4d8c)'},
-  {k:'custom',   name:'自訂',     sub:'自填堂數／價格 → 業績歸屬', col:'#6a655c'},
+  /* 0922 使用者：「自訂要改成自訂方案」——「自訂」兩個字看不出賣的是課程方案 */
+  {k:'custom',   name:'自訂方案', sub:'自填堂數／價格 → 業績歸屬', col:'#6a655c'},
 ];
 /* 其他收費清單（2026-08-21 從卡片牆搬進挑選視窗；品項與價格照舊）。
    「其他商品」是自訂品名／金額 —— 加進購物車後在那一列直接改，所以選它要關掉視窗。 */
@@ -51901,8 +51987,8 @@ async function salesFacility(){
   window._msMembers=members;
   const _fpre=window._salesFacilityMember||''; window._salesFacilityMember=null;
   const today=ymd(TODAY);
-  showModal(`<div class="modal-title">銷售 · 自主訓練票券</div>
-    <div style="font-size:11.5px;color:var(--t2);margin-bottom:12px;background:var(--card2);padding:10px 12px;border-radius:9px;">1 次自主訓練，效期 <b>7 天</b>（自啟用日起算）。使用時在「新增預約」選自主訓練，系統會自動折抵。</div>
+  showModal(`<div class="modal-title">銷售 · 場地租借票券</div>
+    <div style="font-size:11.5px;color:var(--t2);margin-bottom:12px;background:var(--card2);padding:10px 12px;border-radius:9px;">1 次場地租借，效期 <b>7 天</b>（自啟用日起算）。使用時在「新增預約」選<b>場地租借</b>，在「場租票折抵」下拉選這張票，費用自動歸 0。</div>
     <div class="form-row"><label>會員（必選）</label>
       <div class="mem-pick-row">
         <input class="gt-search" placeholder="輸入姓名或手機搜尋" oninput="msFilterMembers(this.value)" autocomplete="off">
@@ -51945,7 +52031,11 @@ async function submitFacilityTicketSale(){
   const inv=(_inv && _inv.mode!=='none') ? 'ecpay' : 'none';
   const expire=termExpire(start,7);   // 效期 7 天（含啟用日）
   try{
-    const tk={id:uid('TK'),member_id:mid,ticket_type_id:'tt-mqdt55uosz5n',plan_name:'自主訓練',
+    /* ⚠⚠ 票種是 tt-venue-rental（場租），不是自主訓練（2026-09-22 改回）——
+       「場地租借」視窗的『場租票折抵』下拉只認 tt-venue-rental；
+       0801~0922 之間這裡發的是自主訓練票，那條折抵路徑根本看不到它們。
+       見 SL_COURSES 的 facility 那一項。 */
+    const tk={id:uid('TK'),member_id:mid,ticket_type_id:'tt-venue-rental',plan_name:'場地租借',
       format:null,purchase_date:ymd(TODAY),start_date:start,expire_date:expire,valid_days:7,
       sessions_total:1,sessions_remaining:1,status:'usable',payment_status:'paid',
       unit_price:fee,amount_paid:fee,created_at:new Date().toISOString()};

@@ -451,9 +451,11 @@ ok('★ 換成團課要補人數上限（否則名單視窗抓不到預設值）
    /&& !\(Number\(b\.max_heads\)>0\)\) b\.max_heads=5;/.test(src));
 /* 2026-08-21：原本只濾掉「友善自主訓練」（與自主訓練同行為、不重複列）；
    後來使用者確認空堂不能是自主訓練，於是整個課別都不列，這條併進下面那一項。 */
-ok('　　課別清單與建立預約同一套過濾（停售／VIP 限定／場租不列）',
+/* 2026-09-22：場租改成**要列**（使用者要在「更換課程」裡選得到場地租借）。
+   這一條守的仍是「與建立預約同一套過濾」—— 停售／VIP 限定照舊不列。 */
+ok('　　課別清單與建立預約同一套過濾（停售／VIP 限定不列；場租 0922 起要列）',
    /if\(typeof bkIsMergedPT==='function' && bkIsMergedPT\(t\)\) return false;/.test(src)
-   && /if\(t\.category==='場租'\) return false;/.test(src));
+   && /場地租借留著（2026-09-22 使用者：「這邊要新增場地租借」）/.test(src));
 ok('　　課別判斷走口袋分類器，不散裝比字串（pockettest 的棘輪）',
    /if\(bkIsGroup\(\{category:t\.category\}\) && !\(Number\(b\.max_heads\)>0\)\) b\.max_heads=5;/.test(src));
 

@@ -72,7 +72,7 @@ ok('★ 卡片牆退場，改成一個 adp-field 欄位',
 ok('★ 清單本身沒有改：六項、順序與 0803 定版一致',
    /const SL_COURSES=\[/.test(src)
    && /\{k:'pt',       name:'教練課'/.test(src)
-   && /\{k:'custom',   name:'自訂'/.test(src)
+   && /\{k:'custom',   name:'自訂方案'/.test(src)
    /* 只數 SL_COURSES 那一塊 —— 薪資那邊也有一個 {k:'pt'} 的表，會誤計（實測 8） */
    && ((src.match(/const SL_COURSES=\[[\s\S]*?\n\];/)||[''])[0]
         .match(/\{k:'(pt|group|massage|facility|grptrial|custom)',/g)||[]).length===6);
@@ -84,9 +84,16 @@ ok('★ 選定要先關掉這一層再走 slGo（後面每條路都是 showModal
    /function slCoursePick\(k\)\{ ashDateClose\(\); slGo\(k\); \}/.test(src));
 ok('　　「先選會員」的守門沒有被繞過（slGo 開頭那一段原封不動）',
    /function slGo\(kind\)\{\n\s*const mid=slMember\(\);\n\s*if\(!mid\|\|mid==='__walkin__'\)\{ showToast\('請先選擇會員'\); return; \}/.test(src));
-ok('　　0801 場地租借→自主訓練、0803 團課體驗 $600 的說明跟著搬（不隨卡片消失）',
-   /這邊方案卡場地租借改成自主訓練/.test(src)
+ok('　　0801→0922 的來回、以及 0803 團課體驗 $600 的說明都跟著搬（不隨卡片消失）',
+   /0801 曾依使用者指示改名成「自主訓練」/.test(src)
+   && /\*\*自主訓練我們沒有單獨販售\*\*/.test(src)
    && /團體課的預約體驗，幫我新增在銷售，團課體驗600/.test(src));
+/* ⚠ 這一條擋的是「只改名、忘了換票種」—— 0801 那次就是名字與票種一起錯了方向，
+   結果賣出去的票，場地租借視窗的『場租票折抵』下拉根本看不到（只認 tt-venue-rental）。 */
+ok('★★★ 改名的同時票種也要是 tt-venue-rental（只改名＝賣出去的票折抵不了）',
+   /\{k:'facility', name:'場地租借'/.test(src)
+   && /ticket_type_id:'tt-venue-rental',plan_name:'場地租借'/.test(src)
+   && !/ticket_type_id:'tt-mqdt55uosz5n',plan_name:'自主訓練'/.test(src));
 /* 2026-08-21 二修：其他收費也收成挑選視窗了（見下一段），這條改驗購物車還在 */
 ok('　　購物車仍在（結帳流程沒被動到）', /<div id="sl-cart-box"/.test(src));
 
