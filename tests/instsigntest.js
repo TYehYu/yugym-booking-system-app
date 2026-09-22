@@ -33,7 +33,7 @@ function gate(ct,cur){
 console.log('① 黃柏瑜那一筆（電子簽・3 期・已收第 1 期）');
 {
   const c={id:'CT1',sign_type:'remote',signed_at:'2026-08-01',installment_signs:[]};
-  ok('★★ 第一次按〔分期繳費〕→ 先問要電子還是紙本，不會直接收錢', gate(c,1)==='ask', gate(c,1));
+  ok('★★ 第一次按〔分期繳費〕→ 先送簽名到會員手機，不會直接收錢', gate(c,1)==='ask', gate(c,1));
   c.installment_signs=[{n:2,sign_type:'remote',requested_at:'2026-09-22T12:00:00Z',signature:null}];
   ok('★★ 送出待簽後再按 → 擋在「等待會員簽名」', gate(c,1)==='wait', gate(c,1));
   c.installment_signs=[{n:2,sign_type:'remote',signature:'data:image/png;base64,AAA',signed_at:'2026-09-22T13:00:00Z'}];
@@ -49,14 +49,16 @@ console.log('② 紙本不受影響（使用者：「紙本第二期還是在紙
   ok('　 根本沒有合約的票券不擋', gate(null,1)==='pay');
 }
 
-console.log('③ 逃生門：客人在現場，這一期改走紙本');
+console.log('③ 閘門的容錯：別把櫃檯鎖死');
 {
-  const c={id:'CT1',sign_type:'remote',installment_signs:[{n:2,sign_type:'remote',signature:null}]};
-  /* instSignPaper 做的事：把那一格換成 paper＋signed_at，pending 清掉 */
-  c.installment_signs=[{n:2,sign_type:'paper',signed_at:'2026-09-22T13:00:00Z'}];
-  c.pending_sign_n=null;
-  ok('★★ 改紙本之後就放行（不必再等會員手機）', gate(c,1)==='pay');
-  ok('★ 整份合約的 sign_type 沒被改掉 —— 只有這一期走紙本', c.sign_type==='remote');
+  const c={id:'CT1',sign_type:'remote',
+    installment_signs:[{n:2,sign_type:'remote',signature:'data:image/png;base64,AAA',signed_at:'2026-09-22T13:00:00Z'}],
+    pending_sign_n:null};
+  ok('★★ 簽完就放行', gate(c,1)==='pay');
+  ok('★ 整份合約的 sign_type 沒被改掉', c.sign_type==='remote');
+  /* ⚠ paper 那一格的容忍留著：萬一日後真的有人手動補紙本紀錄，閘門不該把人鎖死。 */
+  ok('　 舊資料若有 paper 那一格，閘門仍然放行（不把櫃檯鎖死）',
+     gate({sign_type:'remote',installment_signs:[{n:2,sign_type:'paper',signed_at:'x'}]},1)==='pay');
 }
 
 console.log('④ 期數要對得上（不能用「有沒有簽過」含糊帶過）');
@@ -90,7 +92,7 @@ console.log('⑥ 閘門真的裝在 openInstallNext 上（三個入口共用這�
   ok('★ 三個入口都是呼叫 openInstallNext（票券頁／會員頁／今日收款提醒）',
      (src.match(/openInstallNext\('\$\{(t|r)\.(id|tid)\}'\)/g)||[]).length>=3);
   ok('★ 已簽的那一期會顯示在收款畫面上（櫃檯看得到自己在收什麼）',
-     /第 \$\{_sn\} 期 \$\{_sok\.signature\?'已電子簽':'走紙本'\}/.test(g));
+     /第 \$\{_sn\} 期 已簽/.test(g));
 }
 
 console.log('⑦ 會員端簽名板');
@@ -107,6 +109,19 @@ console.log('⑦ 會員端簽名板');
   ok('★★ 分期簽完就結束，不會接著跳「還有 N 份合約待簽」（那是另一回事）',
      d.indexOf("showToast(`第 ${_n} 期已完成簽署")>0 && d.indexOf("showToast(`第 ${_n} 期已完成簽署")<d.indexOf('還有 ${rest.length} 份'));
   ok('★ 寫完清快取', /dbCacheClear\(\['contracts'\]\);\s*\n\s*if\(_n\)\{/.test(d));
+}
+
+console.log('⑦-2 只有一條路：送到會員手機（2026-09-22 使用者連續兩次指正）');
+{
+  /* ① 「他就算在現場　也只有電子簽約　因為第一次電子簽約就已經沒有紙本了」
+     ② 「電子簽名都是在會員手機端」
+     所以「改用紙本」與「現場在櫃檯裝置上簽」兩顆都不該存在。
+     這兩條反面斷言就是擋著別人（包含我自己）再把逃生門加回來。 */
+  ok('★★ 沒有「改用紙本」那顆（第一次電子簽的會員手上根本沒有紙）', !/instSignPaper/.test(src));
+  ok('★★ 沒有「現場在櫃檯裝置上簽」那顆（電子簽一律在會員自己的手機）', !/instSignHere/.test(src));
+  ok('★★ 送出待簽是唯一出口', (src.match(/onclick="instSignRequest\(/g)||[]).length===1);
+  ok('★ 等待視窗講清楚人在現場也是用他自己的手機', /人在現場也一樣用他自己的手機簽/.test(src));
+  ok('　 為什麼沒有逃生門，寫在註解裡', /刻意\*\*沒有\*\*「現場簽」或「改用紙本」的逃生門/.test(src));
 }
 
 console.log('⑧ 送出待簽只動合約，不碰錢也不開通');

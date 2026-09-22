@@ -13801,8 +13801,8 @@ function tbl(s){return TABLE_ALIAS[s]||s;}
 let sb=null;
 // ── 版本號（日期+時間格式：年後兩碼+月+日.時分，例 26620.1058 = 26年6/20 10:58）──
 // 每次改版手動更新這一行即可，畫面與 title 會一起更新
-const APP_VERSION = '260922.2032';
-const APP_VERSION_LABEL = 'v260922.2032';
+const APP_VERSION = '260922.2051';
+const APP_VERSION_LABEL = 'v260922.2051';
 const CLOUD = !!(window.YUGYM_CONFIG && window.YUGYM_CONFIG.url && window.YUGYM_CONFIG.anonKey);
 if(CLOUD){ sb = supabase.createClient(window.YUGYM_CONFIG.url, window.YUGYM_CONFIG.anonKey); }
 
@@ -56505,12 +56505,11 @@ function openInstSignAsk(ticket_id,c,n,seg,amt,memName){
     <div style="font-size:12px;color:var(--t3);line-height:1.85;margin-bottom:4px;">
       ・第 1 期的簽名不受影響，這是另外補的一格<br>
       ・送出不會扣款，也不會先開通堂數<br>
-      ・會員人就在現場的話，直接走紙本比較快
+      ・會員人在現場的話，請他當場拿自己的手機簽就好
     </div>
     <div class="modal-foot">
       <button class="btn btn-ghost" onclick="closeModal()">取消</button>
-      <button class="btn btn-ghost" onclick="instSignPaper('${ticket_id}','${c.id}',${n})">會員在現場・用紙本</button>
-      <button class="btn btn-green" onclick="instSignRequest('${ticket_id}','${c.id}',${n},${Number(amt)||0})">送出待簽</button>
+      <button class="btn btn-green" onclick="instSignRequest('${ticket_id}','${c.id}',${n},${Number(amt)||0})">送到會員手機</button>
     </div>`);
 }
 /* 已送出、還沒簽回 */
@@ -56525,12 +56524,12 @@ function openInstSignWait(ticket_id,c,n,s,memName){
       <b>會員簽完之後，回到這裡再按一次〔分期繳費〕</b>就能收款並開通堂數。
     </div>
     <div style="font-size:12px;color:var(--t3);line-height:1.85;margin-bottom:4px;">
-      ・會員在「我的票券」的這張票上點簽名欄即可<br>
+      ・會員用自己的手機開「我的票券」，這張票上就有簽名欄<br>
+      ・人在現場也一樣用他自己的手機簽<br>
       ・堂數尚未開通，目前的可用堂數不變
     </div>
     <div class="modal-foot">
       <button class="btn btn-ghost" onclick="closeModal()">關閉</button>
-      <button class="btn btn-ghost" onclick="instSignPaper('${ticket_id}','${c.id}',${n})">會員在現場・改用紙本</button>
     </div>`);
 }
 /* 送出待簽：只寫合約，不碰票券、不收款。 */
@@ -56548,21 +56547,13 @@ async function instSignRequest(ticket_id,contract_id,n,amt){
     closeModal(); showToast(`已送出第 ${n} 期簽名，會員手機上就看得到`,4000);
   }catch(e){ showToast('送出失敗：'+((e&&e.message)||e),5000); }
 }
-/* 逃生門：這一期改走紙本（記下事實，不擋開通，也不改整份合約的簽署方式）。 */
-async function instSignPaper(ticket_id,contract_id,n){
-  if(!(isDeskLike())) return;
-  try{
-    const c=await dbGet('contracts',contract_id); if(!c) throw new Error('找不到合約');
-    const arr=instSignsOf(c).filter(x=>x&&Number(x.n)!==Number(n));
-    arr.push({n:Number(n), sign_type:'paper', signed_at:new Date().toISOString(), by:SESSION.name||''});
-    c.installment_signs=arr.sort((a,b)=>(a.n||0)-(b.n||0));
-    if(Number(c.pending_sign_n)===Number(n)) c.pending_sign_n=null;
-    await dbPut('contracts',c);
-    dbCacheClear(['contracts']);
-    closeModal(); showToast(`第 ${n} 期改為紙本簽署，記得請會員在紙本上簽名`,4500);
-    openInstallNext(ticket_id);
-  }catch(e){ showToast('設定失敗：'+((e&&e.message)||e),5000); }
-}
+/* ⚠ 這裡刻意**沒有**「現場簽」或「改用紙本」的逃生門（2026-09-22 使用者連續兩次指正）：
+   ① 「他就算在現場　也只有電子簽約　因為第一次電子簽約就已經沒有紙本了」
+      → 紙本那顆是錯的：叫人簽一張不存在的紙，系統還會記下「紙本簽署」這個謊。
+   ② 「電子簽名都是在會員手機端」
+      → 現場簽那顆也是多餘的：人在櫃檯前面，一樣是拿他自己的手機簽。
+   所以只有一條路：送到會員手機 → 他簽 → 櫃檯再按一次〔分期繳費〕。
+   要再加逃生門之前，先回頭看這兩句話。 */
 async function openInstallNext(ticket_id){
   if(!(isDeskLike())){ showToast('只有管理員或櫃台可開通分期'); return; }
   const t=await dbGet('member_tickets',ticket_id);
@@ -56595,7 +56586,7 @@ async function openInstallNext(ticket_id){
       <div><span style="color:var(--t2);">會員</span>　${m?m.name:'—'}</div>
       <div><span style="color:var(--t2);">方案</span>　${t.plan_name||'分期票券'}　·　已開通 ${unlocked}/${total} 堂</div>
       <div><span style="color:var(--t2);">進度</span>　已收到第 ${cur} 期（共 ${inst.count} 期）・未開通 ${leftN} 堂</div>
-      ${_sok?`<div><span style="color:var(--t2);">簽名</span>　第 ${_sn} 期 ${_sok.signature?'已電子簽':'走紙本'}${_sok.signed_at?`（${String(_sok.signed_at).slice(5,10).replace('-','/')}）`:''}</div>`:''}
+      ${_sok?`<div><span style="color:var(--t2);">簽名</span>　第 ${_sn} 期 已簽${_sok.signed_at?`（${String(_sok.signed_at).slice(5,10).replace('-','/')}）`:''}</div>`:''}
     </div>
     <div style="display:flex;gap:8px;margin-bottom:10px;">
       <button type="button" class="btn btn-ghost btn-sm" style="flex:1;" onclick="inxFill(${seg},${amt})">下一期（${seg} 堂・$${amt.toLocaleString()}）</button>
@@ -69302,7 +69293,7 @@ async function openContractView(id){
   const insig=_is.length?`<div style="margin-top:14px;white-space:normal;">
       <div style="font-size:11.5px;color:var(--t3);margin-bottom:6px;">分期各期簽名</div>
       ${_is.map(s=>`<div style="border:1px solid var(--line);border-radius:8px;padding:9px 11px;margin-bottom:6px;">
-        <div style="font-size:12.5px;color:var(--t2);">第 ${s.n} 期　·　${s.signature?'電子簽':(s.sign_type==='paper'?'紙本簽署':'等待會員簽名')}${s.signed_at?`　·　${String(s.signed_at).slice(0,10)}`:''}</div>
+        <div style="font-size:12.5px;color:var(--t2);">第 ${s.n} 期　·　${s.signature?'電子簽（會員手機）':'等待會員簽名'}${s.signed_at?`　·　${String(s.signed_at).slice(0,10)}`:''}</div>
         ${s.signature?`<img class="ct-sig-img" src="${s.signature}" alt="第 ${s.n} 期簽名">`:''}
       </div>`).join('')}</div>`:'';
   /* 手機端直接滿版閱讀（2026-08-03 使用者：「會員手機端的合約，因為頁面的關係
