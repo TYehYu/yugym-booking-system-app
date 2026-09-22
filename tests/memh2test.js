@@ -251,7 +251,10 @@ t('［＋］收掉舊版下方訂位表但保留狀態', /getElementById\('msb-s
 /* 0822 二修（使用者）：「多功能訓練架不用顯示」「8/22 9:00 也過期了 自主應該也不能預約」 */
 t('多功能訓練架不標（沒標就是它），只標教室與跑步機',
   /VN=\{multi:'',group:'團課教室',treadmill:'跑步機'\}/.test(add));
-t('沒有標籤就不畫空的 tag', /tag\?`<span class="cag-slot-tag">/.test(add));
+/* 2026-09-22：一個時段可能兩個場地都有空，改成「每個有空的場地各一列」
+   （使用者：「該時段團課教室跟跑步機同時顯示　分成兩列」）。
+   ⚠ 這一條守的沒變：沒有名字的場地（多功能，VN.multi 是空字串）不畫空的 tag。 */
+t('沒有名字的場地不畫空的 tag（多功能）', /const nm=VN\[vid\]\|\|''; if\(!nm\) return '';/.test(add));
 t('今天已經過去的時段要濾掉', /const _nowMin=\(date===ymd\(TODAY\)\)\?/.test(add)
   && /\.filter\(m=>_nowMin<0\|\|m>=_nowMin\)/.test(add));
 t('要按確認才前進（與快速預約同一套）',

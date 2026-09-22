@@ -116,13 +116,21 @@ ok('★★ 沿用場地按鈕那套暗化語彙，沒有另做一套',
    ⚠⚠ 挑時段有**兩支各自畫的 UI**：msbLoadSlots（slotPanelHTML 的 tagFn）與
      memh2SelfSlots（自己拼 cells，會員端 V2 走這支）。兩邊都要帶，只改一支客人看不到。
    ⚠ 算不出來時退回只寫「跑步機」，不可印出「剩 undefined 台」。 */
+/* 2026-09-22：memh2SelfSlots 那支改成「每個有空的場地各一列」
+   （使用者：「該時段團課教室跟跑步機同時顯示　分成兩列」），
+   所以標籤不再是單一個 tag 變數，而是逐一場地產生。
+   ⚠ 這一條守的沒變：跑步機那一列要帶「剩 N 台」，而且**兩支挑時段 UI 都要有**。 */
 ok('★★★ 快速預約的時段標籤帶「剩 N 台」（兩支挑時段 UI 都要有）',
-   /return \(_n==null\)\?'跑步機':`跑步機 剩 \$\{_n\} 台`;/.test(src)
-   && /const tag=\(r\.vids\[m\]==='treadmill' && _tmn!=null\) \? `\$\{_vnm\} 剩 \$\{_tmn\} 台` : _vnm;/.test(src));
+   /return \(_n==null\)\?'跑步機':`跑步機 剩 \$\{_n\} 台`/.test(src)
+   && /\$\{nm\} 剩 \$\{_tmn\} 台/.test(src));
 ok('★★ 剩餘台數在探測階段一起算好，且不多送一次請求（同一支有快取的當日佔用 RPC）',
    /const _rows=await fetchDayOccupancy\(s\.date\)\.catch\(\(\)=>\[\]\);/.test(src)
-   && /return \{free,vids,tmFree,bh:_bh\};/.test(src)
+   && /return \{free,vids,tmFree,vlist,bh:_bh\};/.test(src)
    && /改期時不把自己那一筆算進去，否則原時段會少算一台/.test(src));
+/* ⚠ 算不出來時要退回只寫「跑步機」，不可印出「剩 undefined 台」—— 兩支都要守 */
+ok('★★ 算不出台數時退回只寫場地名（不印「剩 undefined 台」）',
+   /_tmn!=null\?`\$\{nm\} 剩 \$\{_tmn\} 台`:nm/.test(src)
+   && /return \(_n==null\)\?'跑步機':/.test(src));
 
 /* 2026-09-16 使用者：「這個確認預約的視窗 來個優化建議 讓客人清楚 日期 時間 場地」。
    ⚠ 原本「類型／日期／時間」拆三列、和「使用票卡」一樣大，最該看的反而不突出。

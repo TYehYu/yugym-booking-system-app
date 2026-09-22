@@ -80,5 +80,39 @@ ok('★★ 只吃 .qs-mtop 這一支，行事曆與 msb-sheet 的時段維持單
    /只吃 \.qs-mtop 這一支；行事曆的時段面板、msb-sheet 那兩處維持單行/.test(src)
    && !/^\.cag-slot\{[^}]*flex-direction:column/m.test(src));
 
+/* ══ 2026-09-22 使用者：「該時段團課教室跟跑步機同時顯示　分成兩列」══
+   原本 vids[m] 只有「自動分配到的那一個」場地，所以 19:00 明明教室與跑步機都空著，
+   畫面只看得到教室。客人挑時段時就該知道兩種都有。
+   使用者追問「如果變成兩列　這樣空間會被壓縮嗎」——實測（375px）沒有：
+   格子內容可用高 100.3px 是固定的（列高＝時段區的 1/4），
+   兩列的內容高 82.5px、上下各剩 8.9px，時間字級維持 30px，一頁仍是 8 格。
+   ⚠ 最多兩列：VN.multi 是空字串（多功能是預設場地，刻意不標）。 */
+console.log('\n⑥ 一個時段有幾個場地有空就畫幾列（2026-09-22）');
+ok('★★★ 探測階段多算一份 vlist（每個時段哪些場地有空）',
+   /const vlist=\{\};/.test(src) && /return \{free,vids,tmFree,vlist,bh:_bh\};/.test(src));
+ok('★★★ 用的是 msbPickSlot 那三顆場地鈕同一套判準（validateBooking 帶 venue_pref）',
+   /venue_pref:vid\};\s*\n\s*return \(await validateBooking\(pb,s\.date,minToTime\(m\),60\)\) \? null : vid;/.test(src));
+ok('★★ 不自己數佔用的理由寫在原地（教室還有團課前清場那條規則）',
+   /教室還有別的規則（10\/01 起團課前 15 分鐘不排教室），/.test(src));
+ok('★★★ 只對已經確定排得進去的時段再探（free 最多 24 個），而且不多送請求',
+   /const _fm=\[\.\.\.free\];/.test(src)
+   && /這 3 倍的探測\*\*不會多送任何請求\*\*/.test(src));
+ok('★★★ 每個有空的場地各一列，沒名字的（多功能）不畫',
+   /const nm=VN\[vid\]\|\|''; if\(!nm\) return '';/.test(src)
+   && /minToTime\(m\)\}\$\{tags\}<\/button>/.test(src));
+ok('★★ 順序固定（多功能→教室→跑步機），不照自動分配的結果排',
+   /const _VIDS=\['multi','group','treadmill'\];/.test(src)
+   && /同一個時段每次打開看到的順序要一樣/.test(src));
+ok('★★★ 退路：探測失敗就退回原本那一個場地，畫面不會空掉',
+   /vlist\[m\]=vs\.length\?vs:\(vids\[m\]\?\[vids\[m\]\]:\[\]\);/.test(src)
+   && /catch\(_\)\{ \[\.\.\.free\]\.forEach\(m=>\{ vlist\[m\]=vids\[m\]\?\[vids\[m\]\]:\[\]; \}\); \}/.test(src)
+   && /const _vs=\(\(r\.vlist\|\|\{\}\)\[m\]\) \|\| \(r\.vids\[m\]\?\[r\.vids\[m\]\]:\[\]\);/.test(src));
+ok('★★ 顯示兩列不等於在這裡選場地（按下去仍走 msbPickSlot，那裡才選）',
+   /這裡顯示兩列不是「要客人在這裡選」，是讓他知道這個時段有兩種可以選/.test(src)
+   && /closeModal\(\); msbPickSlot\(t\);/.test(src));
+ok('★★★ 量過的數字寫在原地（回答「會不會被壓縮」），並標明餘裕只剩 9px',
+   /兩列的內容高 82\.5px、上下各剩 8\.9px；時間字級維持 30px、一頁仍是 8 格/.test(src)
+   && /要再加東西進這一格之前先重量一次，只剩不到 9px 的餘裕/.test(src));
+
 console.log('\n'+pass+' 通過 / '+fail+' 失敗');
 process.exit(fail?1:0);

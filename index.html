@@ -13766,8 +13766,8 @@ function tbl(s){return TABLE_ALIAS[s]||s;}
 let sb=null;
 // ── 版本號（日期+時間格式：年後兩碼+月+日.時分，例 26620.1058 = 26年6/20 10:58）──
 // 每次改版手動更新這一行即可，畫面與 title 會一起更新
-const APP_VERSION = '260921.2327';
-const APP_VERSION_LABEL = 'v260921.2327';
+const APP_VERSION = '260922.1118';
+const APP_VERSION_LABEL = 'v260922.1118';
 const CLOUD = !!(window.YUGYM_CONFIG && window.YUGYM_CONFIG.url && window.YUGYM_CONFIG.anonKey);
 if(CLOUD){ sb = supabase.createClient(window.YUGYM_CONFIG.url, window.YUGYM_CONFIG.anonKey); }
 
@@ -60810,11 +60810,25 @@ async function memh2SelfSlots(ds, until, reschedId){
        ⚠ 這一支與 msbLoadSlots 是**兩支各自畫時段的 UI**（會員端 V2 走這裡），
          兩邊都要加，只改一支客人看不到。
        ⚠ 算不出來時退回只寫「跑步機」，不要印出「剩 undefined 台」。 */
-    const _vnm=VN[r.vids[m]]||'';
+    /* 有空的場地各畫一列（2026-09-22 使用者：「該時段團課教室跟跑步機同時顯示　分成兩列」）——
+       ⚠ 最多就是兩列：VN.multi 是空字串，多功能場地刻意不標（它是預設場地，
+         標出來每一格都會多一行沒有資訊量的字）。所以列數只會是 0、1 或 2。
+       ⚠ 空間夠不夠？使用者問過「如果變成兩列　這樣空間會被壓縮嗎」——
+         實測（375px）不會：格子內容可用高 100.3px 是固定的（列高＝時段區的 1/4），
+         兩列的內容高 82.5px、上下各剩 8.9px；時間字級維持 30px、一頁仍是 8 格。
+         「跑步機 剩 1 台」寬 80.6px，在 138px 的內寬裡不折行。
+         ⚠ 要再加東西進這一格之前先重量一次，只剩不到 9px 的餘裕。
+       ⚠ 退路：vlist 沒算出來（探測失敗）就退回原本那一個 vids[m]，畫面不會空掉。
+       ⚠ 按下去仍是走 msbPickSlot，那裡三顆場地鈕讓客人自己選、沒位的變暗 ——
+         這裡顯示兩列不是「要客人在這裡選」，是讓他知道這個時段有兩種可以選。 */
     const _tmn=(r.tmFree||{})[m];
-    const tag=(r.vids[m]==='treadmill' && _tmn!=null) ? `${_vnm} 剩 ${_tmn} 台` : _vnm;
+    const _vs=((r.vlist||{})[m]) || (r.vids[m]?[r.vids[m]]:[]);
+    const tags=_vs.map(vid=>{
+      const nm=VN[vid]||''; if(!nm) return '';
+      return `<span class="cag-slot-tag">${vid==='treadmill'&&_tmn!=null?`${nm} 剩 ${_tmn} 台`:nm}</span>`;
+    }).join('');
     return `<button type="button" class="cag-slot" data-t="${minToTime(m)}" onclick="memh2SelSlot('${minToTime(m)}')">${
-      minToTime(m)}${tag?`<span class="cag-slot-tag">${tag}</span>`:''}</button>`; }).join('');
+      minToTime(m)}${tags}</button>`; }).join('');
   const _d=parseYmd(date)||new Date(TODAY);
   /* ── 視窗裡的日期列（2026-08-27 使用者轉述客人回饋）──
      「客人反應自主訓練在快速預約的時候　都要關掉視窗再選其他天再點快速預約
@@ -62161,7 +62175,35 @@ async function msbProbeFree(){
       tmFree[m]=Math.max(0, _cap-Math.min(_used,_cap));
     });
   }catch(_){}
-  return {free,vids,tmFree,bh:_bh};
+  /* 每個時段「有空的場地有哪些」（2026-09-22 使用者：「該時段團課教室跟跑步機同時顯示
+       分成兩列」）——
+     上面的 vids[m] 只有**自動分到的那一個**，所以 19:00 明明教室與跑步機都空著，
+     畫面上只看得到教室。客人挑時段時就該知道兩種都有。
+     ⚠ 沿用 msbPickSlot 那三顆場地鈕同一套判準（validateBooking 帶 venue_pref），
+       不自己數佔用 —— 教室還有別的規則（10/01 起團課前 15 分鐘不排教室），
+       自己重算一定會跟確認視窗給的答案不一致。
+     ⚠ 只對「已經確定排得進去」的時段再探（free 最多 24 個），而且 validateBooking
+       吃的是同一份當日佔用快取與表快取，所以這 3 倍的探測**不會多送任何請求**
+       （見上面那段並行探測的說明）。
+     ⚠ 順序固定照 VOPT（多功能→教室→跑步機），不照自動分配的結果排 ——
+       同一個時段每次打開看到的順序要一樣。
+     ⚠ 抓不到就退回只留自動分到的那一個，不擋預約流程。 */
+  const vlist={};
+  try{
+    const _VIDS=['multi','group','treadmill'];
+    const _fm=[...free];
+    const _pt=s.resched?s.resched.ttid:(tk?tk.ticket_type_id:probeTtid);
+    const _r=await Promise.all(_fm.map(async m=>{
+      const oks=await Promise.all(_VIDS.map(async vid=>{
+        const pb={id:s.resched?s.resched.id:null,member_id:SESSION.id,coach_id:null,
+          category:'自主訓練',ticket_type_id:_pt,venue_pref:vid};
+        return (await validateBooking(pb,s.date,minToTime(m),60)) ? null : vid;
+      }));
+      return [m, oks.filter(Boolean)];
+    }));
+    _r.forEach(([m,vs])=>{ vlist[m]=vs.length?vs:(vids[m]?[vids[m]]:[]); });
+  }catch(_){ [...free].forEach(m=>{ vlist[m]=vids[m]?[vids[m]]:[]; }); }
+  return {free,vids,tmFree,vlist,bh:_bh};
 }
 async function msbLoadSlots(){
   const s=window._msb; if(!s) return;
