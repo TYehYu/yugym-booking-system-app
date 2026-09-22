@@ -13801,8 +13801,8 @@ function tbl(s){return TABLE_ALIAS[s]||s;}
 let sb=null;
 // ── 版本號（日期+時間格式：年後兩碼+月+日.時分，例 26620.1058 = 26年6/20 10:58）──
 // 每次改版手動更新這一行即可，畫面與 title 會一起更新
-const APP_VERSION = '260922.2051';
-const APP_VERSION_LABEL = 'v260922.2051';
+const APP_VERSION = '260922.2059';
+const APP_VERSION_LABEL = 'v260922.2059';
 const CLOUD = !!(window.YUGYM_CONFIG && window.YUGYM_CONFIG.url && window.YUGYM_CONFIG.anonKey);
 if(CLOUD){ sb = supabase.createClient(window.YUGYM_CONFIG.url, window.YUGYM_CONFIG.anonKey); }
 
@@ -56571,8 +56571,16 @@ async function openInstallNext(ticket_id){
   const restAmt=(inst.amounts||[]).slice(cur).reduce((a,x)=>a+(Number(x)||0),0);
   const m=await dbGet('members',t.member_id).catch(()=>null);
   /* 第 2 期起的簽名閘門（2026-09-22，見上方說明）——
-     ⚠ 只有電子簽（remote）會被擋；紙本與現場平板一路放行。
-     ⚠ 擋在這裡而不是在收款那一步：櫃檯還沒開始算錢就知道要先請人簽。 */
+     ⚠ 擋在這裡而不是在收款那一步：櫃檯還沒開始算錢就知道要先請人簽。
+     ・電子簽（remote）→ 送到會員手機，簽完才放行
+     ・紙本（paper）　 → **不擋**，只在收款畫面上多一行提醒補簽（見下方 _paper）
+     ・其餘（undecided／沒有合約）→ 照舊直接進收款畫面
+
+   ⚠ 紙本刻意不開確認視窗（2026-09-22 我提案、使用者問「會不會多此一舉」後一起收掉）：
+     這張收款畫面本身不扣錢 —— 還要填堂數、金額、付款方式，按〔確認收款並開通〕才動，
+     誤觸只是開了一張表單。而「櫃檯自己按一下表示紙本已簽」那種註記，紙在會員手上，
+     **沒有任何證明力**，只是多一次點擊與一筆假紀錄。
+     真正有用的只有「別忘了請他補簽」這個提醒，所以做成一行字就好。 */
   const _sn=cur+1;                                   // 這次要收的是第幾期
   const _ct=await instCtOfTicket(t.id);
   if(instNeedsSign(_ct)){
@@ -56581,12 +56589,14 @@ async function openInstallNext(ticket_id){
     if(!_s.signature && _s.sign_type!=='paper') return openInstSignWait(t.id,_ct,_sn,_s,(m?m.name:''));
   }
   const _sok=_ct?instSignFind(_ct,_sn):null;
+  const _paper=!!(_ct && String(_ct.sign_type||'')==='paper');
   showModal(`<div class="modal-title">分期繳費・開通堂數</div>
     <div style="background:var(--card2);border-radius:10px;padding:14px;font-size:13.5px;line-height:1.9;margin-bottom:12px;">
       <div><span style="color:var(--t2);">會員</span>　${m?m.name:'—'}</div>
       <div><span style="color:var(--t2);">方案</span>　${t.plan_name||'分期票券'}　·　已開通 ${unlocked}/${total} 堂</div>
       <div><span style="color:var(--t2);">進度</span>　已收到第 ${cur} 期（共 ${inst.count} 期）・未開通 ${leftN} 堂</div>
       ${_sok?`<div><span style="color:var(--t2);">簽名</span>　第 ${_sn} 期 已簽${_sok.signed_at?`（${String(_sok.signed_at).slice(5,10).replace('-','/')}）`:''}</div>`:''}
+      ${_paper?`<div style="color:var(--gold);">紙本合約・記得請會員在紙本上補簽第 ${_sn} 期</div>`:''}
     </div>
     <div style="display:flex;gap:8px;margin-bottom:10px;">
       <button type="button" class="btn btn-ghost btn-sm" style="flex:1;" onclick="inxFill(${seg},${amt})">下一期（${seg} 堂・$${amt.toLocaleString()}）</button>

@@ -124,6 +124,25 @@ console.log('⑦-2 只有一條路：送到會員手機（2026-09-22 使用者�
   ok('　 為什麼沒有逃生門，寫在註解裡', /刻意\*\*沒有\*\*「現場簽」或「改用紙本」的逃生門/.test(src));
 }
 
+console.log('⑦-3 紙本：不擋，只在收款畫面多一行提醒');
+{
+  /* 2026-09-22：我本來做了一道紙本確認視窗（使用者「避免誤觸」），
+     使用者接著問「會不會多此一舉」—— 一起收掉了，理由：
+     ① 收款畫面本身不扣錢，誤觸只是開一張表單；真正動錢的是〔確認收款並開通〕
+     ② 「櫃檯按一下表示紙本已簽」那種註記，紙在會員手上，沒有證明力，只是假紀錄
+     留下這幾條反面斷言，擋著日後又把那道門加回來。 */
+  ok('★★ 紙本沒有額外的確認視窗', !/openInstPaperAsk|instPaperOk/.test(src));
+  ok('★★ openInstallNext 沒有「第二趟放行」的旗標（那是確認視窗才需要的）',
+     /async function openInstallNext\(ticket_id\)\{/.test(src) && !/_paperOk/.test(src));
+  const g=(src.match(/async function openInstallNext\(ticket_id\)\{[\s\S]*?\n\}/)||[''])[0];
+  ok('★★ 改成收款畫面上的一行金色提醒',
+     /const _paper=!!\(_ct && String\(_ct\.sign_type\|\|''\)==='paper'\);/.test(g)
+     && /\$\{_paper\?`<div style="color:var\(--gold\);">紙本合約・記得請會員在紙本上補簽第 \$\{_sn\} 期<\/div>`:''\}/.test(g));
+  ok('★ 只有紙本會出現那一行（電子與沒合約的都不會）',
+     /String\(_ct\.sign_type\|\|''\)==='paper'/.test(g));
+  ok('　 為什麼收掉那道門，寫在註解裡', /誤觸只是開了一張表單/.test(src));
+}
+
 console.log('⑧ 送出待簽只動合約，不碰錢也不開通');
 {
   const f=(src.match(/async function instSignRequest\([\s\S]*?\n\}/)||[''])[0];
