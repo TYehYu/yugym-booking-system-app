@@ -13801,8 +13801,8 @@ function tbl(s){return TABLE_ALIAS[s]||s;}
 let sb=null;
 // ── 版本號（日期+時間格式：年後兩碼+月+日.時分，例 26620.1058 = 26年6/20 10:58）──
 // 每次改版手動更新這一行即可，畫面與 title 會一起更新
-const APP_VERSION = '260922.2011';
-const APP_VERSION_LABEL = 'v260922.2011';
+const APP_VERSION = '260922.2032';
+const APP_VERSION_LABEL = 'v260922.2032';
 const CLOUD = !!(window.YUGYM_CONFIG && window.YUGYM_CONFIG.url && window.YUGYM_CONFIG.anonKey);
 if(CLOUD){ sb = supabase.createClient(window.YUGYM_CONFIG.url, window.YUGYM_CONFIG.anonKey); }
 
@@ -13924,7 +13924,12 @@ const DB_CACHE_TTL_BY={ticket_types:300000,course_plans:300000,exercises:300000,
 const LEAN_DROP={ bookings:['is_substitute','original_coach_id','space_id','resource_id',
   'checkin_source','actor_user_id','operator_employee_id','makeup_status','import_ref',
   'makeup_date','makeup_time','reward_issued_at','reward_type'],
-  contracts:['body_snapshot','fill_snapshot','signature'] };
+  /* installment_signs（2026-09-22 新增欄位：分期第 2 期起的簽名）——
+     裡面放的是 base64 簽名圖，與 signature 同一個理由要精簡掉
+     （contracts 56 列就有 1.1MB 幾乎全是簽名）。
+     ⚠ 待簽清單只需要知道「有沒有未簽的」，不需要簽名圖本身；
+       真的要看圖的地方走單筆 dbGet（那支是 select('*')，拿得到）。 */
+  contracts:['body_snapshot','fill_snapshot','signature','installment_signs'] };
 const _leanSel=new Map();          // 實體表名 → 精簡 select 字串（本 session 學到才有）
 function leanLearn(store,row){     // 從任何一筆完整資料學欄位（dbGetAll 首抓／dbGet 都會餵）
   const key=tbl(store), drop=LEAN_DROP[key];
@@ -53313,14 +53318,21 @@ async function acctQuickNotifToggle(sw){
   }
 }
 /* 會員手機端簽名（2026-07-28）：讀自己的待簽合約 → 全文＋簽名板 → RPC 寫回 */
-async function memSignContract(id){
+/* n（2026-09-22）：>0 代表這是**分期第 n 期的補簽**，不是整份合約的第一次簽。
+   差別只有三處：擋門條件、標題、送出走哪一支 RPC；簽名板與版面完全共用。 */
+async function memSignContract(id, n){
+  const _n=Number(n)||0;
   /* 預覽用的範例合約（2026-08-24 使用者指示：「要測試到跳出簽名欄」）——
      角色預覽抓不到自己的合約，這一整條路平常在預覽裡走不完。給一份記憶體裡的假合約，
      簽名板、放大簽、清除重簽全部照真的跑；只有最後那顆「完成簽署」換成吐司，
      不打 fn_member_sign_contract（那個 id 根本不存在，打了只會拿到錯誤）。 */
   const _dc=(id==='DEMO-CT') ? memCtDemoObj() : null;
   const c=_dc || await dbGet('contracts',id).catch(()=>null);
-  if(!c||c.signed_at){ showToast('找不到待簽合約'); navTo(CUR_PAGE); return; }
+  if(!c){ showToast('找不到待簽合約'); navTo(CUR_PAGE); return; }
+  /* ⚠ 分期補簽時 signed_at 本來就有值（整份早簽完了），不能拿它當擋門條件。 */
+  if(_n){ const _s=instSignFind(c,_n);
+    if(!_s || _s.signature){ showToast('這一期不需要簽名'); navTo(CUR_PAGE); return; } }
+  else if(c.signed_at){ showToast('找不到待簽合約'); navTo(CUR_PAGE); return; }
   /* 簽署改滿版（2026-08-03 使用者回報：「簽名的時候會一直拖拉到畫面」「從票券查看
      合約也會超出畫面，幫我調整合約介面」）—— 原本是彈窗裡 38vh 的小框＋簽名板，
      手機上整個彈窗比螢幕高、簽名時又容易把彈窗底下的頁面拖著跑。改用滿版閱讀器殼：
@@ -53329,12 +53341,12 @@ async function memSignContract(id){
   host=document.createElement('div'); host.id='contract-reader'; document.body.appendChild(host);
   host.innerHTML=`<div class="cr-backdrop"></div>
     <div class="cr-panel">
-      <div class="cr-head"><div class="cr-title">合約簽署</div>
+      <div class="cr-head"><div class="cr-title">${_n?`合約簽署・第 ${_n} 期`:'合約簽署'}</div>
         <button class="cr-close" onclick="closeContractReader()">✕</button></div>
       ${/* 2026-08-08 使用者指示：購買內容用白底。原本這裡只有一行「方案・N 堂・$X」，
            分期表、每堂費用、有效期限、付款方式全看不到 —— 客人在手機上簽字時，
            看不到自己簽的標的。改用與後台檢視同一份 fill_snapshot（簽約當下就存好了）。 */''}
-      <div class="cr-body">${c.fill_snapshot
+      <div class="cr-body">${_n?`<div style="background:#fdf6e6;border:1px solid #e6d4a6;border-radius:10px;padding:11px 13px;font-size:13.5px;color:#7a5c14;line-height:1.8;margin-bottom:12px;white-space:normal;">這是<b>第 ${_n} 期</b>的簽名。合約內容與第一次簽的同一份，簽完櫃檯才會幫你開通後面的堂數。</div>`:''}${c.fill_snapshot
         ? `<div class="ct-fill-view">${c.fill_snapshot}</div>`
         : `<div style="white-space:normal;font-size:12.5px;color:var(--t2);margin-bottom:10px;">${c.plan_name||''}　·　${c.sessions||0} 堂　·　$${(Number(c.amount)||0).toLocaleString()}</div>`
         }${ctBodyHTML(c.body_snapshot)}</div>
@@ -53350,19 +53362,27 @@ async function memSignContract(id){
         <div class="ct-sign-bar"><span>點簽名區可放大簽署</span><button type="button" class="ct-sign-clear" onclick="memSignClear()">清除重簽</button></div>
         <div style="display:flex;gap:10px;margin-top:10px;">
           <button class="btn btn-ghost" style="flex:1;padding:12px;" onclick="closeContractReader()">稍後再簽</button>
-          <button class="btn btn-green" style="flex:1.6;padding:12px;font-size:15px;" onclick="${_dc?`closeContractReader();showToast('這是預覽用的範例合約，真的會員按下去才會送出簽名',5000)`:`memSignContractDo('${id}')`}">完成簽署</button>
+          <button class="btn btn-green" style="flex:1.6;padding:12px;font-size:15px;" onclick="${_dc?`closeContractReader();showToast('這是預覽用的範例合約，真的會員按下去才會送出簽名',5000)`:`memSignContractDo('${id}'${_n?','+_n:''})`}">完成簽署</button>
         </div>
       </div>
     </div>`;
   setTimeout(signPadInit,60);
 }
-async function memSignContractDo(id){
+async function memSignContractDo(id, n){
   if(!window._signInk){ showToast('請先在簽名區簽名'); return; }
   const sig=(document.getElementById('ct-sign')||{toDataURL:()=>null}).toDataURL('image/png');
+  const _n=Number(n)||0;
   try{
-    const {data,error}=await sb.rpc('fn_member_sign_contract',{p_contract_id:id,p_signature:sig});
+    /* 分期補簽走另一支 RPC（2026-09-22）：只把簽名寫進 installment_signs 的那一格，
+       ⚠ 刻意不在 SQL 裡開通堂數 —— 開通（installment.current／unlocked_sessions／
+         回補分期保留預約）整套住在前端 _confirmInstallNext，寫第二份就會分岔。 */
+    const {data,error}= _n
+      ? await sb.rpc('fn_member_sign_installment',{p_contract_id:id,p_n:_n,p_signature:sig})
+      : await sb.rpc('fn_member_sign_contract',{p_contract_id:id,p_signature:sig});
     if(error||!(data&&data.ok)){ showToast('簽署失敗：'+((data&&data.error_code)||error&&error.message||'請稍後再試')); return; }
     dbCacheClear(['contracts']);
+    if(_n){ closeContractReader(); closeModal();
+      showToast(`第 ${_n} 期已完成簽署，請告知櫃檯`,5000); navTo(CUR_PAGE); return; }
     closeContractReader(); closeModal(); showToast('合約已完成簽署，謝謝！'); navTo(CUR_PAGE);
     /* 連簽（2026-08-18 陳秀蘭案例：一次簽兩張，第二張找不到簽名入口）——
        簽完一份，還有待簽的就直接問要不要接著簽，不必回頁面自己找。 */
@@ -56445,6 +56465,104 @@ async function doSaveTicketShare(){
   _tkShareBack(st.back);
  }catch(e){ console.error('共享設定失敗:',e); showToast('儲存失敗：'+(e&&e.message||e)); }
 }
+/* ══ 分期第 2 期起的簽名（2026-09-22）══════════════════════════════════════════
+   使用者：「今天黃柏瑜要收第二期　應該要讓他簽第二次」
+   定版（同日指示）：「紙本第二期還是在紙本　就不用待簽　電子要等待簽才開通」
+
+   做法（B 案，使用者選的）：不另開一份合約，在**原合約上補一格簽名欄**：
+     contracts.installment_signs = [{n, sign_type, requested_at, requested_by,
+                                     amount, signature, signed_at, by}]
+   ⚠ 簽名圖很大，那一欄放在 LEAN_DROP 裡（列表讀取不搬）。所以「有沒有人在等簽」
+     另外用輕量欄位 `contracts.pending_sign_n` 表示 —— 會員端的票券清單走 dbGetAll，
+     只有這個欄位讀得到。兩者由 fn_member_sign_installment 一起維護。
+   ⚠ 只擋 sign_type='remote'（會員自己在手機上簽的那種）。紙本與現場平板照舊放行 ——
+     那兩種櫃檯手上就有客人，沒有「等」這件事。
+   ⚠ 開通堂數／補綁分期保留課那一整套完全不動：簽名只是閘門，
+     收款與開通仍然是櫃檯按下去的同一個動作。 */
+function instSignsOf(c){ const a=c&&c.installment_signs; return Array.isArray(a)?a:[]; }
+function instSignFind(c,n){ return instSignsOf(c).find(x=>x&&Number(x.n)===Number(n))||null; }
+function instNeedsSign(c){ return !!(c && String(c.sign_type||'')==='remote'); }
+/* ⚠ 一定要用單筆 dbGet 補一次：installment_signs 在 LEAN_DROP 裡，dbGetAll 拿不到。 */
+async function instCtOfTicket(ticket_id){
+  try{
+    const hit=(await dbGetAll('contracts').catch(()=>[])).filter(c=>c&&c.ticket_id===ticket_id);
+    if(!hit.length) return null;
+    return await dbGet('contracts',hit[0].id).catch(()=>null);
+  }catch(_){ return null; }
+}
+/* 第 N 期還沒送出待簽 → 先問要走哪一種（2026-09-22）。
+   紙本那顆是逃生門：客人本來就站在櫃檯前面，不該被自己的電子合約擋住。 */
+function openInstSignAsk(ticket_id,c,n,seg,amt,memName){
+  showModal(`<div class="modal-title">第 ${n} 期・要先請會員簽名</div>
+    <div style="background:var(--card2);border-radius:10px;padding:14px;font-size:13.5px;line-height:1.9;margin-bottom:12px;">
+      <div><span style="color:var(--t2);">會員</span>　${memName||'—'}</div>
+      <div><span style="color:var(--t2);">合約</span>　${c.plan_name||'課程合約'}　·　電子簽（會員手機）</div>
+      <div><span style="color:var(--t2);">本期</span>　${seg} 堂　·　$${(Number(amt)||0).toLocaleString()}</div>
+    </div>
+    <div style="background:#fdf6e6;border:1px solid #e6d4a6;border-radius:10px;padding:11px 13px;font-size:13px;color:#7a5c14;line-height:1.75;margin-bottom:10px;">
+      送出後會員的「我的票券」上會出現簽名欄；<b>會員簽完，你再按一次〔分期繳費〕就能收款開通</b>。
+    </div>
+    <div style="font-size:12px;color:var(--t3);line-height:1.85;margin-bottom:4px;">
+      ・第 1 期的簽名不受影響，這是另外補的一格<br>
+      ・送出不會扣款，也不會先開通堂數<br>
+      ・會員人就在現場的話，直接走紙本比較快
+    </div>
+    <div class="modal-foot">
+      <button class="btn btn-ghost" onclick="closeModal()">取消</button>
+      <button class="btn btn-ghost" onclick="instSignPaper('${ticket_id}','${c.id}',${n})">會員在現場・用紙本</button>
+      <button class="btn btn-green" onclick="instSignRequest('${ticket_id}','${c.id}',${n},${Number(amt)||0})">送出待簽</button>
+    </div>`);
+}
+/* 已送出、還沒簽回 */
+function openInstSignWait(ticket_id,c,n,s,memName){
+  const at=String(s&&s.requested_at||'').replace('T',' ').slice(5,16).replace('-','/');
+  showModal(`<div class="modal-title">等待會員簽名</div>
+    <div style="background:var(--card2);border-radius:10px;padding:14px;font-size:13.5px;line-height:1.9;margin-bottom:12px;">
+      <div><span style="color:var(--t2);">會員</span>　${memName||'—'}</div>
+      <div><span style="color:var(--t2);">進度</span>　第 ${n} 期的簽名已送出${at?`（${at}）`:''}，會員還沒簽</div>
+    </div>
+    <div style="background:#fdf6e6;border:1px solid #e6d4a6;border-radius:10px;padding:11px 13px;font-size:13px;color:#7a5c14;line-height:1.75;margin-bottom:10px;">
+      <b>會員簽完之後，回到這裡再按一次〔分期繳費〕</b>就能收款並開通堂數。
+    </div>
+    <div style="font-size:12px;color:var(--t3);line-height:1.85;margin-bottom:4px;">
+      ・會員在「我的票券」的這張票上點簽名欄即可<br>
+      ・堂數尚未開通，目前的可用堂數不變
+    </div>
+    <div class="modal-foot">
+      <button class="btn btn-ghost" onclick="closeModal()">關閉</button>
+      <button class="btn btn-ghost" onclick="instSignPaper('${ticket_id}','${c.id}',${n})">會員在現場・改用紙本</button>
+    </div>`);
+}
+/* 送出待簽：只寫合約，不碰票券、不收款。 */
+async function instSignRequest(ticket_id,contract_id,n,amt){
+  if(!(isDeskLike())) return;
+  try{
+    const c=await dbGet('contracts',contract_id); if(!c) throw new Error('找不到合約');
+    const arr=instSignsOf(c).filter(x=>x&&Number(x.n)!==Number(n));
+    arr.push({n:Number(n), sign_type:'remote', requested_at:new Date().toISOString(),
+              requested_by:SESSION.name||'', amount:Number(amt)||0, signature:null, signed_at:null});
+    c.installment_signs=arr.sort((a,b)=>(a.n||0)-(b.n||0));
+    c.pending_sign_n=Number(n);
+    await dbPut('contracts',c);
+    dbCacheClear(['contracts']);
+    closeModal(); showToast(`已送出第 ${n} 期簽名，會員手機上就看得到`,4000);
+  }catch(e){ showToast('送出失敗：'+((e&&e.message)||e),5000); }
+}
+/* 逃生門：這一期改走紙本（記下事實，不擋開通，也不改整份合約的簽署方式）。 */
+async function instSignPaper(ticket_id,contract_id,n){
+  if(!(isDeskLike())) return;
+  try{
+    const c=await dbGet('contracts',contract_id); if(!c) throw new Error('找不到合約');
+    const arr=instSignsOf(c).filter(x=>x&&Number(x.n)!==Number(n));
+    arr.push({n:Number(n), sign_type:'paper', signed_at:new Date().toISOString(), by:SESSION.name||''});
+    c.installment_signs=arr.sort((a,b)=>(a.n||0)-(b.n||0));
+    if(Number(c.pending_sign_n)===Number(n)) c.pending_sign_n=null;
+    await dbPut('contracts',c);
+    dbCacheClear(['contracts']);
+    closeModal(); showToast(`第 ${n} 期改為紙本簽署，記得請會員在紙本上簽名`,4500);
+    openInstallNext(ticket_id);
+  }catch(e){ showToast('設定失敗：'+((e&&e.message)||e),5000); }
+}
 async function openInstallNext(ticket_id){
   if(!(isDeskLike())){ showToast('只有管理員或櫃台可開通分期'); return; }
   const t=await dbGet('member_tickets',ticket_id);
@@ -56461,11 +56579,23 @@ async function openInstallNext(ticket_id){
   const leftN=Math.max(0,total-unlocked);
   const restAmt=(inst.amounts||[]).slice(cur).reduce((a,x)=>a+(Number(x)||0),0);
   const m=await dbGet('members',t.member_id).catch(()=>null);
+  /* 第 2 期起的簽名閘門（2026-09-22，見上方說明）——
+     ⚠ 只有電子簽（remote）會被擋；紙本與現場平板一路放行。
+     ⚠ 擋在這裡而不是在收款那一步：櫃檯還沒開始算錢就知道要先請人簽。 */
+  const _sn=cur+1;                                   // 這次要收的是第幾期
+  const _ct=await instCtOfTicket(t.id);
+  if(instNeedsSign(_ct)){
+    const _s=instSignFind(_ct,_sn);
+    if(!_s) return openInstSignAsk(t.id,_ct,_sn,(seg||leftN),amt,(m?m.name:''));
+    if(!_s.signature && _s.sign_type!=='paper') return openInstSignWait(t.id,_ct,_sn,_s,(m?m.name:''));
+  }
+  const _sok=_ct?instSignFind(_ct,_sn):null;
   showModal(`<div class="modal-title">分期繳費・開通堂數</div>
     <div style="background:var(--card2);border-radius:10px;padding:14px;font-size:13.5px;line-height:1.9;margin-bottom:12px;">
       <div><span style="color:var(--t2);">會員</span>　${m?m.name:'—'}</div>
       <div><span style="color:var(--t2);">方案</span>　${t.plan_name||'分期票券'}　·　已開通 ${unlocked}/${total} 堂</div>
       <div><span style="color:var(--t2);">進度</span>　已收到第 ${cur} 期（共 ${inst.count} 期）・未開通 ${leftN} 堂</div>
+      ${_sok?`<div><span style="color:var(--t2);">簽名</span>　第 ${_sn} 期 ${_sok.signature?'已電子簽':'走紙本'}${_sok.signed_at?`（${String(_sok.signed_at).slice(5,10).replace('-','/')}）`:''}</div>`:''}
     </div>
     <div style="display:flex;gap:8px;margin-bottom:10px;">
       <button type="button" class="btn btn-ghost btn-sm" style="flex:1;" onclick="inxFill(${seg},${amt})">下一期（${seg} 堂・$${amt.toLocaleString()}）</button>
@@ -65052,6 +65182,11 @@ PAGES.mem_tickets=async function(){
      只認 sign_type='remote'（會員自己在手機上簽的那種）；紙本與現場電子簽不是會員的事。 */
   window._ctSignByTicket=Object.fromEntries(window._memContracts
     .filter(c=>c.ticket_id && c.sign_type==='remote' && !c.signed_at).map(c=>[c.ticket_id,c.id]));
+  /* 分期第 2 期起的補簽（2026-09-22）——整份合約早就簽完了，但這一期要再簽一次。
+     ⚠ 判斷用輕量欄位 pending_sign_n：簽名本體 installment_signs 在 LEAN_DROP 裡，
+       這一頁走 dbGetAll，撈不到那一欄（見 openInstallNext 上方說明）。 */
+  window._ctInstSignByTicket=Object.fromEntries(window._memContracts
+    .filter(c=>c.ticket_id && c.pending_sign_n).map(c=>[c.ticket_id,{id:c.id,n:Number(c.pending_sign_n)}]));
   window._ttCache=types;
   const typeMap=Object.fromEntries(types.map(t=>[t.id,t]));
   /* 2026-07-31 使用者定案：這一頁不再自己算票券，全部從票券夾拿（見 buildWallet）。
@@ -65319,9 +65454,15 @@ function renderMemTickets(){
             <div class="mck-v2-use" title="已銷課堂數／總堂數"><b>${usedCnt}</b><span>/${total}</span></div>
           </div>
           ${(()=>{ const _cid=(window._ctSignByTicket||{})[t.id];
-             return _cid?`<button class="mck-signpad" onclick="event.stopPropagation();memSignContract('${_cid}')">
+             if(_cid) return `<button class="mck-signpad" onclick="event.stopPropagation();memSignContract('${_cid}')">
                <span class="mck-signpad-ic">✎</span>
                <span class="mck-signpad-tx"><b>這張票券的合約還沒簽名</b><i>點一下開啟合約並簽名</i></span>
+               <span class="mck-signpad-go">簽名 ›</span></button>`;
+             /* 分期補簽（2026-09-22）：同一顆簽名欄，字換成第幾期。 */
+             const _in=(window._ctInstSignByTicket||{})[t.id];
+             return _in?`<button class="mck-signpad" onclick="event.stopPropagation();memSignContract('${_in.id}',${_in.n})">
+               <span class="mck-signpad-ic">✎</span>
+               <span class="mck-signpad-tx"><b>第 ${_in.n} 期要再簽一次名</b><i>簽完櫃檯才能幫你開通後面的堂數</i></span>
                <span class="mck-signpad-go">簽名 ›</span></button>`:''; })()}
           <div class="mck-dots2 mck-dots6">${ticketTokens(t,_bksC,typeMap,usedCnt,null,SESSION.id,_sl.selfBk)}</div>
           ${(t.installment && t.unlocked_sessions!=null && t.unlocked_sessions<total)?`<div class="mck-install">分期方案・目前開通 <b>${t.unlocked_sessions}</b> / ${total} 堂　·　部分堂數需繳下一期後開通</div>`:''}
@@ -65478,11 +65619,13 @@ function openMemContracts(){
   showModal(`<div class="modal-title">我的合約</div>
     ${/* 未簽的遠端合約點下去要進「簽署」而不是唯讀檢視（2026-08-18 陳秀蘭案例：
          連簽兩張，第二張從這裡點進去是唯讀畫面、沒有簽名區，被迫重新登入等蓋版提醒）。 */''}
-    ${list.length?list.map(c=>`<div class="ctl-row" onclick="${(c.sign_type==='remote'&&!c.signed_at)?'closeModal();memSignContract':'openContractView'}('${c.id}')">
+    ${/* 分期第 2 期起的補簽（2026-09-22）：整份已簽、但有一期在等，也要點得進簽名板。 */''}
+    ${list.length?list.map(c=>{ const _p0=(c.sign_type==='remote'&&!c.signed_at), _pn=(!_p0&&c.pending_sign_n)?Number(c.pending_sign_n):0;
+      return `<div class="ctl-row" onclick="${_p0?`closeModal();memSignContract('${c.id}')`:(_pn?`closeModal();memSignContract('${c.id}',${_pn})`:`openContractView('${c.id}')`)}">
       <div class="ctl-row-b"><div class="ctl-row-t">${c.plan_name||'課程合約'}</div>
-        <span class="ctl-row-s">${c.signed_at?`簽約日 ${c.signed_at.slice(0,10)}`:'尚未簽名・點此簽署'}　·　${c.sessions||0} 堂　·　$${(Number(c.amount)||0).toLocaleString()}</span></div>
-      <span class="ctl-row-tag ${c.sign_type==='electronic'?'ct-tag-e':'ct-tag-p'}" ${(c.sign_type==='remote'&&!c.signed_at)?'style="background:#fbe4e2;color:#b5372e;"':''}>${ctSignLabel(c,true)}</span>
-    </div>`).join(''):'<div class="empty" style="padding:22px;"><div class="em-t">尚無合約紀錄</div></div>'}
+        <span class="ctl-row-s">${c.signed_at?`簽約日 ${c.signed_at.slice(0,10)}`:'尚未簽名・點此簽署'}　·　${c.sessions||0} 堂　·　$${(Number(c.amount)||0).toLocaleString()}${_pn?`　·　<b style="color:#b5372e;">第 ${_pn} 期待簽・點此簽署</b>`:''}</span></div>
+      <span class="ctl-row-tag ${c.sign_type==='electronic'?'ct-tag-e':'ct-tag-p'}" ${(_p0||_pn)?'style="background:#fbe4e2;color:#b5372e;"':''}>${_pn?`第 ${_pn} 期待簽`:ctSignLabel(c,true)}</span>
+    </div>`; }).join(''):'<div class="empty" style="padding:22px;"><div class="em-t">尚無合約紀錄</div></div>'}
     <div class="modal-foot"><button class="btn btn-ghost" onclick="closeModal()">關閉</button></div>`);
 }
 
@@ -69153,6 +69296,15 @@ async function openContractView(id){
   const body=ctBodyHTML(c.body_snapshot);
   const sig=c.signature?`<div style="margin-top:10px;"><div style="font-size:11.5px;color:var(--t3);margin-bottom:4px;">會員簽名</div>
       <img class="ct-sig-img" src="${c.signature}" alt="簽名"></div>`:'';
+  /* 分期第 2 期起的簽名（2026-09-22）：一期一格，走紙本的那幾期也列出來
+     （只記事實、沒有圖 —— 紙本的簽名在紙上，系統不假裝有）。 */
+  const _is=instSignsOf(c).slice().sort((a,b)=>(Number(a.n)||0)-(Number(b.n)||0));
+  const insig=_is.length?`<div style="margin-top:14px;white-space:normal;">
+      <div style="font-size:11.5px;color:var(--t3);margin-bottom:6px;">分期各期簽名</div>
+      ${_is.map(s=>`<div style="border:1px solid var(--line);border-radius:8px;padding:9px 11px;margin-bottom:6px;">
+        <div style="font-size:12.5px;color:var(--t2);">第 ${s.n} 期　·　${s.signature?'電子簽':(s.sign_type==='paper'?'紙本簽署':'等待會員簽名')}${s.signed_at?`　·　${String(s.signed_at).slice(0,10)}`:''}</div>
+        ${s.signature?`<img class="ct-sig-img" src="${s.signature}" alt="第 ${s.n} 期簽名">`:''}
+      </div>`).join('')}</div>`:'';
   /* 手機端直接滿版閱讀（2026-08-03 使用者：「會員手機端的合約，因為頁面的關係
      沒辦法一次閱讀」）—— 原本是彈窗裡一個 32vh 的小框自己捲，手機上等於在
      兩層捲軸裡讀合約。滿版閱讀器一路捲到底。桌機維持彈窗，另給「放大閱讀」。 */
@@ -69160,7 +69312,7 @@ async function openContractView(id){
      桌機也不再用一般彈窗（購買內容表被右緣裁掉），直接進放大閱讀器；
      列印鈕放在閱讀器底部。原「放大閱讀」按鈕退場（本體就是放大版）。 */
   openContractReaderWith(c.plan_name||'合約',
-    `${meta}${fill}${body}${sig?'<div style="white-space:normal;">'+sig+'</div>':''}`,
+    `${meta}${fill}${body}${sig?'<div style="white-space:normal;">'+sig+'</div>':''}${insig}`,
     null,
     isDeskLike()?`<button class="btn btn-green" style="flex:1;padding:14px;font-size:15px;" onclick="ctViewPrint('${c.id}')">下載 PDF / 列印</button>`:null);
 }

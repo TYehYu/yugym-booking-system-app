@@ -20,7 +20,7 @@ const ok=(n,c,x)=>{ if(c){pass++;console.log('  ✓ '+n);} else {fail++;console.
 
 console.log('① 簽署改滿版');
 ok('★ memSignContract 用滿版殼（cr-panel），不再是彈窗',
-   /async function memSignContract\(id\)\{[\s\S]{0,1200}host\.id='contract-reader'/.test(src)
+   /async function memSignContract\(id, n\)\{[\s\S]{0,1600}host\.id='contract-reader'/   /* 2026-09-22 多了期數參數 */.test(src)
    && !/showModal\(`<div class="modal-title">合約簽署<\/div>/.test(src));
 /* 2026-08-11 使用者回報「簽名欄太小」：小框改成純預覽（canvas pointer-events:none），
    點整塊開全螢幕橫向簽名板（signFullOpen），簽完縮繪回同一顆 #ct-sign ——

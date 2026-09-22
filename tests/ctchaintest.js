@@ -6,8 +6,14 @@ const src=fs.readFileSync(process.env.HOME+'/Projects/yugym-booking-system-app/i
 let pass=0,fail=0;
 const ok=(n,c)=>{ if(c){pass++;console.log('  ✓ '+n);} else {fail++;console.log('  ✗ '+n);} };
 
+/* 2026-09-22：清單那一行多了「分期第 N 期待簽」的分支（_p0／_pn），
+   原本那個一行三元式已經拆開，改驗三條路都在。 */
 ok('① 我的合約清單：未簽遠端合約 → 簽署畫面（不是唯讀檢視）',
-  src.includes(`onclick="\${(c.sign_type==='remote'&&!c.signed_at)?'closeModal();memSignContract':'openContractView'}('\${c.id}')"`));
+  /const _p0=\(c\.sign_type==='remote'&&!c\.signed_at\)/.test(src)
+  && src.includes(`_p0?\`closeModal();memSignContract('\${c.id}')\``)
+  && src.includes(`:\`openContractView('\${c.id}')\``));
+ok('　　分期第 N 期待簽也點得進簽名板（2026-09-22）',
+  src.includes(`closeModal();memSignContract('\${c.id}',\${_pn})`));
 ok('　　清單副標提示「點此簽署」', src.includes('尚未簽名・點此簽署'));
 ok('② 簽完一份 → 還有待簽就跳「繼續簽署」',
   /還有 \$\{rest\.length\} 份合約待簽名/.test(src) && /memSignContract\('\$\{rest\[0\]\.id\}'\)/.test(src));

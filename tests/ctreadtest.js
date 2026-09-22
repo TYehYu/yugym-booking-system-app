@@ -39,10 +39,11 @@ ok('　　為什麼要補，寫在原地', /客人要簽名了，畫面上卻看
 
 console.log('\n③ B 會員手機簽署：同一份購買內容表');
 {
-  const i=src.indexOf('async function memSignContract(id)');
+  const i=src.indexOf('async function memSignContract(id, n)');   // 2026-09-22 多了期數參數
   const box=src.slice(i, i+2600);
+  /* 2026-09-22：cr-body 開頭多了分期補簽的說明條，快照那一段接在它後面。 */
   ok('★★ 有 fill_snapshot 就顯示白底購買內容表',
-     /\$\{c\.fill_snapshot\n\s*\? `<div class="ct-fill-view">\$\{c\.fill_snapshot\}<\/div>`/.test(box));
+     /\}\$\{c\.fill_snapshot\n\s*\? `<div class="ct-fill-view">\$\{c\.fill_snapshot\}<\/div>`/.test(box));
   ok('★ 舊合約沒有快照時退回原本那一行摘要（不會變空白）',
      /: `<div style="white-space:normal;font-size:12\.5px;color:var\(--t2\);margin-bottom:10px;">\$\{c\.plan_name\|\|''\}/.test(box));
   /* 2026-09-07：內文改走 ctBodyHTML（逐行區塊＋懸掛縮排） */

@@ -608,8 +608,10 @@ console.log('\n⑤ 紙本合約顯示「已使用紙本簽名」');
   eq('★★ 電子未簽 → 講清楚在等誰', L({sign_type:'remote',signed_at:null}), '電子合約・等會員簽名');
   eq('　　列表用短標籤（空間只夠四個字）', L({sign_type:'paper'},true), '紙本已簽');
   eq('　　舊的現場平板簽名', L({sign_type:'electronic',signed_at:'x'}), '已使用電子簽名（現場平板）');
+  /* 2026-09-22：會員端那一份的短標籤多了「第 N 期待簽」的分支，
+     所以裸的 `${ctSignLabel(c,true)}</span>` 只剩後台那一處。 */
   ok('★ 合約列表與檢視都改吃同一支',
-     (src.match(/\$\{ctSignLabel\(c,true\)\}<\/span>/g)||[]).length===2
+     (src.match(/\$\{(_pn\?`第 \$\{_pn\} 期待簽`:)?ctSignLabel\(c,true\)\}<\/span>/g)||[]).length===2
      && /簽約日 \$\{\(c\.signed_at\|\|''\)\.slice\(0,10\)\}　·　\$\{ctSignLabel\(c\)\}/.test(src));
   ok('　　為什麼要明白寫出來（紙本沒有簽名圖檔可存）',
      /紙本沒有簽名圖檔可存（簽在紙上），所以系統要明白寫出「這一份是紙本簽的」，/.test(src));
@@ -785,7 +787,7 @@ console.log('\n預覽會員視角：待簽名票券的範例卡');
      && /body_snapshot:\(typeof CONTRACT_TEXT!=='undefined'\)\?CONTRACT_TEXT:''/.test(src)
      && /fill=contractFillBlockHTML\(\{name:'（範例）王小明'/.test(src));
   ok('★★ 「完成簽署」不打 fn_member_sign_contract（那個 id 不存在，打了只會拿到錯誤）',
-     /\$\{_dc\?`closeContractReader\(\);showToast\('這是預覽用的範例合約，真的會員按下去才會送出簽名',5000\)`:`memSignContractDo\('\$\{id\}'\)`\}/.test(src));
+     /\$\{_dc\?`closeContractReader\(\);showToast\('這是預覽用的範例合約，真的會員按下去才會送出簽名',5000\)`:`memSignContractDo\('\$\{id\}'\$\{_n\?','\+_n:''\}\)`\}/.test(src));
   ok('★ 有範例卡時不要同時出現「目前沒有票券」空狀態',
      /usable\.length===0&&inactive\.length===0&&pendCt\.length===0&&!_ctDemo/.test(R));
   ok('　　範例卡接在真卡後面（真的有就先看真的）', /pendCards\+demoCard\+/.test(R));

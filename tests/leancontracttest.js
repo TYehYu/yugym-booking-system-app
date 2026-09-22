@@ -22,11 +22,17 @@ console.log('① 清單讀取不搬合約全文與簽名圖');
 {
   const m=/contracts:\['([^\]]*)'\]/.exec(src);
   ok('★ LEAN_DROP 有 contracts 這一組', !!m);
-  eq('★★ 三個重欄位都在', m[1].split("','"), ['body_snapshot','fill_snapshot','signature']);
+  /* 2026-09-22：加了 installment_signs（分期第 2 期起的簽名，一樣是 base64 圖）。
+     ⚠ 待簽清單只需要知道「有沒有未簽的」，不需要簽名圖本身；
+       真的要看圖的地方走單筆 dbGet（那支是 select('*')）。 */
+  eq('★★ 四個重欄位都在', m[1].split("','"),
+     ['body_snapshot','fill_snapshot','signature','installment_signs']);
   /* 0823：bookings 那一組從 9 欄加到 13 欄（追加 4 個只寫不讀的），contracts 這一組沒被動到
      —— 兩組的理由不同，這支測試守的是 contracts 那一組。 */
   ok('★ contracts 那一組沒被 bookings 的異動波及',
-     /contracts:\['body_snapshot','fill_snapshot','signature'\] \};/.test(src));
+     /contracts:\['body_snapshot','fill_snapshot','signature','installment_signs'\] \};/.test(src));
+  ok('★★ 新欄位一加就要進來（簽名圖不進列表讀取）',
+     /installment_signs（2026-09-22 新增欄位：分期第 2 期起的簽名）/.test(src));
   ok('　　bookings 那一組維持原本九欄＋0823 追加的四個只寫不讀',
      /bookings:\['is_substitute','original_coach_id','space_id','resource_id',\n\s*'checkin_source','actor_user_id','operator_employee_id','makeup_status','import_ref',\n\s*'makeup_date','makeup_time','reward_issued_at','reward_type'\]/.test(src));
   ok('★★ 為什麼與 bookings 那組理由不同，寫在原地',
