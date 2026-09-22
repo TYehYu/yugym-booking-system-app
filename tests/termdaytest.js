@@ -58,8 +58,10 @@ console.log('\n④ 每一條期限都問同一支');
   ok('★★ 簽到贈點（前端原本比 DB 多一天）',
      /const expire=termExpire\(rewardStart,VALID_DAYS\);/.test(src)
      && /資料庫的 handle_checkin_reward 一直是\s*\n\s*b\.date \+ valid_days - 1，這裡多加了一天/.test(src));
+  /* 2026-09-22：效期改成吃方案的 valid_days（原本寫死 7）。這一條守的沒變：
+     一律走 termExpire，不要有人再自己寫 -1。 */
   ok('★ 場租票改用同一支（原本自己寫 -1，留著兩套遲早又分岔）',
-     /const expire=termExpire\(start,7\);   \/\/ 效期 7 天（含啟用日）/.test(src));
+     /const expire=termExpire\(start,_fvSel\.days\);   \/\/ 效期照方案（含啟用日）/.test(src));
   ok('★ 售票畫面／合約上寫的到期日也同一套（講的與實際發的一致）',
      /const expire=plan\.valid_days\?`\$\{plan\.valid_days\} 天（至 \$\{termExpire\(TODAY,plan\.valid_days\)\}）`:'—';/.test(src)
      && /const expire=termExpire\(TODAY,plan\.valid_days\);/.test(src));

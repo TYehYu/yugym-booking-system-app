@@ -13797,8 +13797,8 @@ function tbl(s){return TABLE_ALIAS[s]||s;}
 let sb=null;
 // ── 版本號（日期+時間格式：年後兩碼+月+日.時分，例 26620.1058 = 26年6/20 10:58）──
 // 每次改版手動更新這一行即可，畫面與 title 會一起更新
-const APP_VERSION = '260922.1655';
-const APP_VERSION_LABEL = 'v260922.1655';
+const APP_VERSION = '260922.1724';
+const APP_VERSION_LABEL = 'v260922.1724';
 const CLOUD = !!(window.YUGYM_CONFIG && window.YUGYM_CONFIG.url && window.YUGYM_CONFIG.anonKey);
 if(CLOUD){ sb = supabase.createClient(window.YUGYM_CONFIG.url, window.YUGYM_CONFIG.anonKey); }
 
@@ -51819,9 +51819,29 @@ function slMerchPick(name, price){
   if(name==='自訂'){ ashDateClose(); return; }
   slMerchOpen();
 }
-function slCourseOpen(){
+async function slCourseOpen(){
   let host=document.getElementById('adp-sheet');
   if(!host){ host=document.createElement('div'); host.id='adp-sheet'; document.body.appendChild(host); }
+  /* 買不到的項目要**暗化＋寫原因**，不要讓櫃檯點進去才撞牆（2026-09-22 使用者指示：
+     「銷售不能購買也要顯示但是要暗化　副標說明」）——
+     這就是 yugym-disabled-with-reason 那條語彙，跟課卡「調整課程」同一套（.ash-ei-off）。
+     ⚠ 目前只有場租有條件（只賣給有會員帳號的教練）。其他項目一律可買。
+     ⚠ 畫面擋掉之後，salesFacility 裡那道檢查仍然留著 —— 規則不能只寫在畫面上。 */
+  const _mid=slMember();
+  let _staffOk=false, _memNm='';
+  if(_mid && _mid!=='__walkin__'){
+    try{
+      const [_ms,_es]=await Promise.all([dbGetAll('members'),dbGetAll('coaches').catch(()=>[])]);
+      const _m=(_ms||[]).find(x=>x&&x.id===_mid);
+      _memNm=(_m&&_m.name)||'';
+      _staffOk=memMatchesStaff(_m,_es);
+    }catch(_){}
+  }
+  const _why=c=>{
+    if(c.k!=='facility') return '';
+    if(!_mid||_mid==='__walkin__') return '請先在上方選擇會員';
+    return _staffOk?'':`${_memNm||'這位會員'}不是教練 —— 場租票只賣給有會員帳號的教練`;
+  };
   host.innerHTML=`<div class="adp-back" onclick="ashDateClose()"></div>
     <div class="adp-box adp-box-2c"><div class="modal-title">選擇課程</div>
       ${/* 兩欄（2026-09-08 使用者指示）：左欄 教練課／團體課／運動按摩、
@@ -51829,9 +51849,10 @@ function slCourseOpen(){
            所以用 grid 的「先填滿一欄再換下一欄」排，不必把清單拆成兩份 ——
            拆成兩份的話，日後加一項就要記得加在對的那一半。 */''}
       <div class="adp-2col">
-      ${SL_COURSES.map(c=>`<button type="button" class="ash-eirow" onclick="slCoursePick('${c.k}')">
+      ${SL_COURSES.map(c=>{ const off=_why(c);
+        return `<button type="button" class="ash-eirow${off?' ash-ei-off':''}" onclick="${off?'':`slCoursePick('${c.k}')`}">
         <span class="ash-eilb"><span class="adp-sw" style="background:${c.col};"></span>${c.name}</span>
-        <span class="ash-eisub">${c.sub}</span></button>`).join('')}
+        <span class="ash-eisub">${off||c.sub}</span></button>`;}).join('')}
       </div>
       <div class="adp-foot"><button class="btn btn-ghost" onclick="ashDateClose()">取消</button></div></div>`;
 }
@@ -52027,8 +52048,26 @@ function memMatchesStaff(m, emps){
   return (emps||[]).some(e=>e && String(e.status||'')!=='inactive'
     && String(e.name||'').trim()===nm && _p(e.phone)===ph);
 }
+/* 場租方案（2026-09-22 補）——
+   ⚠ 原本這支**完全沒讀 course_plans**，寫死 1 堂／7 天／$200。
+     所以使用者照我說的在方案管理建了「場地租借 10 堂 $2000」之後，
+     根本沒有地方賣得出去（使用者：「因為我也沒看到你說的場地租借10堂方案」）。
+     這是我給錯建議 —— 建方案之前沒先確認賣得出去。
+   ⚠ 「單次」留成內建選項，不必先建方案就能賣（今天的行為不變）；
+     方案管理裡建的場租方案會列在它後面。
+   ⚠ 總價＝unit_price × sessions_base（與其他方案同一套算法，見方案一覽）。 */
+function fvPlanOpts(plans){
+  const _n=p=>(Number(p.sessions_base)||0)+(Number(p.sessions_bonus)||0);
+  const _amt=p=>Math.max(0,(Number(p.unit_price)||0)*(Number(p.sessions_base)||0));
+  return [{id:'',name:'單次',n:1,days:7,amt:200}].concat(
+    (plans||[]).map(p=>({id:p.id,name:p.name||'場地租借',n:Math.max(1,_n(p)),
+      days:Math.max(1,Number(p.valid_days)||7), amt:_amt(p)})));
+}
 async function salesFacility(){
-  const [_mAll,_emps]=await Promise.all([dbGetAll('members'),dbGetAll('coaches').catch(()=>[])]);
+  const [_mAll,_emps,_plansAll]=await Promise.all([dbGetAll('members'),dbGetAll('coaches').catch(()=>[]),dbGetAll('course_plans').catch(()=>[])]);
+  const _fvPlans=fvPlanOpts((_plansAll||[]).filter(p=>p && p.ticket_type_id==='tt-venue-rental'
+    && p.active!==false && !p.archived));
+  window._fvPlans=_fvPlans;
   const members=(_mAll||[]).filter(m=>m.status==='active' && memMatchesStaff(m,_emps));
   window._msMembers=members;
   window._fvStaffEmps=_emps;   /* 送出端再驗一次用（畫面可以被繞過，判斷不能只在畫面上） */
@@ -52059,22 +52098,43 @@ async function salesFacility(){
   }
   const today=ymd(TODAY);
   showModal(`<div class="modal-title">銷售 · 場地租借票券</div>
-    <div style="font-size:11.5px;color:var(--t2);margin-bottom:12px;background:var(--card2);padding:10px 12px;border-radius:9px;">1 次場地租借，效期 <b>7 天</b>（自啟用日起算）。使用時在「新增預約」選<b>場地租借</b>，在「場租票折抵」下拉選這張票，費用自動歸 0。<br><b>只列得出有會員帳號的教練</b>（姓名與電話與員工資料一致）。</div>
+    ${/* 〔已移除〕上方那段四行說明（2026-09-22 使用者：「上方說明是不是可以優化一下」）——
+         三句話各有各的問題：
+         ・「1 次…效期 7 天」是**寫死的**，而下面的方案欄位已經寫著「10 堂・效期 180 天」
+           —— 兩個數字互相打架，櫃檯不知道要信哪個。
+         ・「只列得出有會員帳號的教練」是在解釋會員下拉為什麼短，但同一天已經改成
+           在上一層（選擇課程）就暗化並寫原因，能走到這一步的本來就是教練。
+         ・「使用時在『新增預約』選場地租借…」是**操作說明**，賣票的當下用不到；
+           真的要用的時候，場地租借視窗自己就有那個折抵下拉。
+         取代它的是下面那一行「效期 X ～ Y」—— 與其解釋規則，不如直接把結果算出來。
+         ⚠ 要還原就把這段文字加回來，但記得數字要吃方案、不能再寫死。 */''}
     <div class="form-row"><label>會員（必選）</label>
       <div class="mem-pick-row">
         <input class="gt-search" placeholder="輸入姓名或手機搜尋" oninput="msFilterMembers(this.value)" autocomplete="off">
         <select id="ms-member" onchange="fvInvSync()"><option value="" ${_fpre?'':'selected'}>— 請選擇 —</option>${members.map(m=>`<option value="${m.id}" ${_fpre===m.id?'selected':''}>${m.name}（${fmtPhone(m.phone)}）</option>`).join('')}</select>
       </div>
     </div>
+    <div class="form-row"><label>方案</label>
+      ${/* ⚠ 下拉裡**不寫效期天數**（2026-09-22）——下面那一行會印出實際的起訖日期，
+           寫兩次的結果是選項太長被截掉，而被截掉的正好是最重要的價格
+           （使用者截圖：「場地租借 10 堂　10 堂・效期 180 天・$」，$2,000 看不見）。
+           <option> 不能折行，所以只能靠縮短。 */''}
+      <select id="fv-plan" onchange="fvPlanPick()">${_fvPlans.map((p,i)=>
+        `<option value="${i}">${escH(p.name)}　${p.n} 堂・$${p.amt.toLocaleString()}</option>`).join('')}</select>
+      ${_fvPlans.length<2?`<div class="qs-tnote" style="margin:6px 0 0;">要賣多堂數的場租票，先到「方案管理」新增一個票券類型是<b>場地租借</b>的模板。</div>`:''}</div>
+    ${/* 直接把效期算出來（2026-09-22）——「效期自啟用日起算、含當天」是條不直覺的規則，
+         與其寫一句規則，不如把**這張票實際能用到哪一天**印出來。
+         ⚠ 換方案或改啟用日都要重算（兩個欄位都掛了 fvSyncTerm）。 */''}
+    <div class="qs-tnote" id="fv-term" style="margin:-4px 0 10px;"></div>
     <div class="form-2col">
-      <div class="form-row"><label>啟用日</label><input type="date" id="fv-start" value="${today}"></div>
-      <div class="form-row"><label>金額</label><input type="number" id="fv-fee" value="200" min="0"></div>
+      <div class="form-row"><label>啟用日</label><input type="date" id="fv-start" value="${today}" onchange="fvSyncTerm()"></div>
+      <div class="form-row"><label>金額</label><input type="number" id="fv-fee" value="${_fvPlans[0].amt}" min="0"></div>
     </div>
     <div class="form-2col">
       <div class="form-row"><label>付款方式</label><select id="fv-method"><option value="cash">現金</option><option value="transfer">匯款</option></select></div>
 
     </div>
-    ${/* 電子發票（2026-09-15）：賣自主訓練票券也是一次收款。 */''}
+    ${/* 電子發票（2026-09-15）：賣場地租借票券也是一次收款。 */''}
     ${invFieldsHTML()}
     ${/* 2026-09-08 使用者回報：「這個返回鈕　會移除前一個頁面選到的會員」——
          這裡直接叫 openSalesModal()，等於重開一張空的第一步。
@@ -52082,10 +52142,38 @@ async function salesFacility(){
          _salesPreMember、購物車也留著（0906 就是為了這件事做的，那時只修到教練課那條）。 */''}
     <div class="modal-foot"><button class="btn btn-ghost" onclick="slBackToStep1()">← 返回</button><button class="btn btn-green" id="fv-go" onclick="submitFacilityTicketSale()">確認收款發券</button></div>`);
   window._invGateBtn='fv-go';
+  fvSyncTerm();   /* 開窗就把「效期 X ～ Y」算出來（2026-09-22，取代上方那段寫死的說明） */
   /* 賣票券一定是當場收錢 → paid=true。會員必選，所以換人要重新預填。 */
   fvInvSync();
 }
-/* 自主訓練票券銷售的發票區同步（ms-member 是這張視窗的會員選單）。 */
+/* 換方案就把金額帶進來（2026-09-22）。
+   ⚠ 只動金額，不動啟用日 —— 櫃檯可能已經改過啟用日了。
+   ⚠ 金額仍可改：現場給折扣是常有的事，方案價只是預設值。 */
+function fvPlanPick(){
+  const i=Number((document.getElementById('fv-plan')||{}).value)||0;
+  const p=(window._fvPlans||[])[i]; if(!p) return;
+  const fee=document.getElementById('fv-fee'); if(fee) fee.value=p.amt;
+  fvSyncTerm();
+  fvInvSync();
+}
+/* 把「這張票能用到哪一天」印出來（2026-09-22，取代上方那段寫死的說明）。
+   ⚠ 走 termExpire，與真正發票券時同一支 —— 講的與實際發的要一致
+     （0808 那條「含首日」的約定就是為了兩邊不要各算各的）。 */
+function fvSyncTerm(){
+  const box=document.getElementById('fv-term'); if(!box) return;
+  const i=Number((document.getElementById('fv-plan')||{}).value)||0;
+  const p=(window._fvPlans||[])[i];
+  const st=(document.getElementById('fv-start')||{}).value||ymd(TODAY);
+  if(!p){ box.textContent=''; return; }
+  const ex=termExpire(st,p.days);
+  /* ⚠ 只寫「新的那件事」＝實際起訖日（2026-09-22 二修，使用者：「效期這個斷句是不是可以優化一下」）——
+     原本還寫了「10 堂」與「180 天」，那兩個上面的下拉已經有了；重複的字一多就折行，
+     而且折在「（180 ／ 天，含啟用日）」中間特別難讀。
+     ⚠「含啟用日」也拿掉：日期都印出來了，規則不必再解釋一次。
+     ⚠ 整段日期用 nowrap 包住 —— 要折也只能折在「效期」後面，不能把日期拆兩半。 */
+  box.innerHTML=`效期 <b style="white-space:nowrap;">${String(st).replace(/-/g,'/')} ～ ${String(ex||'').replace(/-/g,'/')}</b>`;
+}
+/* 場地租借票券銷售的發票區同步（ms-member 是這張視窗的會員選單）。 */
 function fvInvSync(){
   const mid=(document.getElementById('ms-member')||{}).value||'';
   try{ invSync({paid:true, memberId:mid, members:(window._msMembers||[])}); }catch(_){}
@@ -52105,20 +52193,26 @@ async function submitFacilityTicketSale(){
   const _inv=invReadFields();
   { const _e=invCheckFields(_inv); if(_e){ showToast('發票欄位：'+_e); return; } }
   const inv=(_inv && _inv.mode!=='none') ? 'ecpay' : 'none';
-  const expire=termExpire(start,7);   // 效期 7 天（含啟用日）
+  /* 選到的方案（2026-09-22）——「單次」是內建的第 0 項（1 堂／7 天／$200）。
+     ⚠ 堂數與效期一律照方案走；**金額照表單上的值**（櫃檯可能改過，現場折扣是常有的事）。 */
+  const _fvSel=(window._fvPlans||[])[Number((document.getElementById('fv-plan')||{}).value)||0]
+               || {id:'',name:'場地租借',n:1,days:7};
+  const _fvPlanName=_fvSel.id?String(_fvSel.name||'場地租借'):'場地租借';
+  const expire=termExpire(start,_fvSel.days);   // 效期照方案（含啟用日）
   try{
     /* ⚠⚠ 票種是 tt-venue-rental（場租），不是自主訓練（2026-09-22 改回）——
        「場地租借」視窗的『場租票折抵』下拉只認 tt-venue-rental；
        0801~0922 之間這裡發的是自主訓練票，那條折抵路徑根本看不到它們。
        見 SL_COURSES 的 facility 那一項。 */
-    const tk={id:uid('TK'),member_id:mid,ticket_type_id:'tt-venue-rental',plan_name:'場地租借',
-      format:null,purchase_date:ymd(TODAY),start_date:start,expire_date:expire,valid_days:7,
-      sessions_total:1,sessions_remaining:1,status:'usable',payment_status:'paid',
-      unit_price:fee,amount_paid:fee,created_at:new Date().toISOString()};
+    const tk={id:uid('TK'),member_id:mid,ticket_type_id:'tt-venue-rental',plan_name:_fvPlanName,
+      source_plan_id:_fvSel.id||null,
+      format:null,purchase_date:ymd(TODAY),start_date:start,expire_date:expire,valid_days:_fvSel.days,
+      sessions_total:_fvSel.n,sessions_remaining:_fvSel.n,status:'usable',payment_status:'paid',
+      unit_price:_fvSel.n?Math.round(fee/_fvSel.n):fee,amount_paid:fee,created_at:new Date().toISOString()};
     await dbPut('member_tickets',tk);
-    const _tRow={id:uid('PUR'),member_id:mid,plan_id:null,ticket_id:tk.id,
-      plan_name:'自主訓練票券',list_price:fee,deal_amount:fee,payment_method:method,
-      invoice_type:inv,installment_count:1,note:`效期 ${start}～${expire}`,operator:SESSION.id,
+    const _tRow={id:uid('PUR'),member_id:mid,plan_id:_fvSel.id||null,ticket_id:tk.id,
+      plan_name:_fvPlanName,list_price:fee,deal_amount:fee,payment_method:method,   /* 0801→0922：原本寫死「自主訓練票券」，營收明細會印錯名字 */
+      invoice_type:inv,installment_count:1,note:`${_fvSel.n} 堂・效期 ${start}～${expire}`,operator:SESSION.id,
       source:'facility_rental',created_at:new Date().toISOString()};
     await dbPutPurchaseSafe(_tRow);
     /* 電子發票（2026-09-15）：這條路會員必選，順手把當場問到的載具／信箱寫回去（只補空值）。 */
@@ -52140,7 +52234,7 @@ async function submitFacilityTicketSale(){
         catch(e){ console.error('facility ticket invoice fail', e); }
       }else console.warn('發票區未顯示，自主訓練票券這筆不開立發票：', _tRow.id);
     }
-    closeModal(); showToast(`已收款 $${fee.toLocaleString()}，自主訓練票效期 ${start.slice(5)}～${expire.slice(5)}`);
+    closeModal(); showToast(`已收款 $${fee.toLocaleString()}　${_fvPlanName} ${_fvSel.n} 堂・效期 ${start.slice(5)}～${expire.slice(5)}`);
     navTo(CUR_PAGE);
   }catch(e){ showToast('發券失敗：'+(e&&e.message?e.message:e)); }
 }

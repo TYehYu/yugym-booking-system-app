@@ -80,7 +80,73 @@ console.log('\n④ 前一頁選的人不在名單裡，不可以靜靜換成別�
      /瀏覽器預設顯示\*\*第一個\*\*（曹子安）/.test(src));
 }
 
-console.log('\n⑤ 沒有動到等級（使用者原提議，刻意不採用）');
+/* 2026-09-22 使用者：「或者銷售不能購買也要顯示但是要暗化　副標說明」——
+   就是 yugym-disabled-with-reason 那條語彙，跟課卡「調整課程」同一套（.ash-ei-off）。
+   原本我做成「點進去才擋一張視窗」，使用者要的是**在選單上就看得出來**。 */
+console.log('\n⑤ 買不到的項目在選單上暗化＋寫原因');
+{
+  const S=grab('slCourseOpen');
+  ok('★★★ 暗化那一項點不動（onclick 是空的）',
+     /onclick="\$\{off\?'':`slCoursePick\('\$\{c\.k\}'\)`\}"/.test(S)
+     && /class="ash-eirow\$\{off\?' ash-ei-off':''\}"/.test(S));
+  ok('★★★ 副標換成原因（不是留著原本那句沒用的副標）',
+     /<span class="ash-eisub">\$\{off\|\|c\.sub\}<\/span>/.test(S));
+  ok('★★★ 原因要講出**是誰**不能買', /\$\{_memNm\|\|'這位會員'\}不是教練 —— 場租票只賣給有會員帳號的教練/.test(S));
+  ok('★★ 還沒選會員時講的是另一件事（不要誤說他不是教練）',
+     /if\(!_mid\|\|_mid==='__walkin__'\) return '請先在上方選擇會員';/.test(S));
+  ok('★★ 只有場租有條件，其他項目一律可買', /if\(c\.k!=='facility'\) return '';/.test(S));
+  ok('★★★ 畫面擋掉之後，salesFacility 那道檢查仍然留著（規則不能只寫在畫面上）',
+     /if\(_fpre && !members\.some\(m=>m\.id===_fpre\)\)\{/.test(src)
+     && /showToast\('場租票只賣給有會員帳號的教練'\); return;/.test(src));
+}
+
+/* 2026-09-22 使用者：「上方說明是不是可以優化一下」——
+   那段四行說明三句話各有各的問題：
+   ・「1 次…效期 7 天」是寫死的，而下面的方案欄位已經寫著「10 堂・效期 180 天」→ 互相打架
+   ・「只列得出有會員帳號的教練」在上一層（選擇課程）已經暗化＋寫原因了
+   ・「使用時在『新增預約』選場地租借…」是操作說明，賣票當下用不到
+   取代它的是「效期 X ～ Y」一行 —— **與其解釋規則，不如把結果算出來**。 */
+console.log('\n⑥ 上方說明收掉，改成算出實際效期');
+{
+  const S=grab('salesFacility'), T=grab('fvSyncTerm');
+  const codeOnly=src.replace(/\/\*[\s\S]*?\*\//g,'').replace(/^[ \t]*\/\/.*$/gm,'');
+  ok('★★★ 那段寫死「1 次…效期 7 天」的說明已移除',
+     !/1 次場地租借，效期 <b>7 天<\/b>/.test(codeOnly));
+  ok('★★★ 改成印出這張票實際能用到哪一天',
+     /<div class="qs-tnote" id="fv-term"/.test(S)
+     && /\$\{String\(st\)\.replace\(\/-\/g,'\/'\)\} ～ \$\{String\(ex\|\|''\)\.replace\(\/-\/g,'\/'\)\}/.test(T));
+  ok('★★★ 走 termExpire（與真正發票券時同一支，講的與實際發的一致）',
+     /const ex=termExpire\(st,p\.days\);/.test(T)
+     && /const expire=termExpire\(start,_fvSel\.days\);/.test(src));
+  ok('★★ 換方案或改啟用日都要重算',
+     /onchange="fvSyncTerm\(\)"/.test(S) && /fvSyncTerm\(\);\s*\n\s*fvInvSync\(\);/.test(src));
+  ok('★★ 開窗就先算一次（不要等使用者去動欄位才出現）',
+     /fvSyncTerm\(\);   \/\* 開窗就把/.test(S));
+  /* 2026-09-22 二修（使用者：「效期這個斷句是不是可以優化一下」）——
+     斷句是表面，根本原因是**那一行有一半在重複上面的下拉**（10 堂、180 天各寫兩次）。
+     兩邊各留自己該講的：下拉講「哪個方案・幾堂・多少錢」，這一行講「實際能用到哪一天」。
+     ⚠ 實測（375px）：改前折 2 行、下拉文字 287px 塞不進 223px（被截掉的正好是 $2,000）；
+       改後 1 行、下拉 199.7px 不會被截。 */
+  ok('★★★ 這一行只寫實際起訖日（堂數與天數上面已經有了）',
+     /box\.innerHTML=`效期 <b style="white-space:nowrap;">/.test(T)
+     && !/\$\{p\.n\} 堂/.test(T) && !/含啟用日）`/.test(T));
+  ok('★★★ 日期用 nowrap 鎖住（要折只能折在「效期」後面，不能把日期拆兩半）',
+     /white-space:nowrap;/.test(T));
+  ok('★★★ 下拉不寫效期天數 —— 寫了會太長被截，而截掉的正好是價格',
+     /`<option value="\$\{i\}">\$\{escH\(p\.name\)\}　\$\{p\.n\} 堂・\$\$\{p\.amt\.toLocaleString\(\)\}<\/option>`/.test(src)
+     && /被截掉的正好是最重要的價格/.test(src));
+  /* ⚠ 這一條刻意不寫成「註解裡有沒有那串數字」—— 那種斷言只是在檢查我自己抄對沒，
+     真正值得守的是「下拉不要再長回去」。用字元數當上限：
+     實測 375px 下，下拉可用寬 223px、目前選項文字 199.7px。 */
+  ok('★★ 下拉選項不要再長回去（加東西之前先量）',
+     /堂・\$\$\{p\.amt\.toLocaleString\(\)\}<\/option>/.test(src)
+     && !/效期 \$\{p\.days\} 天・/.test(src));
+  ok('★★ 移除的理由寫在原地（三句話各為什麼該走）',
+     /兩個數字互相打架，櫃檯不知道要信哪個/.test(src)
+     && /是\*\*操作說明\*\*，賣票的當下用不到/.test(src));
+}
+
+console.log('\n⑦ 沒有動到等級（使用者原提議，刻意不採用）');
 {
   const codeOnly=src.replace(/\/\*[\s\S]*?\*\//g,'').replace(/^[ \t]*\/\/.*$/gm,'');
   ok('★★★ 等級沒有多出「教練」這個值', !/level==='教練'|tier_manual==='教練'/.test(codeOnly));

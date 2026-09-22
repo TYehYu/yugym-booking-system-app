@@ -92,8 +92,25 @@ ok('　　0801→0922 的來回、以及 0803 團課體驗 $600 的說明都跟�
    結果賣出去的票，場地租借視窗的『場租票折抵』下拉根本看不到（只認 tt-venue-rental）。 */
 ok('★★★ 改名的同時票種也要是 tt-venue-rental（只改名＝賣出去的票折抵不了）',
    /\{k:'facility', name:'場地租借'/.test(src)
-   && /ticket_type_id:'tt-venue-rental',plan_name:'場地租借'/.test(src)
+   /* 2026-09-22 二修：票名改成吃方案（_fvPlanName），不再寫死 */
+   && /ticket_type_id:'tt-venue-rental',plan_name:_fvPlanName/.test(src)
    && !/ticket_type_id:'tt-mqdt55uosz5n',plan_name:'自主訓練'/.test(src));
+/* ⚠⚠ 這支原本**完全沒讀 course_plans**，寫死 1 堂／7 天／$200 ——
+   使用者照建議在方案管理建了「場地租借 10 堂」之後根本賣不出去
+   （「因為我也沒看到你說的場地租借10堂方案」）。教訓：**叫人去建資料之前，
+   先確認那份資料真的有人讀**。 */
+ok('★★★ 場租銷售要讀 course_plans（不能寫死堂數與效期）',
+   /p\.ticket_type_id==='tt-venue-rental'\s*\n?\s*&& p\.active!==false && !p\.archived/.test(src)
+   && /sessions_total:_fvSel\.n,sessions_remaining:_fvSel\.n/.test(src)
+   && /const expire=termExpire\(start,_fvSel\.days\);/.test(src));
+ok('★★ 「單次」留成內建第 0 項（不必先建方案就能賣，今天的行為不變）',
+   /\[\{id:'',name:'單次',n:1,days:7,amt:200\}\]/.test(src));
+ok('★★ 總價＝unit_price × sessions_base（與其他方案同一套算法）',
+   /\(Number\(p\.unit_price\)\|\|0\)\*\(Number\(p\.sessions_base\)\|\|0\)/.test(src));
+ok('★★ 金額仍可改（現場折扣），但堂數與效期一律照方案',
+   /金額照表單上的值/.test(src) && /堂數與效期一律照方案走/.test(src));
+ok('★★ 沒有任何場租方案時，告訴櫃檯去哪裡建',
+   /要賣多堂數的場租票，先到「方案管理」新增一個票券類型是<b>場地租借<\/b>的模板/.test(src));
 /* 2026-08-21 二修：其他收費也收成挑選視窗了（見下一段），這條改驗購物車還在 */
 ok('　　購物車仍在（結帳流程沒被動到）', /<div id="sl-cart-box"/.test(src));
 
