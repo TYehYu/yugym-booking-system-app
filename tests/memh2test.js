@@ -522,10 +522,15 @@ t('★★ 日期卡高度寫死、內容置中（不再靠行高比例留空間�
   t('★ 選中＝品牌綠、今天＝金框（與頁面上的日期列同一組語彙）',
     /\.qs-day\.on\{background:var\(--green\);border-color:var\(--green\);\}/.test(s)
     && /\.qs-day\.qs-today\{border-color:var\(--gold,#B48A56\);\}/.test(s));
-  t('★★ 原本的挑時段流程一格沒動（時段格、確認鈕、過去時段仍濾掉）',
-    /onclick="memh2SelSlot\('\$\{minToTime\(m\)\}'\)"/.test(QS)
+  /* 2026-09-22：時段格改成「一小時一列、左整點右 30 分」的固定格線
+     （使用者：「左邊欄保持整點　右邊欄是30分時段　如果某時段場地已滿用暗化表示　不要隱藏」），
+     所以格子不再由 mms 直接 map 出來。
+     ⚠ mms 仍然留著 —— 上方那句「還能預約 N 個時段」只能數可約的，不含暗化的。 */
+  t('★★ 挑時段流程一格沒動（可約格、確認鈕、可約數仍只算未過期的）',
+    /onclick="memh2SelSlot\('\$\{t\}'\)"/.test(QS)
     && /<button class="btn btn-primary" id="mh2qs-ok" disabled onclick="memh2GoSlot\(\)">確認<\/button>/.test(QS)
-    && /const mms=Array\.from\(r\.free\)\.filter\(m=>_nowMin<0\|\|m>=_nowMin\)\.sort\(\(a,b\)=>a-b\);/.test(QS));
+    && /const mms=Array\.from\(r\.free\)\.filter\(m=>_nowMin<0\|\|m>=_nowMin\)\.sort\(\(a,b\)=>a-b\);/.test(QS)
+    && /還能預約'\} <b>\$\{mms\.length\}<\/b> 個時段/.test(QS));
 }
 
 

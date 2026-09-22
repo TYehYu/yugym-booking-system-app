@@ -99,7 +99,7 @@ ok('★★★ 只對已經確定排得進去的時段再探（free 最多 24 個
    && /這 3 倍的探測\*\*不會多送任何請求\*\*/.test(src));
 ok('★★★ 每個有空的場地各一列，沒名字的（多功能）不畫',
    /const nm=VN\[vid\]\|\|''; if\(!nm\) return '';/.test(src)
-   && /minToTime\(m\)\}\$\{tags\}<\/button>/.test(src));
+   && /onclick="memh2SelSlot\('\$\{t\}'\)">\$\{t\}\$\{tags\}<\/button>/.test(src));
 ok('★★ 順序固定（多功能→教室→跑步機），不照自動分配的結果排',
    /const _VIDS=\['multi','group','treadmill'\];/.test(src)
    && /同一個時段每次打開看到的順序要一樣/.test(src));

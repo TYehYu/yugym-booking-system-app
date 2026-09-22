@@ -17,11 +17,15 @@ const eq=(n,a,e)=>ok(n,JSON.stringify(a)===JSON.stringify(e),`得到 ${JSON.stri
 // 真的把 openTodoList 抽出來跑
 const i=src.indexOf('function openTodoList(kind){');
 const j=src.indexOf('\n}', src.indexOf('modal-foot', i))+2;
+/* 2026-09-22：多了 rn（這一列有沒有「續課」這個理由）與 due（這一期要收多少）。
+   ⚠ rn=false 的分期列**不給續約三顆鈕**（使用者：「分期的會員應該不用出現
+     ［續約］［考慮］［不續約］」）；M5 是「續課＋分期都有」，鈕要留。 */
 const ITEMS=[
-  {id:'M1',name:'陳蘭馨',sub:'教練課・續課',tkid:'T1',rs:'',time:'10:00'},
-  {id:'M2',name:'王小明',sub:'團體課・續課',tkid:'T2',rs:'renewed',time:'19:00'},
+  {id:'M1',name:'陳蘭馨',sub:'教練課・續課',tkid:'T1',rs:'',time:'10:00',rn:true},
+  {id:'M2',name:'王小明',sub:'團體課・續課',tkid:'T2',rs:'renewed',time:'19:00',rn:true},
   {id:'',  name:'新客人',sub:'新客戶簽約・私人教練',tkid:'',rs:'',time:'20:30',pay:true},
-  {id:'M4',name:'李中間',sub:'教練課・分期繳費',tkid:'T4',rs:'considering',time:'21:00'},
+  {id:'M4',name:'李中間',sub:'教練課・分期繳費　第 2/3 期',tkid:'T4',rs:'',time:'21:00',rn:false,due:7200},
+  {id:'M5',name:'雙重奏',sub:'團體課・續課・教練課・分期繳費　第 3/4 期',tkid:'T5',rs:'considering',time:'18:00',rn:true,due:4500},
 ];
 const run=(kind,list)=>{
   let html='';
@@ -50,7 +54,7 @@ ok('★ CSS 一列四格（超過自動換到第二列）',
    /\.tdl-tg-cells\{[\s\S]{0,140}grid-template-columns:repeat\(4,minmax\(0,1fr\)\)/.test(src));
 ok('★ 時間標在左邊獨立一欄、右對齊、等寬數字',
    /\.tdl-tg-t\{flex:0 0 52px;[\s\S]{0,160}font-family:var\(--num\),inherit;[\s\S]{0,60}text-align:right;/.test(src));
-eq('★ 四個人 → 四個按鈕格', (grid.match(/<div class="tdl-cell[ "]/g)||[]).length, 4);
+eq('★ 五個人 → 五張卡', (grid.match(/<div class="tdl-cell[ "]/g)||[]).length, 5);
 ok('　　中等寬度退成三格、手機退成兩格',
    /@media \(max-width:820px\)\{ \.tdl-tg-cells\{grid-template-columns:repeat\(3,minmax\(0,1fr\)\);\} \}/.test(src)
    && /@media \(max-width:560px\)\{ \.tdl-tg-cells\{grid-template-columns:repeat\(2,minmax\(0,1fr\)\);\}/.test(src));
@@ -80,6 +84,22 @@ ok('★ 已續約標綠勾', /tdl-rs-ok/.test(grid));
 ok('　　考慮中標金色', /tdl-rs-gold/.test(grid));
 ok('★ 續約三顆鈕放在卡片第二行', /class="tdl2-acts"/.test(grid)
    && /setRenewStatus\('T1','considering'\)/.test(grid) && /setRenewStatus\('T1','declined'\)/.test(grid));
+/* 2026-09-22 使用者：「分期的會員應該不用出現［續約］［考慮］［不續約］」 */
+{
+  const seg=n=>{ const a=grid.split(n)[1]||''; return a.split('tdl2-row')[0]; };
+  ok('★★★ 分期那一列不給續約三顆鈕（沒有「不續約」可以按）',
+     !seg('李中間').includes('setRenewStatus'), seg('李中間').slice(0,140));
+  ok('★★★ 同時有續課與分期的，鈕要留（那還是有續約要談）',
+     seg('雙重奏').includes("setRenewStatus('T5','renewed')"));
+  ok('★★★ 這一期要收多少畫成金色章（櫃檯不必點進會員資料翻）',
+     /<span class="tdl-amt">\$7,200<\/span>/.test(grid)
+     && /<span class="tdl-amt">\$4,500<\/span>/.test(grid));
+  ok('★★ 金額章排在時間後面（名字 → 時間 → 金額 → 狀態）',
+     grid.indexOf('21:00')<grid.indexOf('$7,200'));
+  ok('★★ 續課沒有金額（客人還沒挑方案，寫數字都是猜的）',
+     !seg('陳蘭馨').includes('tdl-amt'));
+  ok('★★ 千分位（$7,200 不是 $7200）', /\$7,200/.test(grid) && !/\$7200/.test(grid));
+}
 /* 0803 起三顆都手動（含「續約」），已續約者照樣看得到三顆、按同一顆＝取消標記；
    這一條改成守住「有 tkid 才給按鈕」（沒綁票券的卡位不會出現） */
 ok('　　沒綁票券的（待簽約卡位）不給續約鈕',

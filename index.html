@@ -3965,9 +3965,23 @@ tr.pe-row:hover td{background:var(--sage-bg,#eef4ee);}
 .tlh-log-main{display:flex;justify-content:space-between;align-items:stretch;gap:10px;min-width:0;}
 .tlh-log-left{display:flex;flex-direction:column;flex:1 1 auto;min-width:0;}
 .tlh-note{font-size:12.5px;color:var(--t3);}
-/* margin-top:auto＝把上面的空間全吃掉，於是這一列被推到左欄最下緣。
-   padding-top 是備註貼太近時的最小間距（兩者都有才看得出是兩件事）。 */
-.tlh-pt{font-size:12.5px;color:var(--t3);margin-top:auto;padding-top:4px;}
+/* ══ 姿勢／工具做成浮水印（2026-09-22 使用者：「訓練紀錄姿勢跟工具可以用浮水印」
+     ＋「浮水印可以大一點　被右邊數字蓋住沒關係」）══
+   原本是 12.5px 的灰字沉在左下角，而左邊那一大塊是空的 —— 放大成浮水印剛好用掉那塊空間，
+   教練掃一眼就知道這個動作是用什麼器材做的。
+
+   ⚠⚠ 使用者明確說「被右邊數字蓋住沒關係」，所以**不夾寬度**、讓它直接跑到數字底下。
+     代價是要確保它真的在**底層**：.tlh-log-main／.tlh-sets 要 position:relative＋z-index:1，
+     否則數字會被浮水印疊在上面（同層時後來的元素蓋前面的）。
+   ⚠ 絕對定位＝脫離版面流，所以卡片高度完全不受影響（左欄變空、高度由右邊的組數決定）。
+   ⚠ 卡片要 overflow:hidden，不然長字（跪姿 / SSB槓鈴）會溢出圓角外。
+     這張卡沒有 hover 放大，裁掉不會有副作用（營收卡那次的坑不適用）。
+   ⚠ 不透明度壓在 .10：再濃就開始跟數字搶，再淡就看不出寫什麼。 */
+.tlh-log{overflow:hidden;container-type:inline-size;}
+.tlh-log-main{position:relative;z-index:1;}
+.tlh-pt{position:absolute;left:15px;bottom:6px;margin:0;padding:0;z-index:0;
+  font-size:clamp(28px,15cqw,46px);font-weight:900;line-height:1;letter-spacing:-.02em;
+  color:var(--green);opacity:.10;white-space:nowrap;pointer-events:none;user-select:none;}
 /* 一組一列（2026-09-16 使用者：「右邊放組數每一組分開紀錄　如果三組就用三列」）——
    原本是單行摘要所以 white-space:nowrap 掛在這一層；現在改成直向堆疊，
    nowrap 要移到每一列（.tlh-setrow）身上，否則整塊不折行的是容器、沒有意義。
@@ -9463,6 +9477,13 @@ body.mc-mode #desk-feed-left{left:calc(232px + 20px);}
   font-family:var(--num),inherit;background:rgba(180,138,86,.16);color:var(--gold-d,#b48a56);}
 /* 待付費的時間標籤：實心紅底白字（2026-07-30 使用者回報對比不足，與首頁的「待收」同一套） */
 .tdl-tm-pay{background:var(--danger,#b5372e);color:#fff;}
+/* 這一期要收多少（2026-09-22）：櫃檯開這份名單就是要去收錢，金額不寫出來他得點進去翻。
+   ⚠ 金色實心，比時間那個淡金章再重一階 —— 名單上最重要的數字是錢。
+   ⚠ 不用紅：紅留給「待付費的時間」（紅>金>綠），兩個都紅就分不出輕重。
+   ⚠ 只有分期算得出來，續課刻意不寫（客人還沒挑方案，寫數字都是猜的）。 */
+.tdl-amt{margin-left:6px;flex:0 0 auto;font-size:11.5px;font-weight:800;border-radius:6px;
+  padding:2px 7px;font-family:var(--num),inherit;background:var(--gold-d,#b48a56);color:#fff;
+  white-space:nowrap;font-variant-numeric:tabular-nums;}
 .tdl-rs-ok{background:var(--sage-bg);color:var(--green);}
 .tdl-rs-gold{background:#f7efe0;color:#8a5e28;}
 .tdl-rs-no{background:#fbeaea;color:var(--danger,#b5372e);}
@@ -13776,8 +13797,8 @@ function tbl(s){return TABLE_ALIAS[s]||s;}
 let sb=null;
 // ── 版本號（日期+時間格式：年後兩碼+月+日.時分，例 26620.1058 = 26年6/20 10:58）──
 // 每次改版手動更新這一行即可，畫面與 title 會一起更新
-const APP_VERSION = '260922.1118';
-const APP_VERSION_LABEL = 'v260922.1118';
+const APP_VERSION = '260922.1343';
+const APP_VERSION_LABEL = 'v260922.1343';
 const CLOUD = !!(window.YUGYM_CONFIG && window.YUGYM_CONFIG.url && window.YUGYM_CONFIG.anonKey);
 if(CLOUD){ sb = supabase.createClient(window.YUGYM_CONFIG.url, window.YUGYM_CONFIG.anonKey); }
 
@@ -23447,7 +23468,16 @@ PAGES.g_dashboard=async function(){
         if(_left>0 || _fut>0) return;
       }
       const e=(_signBy[mid]=_signBy[mid]||{id:mid,name:m.name,tags:new Set(),times:new Set(),tkid:b.ticket_id||null,bkid:b.id});
-      if(!e.tkid && b.ticket_id) e.tkid=b.ticket_id;
+      /* ⚠ 續約三顆鈕只對「續課」有意義（2026-09-22 使用者：「分期的會員應該不用出現
+           ［續約］［考慮］［不續約］」）—— 分期是「這一期的錢到了」，不是「要不要再買一期」。
+         ⚠ 一個人可能同時有續課與分期（團課續課＋教練課分期），那還是有續約要談，鈕要留；
+           而且 tkid 要指向**續課那張票** —— renew_status 是標在票上的，
+           標到分期票上等於標錯地方。所以看到第一筆續課時要把 tkid 換過去。
+         ⚠ e.renew 要在換 tkid **之後**才設 true，否則第一筆續課自己就把條件擋掉了。 */
+      const _isRenew = kind==='renew';
+      if(b.ticket_id && (!e.tkid || (_isRenew && !e.renew))) e.tkid=b.ticket_id;
+      if(_isRenew) e.renew=true;
+      if(kind==='install' && b.ticket_id && !e.instTk) e.instTk=b.ticket_id;
       e.tags.add((isGrp?'團體課・':'教練課・')+(kind==='install'?'分期繳費':'續課'));
       e.cc = isGrp?'group':'pt';   // 卡片顏色依課別（2026-07-30 使用者指示）
       if(b.start_time) e.times.add(String(b.start_time).slice(0,5)); });
@@ -23463,7 +23493,21 @@ PAGES.g_dashboard=async function(){
        這份名單改成三顆鈕（續約／考慮中／不續約）都由櫃檯手動標，狀態即紀錄。
        行事曆課卡的 🔁 綠勾（computeLastBkMarks）維持自動，不在此列。 */
     const st=((tk&&tk.renew_status)||'');
-    return {id:e.id,name:e.name,sub:[...e.tags].join('・'),tkid:e.tkid||'',rs:st,
+    /* 這一期要收多少（2026-09-22）——櫃檯看這份名單就是要去收錢，
+       金額不寫出來他還得點進會員資料翻一次。
+       ⚠ 只有分期算得出來：installment.amounts[current] 就是下一期的錢
+         （current ＝ 已繳期數，樣本 paid:[true,false,false]／current:1 → 下一期是第 2 期）。
+       ⚠ 續課**刻意不寫金額**：客人還沒挑方案，寫任何數字都是猜的。
+       ⚠ 不用 tkOwedAmount —— 那支回的是「剩下所有期加總」，今天只收這一期。 */
+    const _it=e.instTk?_tkById[e.instTk]:null;
+    const _ins=(_it && _it.installment && typeof _it.installment==='object')?_it.installment:null;
+    let due=0, dueTxt='';
+    if(_ins){
+      const _c=Number(_ins.current)||0, _n=Number(_ins.count)||0;
+      if(_c<_n){ due=Number((_ins.amounts||[])[_c])||0; dueTxt=`第 ${_c+1}/${_n} 期`; }
+    }
+    return {id:e.id,name:e.name,sub:[...e.tags].join('・')+(dueTxt?'　'+dueTxt:''),
+      tkid:e.tkid||'',rs:st,rn:!!e.renew,due:due,
       time:[...e.times].sort().join('、'), cc:e.cc||'pt'};
   });
   /* 今天要簽約的新客戶（2026-07-30 使用者指示）——「待簽約卡位」與「分期待繳費保留」
@@ -23472,8 +23516,16 @@ PAGES.g_dashboard=async function(){
     if((b.date||'').slice(0,10)!==date || b.status==='cancelled') return;
     if(!b.pending_contract) return;
     const nm=b.member_id?((memMap[b.member_id]||{}).name||'會員'):(b.trial_name||'客戶');
+    /* ⚠ 事由要照課別寫，不能一律「分期待繳費」（2026-09-22 使用者回報：
+         「今天 15:00 曹子安應該是場租收費 200」—— 他那筆是體驗課先卡位，
+         名單卻寫成「分期待繳費・體驗」，櫃檯會以為是分期的錢）。
+       ⚠ pending_contract 的語意只是「還沒收款就先佔住時段」，跟分期無關；
+         體驗與場租本來就不吃票、沒有分期這回事。 */
+    const _cat=b.category||'';
+    const _pre=(_cat==='體驗'||_cat==='場租') ? '待收款・'
+             : (b.member_id?'分期待繳費・':'新客戶簽約・');
     _signList.push({id:b.member_id||'', name:nm, tkid:'', rs:'',
-      sub:(b.member_id?'分期待繳費・':'新客戶簽約・')+(b.category||''),
+      sub:_pre+_cat,
       time:String(b.start_time||'').slice(0,5), pay:true,
       cc:(bkIsGroup(b)?'group':(b.category==='體驗'?'trial':'pt'))});
   });
@@ -23582,8 +23634,11 @@ PAGES.g_dashboard=async function(){
      收款提醒與降級名單維持獨立（使用者：那兩份之後可能會很長一串）。
      _noPunchList 仍保留：狀態卡的「未打卡 N 位」與其他判斷還在用。 */
   window._todoLists={
-    sign:{title:'今日收款提醒',items:_signList,empty:'今日無人待收款',grid:true,
-      note:'今天要向這些人收款：教練課／友善教練課／團體課的最後一堂（續課或分期繳費），以及待簽約卡位的新客戶。名字後面是上課時間；點按鈕可進入會員資料'},
+    /* 說明那三行收掉（2026-09-22）—— 與 0901 對「即將降級名單」做的同一件事：
+       「最上方這一句規則說明可以移除…讓頁面乾淨一點」。
+       櫃檯每天開這份名單，規則只需要學一次；每次開窗先讀三行字，反而把名單推到摺線下
+       （4 位就已經要捲動了）。要還原把 note 加回來即可（openTodoList 有帶就畫）。 */
+    sign:{title:'今日收款提醒',items:_signList,empty:'今日無人待收款',grid:true},
     /* 說明那一段拿掉（2026-09-01 使用者指示：「最上方這一句規則說明可以移除…讓頁面乾淨一點」）——
        這份名單櫃檯每天看，規則只需要學一次；每次開窗都先讀三行字反而擋住名單。
        ⚠ 要還原的話把 note 加回來即可（openTodoList 有帶就畫）。 */
@@ -23995,6 +24050,10 @@ function openTodoList(kind){
   /* 上課時間標在名字旁邊（2026-07-30 使用者指示：櫃檯要知道幾點見得到人）。
      待付費的（待簽約卡位／分期保留）用品牌紅，一般續課用金色 —— 紅 > 金 的色階。 */
   const tm=(it)=>it.time?`<span class="tdl-tm${it.pay?' tdl-tm-pay':''}">${it.time}</span>`:'';
+  /* 應收金額（2026-09-22）：金色章，排在時間後面。
+     ⚠ 用金不用紅：紅已經給「待付費的時間」用了（紅>金>綠），兩個都紅就分不出輕重。
+     ⚠ 只有算得出來的才畫（目前只有分期）——畫一個「$—」比不畫更讓人以為是壞掉。 */
+  const amt=(it)=>it.due?`<span class="tdl-amt">$${Number(it.due).toLocaleString()}</span>`:'';
   /* 主教練章（2026-09-01 使用者指示，即將降級名單用）—— 只有帶了 coach 的名單會出現。
      沒指定的寫「未指定」而不是留白：留白看起來像資料還沒載完。 */
   const co=(it)=>{
@@ -24006,7 +24065,7 @@ function openTodoList(kind){
     const st=cc?` style="background:${cc.bg};color:${cc.fg};"`:'';
     return `<span class="tdl-co"${st}>${it.coach}</span>`;
   };
-  const body=(it)=>`${ava(it.name)}<span class="tdl-tx"><span class="tdl-n">${it.name||'—'}${co(it)}${tm(it)}${tag(it)}</span>${it.sub?`<span class="tdl-s">${it.sub}</span>`:''}</span>`;
+  const body=(it)=>`${ava(it.name)}<span class="tdl-tx"><span class="tdl-n">${it.name||'—'}${co(it)}${tm(it)}${amt(it)}${tag(it)}</span>${it.sub?`<span class="tdl-s">${it.sub}</span>`:''}</span>`;
   /* 三顆都手動（2026-08-03 使用者指示）：續約也用按的，按同一顆＝取消標記。 */
   /* 待補發票資料：每一列給一顆「不再提醒」（2026-09-17 使用者：「有些客人應該不會再出現
      這樣這個通知會一直存在」）—— 沿用收款提醒那一套 .tdl-acts／.tdl-b，不另做一套。
@@ -24016,7 +24075,9 @@ function openTodoList(kind){
      首頁兩個入口都收掉之後，這顆鈕原本的位置已經按不到；而提醒改成「開到那位才出現」，
      本來就不會一直杵在眼前，沒有收起來的必要。 */
   const acts=(it)=>{
-    return (kind!=='sign'||!it.tkid)?'':
+    /* ⚠ 2026-09-22：加上 it.rn —— 只有「續課」那種才要問續不續約。
+       分期繳費是這一期的錢到了，沒有「不續約」這個選項可以按（見 _signList 的說明）。 */
+    return (kind!=='sign'||!it.tkid||!it.rn)?'':
     `<span class="tdl-acts">
        <button class="tdl-b tdl-b-ok${it.rs==='renewed'?' on':''}" onclick="event.stopPropagation();setRenewStatus('${it.tkid}','renewed')">續約</button>
        <button class="tdl-b${it.rs==='considering'?' on':''}" onclick="event.stopPropagation();setRenewStatus('${it.tkid}','considering')">考慮中</button>
@@ -24032,7 +24093,7 @@ function openTodoList(kind){
       ? String(it.time||'').split('、').filter(x=>x&&x!==grpTime).join('、')
       : (it.time||'');
     const tmHtml=extra?tm({time:extra,pay:it.pay}):'';
-    const inner=`<span class="tdl-cell-top"><span class="tdl-cell-nm">${it.name||'—'}</span>${tmHtml}</span>`
+    const inner=`<span class="tdl-cell-top"><span class="tdl-cell-nm">${it.name||'—'}</span>${tmHtml}${amt(it)}</span>`
       + (it.sub?`<span class="tdl-cell-sub">${it.sub}</span>`:'')
       + (RS[it.rs]?`<span>${tag(it)}</span>`:'')
       + (acts(it)?`<span class="tdl-cell-acts" onclick="event.stopPropagation();">${acts(it).replace(/^<span class="tdl-acts">/,'').replace(/<\/span>\s*$/,'')}</span>`:'');
@@ -24063,6 +24124,7 @@ function openTodoList(kind){
       const inner=`<span class="tdl2-top">
           <span class="tdl-cell-nm tdl2-nm">${it.name||'—'}</span>
           ${it.time?`<span class="tdl2-tm${it.pay?' tdl2-tm-pay':''}">${it.time}</span>`:''}
+          ${amt(it)}
           ${it.sub?`<span class="tdl2-sub">${it.sub}</span>`:''}
           ${RS[it.rs]?tag(it):''}
         </span>`
@@ -31825,7 +31887,11 @@ async function bkStep2Facility(pDate,pTime){
   const opts=emps.map(c=>`<option value="${c.id}" ${c.id===SESSION.id?'selected':''}>${coachDisp(c)}</option>`).join('');
   showModal(`<div class="modal-title">場地租借${window._facilityFromSales?`（${String(date).replace(/-/g,'/')} ${time}）`:' · 步驟 2 / 2'}</div>
     ${bkSummaryCard(BK_FACILITY_TYPE,date,time,'')}
-    <div style="font-size:11.5px;color:var(--t2);margin-bottom:12px;background:var(--card2);padding:10px 12px;border-radius:9px;">現場收費，或選擇會員的場租票券折抵（票券效期 7 天）。</div>
+    ${/* ⚠ 效期天數不要寫死（2026-09-22）—— 原本寫「票券效期 7 天」，那是當初唯一一種
+         場租票的天數。效期其實是照**方案的 valid_days** 算的（termExpire），
+         只要賣一種 10 堂 180 天的場租方案，這句話就變成假的。
+         下拉本身每一項已經寫著「效期至 M/D」，這裡不必再說一次天數。 */''}
+    <div style="font-size:11.5px;color:var(--t2);margin-bottom:12px;background:var(--card2);padding:10px 12px;border-radius:9px;">現場收費，或選擇會員的場租票券折抵（效期以票券上標示為準）。</div>
     <div class="form-row"><label>場租票折抵（選填）</label><select id="fr-ticket" onchange="frTicketPick()"><option value="">不使用票券（現場收費）</option>${await frVenueTicketOpts()}</select></div>
     <div class="form-row"><label>使用人姓名（必填）</label><input id="fr-name" placeholder="例：王媽媽"></div>
     <div class="form-row"><label>經手員工</label><select id="fr-emp">${opts||`<option value="${SESSION.id}">${SESSION.name||'我'}</option>`}</select></div>
@@ -60812,14 +60878,36 @@ async function memh2SelfSlots(ds, until, reschedId){
   /* 原時段要看得到（2026-08-31）——它被自己這筆預約佔著，本來就不會出現在 free 裡，
      所以另外插一格、標「目前」、不可點。少了它，客人會以為原本那個時間不見了。 */
   const _origM=(_rs && _rs.origDate===date && _rs.origTime)?timeToMin(_rs.origTime):null;
-  const _all=(_origM!=null && mms.indexOf(_origM)<0) ? mms.concat([_origM]).sort((a,b)=>a-b) : mms;
-  const cells=_all.map(m=>{
-    if(m===_origM) return `<button type="button" class="cag-slot cag-slot-now" disabled
-      title="這張預約目前就在這個時段">${minToTime(m)}<span class="cag-slot-tag">目前</span></button>`;
-    /* 跑步機要帶「剩幾台」（2026-09-16 使用者：「跑步機的數量有辦法顯示在快速預約介面嗎」）——
-       ⚠ 這一支與 msbLoadSlots 是**兩支各自畫時段的 UI**（會員端 V2 走這裡），
-         兩邊都要加，只改一支客人看不到。
-       ⚠ 算不出來時退回只寫「跑步機」，不要印出「剩 undefined 台」。 */
+  /* ══ 固定兩欄：左欄整點、右欄 30 分；排不進去的照樣列出來但暗化 ══
+     2026-09-22 使用者指示：「左邊欄保持整點　右邊欄是30分時段
+       如果某時段場地已滿用暗化表示　不要隱藏」
+
+     原本是「只列可約的、由左往右填」，所以 13:30 會落在左欄、14:00 落在右欄 ——
+     客人得逐格讀時間才知道哪個是整點，而且看不出「這個時段是沒有還是滿了」。
+     改成一小時一列：左邊固定 HH:00、右邊固定 HH:30，眼睛沿著左緣往下掃就是整點。
+
+     ⚠ 這是「不能用就寫原因，別藏按鈕」那條語彙（yugym-disabled-with-reason）
+       套到時段上 —— 快速預約那一支（slotPanelHTML）本來就是這樣做的，
+       這裡只是跟上，不是新發明。
+     ⚠ 三種暗化的理由要分開寫，不能都寫「不可預約」：
+         已過　　→ 今天已經過去的時段（這不是滿，是時間過了）
+         已額滿　→ 三個場地都被佔走
+         （營業時間外的格子畫成看不見的佔位，不寫字 —— 那不是「不能約」，是根本沒這個時段）
+     ⚠ 整列都過去了就整列不畫：13:35 打開時 13:00／13:30 都過期了，
+       留著只是讓客人多捲一頁。但只要那一列還有一格可看，另一格就要留著佔位，
+       否則欄位會錯開 —— 欄位對齊正是這次要的東西。
+     ⚠「還能預約 N 個時段」仍然只數可約的（mms），不含暗化的。 */
+  const _openM=timeToMin(r.bh[0]), _closeM=timeToMin(r.bh[1]);
+  const _firstM=Math.max(540,_openM), _lastM=_closeM-60;   // 最後一個排得下 60 分鐘的時段
+  const _slotHtml=(m)=>{
+    const t=minToTime(m);
+    if(m<_firstM || m>_lastM) return {k:'void', h:'<div class="cag-slot-void"></div>'};
+    if(m===_origM) return {k:'now', h:`<button type="button" class="cag-slot cag-slot-now" disabled
+      title="這張預約目前就在這個時段">${t}<span class="cag-slot-tag">目前</span></button>`};
+    if(_nowMin>=0 && m<_nowMin) return {k:'past', h:`<button type="button" class="cag-slot cag-slot-off" disabled
+      title="這個時段已經過了">${t}<span class="cag-slot-tag">已過</span></button>`};
+    if(!r.free.has(m)) return {k:'full', h:`<button type="button" class="cag-slot cag-slot-off" disabled
+      title="這個時段三個場地都被約走了">${t}<span class="cag-slot-tag">已額滿</span></button>`};
     /* 有空的場地各畫一列（2026-09-22 使用者：「該時段團課教室跟跑步機同時顯示　分成兩列」）——
        ⚠ 最多就是兩列：VN.multi 是空字串，多功能場地刻意不標（它是預設場地，
          標出來每一格都會多一行沒有資訊量的字）。所以列數只會是 0、1 或 2。
@@ -60837,8 +60925,15 @@ async function memh2SelfSlots(ds, until, reschedId){
       const nm=VN[vid]||''; if(!nm) return '';
       return `<span class="cag-slot-tag">${vid==='treadmill'&&_tmn!=null?`${nm} 剩 ${_tmn} 台`:nm}</span>`;
     }).join('');
-    return `<button type="button" class="cag-slot" data-t="${minToTime(m)}" onclick="memh2SelSlot('${minToTime(m)}')">${
-      minToTime(m)}${tags}</button>`; }).join('');
+    return {k:'ok', h:`<button type="button" class="cag-slot" data-t="${t}" onclick="memh2SelSlot('${t}')">${t}${tags}</button>`};
+  };
+  let cells='';
+  for(let h=Math.floor(_firstM/60); h<=Math.floor(_lastM/60); h++){
+    const a=_slotHtml(h*60), b=_slotHtml(h*60+30);
+    /* 整列都沒東西看（都過去了／都在營業時間外）就整列不畫 */
+    if(['past','void'].includes(a.k) && ['past','void'].includes(b.k)) continue;
+    cells+=a.h+b.h;
+  }
   const _d=parseYmd(date)||new Date(TODAY);
   /* ── 視窗裡的日期列（2026-08-27 使用者轉述客人回饋）──
      「客人反應自主訓練在快速預約的時候　都要關掉視窗再選其他天再點快速預約
@@ -63178,7 +63273,13 @@ async function renderTrainingLogSheet(){
              ⚠ 單位存在 log 層級的 weight_unit，sets_detail 裡沒有，所以每列都讀 l.weight_unit。
              ⚠ 沒有重量的動作（伏地挺身、懸吊抬腿）只寫「10 次」，不要硬掛一個空單位。 */''}
         <div class="tlh-ex">${l.exercise_name}</div>
-        <div class="tlh-log-main"><div class="tlh-log-left">${_nt?`<div class="tlh-note">${_nt}</div>`:''}${_pt?`<div class="tlh-pt">${_pt}</div>`:''}</div><span class="tlh-sets">${
+        ${/* ⚠⚠ 浮水印要掛在**卡片的直接子層**，不能留在 .tlh-log-main 裡面（2026-09-22 量出來的）——
+             絕對定位元素會畫在靜態內容**之上**（堆疊順序：一般流 < z-index:0 的定位元素），
+             所以留在裡面的話浮水印會蓋住數字，跟「被數字蓋住」正好相反。
+             掛到外層之後，.tlh-log-main 的 z-index:1 才壓得過它的 z-index:0。
+           ⚠ 備註（.tlh-note）留在原位不動，它是要讀的字，不是浮水印。 */''}
+        ${_pt?`<div class="tlh-pt">${_pt}</div>`:''}
+        <div class="tlh-log-main"><div class="tlh-log-left">${_nt?`<div class="tlh-note">${_nt}</div>`:''}</div><span class="tlh-sets">${
           tlSetsFromLog(l).map(s=>{ const _w=wpWeightHtml(s.weight,l.weight_unit);
             return `<span class="tlh-setrow">${s.reps||'-'} 次${_w?' × '+_w:''}</span>`; }).join('')
         }</span></div>

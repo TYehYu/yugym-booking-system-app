@@ -469,9 +469,21 @@ ok('★★★ 動作名稱獨佔第一列（不再與第一組數字搶同一列
    && /\.tlh-ex\{font-size:[\d.]+px;font-weight:700;color:var\(--text\);line-height:[\d.]+;margin-bottom:\d+px;\}/.test(src));
 /* 2026-09-16 三改（使用者：「左邊第一列是動作名稱　第二列備註　第三列靠下留給姿勢/工具」）。
    ⚠ 空的那一列不要畫成空元素，否則沒備註的動作會憑空多一段高度。 */
-ok('★★★ 左欄三列：備註第二列、姿勢／工具靠下；沒有的那一列不畫',
-   /<div class="tlh-log-main"><div class="tlh-log-left">\$\{_nt\?`<div class="tlh-note">\$\{_nt\}<\/div>`:''\}\$\{_pt\?`<div class="tlh-pt">\$\{_pt\}<\/div>`:''\}<\/div>/.test(src)
-   && /\.tlh-pt\{[^}]*margin-top:auto;/.test(src));
+/* 2026-09-22：姿勢／工具改成浮水印（使用者：「訓練紀錄姿勢跟工具可以用浮水印」
+   ＋「浮水印可以大一點　被右邊數字蓋住沒關係」）——
+   ⚠⚠ 它必須掛在**卡片的直接子層**，不能留在 .tlh-log-main 裡面：
+     絕對定位元素會畫在靜態內容之上，留在裡面的話浮水印會蓋住數字（正好相反）。
+     掛到外層，.tlh-log-main 的 z-index:1 才壓得過浮水印的 z-index:0。
+   ⚠ 備註（.tlh-note）留在左欄原位 —— 它是要讀的字，不是浮水印。 */
+ok('★★★ 浮水印掛在卡片直接子層，備註留在左欄',
+   /\$\{_pt\?`<div class="tlh-pt">\$\{_pt\}<\/div>`:''\}\s*\n\s*<div class="tlh-log-main"><div class="tlh-log-left">\$\{_nt\?`<div class="tlh-note">\$\{_nt\}<\/div>`:''\}<\/div>/.test(src));
+ok('★★★ 數字要壓在浮水印上面（z-index 的方向不能反）',
+   /\.tlh-log-main\{position:relative;z-index:1;\}/.test(src)
+   && /\.tlh-pt\{position:absolute;[^}]*z-index:0;/.test(src));
+ok('★★ 卡片要 overflow:hidden（長字會溢出圓角外）',
+   /\.tlh-log\{overflow:hidden;container-type:inline-size;\}/.test(src));
+ok('★★ 絕對定位＝脫離版面流，所以卡片高度不受影響（實測 116\\.1／147\\.5／84\\.7 都沒變）',
+   /絕對定位＝脫離版面流，所以卡片高度完全不受影響/.test(src));
 /* ⚠⚠ margin-top:auto 要有效，左欄必須先被拉到整張卡的高度 ——
    align-items 若是 flex-start，左欄只有內容高，auto 沒有空間可推，姿勢／工具就沉不下去。 */
 ok('★★★ align-items 必須是 stretch，margin-top:auto 才推得動',

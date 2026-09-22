@@ -47,8 +47,12 @@ console.log('\n①b 視窗裡要標出這張預約的時間');
   ok('★★★ 為什麼要自己插（原時段被自己這筆佔著，不會出現在 free 裡）',
      /它被自己這筆預約佔著，本來就不會出現在 free 裡，/.test(src)
      && /少了它，客人會以為原本那個時間不見了/.test(src));
-  ok('★★ 插進去要照時間排序（不能掛在最後一格）',
-     /mms\.concat\(\[_origM\]\)\.sort\(\(a,b\)=>a-b\)/.test(src));
+  /* 2026-09-22：時段格改成「一小時一列、左整點右 30 分」的固定格線，
+     所以「目前」那一格不必再插進陣列排序 —— 它本來就落在自己的時間格裡。
+     這一條改成守「原時段仍然畫得出來、而且是不可點的」。 */
+  ok('★★ 原時段落在它自己的時間格（固定格線，不必再插進陣列排序）',
+     /if\(m===_origM\) return \{k:'now', h:`<button type="button" class="cag-slot cag-slot-now" disabled/.test(src)
+     && !/mms\.concat\(\[_origM\]\)/.test(src));
   ok('★★★ 視窗上方寫出原時段與去向',
      /<div class="qs-orig">原時段　<b>\$\{String\(_rs\.origDate\)\.slice\(5\)\.replace\('-','\/'\)\}　\$\{String\(_rs\.origTime\)\.slice\(0,5\)\}<\/b>　→　請選新的時段<\/div>/.test(src));
   /* 2026-08-31：提示只留四條標籤說明，「改期不另扣點」單獨多加一條。
