@@ -13797,8 +13797,8 @@ function tbl(s){return TABLE_ALIAS[s]||s;}
 let sb=null;
 // ── 版本號（日期+時間格式：年後兩碼+月+日.時分，例 26620.1058 = 26年6/20 10:58）──
 // 每次改版手動更新這一行即可，畫面與 title 會一起更新
-const APP_VERSION = '260922.1724';
-const APP_VERSION_LABEL = 'v260922.1724';
+const APP_VERSION = '260922.1748';
+const APP_VERSION_LABEL = 'v260922.1748';
 const CLOUD = !!(window.YUGYM_CONFIG && window.YUGYM_CONFIG.url && window.YUGYM_CONFIG.anonKey);
 if(CLOUD){ sb = supabase.createClient(window.YUGYM_CONFIG.url, window.YUGYM_CONFIG.anonKey); }
 
@@ -22852,13 +22852,31 @@ PAGES.g_dashboard=async function(){
      新增「今日營收」——今日售出票券金額，拆 新約／續約／分期。
      分類：有分期物件＝分期；否則該會員此前已有購票紀錄＝續約、首購＝新約。 */
   /* 自主訓練點數（簽到贈點等，$0）不屬於營收，收款名單不列（2026-07-26 使用者指示） */
+  /* ══ 哪些票的錢是在「收款」那一側算的（2026-09-22 修）══
+     _dayPur 認的是 reactivate／facility_rental／merchandise —— 這幾種的票券側要排掉，
+     否則同一筆錢會被算兩次。用「今天這張票有沒有那種收款紀錄」來判，
+     不要用課別去猜。
+     ⚠⚠ 這條原本寫的是「排除所有自主訓練類的票」（見下方〔已移除〕）——
+       那是為了擋 0801~0922 場地租借賣出的自主訓練票（收款另寫 facility_rental）。
+       但它也把**正常賣出的自主訓練票**一起排掉了：
+       0922 曹子安走自訂銷售買了一張 $200（收款 source='backoffice'），
+       票券側被這條擋掉、收款側又只認場租/重啟/商品/分期 → 兩邊都漏，$200 憑空消失
+       （使用者回報：「這一筆怎麼沒出現在今日營收」）。
+       ⚠ 影響範圍查過：歷來只有 3 張這種票（都是曹子安），前兩張走場租所以有被算到，
+         只有 0922 這張掉進縫裡。 */
+  const _tkPaidInPur=new Set();
+  (purchases||[]).forEach(p=>{ if(p && p.ticket_id && puLocalDate(p)===date
+    && (p.source==='reactivate'||p.source==='facility_rental'||p.source==='merchandise'))
+      _tkPaidInPur.add(p.ticket_id); });
   const _dayTk=(mtickets||[]).filter(t=>t.source==='purchase'&&t.purchase_date===date
     &&(t.status!=='refunded' || t.void_mode==='credit')
     /* 已作廢不列今日營收/收款名單（2026-07-28）——
        但「作廢→轉儲值金」例外（2026-08-30 使用者定案：「保留這筆營收　只是客人把
        部分付款要轉去其他方案」）：錢沒有離開店裡，沖掉就是把真的收到的錢當成沒收到。
        另一頭配合的規則是「用儲值金買的方案營收記 $0」，同一筆錢只會被認一次。 */
-    &&!((((types||[]).find(x=>x.id===t.ticket_type_id)||{}).category==='自主訓練')||(t.plan_name||'').includes('自主訓練')));
+    /* 〔已移除〕`排除 category==='自主訓練' 或 plan_name 含「自主訓練」` ——
+       用課別猜「這筆是不是已經在別處算過」會誤傷正常售票，見上方說明。 */
+    &&!_tkPaidInPur.has(t.id));
   /* 票券的「當日實收」優先用當日收款紀錄的金額（2026-08-15）：
      分期票的 amount_paid 是累計實收，事後回看購買日會把後續各期一起算進去。 */
   const _puOfTk={};
@@ -51771,7 +51789,13 @@ const SL_COURSES=[
      ⚠ 換回 tt-venue-rental 才接得上「場地租借」視窗的『場租票折抵』下拉
        （那支只認 tt-venue-rental）—— 0801 之後賣的票它根本看不到。
      ⚠ 已經賣出的 4 張維持原樣（歷史不動），只影響之後賣的。 */
-  {k:'facility', name:'場地租借', sub:'單次 · 效期 7 天',       col:'#6a655c'},
+  /* ⚠ 副標不要再寫死堂數與效期（2026-09-22 二修，使用者：「這邊場地租借
+       副標是單次·效期7天　是不是也要修改」）——
+     同一天已經改成可以賣多堂數的方案，這張卡卻還寫著「單次 · 效期 7 天」。
+     改成與其他卡片同一個句式（X → Y），把「幾堂、多少錢、效期多久」留給
+     下一步的方案下拉講 —— 那裡才知道實際是哪一個。
+     ⚠ 這裡刻意不寫「→ 業績歸屬」：場租不歸教練業績、也不計堂數。 */
+  {k:'facility', name:'場地租借', sub:'選方案 → 發場租票',      col:'#6a655c'},
   /* 0803 使用者指示：「團體課的預約體驗，幫我新增在銷售，團課體驗600」——
      走自訂銷售的殼、預填 1 堂 $600，欄位到了下一步仍可改。 */
   {k:'grptrial', name:'團課體驗', sub:'1 堂 · $600',            col:'var(--course-trial-accent,#7a4d8c)'},
@@ -52121,7 +52145,13 @@ async function salesFacility(){
            <option> 不能折行，所以只能靠縮短。 */''}
       <select id="fv-plan" onchange="fvPlanPick()">${_fvPlans.map((p,i)=>
         `<option value="${i}">${escH(p.name)}　${p.n} 堂・$${p.amt.toLocaleString()}</option>`).join('')}</select>
-      ${_fvPlans.length<2?`<div class="qs-tnote" style="margin:6px 0 0;">要賣多堂數的場租票，先到「方案管理」新增一個票券類型是<b>場地租借</b>的模板。</div>`:''}</div>
+      ${/* ⚠ 路徑要寫**真的存在的那一個**（2026-09-22 使用者：「只看到單次 沒看到10次的」）——
+           原本寫「方案管理」，系統裡根本沒有這個名字的頁面；我第一次口頭講的
+           「票券管理 → 票券模板」也是錯的（那個分頁 TK_TABS 裡早就沒有了）。
+           實際位置是 系統設定 → 課程方案（PAGES.settings_ticket，導覽標籤就叫「課程方案」）
+           → 下半部的「票券模板（CoursePlan）」→〔＋ 新增模板〕。
+           ⚠ 寫路徑之前先 grep 導覽標籤，不要憑印象寫。 */''}
+      ${_fvPlans.length<2?`<div class="qs-tnote" style="margin:6px 0 0;">要賣多堂數的場租票，先到<b>系統設定 → 課程方案</b>，在「票券模板」按〔＋ 新增模板〕，票券類型選<b>場地租借</b>。</div>`:''}</div>
     ${/* 直接把效期算出來（2026-09-22）——「效期自啟用日起算、含當天」是條不直覺的規則，
          與其寫一句規則，不如把**這張票實際能用到哪一天**印出來。
          ⚠ 換方案或改啟用日都要重算（兩個欄位都掛了 fvSyncTerm）。 */''}
