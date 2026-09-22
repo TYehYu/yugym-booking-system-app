@@ -13797,8 +13797,8 @@ function tbl(s){return TABLE_ALIAS[s]||s;}
 let sb=null;
 // ── 版本號（日期+時間格式：年後兩碼+月+日.時分，例 26620.1058 = 26年6/20 10:58）──
 // 每次改版手動更新這一行即可，畫面與 title 會一起更新
-const APP_VERSION = '260922.1416';
-const APP_VERSION_LABEL = 'v260922.1416';
+const APP_VERSION = '260922.1424';
+const APP_VERSION_LABEL = 'v260922.1424';
 const CLOUD = !!(window.YUGYM_CONFIG && window.YUGYM_CONFIG.url && window.YUGYM_CONFIG.anonKey);
 if(CLOUD){ sb = supabase.createClient(window.YUGYM_CONFIG.url, window.YUGYM_CONFIG.anonKey); }
 
@@ -51982,13 +51982,47 @@ async function salesAttribSubmit(cid){
    那種票只有「新增預約 → 場地租借」那條特別流程折抵得到，從一般預約流程約
    自主訓練是用不到的；正式庫查過這個票種一張都沒賣出去（0 筆），所以改掛沒有歷史包袱。
    「新增預約 → 場地租借」那條 $200 現場收費流程維持不變。 */
+/* ══ 這位會員是不是我們的員工（2026-09-22）══
+   使用者定案：場租票**只賣給有會員帳號的教練**，一般會員不能買
+   （「其他會員也不能買場租票，只有教練＋會員身份才可以」）。
+
+   ⚠ 用「姓名＋電話都對得上」比對，不是只比姓名 —— 使用者的顧慮是
+     「不會導致其他會員買到場租票」。0922 查證正式庫：
+       ・14 位在職員工全部有填電話
+       ・姓名＋電話都對得上的正好 7 位（就是那 7 位有會員身分的教練）
+       ・只有姓名對得上、電話不同的：**0 筆**
+       ・會員裡沒有同名的
+     所以這個比對不會把別的會員放進來。
+   ⚠ 刻意**不**在 members 加欄位（例如 employee_id），也**不**動會員等級：
+     等級只有 regular／loyal／vip 三值而且每月自動算（effTier），
+     加第四值要同步改 tierIsVip／lottoIsVip／抽獎／方案定價多處，
+     而且語意錯 —— 等級講「買多少、來多少」，不是「你是誰」。
+     這個比對自己會維護：哪位教練哪天辦了會員帳號就自動出現，不用有人記得填欄位。
+   ⚠ 將來若要做「教練自己的場租對帳」那種需要精確配對的功能，再升級成真的關聯欄位。 */
+function memMatchesStaff(m, emps){
+  if(!m) return false;
+  const _p=x=>String(x||'').replace(/\D/g,'');
+  const nm=String(m.name||'').trim(), ph=_p(m.phone);
+  if(!nm || !ph) return false;
+  return (emps||[]).some(e=>e && String(e.status||'')!=='inactive'
+    && String(e.name||'').trim()===nm && _p(e.phone)===ph);
+}
 async function salesFacility(){
-  const members=(await dbGetAll('members')).filter(m=>m.status==='active');
+  const [_mAll,_emps]=await Promise.all([dbGetAll('members'),dbGetAll('coaches').catch(()=>[])]);
+  const members=(_mAll||[]).filter(m=>m.status==='active' && memMatchesStaff(m,_emps));
   window._msMembers=members;
+  window._fvStaffEmps=_emps;   /* 送出端再驗一次用（畫面可以被繞過，判斷不能只在畫面上） */
+  if(!members.length){
+    showModal(`<div class="modal-title">銷售 · 場地租借票券</div>
+      <div class="mh2-rule">場租票只賣給<b>有會員帳號的教練</b>。<br>
+        目前沒有任何教練辦過會員帳號 —— 先到「會員」那一頁幫他建立，姓名與電話要與員工資料一致。</div>
+      <div class="modal-foot mh2-foot one"><button class="btn btn-ghost" onclick="closeModal()">知道了</button></div>`);
+    return;
+  }
   const _fpre=window._salesFacilityMember||''; window._salesFacilityMember=null;
   const today=ymd(TODAY);
   showModal(`<div class="modal-title">銷售 · 場地租借票券</div>
-    <div style="font-size:11.5px;color:var(--t2);margin-bottom:12px;background:var(--card2);padding:10px 12px;border-radius:9px;">1 次場地租借，效期 <b>7 天</b>（自啟用日起算）。使用時在「新增預約」選<b>場地租借</b>，在「場租票折抵」下拉選這張票，費用自動歸 0。</div>
+    <div style="font-size:11.5px;color:var(--t2);margin-bottom:12px;background:var(--card2);padding:10px 12px;border-radius:9px;">1 次場地租借，效期 <b>7 天</b>（自啟用日起算）。使用時在「新增預約」選<b>場地租借</b>，在「場租票折抵」下拉選這張票，費用自動歸 0。<br><b>只列得出有會員帳號的教練</b>（姓名與電話與員工資料一致）。</div>
     <div class="form-row"><label>會員（必選）</label>
       <div class="mem-pick-row">
         <input class="gt-search" placeholder="輸入姓名或手機搜尋" oninput="msFilterMembers(this.value)" autocomplete="off">
@@ -52022,6 +52056,11 @@ function fvInvSync(){
 async function submitFacilityTicketSale(){
   const mid=(document.getElementById('ms-member')||{}).value;
   if(!mid){ showToast('請選擇會員'); return; }
+  /* ⚠ 畫面已經只列教練了，這裡再擋一次 —— 下拉可以被上一筆的殘留值或手動改值繞過，
+     而「誰能買」是規則，規則不能只寫在畫面上（見 memMatchesStaff 的說明）。 */
+  { const _m=(window._msMembers||[]).find(x=>x&&x.id===mid);
+    if(!memMatchesStaff(_m, window._fvStaffEmps||[])){
+      showToast('場租票只賣給有會員帳號的教練'); return; } }
   const start=(document.getElementById('fv-start')||{}).value||ymd(TODAY);
   const fee=Math.max(0,Number((document.getElementById('fv-fee')||{}).value)||0);
   const method=(document.getElementById('fv-method')||{}).value||'cash';
