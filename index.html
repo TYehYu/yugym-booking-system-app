@@ -13797,8 +13797,8 @@ function tbl(s){return TABLE_ALIAS[s]||s;}
 let sb=null;
 // ── 版本號（日期+時間格式：年後兩碼+月+日.時分，例 26620.1058 = 26年6/20 10:58）──
 // 每次改版手動更新這一行即可，畫面與 title 會一起更新
-const APP_VERSION = '260922.1645';
-const APP_VERSION_LABEL = 'v260922.1645';
+const APP_VERSION = '260922.1655';
+const APP_VERSION_LABEL = 'v260922.1655';
 const CLOUD = !!(window.YUGYM_CONFIG && window.YUGYM_CONFIG.url && window.YUGYM_CONFIG.anonKey);
 if(CLOUD){ sb = supabase.createClient(window.YUGYM_CONFIG.url, window.YUGYM_CONFIG.anonKey); }
 
@@ -52040,13 +52040,30 @@ async function salesFacility(){
     return;
   }
   const _fpre=window._salesFacilityMember||''; window._salesFacilityMember=null;
+  /* ⚠⚠ 前一頁選的人不在名單裡要**明講**，不能靜靜換成別人（2026-09-22 使用者回報：
+       「我前一頁選了魚先森　這邊跑出來變曹子安」）——
+     這是同一天把名單濾成「只有教練」之後生出來的 bug：
+     魚先森不是教練 → 沒有任何 option 帶 selected → 瀏覽器預設顯示**第一個**（曹子安）。
+     櫃檯就這樣可能賣給錯的人，而且金額、發票都已經填好了。
+     ⚠ 這個坑在改之前就存在（原本名單是全部會員，所以幾乎不會踩到），
+       濾名單之後變成「常態」。兩件事一起修：
+       ①前一頁選的人不合格 → 直接擋下並說清楚是誰、為什麼
+       ②沒有預選時，下拉第一項是空的「— 請選擇 —」，不要拿名單第一位當預設
+         （與 0728「不預設會員，避免沒注意賣給名單第一位」同一條規矩）。 */
+  if(_fpre && !members.some(m=>m.id===_fpre)){
+    const _who=((_mAll||[]).find(m=>m.id===_fpre)||{}).name||'這位會員';
+    showModal(`<div class="modal-title">銷售 · 場地租借票券</div>
+      <div class="mk-key">${escH(_who)}不能買場租票<small>場租票只賣給有會員帳號的教練（姓名與電話與員工資料一致）</small></div>
+      <div class="modal-foot mh2-foot one"><button class="btn btn-ghost" onclick="closeModal()">知道了</button></div>`);
+    return;
+  }
   const today=ymd(TODAY);
   showModal(`<div class="modal-title">銷售 · 場地租借票券</div>
     <div style="font-size:11.5px;color:var(--t2);margin-bottom:12px;background:var(--card2);padding:10px 12px;border-radius:9px;">1 次場地租借，效期 <b>7 天</b>（自啟用日起算）。使用時在「新增預約」選<b>場地租借</b>，在「場租票折抵」下拉選這張票，費用自動歸 0。<br><b>只列得出有會員帳號的教練</b>（姓名與電話與員工資料一致）。</div>
     <div class="form-row"><label>會員（必選）</label>
       <div class="mem-pick-row">
         <input class="gt-search" placeholder="輸入姓名或手機搜尋" oninput="msFilterMembers(this.value)" autocomplete="off">
-        <select id="ms-member" onchange="fvInvSync()">${members.map(m=>`<option value="${m.id}" ${_fpre===m.id?'selected':''}>${m.name}（${fmtPhone(m.phone)}）</option>`).join('')}</select>
+        <select id="ms-member" onchange="fvInvSync()"><option value="" ${_fpre?'':'selected'}>— 請選擇 —</option>${members.map(m=>`<option value="${m.id}" ${_fpre===m.id?'selected':''}>${m.name}（${fmtPhone(m.phone)}）</option>`).join('')}</select>
       </div>
     </div>
     <div class="form-2col">
