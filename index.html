@@ -7663,9 +7663,17 @@ body.memh2-shell .bottom-nav .bn-lb{color:inherit;}
        24px ＝ 三道 8px 的 gap（見 .modal .cag-slots.chvqs2）。
      ⚠ 退路：萬一百分比解析不到（容器高度變成不明確），grid-auto-rows 會退回
        auto ＝內容高度 —— 格子偏小但版面不壞，不會退回撐滿那個災情。
-       .cag-slot 的 padding 就是這條退路的最小高度，所以不能拿掉。 */
+       .cag-slot 的 padding 就是這條退路的最小高度，所以不能拿掉。
+     ⚠⚠ 2026-09-22 修：minmax 的下限不能省（使用者附截圖「更改自主訓練時間的頁面壞掉了」，
+       時段格整片疊在一起）。原本只寫 calc(...)＝**只有上限沒有下限**：
+       時段區一矮，四分之一就小於格子內容需要的高度，格子被壓扁、字溢出疊到下一列。
+       量到的數字：視窗 460px（LINE 內建瀏覽器＋改期多三塊標頭）時
+       每格被壓成 31px、內容需要 47px → 重疊 16px。加了 min-content 之後
+       每格 84px、重疊 0，時段區自己捲（它本來就有 overflow-y:auto）。
+       ⚠ 為什麼「改期」才壞而「預約」沒事：改期多了取消鈕（標題折兩行）、
+         原時段那條、改期提示那條，上方多吃掉約 110px。 */
   .modal-bg:not(.modal-side):has(.qs-mtop) .cag-slots.chvqs2{
-    align-content:start;grid-auto-rows:calc((100% - 24px)/4);}
+    align-content:start;grid-auto-rows:minmax(min-content,calc((100% - 24px)/4));}
   /* 時間第一列、場地第二列置中（2026-09-21 使用者附截圖：「跑步機被斷行了」
      →「跑步機剩幾台直接放第二列置中」「時間放大一點第一列　場地第二列」）——
      原本兩段是同一行的行內文字，「19:00 跑步機 剩 2 台」在 131px 寬的格子裡
@@ -7680,6 +7688,11 @@ body.memh2-shell .bottom-nav .bn-lb{color:inherit;}
        9.5cqw 只有 29px，所以下限寫 30px 才是真正看到的大小。
        （要讓 cqw 吃單格的寬，得把 container-type 移到 .cag-slot 上 —— 沒必要，
        時段區與格子寬是等比例的。） */
+  /* ⚠ 2026-09-22 時間維持原本的大小（使用者三修後定案：「放大時間＋訓練架＋教室＋跑步機」
+     ＋「頁面一次要展示八個時段」）—— 中間一度縮到 26px，是因為場地名稱還是
+     「史密斯訓練架／團課教室」那種長版、三列擠。名稱改成三個字之後不必縮。
+     量過（375×812、三列場地、時間 30px）：一格 123px、時段區 574px → 一頁 4.35 列
+     ＝ 八個時段看得完，第五列露一點當作「還有更多」的提示。 */
   .modal-bg:not(.modal-side):has(.qs-mtop) .cag-slots .cag-slot{
     display:flex;flex-direction:column;align-items:center;justify-content:center;gap:4px;
     padding:clamp(10px,3cqw,18px) 4px;font-size:clamp(30px,9.5cqw,38px);font-weight:800;
@@ -11168,6 +11181,18 @@ body.mc-mode .cal-body{background:var(--bg);}
   background:#fff;color:var(--t2);}
 .msb-vbig .msb-vbtn.on{background:var(--green);border-color:var(--green);color:#fff;}
 .msb-vbig .msb-vbtn.off{background:var(--card2);color:var(--t3);opacity:.55;}
+/* 改期的簡易確認：原時段 → 新時段（2026-09-22 使用者指示
+   「跳出一個簡易的確認視窗表示前後的時段」）——
+   ⚠ 原時段用刪除線＋淡色、新時段用品牌綠：客人一眼就知道哪個是「要換掉的」。
+     只靠上下兩行文字的話，兩個時間長得一樣重，還要讀標籤才分得出來。
+   ⚠ 箭頭縮排對齊數字（margin-left 跟 .rs-k 的寬一致），不要浮在最左邊。 */
+.rs-swap{background:var(--card2);border-radius:12px;padding:14px 16px;}
+.rs-row{display:flex;align-items:center;gap:12px;}
+.rs-k{color:var(--t2);font-size:13px;flex:0 0 auto;width:48px;}
+.rs-v{font-family:var(--num);font-size:19px;font-weight:800;letter-spacing:-.01em;}
+.rs-v.old{color:var(--t3);text-decoration:line-through;text-decoration-thickness:1.5px;}
+.rs-v.new{color:var(--green);}
+.rs-ar{margin:2px 0 2px 60px;color:var(--gold);font-size:15px;font-weight:800;line-height:1;}
 /* 人數列（2026-09-16 使用者：「點跑步機的時候跟人數這一列太靠近了」）——
    ⚠ 與場地列拉開：它是「選了跑步機才出現」的第二層選擇，貼著上一列會看成同一組。
    ⚠ 提示文字獨立一行（flex:1 0 100%）：原本「人數」、按鈕、提示三個擠在同一列，
@@ -13801,8 +13826,8 @@ function tbl(s){return TABLE_ALIAS[s]||s;}
 let sb=null;
 // ── 版本號（日期+時間格式：年後兩碼+月+日.時分，例 26620.1058 = 26年6/20 10:58）──
 // 每次改版手動更新這一行即可，畫面與 title 會一起更新
-const APP_VERSION = '260922.2059';
-const APP_VERSION_LABEL = 'v260922.2059';
+const APP_VERSION = '260922.2252';
+const APP_VERSION_LABEL = 'v260922.2252';
 const CLOUD = !!(window.YUGYM_CONFIG && window.YUGYM_CONFIG.url && window.YUGYM_CONFIG.anonKey);
 if(CLOUD){ sb = supabase.createClient(window.YUGYM_CONFIG.url, window.YUGYM_CONFIG.anonKey); }
 
@@ -61308,7 +61333,13 @@ async function memh2SelfSlots(ds, until, reschedId){
   s.free=r.free; s.vids=r.vids;
   /* 史密斯訓練架不標（2026-08-22 使用者指示）——它是第一順位，沒標就是它；
      只有排到教室或跑步機才需要讓客人知道會上在哪。 */
-  const VN={multi:'',group:'團課教室',treadmill:'跑步機'};
+  /* ⚠ 2026-09-22 修：multi（史密斯訓練架）原本是空字串＝刻意不標（它是預設場地）。
+     但那讓「三個場地都有空」的時段只標得出團課教室與跑步機，使用者回報：
+     「訓練架被忽視了」「會造成客人誤會　整天都沒有訓練架可以用」。
+     現在三個都有名字，三個場地有空就列三列。
+     ⚠ 三個都用三個字（使用者：「還是統一改成　訓練架　教室　跑步機」）——
+       與第二步確認視窗那三顆場地鈕同一套字（見 VOPT），客人兩頁看到的要一樣。 */
+  const VN={multi:'訓練架',group:'教室',treadmill:'跑步機'};
   /* ⚠ 已經過去的時段要濾掉（2026-08-22 使用者回報「8/22 9:00 也過期了 自主應該也不能預約」）——
      msbProbeFree 只回「排不排得進去」，「現在幾點」本來是舊版 slotPanelHTML 在管的
      （它拿 todayStr/nowMin 把過去的格子畫成不可選）。這個視窗不走那支，所以要自己擋。 */
@@ -61360,6 +61391,11 @@ async function memh2SelfSlots(ds, until, reschedId){
        ⚠ 按下去仍是走 msbPickSlot，那裡三顆場地鈕讓客人自己選、沒位的變暗 ——
          這裡顯示兩列不是「要客人在這裡選」，是讓他知道這個時段有兩種可以選。 */
     const _tmn=(r.tmFree||{})[m];
+    /* 有空的場地**全部列出來**，最多三列（2026-09-22 使用者定版：
+       「預約時段要顯示　時間＋所有場地　所以下面要塞三列　這樣時間要改小一點」）。
+       ⚠ 原本 VN.multi 是空字串＝訓練架有空也不標（當它是預設場地），結果三個場地
+         都空著的時段只標得出團課教室與跑步機 —— 使用者：「訓練架被忽視了」
+         「會造成客人誤會　整天都沒有訓練架可以用」。 */
     const _vs=((r.vlist||{})[m]) || (r.vids[m]?[r.vids[m]]:[]);
     const tags=_vs.map(vid=>{
       const nm=VN[vid]||''; if(!nm) return '';
@@ -61617,7 +61653,11 @@ function memh2SelSlot(t){
   document.querySelectorAll('.modal .cag-slots .cag-slot[data-t]').forEach(el=>{
     el.classList.toggle('cag-slot-on', el.getAttribute('data-t')===window._mh2Pick); });
   const ok=document.getElementById('mh2qs-ok');
-  if(ok){ ok.disabled=!window._mh2Pick; ok.textContent=window._mh2Pick?`確認 ${window._mh2Pick}`:'確認'; }
+  /* 改期時這顆寫「更改時間」（2026-09-22 使用者指示：「右下角確認的按鈕改成［更改時間］
+     讓會員知道這次會改時間」）—— 同一個視窗、同一顆鈕，兩種情境要講不同的話。 */
+  const _rs=!!((window._msb||{}).resched);
+  if(ok){ ok.disabled=!window._mh2Pick;
+    ok.textContent=window._mh2Pick?`${_rs?'更改時間':'確認'} ${window._mh2Pick}`:(_rs?'更改時間':'確認'); }
 }
 function memh2GoSlot(){
   const t=window._mh2Pick;
@@ -61625,7 +61665,51 @@ function memh2GoSlot(){
   /* 記住來路，下一步的「返回」才退得回這一頁（2026-08-31）——
      日期與「這一點的效期」都要帶，否則退回來的日期列會變成所有票的聯集。 */
   window._mh2SlotBack={ date:((window._msb||{}).date)||mh2S().date, until:window._mh2SelfUntil||'' };
+  /* 改期走簡易確認（2026-09-22 使用者指示：「跳出一個簡易的確認視窗表示前後的時段」）——
+     ⚠ 不走 msbPickSlot 那一套：那張是「約新的一點」要確認的東西（場地／台數／使用人／
+       扣哪一張票）。改期只換時間，票已經定了、點也不再扣，整套問下去是多問的。 */
+  if((window._msb||{}).resched) return memh2ReschedAsk(t);
   closeModal(); msbPickSlot(t);     // 之後的場地／台數／使用人／選票券都走原本那一套
+}
+/* 改期的簡易確認：只講前後時段。
+   ⚠ 場地自動分配（使用者選的）但一定要寫出來 —— 不讓客人「改完才發現換了地方」。
+     這裡先探一次 validateBooking 拿到系統會排到哪一個，顯示的就是送出時會用的那個
+     （msbConfirm 的改期分支同樣不帶 venue_pref，所以兩次算出來是同一個）。
+   ⚠ 探不到就擋下並把原因講出來，不要讓客人按了才失敗。 */
+async function memh2ReschedAsk(t){
+  const s=window._msb; if(!s||!s.resched) return;
+  const vbk={id:s.resched.id,member_id:SESSION.id,coach_id:null,category:'自主訓練',
+    ticket_type_id:s.resched.ttid,venue_pref:null};
+  const verr=await validateBooking(vbk,s.date,t,60);
+  if(verr){ showToast(verr); return; }
+  const VNM={multi:'訓練架',group:'教室',treadmill:'跑步機'};
+  const _vid=String(vbk.venue_unit||'').split('_')[0];
+  const _fmt=(d,tm)=>{ const x=parseYmd(d);
+    return `${String(d).slice(5).replace('-','/')}（${'日一二三四五六'[x.getDay()]}）${String(tm).slice(0,5)}`; };
+  closeModal();
+  showModal(`<div class="modal-title">確認更改時間</div>
+    <div class="rs-swap">
+      <div class="rs-row"><span class="rs-k">原時段</span><b class="rs-v old">${_fmt(s.resched.origDate,s.resched.origTime)}</b></div>
+      <div class="rs-ar">↓</div>
+      <div class="rs-row"><span class="rs-k">新時段</span><b class="rs-v new">${_fmt(s.date,t)}</b></div>
+    </div>
+    <div style="background:var(--card2);border-radius:10px;padding:12px 14px;font-size:13.5px;line-height:1.9;margin-top:10px;">
+      <div><span style="color:var(--t2);">場地</span>　${VNM[_vid]||'自動安排'}</div>
+    </div>
+    <div style="font-size:11.5px;color:var(--t3);margin-top:10px;">改期不另外扣點；開課 24 小時前可改。</div>
+    <div class="modal-foot">
+      <button class="btn btn-ghost" onclick="memh2ReschedBack()">返回</button>
+      <button class="btn btn-green" onclick="msbConfirm('${t}')">確認更改</button>
+    </div>`);
+}
+/* ⚠⚠ 改期的「返回」不能用 msbSlotBack —— 那一支呼叫 memh2SelfSlots 時**不帶 reschedId**，
+   而 memh2SelfSlots 開頭就寫了「if(!reschedId) s.resched=null」。改期狀態一被清掉，
+   同一個視窗就變成「預約自主訓練」，客人再按下去會**扣掉一點去約新的**，
+   原本那筆還留在舊時段。所以改期自己一條返回，把 reschedId 帶回去。 */
+function memh2ReschedBack(){
+  const s=window._msb;
+  if(s&&s.resched){ memh2SelfSlots(s.date||s.resched.origDate, '', s.resched.id); return; }
+  msbSlotBack();
 }
 PAGES.mem_bookings=async function(){
   memSignBannerCheck();   // 待簽合約浮動橫幅（2026-07-28）
@@ -62788,7 +62872,16 @@ async function msbPickSlot(t){
   const d=parseYmd(s.date);
   /* 場地選擇（2026-07-26 使用者指示）：確認視窗內選場地，預設＝自動分配到的；
      逐一驗證該時段各場地是否還有位，沒位的不顯示。 */
-  const VOPT=[['multi','多功能'],['group','教室'],['treadmill','跑步機']];
+  /* ⚠ 2026-09-22 使用者指示：「確認以後的第二步視窗　多功能要改成史密斯訓練架」——
+     這三顆鈕的字是 0726 寫死的縮寫，而場地 0903 就已經更名（見 VENUES 那份：
+     multi 的 name 是「史密斯訓練架」）。全站只剩這裡還寫著舊名。
+     ⚠⚠ 三個都用三個字（使用者同日二修：「還是統一改成　訓練架　教室　跑步機」）——
+       我先改成完整名稱「史密斯訓練架」，量出來文字寬 84px、按鈕內寬只有 70px，
+       瀏覽器會斷成「史密斯訓／練架」（量到的行寬 56／28）。
+       三個字對齊之後三顆等寬等高、都單行，不必為了斷句寫死 <br>。
+       ⚠ 這只適用**預約流程**（這三顆鈕與時段格的標籤）；課卡維持完整名稱
+         「史密斯訓練架」（0903 使用者定案），那是不同的畫面、沒有寬度壓力。 */
+  const VOPT=[['multi','訓練架'],['group','教室'],['treadmill','跑步機']];
   const opts=await Promise.all(VOPT.map(async([vid,label])=>{
     const probe={id:s.resched?s.resched.id:null,member_id:SESSION.id,coach_id:null,category:'自主訓練',
       ticket_type_id:s.resched?s.resched.ttid:tk.ticket_type_id,venue_pref:vid};

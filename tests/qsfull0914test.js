@@ -36,7 +36,7 @@ ok('★★★ 全部掛在 .qs-mtop 底下，沒有動到全域 .modal／.cag-sl
    !/^\.modal \.cag-slots \.cag-slot\{[^}]*font-size:clamp/m.test(src)
    && /^\.cag-slot\{border:none;border-radius:12px;padding:9px 0;font-size:13\.5px;/m.test(src));
 ok('★★ 只在手機全螢幕那段裡（桌機維持置中視窗）',
-   /@media\(max-width:600px\),\(orientation:portrait\) and \(max-width:1024px\)\{[\s\S]{0,3000}?\.cag-slots \.cag-slot\{/.test(src));
+   /@media\(max-width:600px\),\(orientation:portrait\) and \(max-width:1024px\)\{[\s\S]{0,4200}?\.cag-slots \.cag-slot\{/.test(src));
 
 /* 2026-09-21 使用者兩則回報（同一段 CSS 同時處理）：
      「怎麼格子變那麼大　是因為時段變少了嗎」（只剩兩個時段時整格撐成半個畫面）
@@ -48,8 +48,16 @@ ok('★★ 只在手機全螢幕那段裡（桌機維持置中視窗）',
 console.log('\n④ 一頁八個時段、時段少也不撐大（2026-09-21）');
 ok('★★★ align-content:start —— 只剩一列時不會被撐成整個時段區',
    has(Q+' \\.cag-slots\\.chvqs2\\{\\s*\\n?\\s*align-content:start;'));
-ok('★★★ 列高＝容器高度的四分之一 ＝ 一頁四列八格，其餘往下捲',
-   has(Q+' \\.cag-slots\\.chvqs2\\{\\s*\\n?\\s*align-content:start;grid-auto-rows:calc\\(\\(100% - 24px\\)/4\\);\\}'));
+/* 2026-09-22 使用者附截圖：「更改自主訓練時間的頁面壞掉了」——時段格整片疊在一起。
+   根因：原本只寫 calc(...)＝只有上限沒有下限，時段區一矮（改期多了取消鈕、原時段、
+   改期提示，上方多吃掉約 110px；LINE 內建瀏覽器又更矮）四分之一就小於格子內容
+   需要的高度，格子被壓扁、字溢出疊到下一列。量到：360×460 時每格 31px、
+   內容需要 47px → 重疊 16px。 */
+ok('★★★ 列高＝容器高度的四分之一（上限）但不得小於內容（下限）＝ 一頁四列八格，其餘往下捲',
+   has(Q+' \\.cag-slots\\.chvqs2\\{\\s*\\n?\\s*align-content:start;grid-auto-rows:minmax\\(min-content,calc\\(\\(100% - 24px\\)/4\\)\\);\\}'));
+ok('★★ 下限不可以拿掉（拿掉就回到「格子疊在一起」那個災情）',
+   /minmax\(min-content,calc\(\(100% - 24px\)\/4\)\)/.test(src)
+   && /重疊 16px/.test(src));
 ok('★★ 24px 要對得上實際的 gap（三道 8px），不然一頁會變成 3.9 列',
    /\.modal \.cag-slots\.chvqs2\{display:grid;grid-template-columns:1fr 1fr;gap:8px;\}/.test(src));
 ok('★★ 撐大的成因寫在原地（下次有人想拿掉 align-content 時看得到）',
