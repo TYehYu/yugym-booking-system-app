@@ -530,12 +530,18 @@ t('★★ 日期卡高度寫死、內容置中（不再靠行高比例留空間�
   /* 2026-09-22：時段格改成「一小時一列、左整點右 30 分」的固定格線
      （使用者：「左邊欄保持整點　右邊欄是30分時段　如果某時段場地已滿用暗化表示　不要隱藏」），
      所以格子不再由 mms 直接 map 出來。
-     ⚠ mms 仍然留著 —— 上方那句「還能預約 N 個時段」只能數可約的，不含暗化的。 */
+     ⚠ mms 仍然留著 —— 它還在決定「這天有沒有可約時段」（沒有就畫空狀態、不畫確認鈕）。
+     ⚠⚠ 2026-09-22：上方那句「還能預約 N 個時段」已移除（使用者：「只顯示 2026/09/23（三）
+       並明顯化　不用顯示後面可預約時段　讓閱讀重點可以放在時間」），所以不再斷言那句話。 */
   t('★★ 挑時段流程一格沒動（可約格、確認鈕、可約數仍只算未過期的）',
     /onclick="memh2SelSlot\('\$\{t\}'\)"/.test(QS)
-    && /<button class="btn btn-primary" id="mh2qs-ok" disabled onclick="memh2GoSlot\(\)">確認<\/button>/.test(QS)
-    && /const mms=Array\.from\(r\.free\)\.filter\(m=>_nowMin<0\|\|m>=_nowMin\)\.sort\(\(a,b\)=>a-b\);/.test(QS)
-    && /還能預約'\} <b>\$\{mms\.length\}<\/b> 個時段/.test(QS));
+    && /<button class="btn btn-primary" id="mh2qs-ok" disabled onclick="memh2GoSlot\(\)">\$\{_rs\?'更改時間':'確認'\}<\/button>/.test(QS)
+    && /const mms=Array\.from\(r\.free\)\.filter\(m=>_nowMin<0\|\|m>=_nowMin\)\.sort\(\(a,b\)=>a-b\);/.test(QS));
+  t('★★ 標頭只剩日期（不再寫「還能預約 N 個時段」）',
+    /<div class="qs-head-t">\$\{date\.replace\(\/-\/g,'\/'\)\}（\$\{'日一二三四五六'\[_d\.getDay\(\)\]\}）<\/div>/.test(QS)
+    /* ⚠ 先把註解剝掉再驗「沒有這句話」—— 原地註解裡就寫著「還能預約 N 個時段已移除」，
+       直接驗會命中自己的說明（yugym-assert-hits-comment，這是第五次）。 */
+    && !/還能預約/.test(QS.replace(/\/\*[\s\S]*?\*\//g,'')));
 }
 
 

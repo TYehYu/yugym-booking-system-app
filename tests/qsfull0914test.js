@@ -28,7 +28,7 @@ ok('★★ 場地標籤（團課教室／跑步機）跟著放大',
    has(Q+' \\.cag-slot-tag\\{\\s*\\n?\\s*font-size:clamp\\(13px,4cqw,17px\\);'));
 ok('★★ 標題、當日摘要、按鈕都升一階',
    has(Q+' \\.modal-title\\{font-size:21px;font-weight:900;\\}')
-   && has(Q+' \\.qs-head-t\\{font-size:15px;\\}')
+   && has(Q+' \\.qs-head-t\\{\\s*\\n?\\s*font-size:19px;font-weight:800;color:var\\(--text\\);letter-spacing:-\\.01em;\\}')
    && has(Q+' \\.modal-foot \\.btn\\{min-height:54px;font-size:17px;'));
 
 console.log('\n③ 範圍控制');

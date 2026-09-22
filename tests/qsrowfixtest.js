@@ -52,9 +52,14 @@ console.log('① 日期列：七格攤開、不准被壓、不准上下捲');
 console.log('\n② 字級改吃容器寬度，不用斷點');
 {
   ok('★★★ 容器宣告 container-type', /container-type:inline-size;/.test(QSDAYS));
+  /* 2026-09-22 星期放大（使用者：「星期可以改成(一)(二) 然後放大一點」）：
+     9.1px → 12.6px。上限 14px 是刻意壓在日期那行（14.7px）之下，主從才不會顛倒。 */
   ok('★★★ 日期與週標都用 clamp(...cqw...) 連續縮放',
      /\.qs-day b\{[^}]*font-size:clamp\(12px,4\.2cqw,19px\);/.test(src)
-     && /\.qs-day i\{[^}]*font-size:clamp\(9px,2\.6cqw,11\.5px\);/.test(src));
+     && /\.qs-day i\{[^}]*font-size:clamp\(11px,3\.6cqw,14px\);/.test(src));
+  ok('★★ 星期用半形括號（全形在 40px 的卡片內寬會溢出）',
+     /'\('\+'日一二三四五六'\[dd\.getDay\(\)\]\+'\)'/.test(src)
+     && /半形括號不是全形/.test(src));
   ok('★★ 兩行都不准折行（寧可字小一階，也不要七格高低不齊）',
      /\.qs-day i\{[^}]*white-space:nowrap;/.test(src) && /\.qs-day b\{[^}]*white-space:nowrap;/.test(src));
 }
