@@ -13797,8 +13797,8 @@ function tbl(s){return TABLE_ALIAS[s]||s;}
 let sb=null;
 // ── 版本號（日期+時間格式：年後兩碼+月+日.時分，例 26620.1058 = 26年6/20 10:58）──
 // 每次改版手動更新這一行即可，畫面與 title 會一起更新
-const APP_VERSION = '260922.1612';
-const APP_VERSION_LABEL = 'v260922.1612';
+const APP_VERSION = '260922.1645';
+const APP_VERSION_LABEL = 'v260922.1645';
 const CLOUD = !!(window.YUGYM_CONFIG && window.YUGYM_CONFIG.url && window.YUGYM_CONFIG.anonKey);
 if(CLOUD){ sb = supabase.createClient(window.YUGYM_CONFIG.url, window.YUGYM_CONFIG.anonKey); }
 
@@ -17772,8 +17772,14 @@ function visibleGroups(){
   const limited=isFd||isMgr;
   return ADMIN_NAV2
     .filter(g=>!g.sup || !!SESSION.is_manager || SESSION.role==='admin' || SESSION.role==='front_desk')   // 班表：店長/管理員可改，櫃檯唯讀（2026-07-29）
-    .filter(g=>!limited||g.fd||g.sup).map(g=>{
+    /* ⚠ 訓練方案要放行（2026-09-22）——它沒有 fd:true（櫃檯沒有課要上，刻意不給），
+       但**店長教練也是教練**，limited 這條會把它一起濾掉。
+       用 wpEnabled() 判：櫃檯不是 teachable 所以照樣看不到，店長教練看得到。 */
+    .filter(g=>!limited||g.fd||g.sup||(g.key==='g_train'&&wpEnabled())).map(g=>{
     if(!limited||g.sup) return g;
+    /* ⚠ 同上：g_train 的子項目也沒有 fd，不放行的話 sub 會被濾空、整組又被下面那行丟掉。
+       這是同一個 bug 的第二半 —— 只改上面那條過濾，店長教練仍然看不到。 */
+    if(g.key==='g_train') return g;
     return Object.assign({},g,{sub:g.sub.filter(s=>s.fd)}); // 櫃台/店長只看 fd 的次功能
   }).filter(g=>g.sub.length);
 }
@@ -17849,7 +17855,14 @@ function renderLeftSidebar(groups){
       </div>`:''}
     <nav class="mc-nav">
       ${isCoachWide
-        ? [['coach_today','首頁','g_dashboard'],['calendar','預約行事曆','g_booking']].map(([pg,lb,ic])=>
+        ? [['coach_today','首頁','g_dashboard'],['calendar','預約行事曆','g_booking']]
+            /* ⚠ 訓練方案（2026-09-22 使用者回報：「教練用桌機看不到訓練方案可以設定」）——
+               0909 把它加進 NAV.coach 了，但**一般教練在桌機根本不走 NAV.coach**：
+               上面那段 `if(!isMobile && !SESSION.is_manager)` 會先 renderLeftSidebar 再 return，
+               而這條頂列一直是硬寫死的兩項。手機端（MOBILE_COACH_NAV）有濾 wpEnabled 所以看得到，
+               桌機就這樣漏了兩週。
+               ⚠ 判準與其他三份導覽同一支 wpEnabled()（能開課的教練＋管理員），不要另寫條件。 */
+            .concat(wpEnabled()?[['coach_plans','訓練方案','g_train']]:[]).map(([pg,lb,ic])=>
             `<div class="mc-nav-item${CUR_PAGE===pg?' active':''}" data-page="${pg}" onclick="navTo('${pg}')" title="${lb}">
               <span class="mc-ni-ic">${NAV2_ICONS[ic]||''}</span>
               <span class="mc-ni-label">${lb}</span>

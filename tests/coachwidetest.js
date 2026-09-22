@@ -24,8 +24,25 @@ ok('　　打卡 FAB 也收起（那是手機版右下角的）', /#app-screen\.
 ok('　　店長桌機那條規則沒被動到', /#app-screen\.desktop-wide\.role-coach \.navbar-row\{display:flex;\}/.test(src));
 
 console.log('\n導覽項目');
-ok('★ 綠底頂列只放 首頁 ＋ 預約行事曆',
-   /\[\['coach_today','首頁','g_dashboard'\],\['calendar','預約行事曆','g_booking'\]\]\.map/.test(src));
+/* 2026-09-22 使用者回報：「教練用桌機看不到訓練方案可以設定」——
+   0909 把訓練方案加進 NAV.coach 了，但**一般教練在桌機根本不走 NAV.coach**：
+   `if(!isMobile && !SESSION.is_manager)` 會先 renderLeftSidebar 再 return，
+   而這條綠底頂列一直是硬寫死的兩項。手機端（MOBILE_COACH_NAV）有濾 wpEnabled 所以看得到。
+   ⚠ 三份導覽（手機底部／手機側邊／桌機頂列）要走同一條線 —— 都用 wpEnabled()。 */
+ok('★ 綠底頂列：首頁 ＋ 預約行事曆，能開課的再加訓練方案',
+   /\[\['coach_today','首頁','g_dashboard'\],\['calendar','預約行事曆','g_booking'\]\]/.test(src)
+   && /\.concat\(wpEnabled\(\)\?\[\['coach_plans','訓練方案','g_train'\]\]:\[\]\)\.map/.test(src));
+ok('★★★ 不能開課的教練仍然看不到（判準與其他三份導覽同一支 wpEnabled）',
+   /function wpEnabled\(\)\{ return !!\(SESSION && \(SESSION\.role==='admin' \|\| isTeachable\(SESSION\)\)\); \}/.test(src)
+   && (src.match(/n\.key!=='coach_plans'\|\|wpEnabled\(\)/g)||[]).length>=2);
+/* 店長教練走的是另一條（buildNav2 → visibleGroups），同一天發現的第二半 bug：
+   g_train 沒有 fd:true（櫃檯刻意不給），limited 這條會把它連同店長教練一起濾掉；
+   而且就算放行了群組，下面還會把 sub 濾成只剩 fd → 濾空 → 整組又被丟掉。兩處都要放行。 */
+ok('★★★ 店長教練也看得到（群組過濾與子項目過濾兩處都要放行）',
+   /\.filter\(g=>!limited\|\|g\.fd\|\|g\.sup\|\|\(g\.key==='g_train'&&wpEnabled\(\)\)\)/.test(src)
+   && /if\(g\.key==='g_train'\) return g;/.test(src));
+ok('★★ 櫃檯照樣看不到（櫃檯不是 teachable，wpEnabled 回 false）',
+   /不給 fd:true：櫃檯沒有課要上/.test(src));
 ok('★ 只在「非手機且非店長」時走這條（店長仍是完整側欄版）',
    /if\(!isMobile && !SESSION\.is_manager\)\{[\s\S]{0,300}renderLeftSidebar\(\);/.test(src));
 ok('★ 換頁時綠底頂列的高亮跟著換',
