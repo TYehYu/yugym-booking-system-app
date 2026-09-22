@@ -128,10 +128,20 @@ console.log('\n⑤ 團／商圓章（2026-09-21 使用者：「才不會讓左�
   ok('★★★ 有約別時仍畫約別，不會被團／商蓋掉',
      /<KIND:renewal>/.test(K({tk:'T1',cls:'group',kind:'renewal'})));
   ok('★ 教練課票不會被誤標成團', !/rev-kind-group/.test(K({tk:'T1',cls:'pt'})));
-  /* 使用者只指名團課與商品兩種；其餘維持空格子（那一格是為了讓姓名對齊才存在的） */
-  ok('★ 場租／重啟仍是空格子（只指名了團與商）',
-     /mc-rev-kv-none/.test(K({pur:'P1',src:'facility_rental'}))
-     && /mc-rev-kv-none/.test(K({pur:'P2',src:'reactivate'})));
+  /* 2026-09-22 使用者：「場租也要給個圓形章」——
+     0921 當時刻意不給（「只指名團課與商品」），0922 場租變成真的會賣的東西
+     （有自己的方案、可以賣回數票），營收明細開始常態出現這種列，留白就說不過去了。
+     ⚠ 票券重啟**仍然不給** —— 那不是「賣了什麼」，是把舊票救回來。 */
+  ok('★★★ 場租要有〔租〕章', /rev-kind-rent[^>]*>租</.test(K({pur:'P1',src:'facility_rental'})));
+  ok('★ 票券重啟仍是空格子（那不是一種賣出的東西）',
+     /mc-rev-kv-none/.test(K({pur:'P2',src:'reactivate'})));
+  /* ⚠ 場租與商品同色是刻意的：兩者都是「不是課」的收入，字不同就分得出來，
+     再多發明一個顏色只會稀釋掉課程色的語意。 */
+  ok('★★ 場租用中性灰（與商品同一組，不佔課程色）',
+     /\.rev-kind-rent\{background:#f0eee9;color:#6b635a;border-color:#ded9d1;\}/.test(src)
+     && /場租不佔課程色（全站一律 ev-self）/.test(src));
+  ok('★★ 有約別時仍以約別優先（場租那條不會蓋掉分期章）',
+     /<KIND:installment>/.test(K({tk:'T9',src:'facility_rental',kind:'installment'})));
   /* 2026-09-21 使用者：「團課張改成橘色 跟課卡一樣」——
      團＝行事曆／課卡上團課的那個橘（--course-group-accent #9a5a1e），三處同一個色。
      ⚠ Ink 模式只吃 color（框線 currentColor、背景透明），所以那一層自動跟著變。 */
