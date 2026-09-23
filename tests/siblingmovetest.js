@@ -74,6 +74,26 @@ console.log('④ 會員端那一半（2026-09-16 已修，不可回退）');
      /const mine=bookings\.filter\(b=>bkHasMember\(b,SESSION\.id\)&&b\.status!=='cancelled' && !b\.sibling_of\)/.test(src));
 }
 
+console.log('④-2 資料庫那一道（會員手機唯一能改預約的路）');
+{
+  const mg=process.env.HOME+'/Projects/yugym-booking-system-app/docs/migrations/20260923_self_reschedule_sibling_guard.sql';
+  const has=fs.existsSync(mg);
+  ok('★★ migration 有進版控', has, mg);
+  const t=has?fs.readFileSync(mg,'utf8'):'';
+  ok('★★★ fn_member_self_reschedule 擋影子卡',
+     /if b\.sibling_of is not null then\s*\n\s*return jsonb_build_object\('ok',false,'error_code','BOOKING\.IS_SIBLING'\);/.test(t));
+  ok('★★★ 主卡搬動時第 2 台跟著搬（與前端 bkMoveSiblings 同一套行為）',
+     /for s in select \* from bookings where sibling_of=b\.id and status::text<>'cancelled' for update loop/.test(t));
+  ok('★★★ 新時段被佔走就取消第 2 台，不要留在舊時段',
+     /status='cancelled',[\s\S]{0,120}同行第 2 台取消/.test(t));
+  ok('★★ 順手修掉「自己擋自己」：重複與場地檢查要排除自己那一組的第 2 台',
+     /x\.sibling_of is null\s+-- 自己那組的第 2 台不算「重複」/.test(t)
+     && /x\.sibling_of is distinct from b\.id/.test(t));
+  ok('★★ security definer 固定 search_path', /set search_path to 'public','pg_temp'/.test(t));
+  ok('★★ 前端認得新錯誤碼（不要吐一串英文給客人）',
+     (src.match(/'BOOKING\.IS_SIBLING':'這是同行的第 2 台，請改主預約那一筆'/g)||[]).length===2);
+}
+
 console.log('⑤ 影子卡的出生規則沒被動到（它本來就該跟主卡同時段）');
 {
   const A=(src.match(/async function bkAddTreadmillUnits\(bk, want\)\{[\s\S]*?\n\}/)||[''])[0];
