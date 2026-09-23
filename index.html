@@ -13837,8 +13837,8 @@ function tbl(s){return TABLE_ALIAS[s]||s;}
 let sb=null;
 // ── 版本號（日期+時間格式：年後兩碼+月+日.時分，例 26620.1058 = 26年6/20 10:58）──
 // 每次改版手動更新這一行即可，畫面與 title 會一起更新
-const APP_VERSION = '260922.2311';
-const APP_VERSION_LABEL = 'v260922.2311';
+const APP_VERSION = '260923.1028';
+const APP_VERSION_LABEL = 'v260923.1028';
 const CLOUD = !!(window.YUGYM_CONFIG && window.YUGYM_CONFIG.url && window.YUGYM_CONFIG.anonKey);
 if(CLOUD){ sb = supabase.createClient(window.YUGYM_CONFIG.url, window.YUGYM_CONFIG.anonKey); }
 
@@ -28879,6 +28879,18 @@ function venueMoveNote(b){
      —— 那是另一件事，而且要等使用者選好新時間才知道。 */
 function bkMoveBlockReason(b){
   if(!b) return '找不到預約';
+  /* ⚠⚠ 影子卡不可以被單獨搬走（2026-09-23 李昭賜案例）——
+     一堂佔兩台在資料層是兩筆 booking，第二台 sibling_of 指回主預約、**不綁票不扣點**。
+     它被單獨改時間之後就跟主預約脫鉤，變成一張「不扣點、卻佔著那個時段、
+     畫面上還有姓名」的幽靈預約 —— 櫃檯看起來就像那位會員在沒有票券的情況下多約了一堂。
+     實例：BK-1a0c3c8175f36bb 出生時是 9/23 20:00 第二台跑步機（note 還留著
+     「同行使用（跑步機）・不另外扣點」），被搬到 9/23 21:00 訓練架。
+     ⚠ 這是 2026-09-16「影子卡濾在來源」那次只修了一半的另一半：
+       那次修的是**會員端**換時段清單（msbStart 的 futureSelf），
+       櫃檯端的行事曆拖曳與「調整預約時間」完全沒擋。
+     ⚠ 擋在這一支就夠：視窗（admhMoveAsk）與三條拖曳路徑都拿它當唯一規則來源。
+     ⚠ 主卡改時間時第二台會跟著走（見 amvSave 末段），所以這裡叫人去改主預約。 */
+  if(b.sibling_of) return '這是同行的第 2 台，不能單獨改時間 —— 請改主預約那一筆，第 2 台會跟著走';
   if(b.status==='cancelled') return '已取消的課無法調整時間';
   if(b.no_show===true) return '這一堂已標記未到課。要改時間請先在課卡按「取消未到課」';
   if(b.status==='checked_in'||b.status==='completed') return '已簽到／已完成的課不能改時間（請先取消簽到）';
@@ -29050,6 +29062,7 @@ async function _admhMoveDo(id){
     try{
       b.date=nd; b.start_time=nt; await dbPut('bookings',b);
       showToast('已更新預約時間');
+      await bkMoveSiblings(b, nd, nt);      // 同行的第 2 台跟著走（見下方）
     }catch(err){ showToast('修改失敗：'+(err&&err.message?err.message:err)); navTo(CUR_PAGE); return; }
     /* 先改期再連排 —— 起點要用「改完之後」的日期時間，不然新排的那幾堂還跟著舊時段走 */
     if(rc.on) await amvRunRecur(b, nd, nt, rc);
@@ -29057,6 +29070,42 @@ async function _admhMoveDo(id){
     if(_grpLater && _grpLater.length){ try{ await grpTimeAsk(b.id, _grpLater, nt, nv); return; }catch(_){} }
     navTo(CUR_PAGE);
   });
+}
+/* 主預約改時間 → 同行的第 2 台跟著走（2026-09-23 李昭賜案例）——
+   不跟著走的話，主卡搬到新時段、第 2 台還佔著**舊**時段，那台就變成看不見的幽靈
+   （不綁票、不扣點，但別人約不到）。這是 bkMoveBlockReason 擋住「單獨搬影子卡」的另一半：
+   單獨搬不行，但跟著主卡搬一定要成。
+   ⚠ 新時段那一台可能已經被別人約走 —— 佔不到就**取消第 2 台並明講**，
+     不要靜靜留在舊時段（那就是這次的 bug）。
+   ⚠ 只搬還活著的；已取消的不動。
+   ⚠ 整段包在 try 裡：第 2 台搬不動不該讓主卡的改期看起來失敗（主卡已經寫進去了）。 */
+async function bkMoveSiblings(b, nd, nt){
+  try{
+    const all=await dbGetAll('bookings').catch(()=>[]);
+    const sibs=(all||[]).filter(x=>x && x.sibling_of===b.id && x.status!=='cancelled');
+    if(!sibs.length) return;
+    const dur=Number(b.duration)||60;
+    const ns=timeToMin(nt), ne=ns+dur;
+    const ov=x=>{ const s0=timeToMin(x.start_time), e0=s0+(Number(x.duration)||60); return s0<ne && ns<e0; };
+    /* 新時段已經被佔住的單位（排除這一組自己的） */
+    const mine=new Set([b.id].concat(sibs.map(x=>x.id)));
+    const taken={};
+    (all||[]).forEach(x=>{ if(x && x.date===nd && x.status!=='cancelled' && x.venue_unit
+      && !mine.has(x.id) && ov(x)) taken[x.venue_unit]=1; });
+    const moved=[], dropped=[];
+    for(const s of sibs){
+      if(taken[s.venue_unit]){
+        await dbPut('bookings', Object.assign({}, s, {status:'cancelled'}));
+        dropped.push(venueName(s.venue_unit)||'第 2 台');
+      }else{
+        taken[s.venue_unit]=1;
+        await dbPut('bookings', Object.assign({}, s, {date:nd, start_time:nt}));
+        moved.push(venueName(s.venue_unit)||'第 2 台');
+      }
+    }
+    if(dropped.length) showToast(`同行的第 2 台（${dropped.join('、')}）在新時段已被約走，已取消`, 6000);
+    else if(moved.length) showToast(`同行的第 2 台也一起改到新時間`, 4000);
+  }catch(e){ console.error('同行第 2 台跟著改期失敗:', e); }
 }
 /* 以某一堂為起點往後每週連排（2026-08-23 使用者指示，入口在「調整日期／時間」）。
    整個建立走既有的 runRecurringBooking —— 挑票、扣課、寫 ticket_logs、場地配置、
@@ -30191,6 +30240,7 @@ async function wtlDropAt(bid, ds, mm){
     // 被擠到次選場地 → 先讓操作者確認（2026-07-30 使用者指示）
     if(b._venueOverflow && !(await confirmVenueOverflow(b,'取消移動'))){ renderWeekTimeline(); return; }
     b.date=ds; b.start_time=ntime; await dbPut('bookings',b);
+    await bkMoveSiblings(b, ds, ntime);      // 同行的第 2 台跟著走（2026-09-23）
     hapticFeedback(10);
     showToast('已移動預約至 '+ds+' '+ntime);
     renderWeekTimeline();
@@ -30214,6 +30264,7 @@ async function wtlDropMove(ds, mm){
     if(!(await confirmOffHours(ds, ntime, b.duration||60, '取消移動', b.category))) return;
     if(b._venueOverflow && !(await confirmVenueOverflow(b,'取消移動'))) return; // 場地被擠 → 操作者決定
     b.date=ds; b.start_time=ntime; await dbPut('bookings',b);
+    await bkMoveSiblings(b, ds, ntime);      // 同行的第 2 台跟著走（2026-09-23）
     wtlCancelMove();
     showToast('已移動預約至 '+ds+' '+ntime);
     renderWeekTimeline();
@@ -30884,6 +30935,7 @@ async function cagDropMove(bid, ds, mm){
     confirmCalMove(b, b.date, b.start_time, b.duration||60, ds, ntime, b.duration||60, async()=>{
       try{
         b.date=ds; b.start_time=ntime; await dbPut('bookings',b);
+        await bkMoveSiblings(b, ds, ntime);      // 同行的第 2 台跟著走（2026-09-23）
         hapticFeedback(10);
         showToast('已移動預約至 '+ds+' '+ntime);
       }catch(err){ showToast('移動失敗：'+(err&&err.message?err.message:err)); }
