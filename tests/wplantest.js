@@ -465,7 +465,7 @@ ok('★★★ 用 10050 不用更高 —— 挑選視窗 #adp-sheet 是 10090，
    ⚠ 0909 那條防線沒有消失，只是換人扛：現在的 flex 子項是副標，備註一長
      一樣會擠到右邊的數字，min-width:0 要掛在它身上。 */
 ok('★★★ 動作名稱獨佔第一列（不再與第一組數字搶同一列）',
-   /<div class="tlh-ex">\$\{l\.exercise_name\}<\/div>/.test(src)
+   /<div class="tlh-ex">\$\{escH\(l\.exercise_name\|\|'—'\)\}<\/div>/.test(src)
    && /\.tlh-ex\{font-size:[\d.]+px;font-weight:700;color:var\(--text\);line-height:[\d.]+;margin-bottom:\d+px;\}/.test(src));
 /* 2026-09-16 三改（使用者：「左邊第一列是動作名稱　第二列備註　第三列靠下留給姿勢/工具」）。
    ⚠ 空的那一列不要畫成空元素，否則沒備註的動作會憑空多一段高度。 */
@@ -476,7 +476,7 @@ ok('★★★ 動作名稱獨佔第一列（不再與第一組數字搶同一列
      掛到外層，.tlh-log-main 的 z-index:1 才壓得過浮水印的 z-index:0。
    ⚠ 備註（.tlh-note）留在左欄原位 —— 它是要讀的字，不是浮水印。 */
 ok('★★★ 浮水印掛在卡片直接子層，備註留在左欄',
-   /\$\{_pt\?`<div class="tlh-pt">\$\{_pt\}<\/div>`:''\}\s*\n\s*<div class="tlh-log-main"><div class="tlh-log-left">\$\{_nt\?`<div class="tlh-note">\$\{_nt\}<\/div>`:''\}<\/div>/.test(src));
+   /\$\{_pt\?`<div class="tlh-pt">\$\{escH\(_pt\)\}<\/div>`:''\}\s*\n\s*<div class="tlh-log-main"><div class="tlh-log-left">\$\{_nt\?`<div class="tlh-note">\$\{escH\(_nt\)\}<\/div>`:''\}<\/div>/.test(src));
 ok('★★★ 數字要壓在浮水印上面（z-index 的方向不能反）',
    /\.tlh-log-main\{position:relative;z-index:1;\}/.test(src)
    && /\.tlh-pt\{position:absolute;[^}]*z-index:0;/.test(src));

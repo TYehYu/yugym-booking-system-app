@@ -9,8 +9,14 @@ const fn=name=>{ const i=src.indexOf('function '+name+'('); if(i<0) throw new Er
   for(let k=src.indexOf('{',i);k<src.length;k++){ if(src[k]==='{')d++; else if(src[k]==='}'){ d--; if(!d) return src.slice(i,k+1); } } };
 
 console.log('① 入口');
-ok('★★★ 點今日紀錄那一列就是修改', /<div class="tlh-log" onclick="tlEditLog\('\$\{l\.id\}'\)">/.test(src));
-ok('★★★ ✕ 擋住冒泡（刪之前不會先跳出修改視窗）', /<button class="tl-del" onclick="event\.stopPropagation\(\);delTrainingLog\('\$\{l\.id\}'\)">✕<\/button>/.test(src));
+/* 2026-09-23：這張動作卡抽成共用的 tlLogCardHtml(l, editable)，
+   教練端傳 true（可點可刪）、會員端傳 false（唯讀）。斷言跟著搬到那支裡。 */
+ok('★★★ 點今日紀錄那一列就是修改（editable 才掛 onclick）',
+   /\$\{editable\?` onclick="tlEditLog\('\$\{l\.id\}'\)"`:''\}/.test(src)
+   && /<div class="tlh-log\$\{editable\?'':' tlh-log-ro'\}"/.test(src));
+ok('★★★ ✕ 擋住冒泡（刪之前不會先跳出修改視窗），而且只有可編輯時才畫',
+   /\$\{editable\?`<button class="tl-del" onclick="event\.stopPropagation\(\);delTrainingLog\('\$\{l\.id\}'\)">✕<\/button>`:''\}/.test(src));
+ok('★★★ 教練端傳 editable=true', /tlLogCardHtml\(l, true\)/.test(src));
 ok('★★ 看得出點得下去：標題旁一句提示（有紀錄才畫）＋按壓回饋',
    /今日訓練紀錄\$\{logs\.length\?'<span class="tlh-hint">點一下可修改<\/span>':''\}/.test(src) && /\.tlh-log:active\{background:#e3efe9;\}/.test(src));
 

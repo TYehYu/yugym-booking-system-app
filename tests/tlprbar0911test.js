@@ -80,8 +80,9 @@ ok('★★★ slot 的過濾**不可以**跟著拿掉（那是別人的紀錄，
 /* ══ 〔已移除〕課表張數頁籤的「移除頁面」鈕（2026-09-16 做的）══
    0921 整個張數功能退場（見 ③），這一區連同 tlDelSheet／tlDelSheetDo
    與 .tl-sheets 那組樣式一起收掉。刪紀錄的路仍在：每一張動作卡右上角的 ✕。 */
+/* 2026-09-23：動作卡抽成 tlLogCardHtml，刪除鈕跟著搬過去（整份 src 裡找得到就好）。 */
 ok('★★ 刪單一動作的路還在（張數沒了，但要刪的東西還是刪得掉）',
-   /onclick="event\.stopPropagation\(\);delTrainingLog\('\$\{l\.id\}'\)"/.test(S));
+   /onclick="event\.stopPropagation\(\);delTrainingLog\('\$\{l\.id\}'\)"/.test(src));
 
 /* 2026-09-22：動作名稱字級比較過 19.5／24／27px，定案維持 19.5px。
    ⚠ 這一條是**擋放大**的：中文名（最長 7 字）到 28px 都放得下，光看中文會覺得該放大；
