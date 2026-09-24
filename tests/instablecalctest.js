@@ -11,7 +11,9 @@ const eq=(n,a,e)=>ok(n,JSON.stringify(a)===JSON.stringify(e),`得到 ${JSON.stri
 const grabFn=n=>{const i=src.indexOf('function '+n+'(');if(i<0)return'';let d=0;for(let k=src.indexOf('{',i);k<src.length;k++){if(src[k]==='{')d++;else if(src[k]==='}'){d--;if(!d)return src.slice(i,k+1);}}return'';};
 const grabConst=n=>{const i=src.indexOf('const '+n+'=');const j=src.indexOf('};',i);return src.slice(i,j+2);};
 
-const insAmounts=new Function(grabConst('INS_R')+'\n'+grabFn('insAmounts')+'\nreturn insAmounts;')();
+/* ⚠ 2026-09-24 起 insAmounts 會讀 window.SALARY_GLOBAL（職災費率、平均眷口數都是設定值），
+   這裡餵一個空的進去，等於用程式內建的預設值算。 */
+const insAmounts=new Function('window', grabConst('INS_R')+'\n'+grabFn('insAmounts')+'\nreturn insAmounts;')({SALARY_GLOBAL:{}});
 const E=(g,o)=>Object.assign({insured_grade:g,labor_insurance_status:'enrolled',
   health_insurance_status:'enrolled',pension_status:'enrolled'},o||{});
 
@@ -22,8 +24,14 @@ console.log('① 金額算得對（對照薪資頁既有級距表）');
   eq('★ 勞保員工自付 42000×12.5%×20%＝1,050', a.labor.emp, 1050);
   eq('★ 健保員工自付 42000×5.17%×30%＝651', a.health.emp, 651);
   eq('★ 勞退雇主提繳 42000×6%＝2,520（員工不負擔）', [a.pension.co,a.pension.emp], [2520,0]);
-  eq('★ 勞保雇主含職災＋墊償 42000×(12.5%×70%＋0.1350%)＝3,732', a.labor.co, 3732);
-  eq('　　健保雇主 42000×5.17%×60%＝1,303', a.health.co, 1303);
+  /* ⚠⚠ 2026-09-24 用 115/08 的實際繳款單對帳後改了兩個數字（見 instest0924.js）：
+       ・職災 0.11% → 0.16%（行業別 9312 運動場館：上下班 0.07%＋行業別 0.09%）
+         42000×(12.5%×70% ＋ 0.16% ＋ 0.025%) ＝ 3,753
+       ・健保雇主要乘 (1 ＋ 平均眷口數 0.56) —— 眷屬的保費雇主也要分攤
+         42000×5.17%×60%×1.56 ＝ 2,032
+     兩個都是**低估**，帳單上的公司負擔比系統算的高。 */
+  eq('★ 勞保雇主含職災＋墊償 42000×(12.5%×70%＋0.16%＋0.025%)＝3,753', a.labor.co, 3753);
+  eq('★★ 健保雇主 42000×5.17%×60%×1.56＝2,032（含平均眷口數）', a.health.co, 2032);
   // 級距表對照：36300 → 勞保 908、健保 563
   const b=insAmounts(E(36300));
   eq('★ 36,300 級距：勞保 908／健保 563（與級距表相同）', [b.labor.emp,b.health.emp], [908,563]);

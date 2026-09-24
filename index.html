@@ -13954,8 +13954,8 @@ function tbl(s){return TABLE_ALIAS[s]||s;}
 let sb=null;
 // ── 版本號（日期+時間格式：年後兩碼+月+日.時分，例 26620.1058 = 26年6/20 10:58）──
 // 每次改版手動更新這一行即可，畫面與 title 會一起更新
-const APP_VERSION = '260924.1222';
-const APP_VERSION_LABEL = 'v260924.1222';
+const APP_VERSION = '260924.2222';
+const APP_VERSION_LABEL = 'v260924.2222';
 const CLOUD = !!(window.YUGYM_CONFIG && window.YUGYM_CONFIG.url && window.YUGYM_CONFIG.anonKey);
 if(CLOUD){ sb = supabase.createClient(window.YUGYM_CONFIG.url, window.YUGYM_CONFIG.anonKey); }
 
@@ -43702,6 +43702,12 @@ const SALARY_GLOBAL_DEFAULT = {
      舊的「逐位教練查階梯」制（leader_tiers）已停用，欄位保留供歷史對照。 */
   leader_per_classes: 80,
   leader_per_amount: 4000,
+  /* 勞健保的兩個會變動的數字（2026-09-24 對 115/08 繳款單時抓出來的）——
+     ⚠ 職災費率是**行業別**的：0.16% ＝ 上下班 0.07% ＋ 行業別 0.09%（業別 9312 運動場館）。
+       換行業別或勞保局調整時改這裡，不用動程式。
+     ⚠ 平均眷口數：健保署每年公告，雇主負擔要乘 (1 ＋ 這個數)。 */
+  occ_rate: 0.0016,
+  nhi_avg_dependents: 0.56,
   /* 2026-08 起的新制預設（每位店長可自己覆寫，見 employees.leader_t1/b1/t2/b2）：
      門檻① 80 堂 $4,000；門檻② 100 堂再追加 $2,000（滿 100 堂合計 $6,000）。 */
   /* 團隊獎金（2026-09 起）：門檻可增可刪、名單全主管共用（2026-09-08 使用者兩則指示）。
@@ -47244,9 +47250,29 @@ const NHI_RATE_OWNER=0.0517; // 2026 健保一般保險費率；負責人自付�
    （上排＝員工自付、下排＝公司負擔），不再只寫「投保中」。
    費率沿用薪資頁那一套（2026 官方）：勞保 12.5%（員工 20%／雇主 70%）、
    健保 5.17%（員工 30%／雇主 60%；健保投保金額下限 29,500）、勞退雇主 6%、
-   職災 0.11%＋墊償 0.025% 由雇主負擔。負責人健保由本人全額自付。 */
+   職災＋墊償由雇主負擔。負責人健保由本人全額自付。
+
+   ══ 2026-09-24 用 115/08 的三張實際繳款單逐筆對帳，修掉兩個低估 ══
+   （對帳過程：勞保「全月無異動」個人 2,659 ＝ 四位在保同仁 106,340 × 2.5%，
+     分毫不差，證明級距與費率的主結構是對的。）
+   ⚠⚠ ① 職災費率是**行業別**的，不是固定 0.11%：
+        帳單寫 0.16% ＝ 上下班 0.07% ＋ 行業別 0.09%（業別 9312 運動場館）。
+        原本寫死 0.11% 會低估公司負擔。做成設定值（SALARY_GLOBAL.occ_rate），
+        行業別調整時不必改程式。
+   ⚠⚠ ② 健保雇主負擔要乘「**平均眷口數**」：
+        眷屬的保費雇主也要分攤，不論員工實際有沒有眷屬 ——
+        單位負擔 ＝ 投保金額 × 費率 × 60% × (1 ＋ 平均眷口數)。
+        漏掉這個乘數，每位每月少算約 500 元。
+        驗算：5 位受僱者 × 費率 × 60% ＝ 4,950，× 1.56 ＝ 7,722，
+        帳單 7,725（逐人四捨五入的差）。
+   ⚠ 員工自付**不乘**眷口數 —— 眷屬保費是眷屬自己那一份，
+     受僱者本人的自付額就是「投保金額 × 費率 × 30%」。
+     驗算：2,368（負責人全額）＋563＋540＋458＋458＋458 ＝ 4,845 ＝ 帳單 ✓
+   ⚠ 薪資單那條路（calcSalary ⑧ 查 insurance_levels.co_total）**本來就是對的** ——
+     那張表抄的是官方對照表，已經含眷口數了（29,500 那一級 5,820 驗過）。
+     錯的只有這一支即時算的，兩邊當初沒對過。 */
 const INS_R={labor:0.125, laborEmp:0.2, laborCo:0.7, nhi:0.0517, nhiEmp:0.3, nhiCo:0.6,
-  pension:0.06, occ:0.0011, wage:0.00025, nhiFloor:29500};
+  pension:0.06, occ:0.0016, wage:0.00025, nhiFloor:29500, nhiDep:0.56};
 function insAmounts(c){
   const g=Number(c&&c.insured_grade)||0;
   if(!g) return null;
@@ -47254,13 +47280,20 @@ function insAmounts(c){
   const owner=(c.insurance_identity==='owner');
   const nhiBase=Math.max(g, INS_R.nhiFloor);
   const R=x=>Math.round(x);
+  /* 職災費率與平均眷口數走全域設定（見 INS_R 上方的對帳說明）——
+     職災是行業別的、眷口數健保署每年公告，都會變，不該寫死在程式裡。 */
+  const _G=(typeof window!=='undefined'&&window.SALARY_GLOBAL)||{};
+  const _occ=(Number(_G.occ_rate)>0)?Number(_G.occ_rate):INS_R.occ;
+  const _dep=(_G.nhi_avg_dependents!=null&&_G.nhi_avg_dependents!=='')
+    ? Number(_G.nhi_avg_dependents) : INS_R.nhiDep;
   return {
     grade:g,
     labor: on(c.labor_insurance_status)
-      ? {emp:R(g*INS_R.labor*INS_R.laborEmp), co:R(g*INS_R.labor*INS_R.laborCo + g*(INS_R.occ+INS_R.wage))} : null,
+      ? {emp:R(g*INS_R.labor*INS_R.laborEmp), co:R(g*INS_R.labor*INS_R.laborCo + g*(_occ+INS_R.wage))} : null,
     health: on(c.health_insurance_status)
       ? (owner ? {emp:R(nhiBase*INS_R.nhi), co:0, owner:true}
-               : {emp:R(nhiBase*INS_R.nhi*INS_R.nhiEmp), co:R(nhiBase*INS_R.nhi*INS_R.nhiCo)}) : null,
+               : {emp:R(nhiBase*INS_R.nhi*INS_R.nhiEmp),
+                  co:R(nhiBase*INS_R.nhi*INS_R.nhiCo*(1+_dep))}) : null,
     pension: on(c.pension_status) ? {emp:0, co:R(g*INS_R.pension)} : null,
   };
 }
