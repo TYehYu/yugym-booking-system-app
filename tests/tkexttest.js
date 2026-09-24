@@ -152,8 +152,10 @@ ok('　　按鈕上的提示直接寫可延幾天、延到哪天',
    /title="剩 \$\{Number\(t\.sessions_remaining\)\|\|0\} 堂沒用完，可展延 \$\{tkPlanDays\(t\)\} 天至 \$\{String\(tkExtendTo\(t\)\)\.replace\(\/-\/g,'\/'\)\}"/.test(src));
 /* 2026-08-25：這句話抽成 tkExtBadge()，文案統一成「此方案已展延，不得退費」，
    並補到會員端與歷史紀錄（原本只有後台「持有中」那張卡有）。細節在 tkextnotetest.js。 */
-ok('★ 展延後票券回到可用區，卡片標「此方案已展延，不得退費」',
-   /\$\{tkIsExtended\(t\)\?`　·　\$\{tkExtBadge\(t\)\}`:''\}/.test(src)
+/* 2026-09-23：持有中那張卡改標一枚短的「不退費」（見 tkExpireSeg）；
+   TK_EXT_TEXT 那一整句仍在會員端與歷史區用，文案沒有改。 */
+ok('★ 展延後票券標得出「不退費」',
+   /\(e\.nMan\?` <b class="tkx tkx-man"\$\{_ti\}>不退費<\/b>`:''\)/.test(src)
    && /const TK_EXT_TEXT='此方案已展延，不得退費';/.test(src));
 ok('　　歷史列若是已展延過的也標一下（0825 起同一句，不再只寫「已展延」）',
    /\$\{shrTag\}\$\{tkExtBadge\(t\)\}<\/span>/.test(src));

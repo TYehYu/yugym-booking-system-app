@@ -40,12 +40,16 @@ ok('★★★ 不另外存一份到 member_tickets（一份資料兩個地方存
    && !/tk\.void_note=/.test(src));
 
 console.log('\n② 畫在票券卡上');
+/* ⚠ 2026-09-23 一度把圓點與底列包進 .tkc-body 排成兩欄、作廢說明移到後面，
+   使用者看過實機後決定「先維持現況」，整段收回，這裡也回到原本的位置。 */
 ok('★★★ 歷史紀錄那張卡有（使用者截圖就是這一張）',
    /<div class="mck-dots2" style="margin:8px 0 2px;">\$\{ticketTokens\(t,bks,typeMap,used,null,PP\.id,WAL\.selfBk\)\}<\/div>\s*\n\s*\$\{tkVoidNoteHtml\(t, c\.myLogs\)\}/.test(src));
 ok('★★★ 持有中那張卡也有（共享票等情況可能停在上面）',
    /<div class="mck-dots2" style="margin:10px 0 2px;">\$\{ticketTokens\(t,bks,typeMap,used,null,PP\.id,WAL\.selfBk\)\}<\/div>\s*\n\s*\$\{tkVoidNoteHtml\(t, c\.myLogs\)\}/.test(src));
+ok('★★ .tkc-body 那一套確實收乾淨了（下次要再做，理由寫在 CSS 原地）',
+   !/tkc-body/.test(src) && /使用者看過實機後決定「先維持現況」/.test(src));
 ok('★★ 帳本本來就在這個渲染器的手上（c.myLogs），不必為了這件事多撈一次',
-   /tkExtOrigExpire\(t,c\.myLogs\)/.test(src));
+   /tkExpireSeg\(t,c\.myLogs\)/.test(src));
 ok('★★ 原因會跳脫（那是人打的字）', /return n\?`<div class="tkc-void">\$\{escH\(n\)\}<\/div>`:'';/.test(src));
 ok('★★ 沒有原因就整塊不畫，不留一個空盒子', /return n\?`<div class="tkc-void">/.test(src));
 ok('★  用淡紅底細字：作廢是已成定局的說明，不是警示（紅>金>綠的最輕一階）',

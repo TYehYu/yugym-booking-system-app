@@ -31,13 +31,19 @@ console.log('\n② 卡片畫出來的樣子');
 const t={id:'TK-mtnz6zdoo22d', amount_paid:300, plan_name:'運動按摩'};
 const html=mk({'TK-mtnz6zdoo22d':{m:'transfer', sp:null, vn:4, va:1200, cu:0, lp:1500}})(t);
 ok('★★ 實收金額還在（$300）', html.includes('$300'));
-ok('★★ 折抵券張數與金額都寫出來了', html.includes('折抵券×4') && html.includes('−$1,200'));
-ok('★★ 原價放在 title（$1,500）', html.includes('title="原價 $1,500"'));
+/* ⚠ 2026-09-23 使用者：「折抵券改成[折抵券]滑鼠提示金額」——
+   標籤只剩三個字，張數／折抵金額／原價全部收進 title。
+   理由是這一格跟金額擠在同一欄（兩欄版面），標籤越短金額欄越窄。
+   ⚠ 資訊沒有變少：title 現在比原本的標籤寫得更完整。 */
+ok('★★ 標籤只寫三個字', html.includes('>折抵券</span>') && !html.includes('折抵券×4'));
+ok('★★ 張數、折抵金額與原價都在 title',
+   html.includes('title="折抵券 4 張　·　折抵 $1,200　·　原價 $1,500"'));
 ok('★  付款方式標籤沒有被擠掉（匯款）', html.includes('匯款'));
 ok('★  折抵用中性色 class，不是現金綠那顆', html.includes('class="tk-disc"'));
 
 const html2=mk({'TK-x':{m:'cash', sp:null, vn:0, va:0, cu:2000, lp:5000}})({id:'TK-x', amount_paid:3000});
-ok('★★ 儲值金折抵也標得出來', html2.includes('儲值金 −$2,000'));
+ok('★★ 儲值金折抵也標得出來', html2.includes('>儲值金</span>')
+   && html2.includes('title="儲值金折抵 $2,000　·　原價 $5,000"'));
 ok('★  沒有折抵券時不會多畫一顆空標籤', !html2.includes('折抵券'));
 
 const html3=mk({'TK-y':{m:'cash', sp:null, vn:0, va:0, cu:0, lp:1300}})({id:'TK-y', amount_paid:1300});

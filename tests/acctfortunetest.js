@@ -355,7 +355,7 @@ ok('★ 交易分頁：四欄表格改成一筆一列的卡片（桌機仍是表
    /if\(_m2\)\{[\s\S]{0,700}<div class="pp-txrow">[\s\S]{0,400}<b class="pp-txamt">/.test(src)
    && src.includes('<table class="mtk-table"><thead><tr><th>日期</th>'));
 ok('★ 票券卡：購買・效期提到第二列（緊接編號那一列）',
-   /\$\{_m2\?`<div class="tkc-meta">\$\{tkBuyDateHtml\(t\)\}　·　效期至/.test(src)
+   /\$\{_m2\?`<div class="tkc-meta">\$\{tkBuyDateHtml\(t\)\}　·　\$\{tkExpireSeg\(t,c\.myLogs\)\}<\/div>`:''\}/.test(src)
    && /\.tkc-meta\{font-size:11px/.test(src));
 console.log('「已完成」＝課真的銷完，不是排完');
 ok('★ 判定抽成 tkStBadgeUsed：只有實際銷課數達標才標已完成',
@@ -375,18 +375,18 @@ ok('★ 票券卡：狀態章（已完成／已過期／已退費）移到課程
    src.includes("${tkNoTag(sl.no)}${t.plan_name||'票券'}${_m2?stTag:''}")
    && !/tkc-meta">\$\{tkBuyDateHtml\(t\)\}[^`]*\$\{stTag/.test(src));
 /* 2026-09-15 使用者：「票券右下角的資訊跟按鈕會不會太擁擠　左下角有安排什麼內容嗎
-   還是可以把按鈕改到左下呢」——
-   這推翻 0820 的「金額放右下角、就在作廢按鈕上方」：當時是 column＋靠右，
-   金額與按鈕疊成兩層全擠在右下，左下角整片空著。改成左右分開（按鈕 order:-1 到左邊）。
-   ⚠ 金額仍然由 .tkc-money 畫、仍在這一列 —— 變的只是它與按鈕的相對位置。 */
-ok('★ 票券卡：按鈕移到左下、金額與發票留在右邊',
+   還是可以把按鈕改到左下呢」—— 按鈕左下、金額右下（order:-1）。
+   ⚠ 2026-09-23 一度把按鈕整組搬去效期那一列（底列只剩金額），
+     使用者看過實機後：「先維持現況　把左下角的按鈕置底」，整段收回。 */
+ok('★★★ 票券卡：按鈕在左下、金額與發票在右邊',
    /<span class="tkc-money">\$\{tkMoneyHtml\(t\)\.replace\(\/\^　·　\/,''\)\}<\/span>/.test(src)
    && /\.tkc-foot\{align-items:center !important;\}/.test(src)
    && /\.tkc-foot>span:last-child\{order:-1;margin-left:0 !important;\}/.test(src));
-/* 2026-08-30：展延過的票，「效期至」顯示的是**原到期日**，展延後的日期跟在
-   「教練展延」標籤後面（使用者：內容收斂，一行講完）。沒展延過的票原樣不變。 */
+ok('★★★ 分期多列時按鈕置底（使用者：「把左下角的按鈕置底」）',
+   /\.tkc-foot:has\(\.tk-paylist-multi\)\{align-items:flex-end !important;\}/.test(src));
 ok('　　桌機與其他角色維持原本的單行底列',
-   src.includes(": `${tkBuyDateHtml(t)}　·　效期至 ${fmtExpire(tkExtOrigExpire(t,c.myLogs)||t.expire_date,t)}"));
+   src.includes(": `${tkBuyDateHtml(t)}　·　${tkExpireSeg(t,c.myLogs)}")
+   && (src.match(/<span class="tkc-acts">\$\{_tkActs\}<\/span>/g)||[]).length===2);
 ok('★ 預約紀錄：520px 月曆改成按月分段的清單（桌機仍是月曆）',
    (()=>{ const i=src.indexOf('if(_m2){', src.indexOf("if(PP.recView==='bookings'){"));
       const j=src.indexOf('<div class="pp-bkmon">', i), k=src.indexOf('<div class="pp-bkrow', j);

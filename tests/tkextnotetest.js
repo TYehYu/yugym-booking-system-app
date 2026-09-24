@@ -37,8 +37,12 @@ console.log('\n每個畫得出票券的地方都掛同一顆');
 ok('★★ 會員端 V2 卡片（memh2 那一支才是會員真的在用的）',
    /<span class="mck-v2-left">\$\{_tag\}\$\{tkExtBadge\(t\)\}/.test(src));
 ok('★★ 會員端舊版卡片', /:\(soon\?`<span class="mck-badge mck-badge-warn">\$\{days\} 天後到期<\/span>`:''\)\}\$\{tkExtBadge\(t\)\}/.test(src));
+/* ⚠ 2026-09-23：這兩處的「· 此方案已展延，不得退費」併進 tkExpireSeg 那一段了
+   （使用者：「才不會導致這一列過長又需要斷句」），改標一枚短的「不退費」。
+   ⚠ 話沒有消失，只是從一整句縮成一枚標籤，完整規則在 title 與合約裡。 */
 ok('★★ 後台會員檔案「持有中」的票券卡（桌機與管理員手機兩種版型）',
-   (src.match(/\$\{tkIsExtended\(t\)\?`　·　\$\{tkExtBadge\(t\)\}`:''\}/g)||[]).length===2);
+   /\(e\.nMan\?` <b class="tkx tkx-man"\$\{_ti\}>不退費<\/b>`:''\)/.test(src)
+   && !/\$\{tkIsExtended\(t\)\?`　·　\$\{tkExtBadge\(t\)\}`:''\}/.test(src));
 ok('★★ 後台「已過期方案／歷史紀錄」—— 原本只寫「已展延」，沒講不得退費',
    /\$\{shrTag\}\$\{tkExtBadge\(t\)\}<\/span>/.test(src)
    && !/pp-hist-tag">已展延</.test(src));

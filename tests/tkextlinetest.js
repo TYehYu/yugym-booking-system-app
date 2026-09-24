@@ -74,18 +74,32 @@ console.log('\n④ 接線與語彙');
 {
   ok('★★ 後台那一行不再另外掛時間軸（標籤已經接在效期後面）',
      !/tkExtLineHTML\(t, tkLogs/.test(src)
-     && /\$\{tkExtTagHTML\(t,tkLogs\)\}/.test(src));
+     && /\$\{tkExpireSeg\(t,tkLogs,'到期'\)\}/.test(src));
   /* 2026-08-30 使用者：「這種有教練請假的　要在第二列效期旁邊新增· 教練展延」
      ＋「展延(不退費)也放在這」—— 兩枚都掛在效期後面。 */
   ok('★★★ 效期旁邊的短標籤：兩種都掛在同一支，而且各自帶展延後的日期',
      /function tkExtTagHTML\(t, logs\)\{/.test(src)
      && /<b class="tkx tkx-clv">教練展延\$\{e\.nClv>1\?` ×\$\{e\.nClv\}`:''\}<\/b>\$\{to\?` <span class="tkx-d">\$\{to\}<\/span>`:''\}/.test(src)
      && /<b class="tkx tkx-man">展延（不退費）<\/b>/.test(src));
-  ok('★★★ 前面的「效期至」改顯示原到期日（整句＝效期至 原到期 · 教練展延 展延後）',
-     /function tkExtOrigExpire\(t, logs\)\{/.test(src)
-     && (src.match(/fmtExpire\(tkExtOrigExpire\(t,(c\.myLogs|tkLogs)\)\|\|t\.expire_date,t\)/g)||[]).length===3);
+  /* ⚠⚠ 2026-09-23 推翻 0830 的「效期至＝原到期日、展延後的日期跟在標籤後面」——
+       使用者：「效期如果有展延會多一段文字　是不是可以修改第二段文字就好
+       保持購買日·效期」「就變成購買日·展延效期」「才不會導致這一列過長又需要斷句」。
+     那一版一列會長成四段：
+       購買 08/15 · 效期至 2027-08-19 · 教練展延 2027/08/26 · 此方案已展延，不得退費
+     而最要緊的日期（真正哪天到期）反而排在第三段。
+     現在收斂成兩段：**標籤本身**換成「展延效期」、日期直接寫展延後的，
+     誰延的與展延前到期日收進 title。 */
+  ok('★★★ 展延過就換標籤、不另起一段（購買日 · 展延效期 2027/08/26）',
+     /function tkExpireSeg\(t, logs, label\)\{/.test(src)
+     && /<b class="tkx-lb"\$\{_ti\}>\$\{label\?'展延'\+label:'展延效期'\}<\/b> \$\{fmtExpire\(t&&t\.expire_date,t\)\}/.test(src)
+     && /title="\$\{_who\}；展延前到期日 \$\{_orig\|\|'—'\}"/.test(src));
+  ok('★★★ 沒展延過的票一個字都不變',
+     /if\(!e\) return `\$\{_lb\} \$\{fmtExpire\(t&&t\.expire_date,t\)\}`;/.test(src));
+  ok('★★ 「不退費」只在櫃檯展延時留一枚（合約後果，不能只藏在 title）',
+     /\(e\.nMan\?` <b class="tkx tkx-man"\$\{_ti\}>不退費<\/b>`:''\)/.test(src)
+     && /教練請假展延不寫 extended_from，本來就不影響退費/.test(src));
   ok('★★★ 三張有「效期／到期」那一行的卡都掛上了（後台票券夾＋會員資料的手機版與桌機版）',
-     (src.match(/\$\{tkExtTagHTML\(t,\s*(tkLogs|c\.myLogs)\)\}/g)||[]).length===3);
+     (src.match(/\$\{tkExpireSeg\(t,\s*(tkLogs|c\.myLogs)(,'到期')?\)\}/g)||[]).length===3);
   ok('★★ 會員端那兩張沒有 meta 行，所以自己講同一句',
      (src.match(/\$\{tkExtLineHTML\(t, logs\)\}/g)||[]).length===2
      && /格式與後台那一行完全一致：效期至（原到期）· 教練展延（展延後）。/.test(src));

@@ -49,20 +49,104 @@ console.log('\n③ 票券卡顯示發票號碼');
      ⚠ fixture 一定要帶 pm：付款方式改讀那一期自己的 v.pm，沒帶就不會畫，
        第一版的 fixture 沒有這一欄，等於整條新功能沒被驗到。 */
   const one=mk({A1:{m:'transfer',sp:null,vn:0,va:0,cu:0,lp:0,invs:[{no:'FX28688355',amt:7500,pm:'transfer'}]}})({id:'A1',amount_paid:7500});
-  ok('★ 單筆：一列＝發票號碼 → 付款方式 → 金額（金額在最右）',
-     /<span class="tk-payrow"><span class="rev-invno" title="第 1 期發票">FX28688355<\/span><span class="tk-pay tk-pay-tr">匯款<\/span><b class="tk-amt">\$7,500<\/b><\/span>/.test(one), one);
+  /* ⚠⚠ 2026-09-23 使用者改了列內順序：「右下角的排序調整　付款　金額　發票」
+     （0915 定的「發票在最前」已被推翻）。
+     ⚠ 當天稍早要過「並新增期數」，看過實機之後又拿掉 ——
+       三列由上往下本來就是第 1、2、3 期，多一欄只是把整組推寬。
+       期數沒有消失：每一列的發票／沒開發票 title 仍寫著「第 N 期」。 */
+  /* ⚠ 金額與折抵券包在同一個 .tk-amtcell 格子裡（0923）——
+       多期是四欄 grid，折抵不包起來會自己佔一欄、把發票擠到下一列。 */
+  ok('★ 單筆：一列＝付款方式 → 金額 → 發票，而且**不標期數**',
+     /<span class="tk-payrow"><span class="tk-pay tk-pay-tr">匯款<\/span><span class="tk-amtcell"><b class="tk-amt">\$7,500<\/b><\/span><span class="rev-invno" title="發票號碼">FX28688355<\/span><\/span>/.test(one)
+     && !/tk-seq/.test(one), one);
 
   const ins=mk({A2:{m:'transfer',sp:null,vn:0,va:0,cu:0,lp:18000,invs:[
     {no:'FX28688300',amt:6000,pm:'cash'},{no:'FX28688310',amt:6000,pm:'transfer'},{no:null,amt:6000,pm:''}]}})({id:'A2',amount_paid:12000});
   ok('★★ 分期：一期一列往下堆（收第三期就長出第三列）',
      (ins.match(/<span class="tk-payrow">/g)||[]).length===3, ins);
   ok('★★ 每一期標自己的付款方式（第一期現金、第二期匯款，不是整張票的最新值）',
-     /FX28688300<\/span><span class="tk-pay">現金<\/span><b class="tk-amt">\$6,000<\/b>/.test(ins)
-     && /FX28688310<\/span><span class="tk-pay tk-pay-tr">匯款<\/span><b class="tk-amt">\$6,000<\/b>/.test(ins), ins);
+     /<span class="tk-pay">現金<\/span><span class="tk-amtcell"><b class="tk-amt">\$6,000<\/b><\/span><span class="rev-invno" title="第 1 期發票">FX28688300<\/span>/.test(ins)
+     && /<span class="tk-pay tk-pay-tr">匯款<\/span><span class="tk-amtcell"><b class="tk-amt">\$6,000<\/b><\/span><span class="rev-invno" title="第 2 期發票">FX28688310<\/span>/.test(ins), ins);
+  ok('★★★ 期數那一欄已經收掉，但每一列仍講得出自己是第幾期（在 title 裡）',
+     !/tk-seq/.test(ins)
+     && (ins.match(/title="第 \d 期(發票)?/g)||[]).length===3, ins);
   ok('★ 還沒開立的那一期畫「沒開發票」灰標，該期金額照畫',
-     /<span class="rev-noinv" title="這一期沒有開立電子發票">沒開發票<\/span><b class="tk-amt">\$6,000<\/b>/.test(ins), ins);
+     /<b class="tk-amt">\$6,000<\/b><\/span><span class="rev-noinv" title="第 3 期沒有開立電子發票">沒開發票<\/span>/.test(ins), ins);
   ok('　　整組靠右下、直向堆疊（直向 flex 要用 align-items，text-align 在這裡沒作用）',
      /\.tkc-money \.tk-paylist\{display:flex;flex-direction:column;align-items:flex-end;gap:4px;\}/.test(src));
+  /* 2026-09-23：多期改用四欄 grid，讓期數／金額／發票跨列切齊。
+     量過（390px）：單純直向 flex 時期數左緣是 142／144／205，改 grid 之後全部 142。 */
+  ok('★★★ 多期用三欄 grid 讓欄位跨列切齊（單純的直向 flex 做不到）',
+     /\.tkc-money \.tk-paylist-multi\{display:inline-grid;grid-template-columns:auto auto auto;/.test(src)
+     && /\.tk-paylist-multi \.tk-payrow\{display:contents;\}/.test(src));
+  ok('★★★ 只有多期才套 grid（單期一列沒有對齊問題）',
+     /tk-paylist\$\{_multi\?' tk-paylist-multi':''\}/.test(src)
+     && !/tk-paylist-multi/.test(one));
+  ok('★★★ 沒有付款方式的那一期也要佔一格（少一格整列會位移）',
+     /:\(_multi\?'<span class="tk-pay-na"><\/span>':''\);/.test(src)
+     && /<span class="tk-pay-na"><\/span><span class="tk-amtcell"><b class="tk-amt">\$6,000<\/b>/.test(ins));
+  ok('　 量到的數字寫在 CSS 原地', /量到 142／144／205/.test(src));
+  /* ══ 底列的版型：七輪回報收斂成定版（2026-09-23）══
+       ①「功能按鈕沒有在左下角嗎」②「左邊功能按鈕置底」
+       ③「左邊圓形卡跟功能按鈕中間的空白　有必要嗎」
+       ④「按鈕變直式了變得奇怪　維持原本的橫式排列可以把按鈕縮小或縮寫?」
+       ⑤「左下功能按鈕沒有置底　而且為什麼這兩組大小不同?」
+       ⑥「手機版的金額沒辦法在右下角了嗎」
+       ⑦「還是功能按鈕統一改到效期跟圓形卡中間? 你覺得呢」
+     ①〜⑥ 全是同一個死結的不同切面：底列只有一行，
+     「按鈕在左下」與「金額在右下」在手機上放不進同一行 ——
+     兩欄要 468px（含折抵券），卡內寬只有 316–386px。
+     ⑦ 把按鈕整組搬去效期那一列，死結就不存在了：底列只剩金額。
+     ⚠ 這一輪拆掉的東西：nowrap／align-items 覆寫／order 翻轉／@media 斷點，
+       以及中途試過的 wrap-reverse。下面幾條就是防它們回來的。 */
+  ok('★★★ 底列＝按鈕在左下、金額在右下（2026-09-23 使用者：「先維持現況」）',
+     /\.tkc-foot\{align-items:center !important;\}/.test(src)
+     && /\.tkc-foot>span:last-child\{order:-1;margin-left:0 !important;\}/.test(src)
+     && /\.tkc-foot>span:first-child\{margin-left:auto;\}/.test(src));
+  ok('★★★ 分期多列時按鈕置底（使用者：「把左下角的按鈕置底」）',
+     /\.tkc-foot:has\(\.tk-paylist-multi\)\{align-items:flex-end !important;\}/.test(src));
+  /* ⚠⚠ 不准再出現寫死的折行斷點：兩版都錯過（440 → 405）——
+       斷點是拿「某一張卡」量出來的，可是金額欄的寬度會變。
+     ⚠ 中途還試過 wrap-reverse（讓按鈕折行後落在下面）與
+       「按鈕搬去效期列 ＋ 圓點｜金額兩欄」，兩套都被收回，理由留在 CSS 原地。 */
+  ok('★★★ 沒有寫死斷點、也沒有殘留收回去的那兩套',
+     !/@media \(max-width:405px\)/.test(src) && !/wrap-reverse/.test(src)
+     && !/tkc-body/.test(src) && !/container-type:inline-size;\}\n\.tkc-body/.test(src));
+  ok('★★ 收回去的理由留在原地（下一個人不要又走一次）',
+     /使用者看過實機後決定「先維持現況」/.test(src)
+     && /一加折抵券標籤就從 226px 撐到 326px/.test(src));
+  ok('★★ 單期不受影響（0915 定過「四組資訊全部都要留、密度縮一號排得回來」）',
+     /只有多期才套（\.tk-paylist-multi）：單期只有一列，沒有對齊的問題，/.test(src));
+
+  /* ══ 折抵券：接在**實際使用的那一期**的金額後面 ══
+     使用者兩則（2026-09-23）：
+       「折抵券300可以直接接在金額後面-300」
+       「折抵券也不是固定接第一期　是看他第幾期有使用就接在哪一期的金額後面」
+     ⚠ 第一版寫死 `i===0`（理由是「折抵都在第 1 期收款時扣」），被使用者推翻。 */
+  const dc2=mk({A5:{m:'transfer',sp:null,vn:0,va:0,cu:0,lp:18000,invs:[
+    {no:'FX1',amt:6000,pm:'cash',vn:0,va:0,cu:0,lp:0},
+    {no:'FX2',amt:5700,pm:'transfer',vn:1,va:300,cu:0,lp:6000},
+    {no:null,amt:6000,pm:'',vn:0,va:0,cu:0,lp:0}]}})({id:'A5',amount_paid:17700});
+  /* ⚠ 折抵券在金額**左邊**（2026-09-23 使用者：「折抵券的位子改在金額左邊」）——
+       放右邊會把有折抵那一列的金額推離發票，三期的金額右緣對不齊。
+     ⚠ 標籤只寫三個字（同日：「折抵券改成[折抵券]滑鼠提示金額」），數字進 title。 */
+  ok('★★★ 折抵券接在**有用到的那一期**（第 2 期），不是固定第 1 期',
+     /<span class="tk-pay tk-pay-tr">匯款<\/span><span class="tk-amtcell"><span class="tk-disc"[^>]*>折抵券<\/span><b class="tk-amt">\$5,700<\/b><\/span><span class="rev-invno" title="第 2 期發票">/.test(dc2)
+     && (dc2.match(/tk-disc/g)||[]).length===1, dc2);
+  ok('★★ 張數、折抵金額與該期原價都寫進 title',
+     /<span class="tk-disc" title="折抵券 1 張　·　折抵 \$300　·　原價 \$6,000">/.test(dc2), dc2);
+  const dc3=mk({A6:{m:'cash',sp:null,vn:0,va:0,cu:0,lp:0,invs:[
+    {no:'FX1',amt:6000,pm:'cash',vn:0,va:0,cu:0,lp:0},
+    {no:'FX2',amt:5700,pm:'cash',vn:0,va:0,cu:300,lp:0}]}})({id:'A6',amount_paid:11700});
+  ok('★★ 儲值金同理（逐期，不是整張票一個值）',
+     /<span class="tk-disc" title="儲值金折抵 \$300">儲值金<\/span><b class="tk-amt">\$5,700<\/b><\/span><span class="rev-invno" title="第 2 期發票">/.test(dc3)
+     && (dc3.match(/tk-disc/g)||[]).length===1, dc3);
+  ok('★★★ 折抵包在 .tk-amtcell 裡（不包會自己佔一欄、把發票擠到下一列）',
+     /<span class="tk-amtcell">\$\{_amt\}<\/span>\$\{_iv\}/.test(src)
+     && /\.tk-amtcell\{display:inline-flex;/.test(src)
+     && /const _amt=`\$\{_dcThis\}<b class="tk-amt">\$\$\{\(Number\(v\.amt\)\|\|0\)\.toLocaleString\(\)\}<\/b>`;/.test(src));
+  ok('★★★ 三期的金額右緣要切齊：折抵在左邊（量過 783／783／783，之前是 783／883／883）',
+     /折抵券放在金額\*\*左邊\*\*/.test(src));
 
   /* ⚠ 下面兩條是保護①區的防線：那些 fixture 全都沒有 invs 欄位，
      這裡只要多畫一個字，就會打到「沒對照到的票不標」那幾條。 */
@@ -88,7 +172,7 @@ console.log('\n④ 對照表逐期累積發票號碼');
 ok('★ 發票號碼、金額與該期付款方式逐期 push 進 invs（不覆寫）',
    /const _prev=window\._tkPayMap\[p\.ticket_id\];/.test(src)
    && /const _invs=\(_prev&&Array\.isArray\(_prev\.invs\)\)\?_prev\.invs\.slice\(\):\[\];/.test(src)
-   && /_invs\.push\(\{no:p\.invoice_number\|\|null, amt:Number\(p\.deal_amount\)\|\|0, pm:p\.payment_method\|\|''\}\);/.test(src)
+   && /_invs\.push\(\{no:p\.invoice_number\|\|null, amt:Number\(p\.deal_amount\)\|\|0, pm:p\.payment_method\|\|'',\n\s*vn:_vm\?Number\(_vm\[1\]\):0, va:_vm\?Number\(String\(_vm\[2\]\)\.replace\(\/,\/g,''\)\):0,\n\s*cu:Number\(p\.credit_used\)\|\|0, lp:Number\(p\.list_price\)\|\|0\}\);/.test(src)
    && /invs:_invs\}/.test(src));
 
 console.log(`\n${pass} 通過 / ${fail} 失敗`);
