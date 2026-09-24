@@ -13954,8 +13954,8 @@ function tbl(s){return TABLE_ALIAS[s]||s;}
 let sb=null;
 // ── 版本號（日期+時間格式：年後兩碼+月+日.時分，例 26620.1058 = 26年6/20 10:58）──
 // 每次改版手動更新這一行即可，畫面與 title 會一起更新
-const APP_VERSION = '260924.0922';
-const APP_VERSION_LABEL = 'v260924.0922';
+const APP_VERSION = '260924.1222';
+const APP_VERSION_LABEL = 'v260924.1222';
 const CLOUD = !!(window.YUGYM_CONFIG && window.YUGYM_CONFIG.url && window.YUGYM_CONFIG.anonKey);
 if(CLOUD){ sb = supabase.createClient(window.YUGYM_CONFIG.url, window.YUGYM_CONFIG.anonKey); }
 
@@ -43706,7 +43706,10 @@ const SALARY_GLOBAL_DEFAULT = {
      門檻① 80 堂 $4,000；門檻② 100 堂再追加 $2,000（滿 100 堂合計 $6,000）。 */
   /* 團隊獎金（2026-09 起）：門檻可增可刪、名單全主管共用（2026-09-08 使用者兩則指示）。
      team_members 給 null＝全體（日後新進教練自動納入）。 */
-  team_tiers: [{classes:80, amount:4000}],
+  /* ⚠ 兩階都要寫進預設（2026-09-24）：使用者的規則從 0802 起就是
+     「80 堂 4,000、100 堂再追加 2,000」，只放第一階等於預設就把規則講錯了。
+     多階是**追加**不是取代 —— 上滿 100 堂＝4,000＋2,000＝6,000。 */
+  team_tiers: [{classes:80, amount:4000}, {classes:100, amount:2000}],
   team_members: null,
   leader_t1: 80, leader_b1: 4000,
   leader_t2: 100, leader_b2: 2000,
@@ -44836,8 +44839,13 @@ function leaderBonusOf(emp, extras, G, month){
          全體是他要的預設，不是猜的。（0802 那條「不猜全員」講的是逐位店長的私人名單。） */
     const _tiers=(Array.isArray(G.team_tiers)&&G.team_tiers.length)
       ? G.team_tiers.slice().sort(function(a,b){ return (Number(a.classes)||0)-(Number(b.classes)||0); })
+      /* 沒設 team_tiers 時退回舊制的兩個門檻欄位（leader_t1/b1 ＋ leader_t2/b2）——
+         ⚠ 2026-09-24 補上第二階：原本只退回第一階，等於把「100 堂追加 2,000」
+           這條規則靜靜吃掉。舊欄位裡本來就存著 100/2000。 */
       : [{classes:((G.leader_t1!=null&&G.leader_t1!=='')?Number(G.leader_t1):80),
-          amount:((G.leader_b1!=null&&G.leader_b1!=='')?Number(G.leader_b1):4000)}];
+          amount:((G.leader_b1!=null&&G.leader_b1!=='')?Number(G.leader_b1):4000)}]
+        .concat((Number(G.leader_t2)>0 && Number(G.leader_b2)>0)
+          ? [{classes:Number(G.leader_t2), amount:Number(G.leader_b2)}] : []);
     const _pick=Array.isArray(G.team_members)?G.team_members.map(String):null;
     const _inList=_pick?rows.filter(function(r){ return _pick.indexOf(String(r.id))>=0; }):rows;
     const _amtOf=function(n){ return _tiers.reduce(function(sum,t){
@@ -51234,11 +51242,25 @@ function hrAddTeamTier(){
   const box=document.getElementById('hr-tt-list'); if(!box) return;
   box.insertAdjacentHTML('beforeend', hrTeamTierRow({classes:0,amount:0}));
 }
+/* ⚠⚠ 2026-09-24 使用者回報：「我剛剛去加那一列100/$2000 跳錯誤不給我改」——
+   根因在這一支：原本是 document.querySelectorAll('.hr-tt-row')，**全文件**掃，
+   而上面「主管津貼」那一列為了共用 grid 版型也掛了 .hr-tt-row，
+   它裡面只有 #hr-supbonus、沒有 .htt-c／.htt-a ——
+   r.querySelector('.htt-c').value 直接 TypeError。
+   外層有 try/catch 接住，所以症狀是一句「團隊獎金設定沒存成功」，
+   而門檻、名單、主管津貼**三樣一起沒存進去**。
+   ⚠ 這個洞從 0908 加主管津貼那一列的當下就在了 —— 正式庫的 team_tiers
+     停在只有一階（80/4000），第二階（100/2000）因此一直加不上去，
+     0923 的薪資單才會出現「105 堂只給 4,000」。
+   修法兩道：①只掃 #hr-tt-list 裡面的列　②沒有 .htt-c 的列直接跳過。 */
 function hrReadTeamTiers(){
-  return [...document.querySelectorAll('.hr-tt-row')].map(function(r){
-    return { classes:Number(r.querySelector('.htt-c').value)||0,
-             amount:Number(r.querySelector('.htt-a').value)||0 };
-  }).filter(function(t){ return t.classes>0 && t.amount>0; })
+  const box=document.getElementById('hr-tt-list');
+  const rows=box?[...box.querySelectorAll('.hr-tt-row')]:[];
+  return rows.map(function(r){
+    const c=r.querySelector('.htt-c'), a=r.querySelector('.htt-a');
+    if(!c||!a) return null;
+    return { classes:Number(c.value)||0, amount:Number(a.value)||0 };
+  }).filter(function(t){ return t && t.classes>0 && t.amount>0; })
     .sort(function(a,b){ return a.classes-b.classes; });
 }
 function hrReadTeamMembers(){
@@ -51250,7 +51272,8 @@ function hrReadTeamMembers(){
 function hrTeamAll(on){ [...document.querySelectorAll('.hr-tm')].forEach(function(e){ e.checked=!!on; }); }
 function hrTeamBoxHtml(){
   const G=window.SALARY_GLOBAL||{};
-  const tiers=(Array.isArray(G.team_tiers)&&G.team_tiers.length)?G.team_tiers:[{classes:80,amount:4000}];
+  const tiers=(Array.isArray(G.team_tiers)&&G.team_tiers.length)?G.team_tiers
+    :[{classes:80,amount:4000},{classes:100,amount:2000}];
   const roster=(window._hrRoster||[]);
   const picked=Array.isArray(G.team_members)?G.team_members.map(String):null;   // null＝全體
   const ET={full_time:'正職',part_time:'兼職',intern:'工讀',contractor:'合作'};
