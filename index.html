@@ -3678,6 +3678,22 @@ body.mc-mode #tl-sheet,body.mc-mode #tl-add-sheet{top:60px;}
 .grw-seq-renewal{color:#1f6f54;}
 .grw-seq-installment{color:#6e3a86;}
 .grw-seq-gift{color:#6e665c;}
+/* 共享票的浮水印（2026-09-23 使用者：「共享票可以改成浮水印在右邊置中
+   Ａ分給Ｂ的話在Ｂ的這一張顯示浮水印」「浮水印寫 共享」）——
+   ⚠ 只給**被分享的那一張**（我不是持有人）。持有人那張維持可點的「共享：王小美 ›」章，
+     因為那顆是改設定的入口，浮水印點不下去。
+   ⚠ 規格沿用同一張卡 0917 做的 .grw-seq（靠右、垂直置中、大字、低透明度、
+     pointer-events:none），不另調一套。
+   ⚠⚠ 內容一定要墊到浮水印上面：浮水印是 absolute＋z-index:0，在同一個堆疊裡
+     會蓋過**沒有定位**的兄弟元素 —— 不墊的話卡片文字會被壓在底下（0917、0922 各踩過一次）。
+   ⚠ overflow:hidden：字往外伸會破版；被內容蓋住是刻意的
+     （0908 定案：「浮水印是視覺提醒」，不是要讀完的資訊）。 */
+.bkd-tkcard-shared{position:relative;overflow:hidden;}
+.bkd-tkcard-shared>*:not(.tkwm){position:relative;z-index:1;}
+.tkwm{position:absolute;right:12px;top:50%;transform:translateY(-50%);
+  z-index:0;pointer-events:none;user-select:none;white-space:nowrap;
+  font-size:30px;font-weight:800;line-height:1;letter-spacing:-.02em;
+  opacity:.16;color:var(--gold-d,#9a7344);}
 .bkd-tkcard-head{display:flex;align-items:center;justify-content:space-between;margin-bottom:9px;flex-wrap:wrap;gap:6px;}
 .bkd-tkcard-name{font-size:13.5px;font-weight:700;color:var(--text);}
 .bkd-tkcard-prog{font-size:12px;color:var(--t2);font-family:var(--num);}
@@ -13954,8 +13970,8 @@ function tbl(s){return TABLE_ALIAS[s]||s;}
 let sb=null;
 // ── 版本號（日期+時間格式：年後兩碼+月+日.時分，例 26620.1058 = 26年6/20 10:58）──
 // 每次改版手動更新這一行即可，畫面與 title 會一起更新
-const APP_VERSION = '260924.2222';
-const APP_VERSION_LABEL = 'v260924.2222';
+const APP_VERSION = '260924.2227';
+const APP_VERSION_LABEL = 'v260924.2227';
 const CLOUD = !!(window.YUGYM_CONFIG && window.YUGYM_CONFIG.url && window.YUGYM_CONFIG.anonKey);
 if(CLOUD){ sb = supabase.createClient(window.YUGYM_CONFIG.url, window.YUGYM_CONFIG.anonKey); }
 
@@ -42588,9 +42604,11 @@ async function openMemberDetail(member_id){
         return _shrKeys.has([(ty?ty.name:''), b.format||''].join('|'));
       })).sort((a,b)=>(b.date+b.start_time).localeCompare(a.date+a.start_time))
     : myBookings;
-  /* 共享票要在卡片上標出「跟誰共用」，只有存在共享票時才多撈一次 members */
+  /* 共享票要在卡片上標出「跟誰共用」，只有存在共享票時才多撈一次 members。
+     ⚠ 2026-09-23：1V2 的同行會員（partner_id）也要查得到名字，否則標籤只寫得出 id。 */
   const peerName={};
-  if(_shrPeers.size){
+  const _hasPartner=(myTickets||[]).some(t=>t&&((t.partners&&Object.keys(t.partners).length)||t.partner_id));
+  if(_shrPeers.size || _hasPartner){
     try{ (await dbGetAll('members')).forEach(x=>{ peerName[x.id]=x.name; }); }catch(_){}
   }
   /* 2026-07-31 使用者定案：票券一律從票券夾拿（見 buildWallet）。
@@ -42658,9 +42676,22 @@ async function openMemberDetail(member_id){
       : '';
     // 自主訓練點數與折抵券不提供共享
     const canShare=(isDeskLike())&&tkCategoryOf(t)==='course';
+    /* 1V2 同行會員（2026-09-23）：只有 1V2 的教練課票才有第二位。
+       ⚠ 與共享是兩件事，兩顆按鈕並排時字要分得開（「同行會員」vs「共享設定」）。 */
+    const _isV2=String(t.format||'').toUpperCase()==='1V2';
+    const canPartner=canShare && _isV2;
+    const _ptIdM=(typeof tkPartnerOf==='function')?tkPartnerOf(t,member_id):'';
+    const _ptName=_ptIdM ? (peerName[_ptIdM]||'') : '';
+    /* 設了同行會員就標在票名旁（2026-09-23）——櫃檯掃一眼就知道這張票是誰跟誰。
+       ⚠ 用金色不是綠色：綠色在這一列已經是「共享」在用，兩個標籤要分得出來。
+       ⚠ 這一段要放在 _isV2／_ptName 宣告**之後** —— const 有暫時死區，
+         放在前面會直接拋 ReferenceError，整張會員資料頁白掉。 */
+    const partnerTag=(_isV2 && _ptIdM && _ptName)
+      ? `<span class="tag" style="background:#faf3e3;color:#8a6a20;font-size:10px;margin-left:6px;" title="1V2 同行會員：一起上課，不扣他的堂數、他也不能拿這張票約課">同行・${escH(_ptName)}</span>`
+      : '';
     return `<div class="md-tk-item"${isDim?' style="opacity:.55;"':''}>
       <div class="md-tk-top">
-        <div class="md-tk-name">${tkNoTag(WAL.noOf(t.id))}${t.plan_name||(ty?ty.name:'—')}<span class="tag tag-${ty?ty.color:'pt'}" style="margin-left:8px;">${ty?ty.name:'—'}${t.format?'·'+t.format:''}</span>${instTag}${shareTag}</div>
+        <div class="md-tk-name">${tkNoTag(WAL.noOf(t.id))}${t.plan_name||(ty?ty.name:'—')}<span class="tag tag-${ty?ty.color:'pt'}" style="margin-left:8px;">${ty?ty.name:'—'}${t.format?'·'+t.format:''}</span>${instTag}${shareTag}${partnerTag}</div>
         <!-- 2026-07-26 使用者指示：右上角改顯示「已用/總數」（原本是剩餘/總數） -->
         ${/* 無限卡沒有分母（2026-08-29 使用者：「這張無限卡右上角顯示8/9999　這個數字
              還有意義嗎　還是改成使用次數　統計這張無限卡用了幾次」）——
@@ -42675,6 +42706,7 @@ async function openMemberDetail(member_id){
         <span class="md-tk-meta">${tkBuyDateHtml(t)}　·　${tkExpireSeg(t,tkLogs,'到期')}　·　<span class="tag ${stTag[t.status]}" style="font-size:10.5px;">${stLabel[t.status]}</span>${tkMoneyHtml(t)}</span>
         ${(inst && (t.unlocked_sessions||0)<total && (isDeskLike()))?`<button class="btn btn-gold btn-sm" onclick="openInstallNext('${t.id}')">開通下一期</button>`:''}
         ${canShare?`<button class="btn btn-ghost btn-sm" onclick="openTicketShare('${t.id}','${member_id}')">${_others.length?'共享設定':'設為共享'}</button>`:''}
+        ${canPartner?`<button class="btn btn-ghost btn-sm" onclick="openTicketPartner('${t.id}','${member_id}')">${_ptIdM?'同行會員':'設定同行'}</button>`:''}
         ${extraBtn||''}
       </div>
     </div>`;
@@ -49599,9 +49631,43 @@ function ppRecordHtml(){
           const _canShare=isDeskLike()&&t.status==='usable'&&(tab==='pt'||tab==='group')&&t.member_id===PP.id;
           /* 章上直接寫名字（2026-08-04 使用者指示：「共享人顯示清楚一點」）：
              兩人以內全列、更多列第一位＋等N人；共享給我的票寫「共享自 持有人」。 */
+          /* 1V2 同行會員（2026-09-23）——與共享章並排在右上角（同樣是「這張票是誰在用」）。
+             ⚠⚠ 這張卡（bkd-tkcard）是**會員檔案頁**在用的那一支，跟 md-tk-item 是兩份
+               （使用者 0923 附截圖：「我在桌機看到的票券卡長這樣　跟你展示的不一樣」）。
+               同一件事有好幾張卡片，改了一張不等於改好 —— 見記憶 yugym-card-template-copy。
+             ⚠ 條件放寬到「format 空白的教練課票」也給：自訂銷售 0923 之前把 format 寫死 null，
+               正式庫 47 張叫「自訂方案」的票因此看不出 1V1／1V2（40 張還有效）。
+               設定同行者這個動作本身就說明了它是 1V2，儲存時會順手把 format 補上。 */
+          /* ⚠ 「同行是1v2的方案限定」（2026-09-23 使用者重新定義）——
+             format 空白的教練課票也放行，是因為自訂銷售 0923 之前把 format 寫死 null
+             （正式庫 47 張叫「自訂方案」的票，40 張還有效），那些票其實可能是 1V2、
+             只是沒標。設同行者時會順手把 format 補成 1V2（見 tkPtSave）。
+             ⚠ 1V1 明確標過的不放行 —— 1V1 沒有第二位。 */
+          const _fmtU=String(t.format||'').toUpperCase();
+          /* ⚠ 持有人**與共享者**的票卡都能設（2026-09-23 定版）——
+             設的是「這一位的同行人」，不是整張票。兒子買票給爸媽時，
+             櫃檯開著爸爸的資料就在爸爸的票卡設，不必跑去兒子那邊。 */
+          const _ptOk=isDeskLike()&&t.status==='usable'&&tab==='pt'
+            &&(typeof tkUsableBy==='function'?tkUsableBy(t,PP.id):t.member_id===PP.id)
+            &&(_fmtU==='1V2'||_fmtU==='');
+          const _ptId=(typeof tkPartnerOf==='function')?tkPartnerOf(t,PP.id):'';
+          const _ptNm=_ptId?((c.memMap||{})[_ptId]||''):'';
+          const ptTag=(_ptId&&_ptNm)
+            ? `<button type="button" style="font-size:11px;color:#8a6a20;border:1px solid #c9a95c;border-radius:6px;padding:1px 8px;margin-left:6px;background:transparent;${_ptOk?'cursor:pointer;':''}font-family:inherit;" ${_ptOk?`onclick="event.stopPropagation();openTicketPartner('${t.id}','${PP.id}')"`:''} title="1V2 同行會員：一起上課，不扣他的堂數、他也不能拿這張票約課${_ptOk?'。點擊調整':''}">同行：${escH(_ptNm)}${_ptOk?' ›':''}</button>`
+            : '';
           const _shNames=tkSharedIds(t).map(id=>(c.memMap||{})[id]).filter(Boolean);
           const _shLabel=_shNames.length ? (_shNames.length<=2?_shNames.join('、'):`${_shNames[0]} 等 ${_shNames.length} 人`) : `${_shN}人`;
-          const shrTag=(t.member_id!==PP.id)?`<span style="font-size:11px;color:var(--gold-d);border:1px solid var(--gold-d);border-radius:6px;padding:1px 6px;margin-left:6px;">共享自 ${(c.memMap||{})[t.member_id]||'持有人'}</span>`
+          /* ⚠ 2026-09-23：被分享的那一張改用浮水印（見 .tkwm）——
+             使用者：「共享票可以改成浮水印在右邊置中　Ａ分給Ｂ的話在Ｂ的這一張顯示浮水印」。
+             「共享自 葉隆震」原本是個不可點的小標籤，擠在右上角跟進度數字搶位置，
+             而它要講的只是「這張不是我買的」這件背景事實 —— 正好是浮水印的用途。
+             ⚠ 持有人那一張**不動**：那顆是可點的改設定入口，浮水印點不下去。
+             ⚠ 持有人的名字改放在浮水印的 title 上，要查還是查得到。 */
+          const _sharedFromMe=(t.member_id!==PP.id);
+          const _shOwner=(c.memMap||{})[t.member_id]||'持有人';
+          const shrWm=_sharedFromMe
+            ? `<span class="tkwm" title="共享自 ${escH(_shOwner)}：共用同一個堂數池，堂數從持有人那張票扣">共享</span>` : '';
+          const shrTag=_sharedFromMe?''
             :(_shN?`<button type="button" style="font-size:11px;color:#2f6f4f;border:1px solid #2f6b4f;border-radius:6px;padding:1px 8px;margin-left:6px;background:transparent;${_canShare?'cursor:pointer;':''}font-family:inherit;" ${_canShare?`onclick="ppShareTk('${t.id}')"`:''} title="共用同一個堂數池，任一人上課都從這張票扣${_canShare?'。點擊查看／調整共享名單':''}">共享：${_shLabel}${_canShare?' ›':''}</button>`:'');
           /* 合約鈕移到票券編號左邊（2026-08-04 使用者指示：減少底列被太多物件擠壓變形） */
           /* 底列左下角那一排動作鈕，抽成常數（2026-09-23）——
@@ -49646,14 +49712,20 @@ function ppRecordHtml(){
                 ${(isDeskLike()&&t.payment_status==='unpaid')?`<button class="btn btn-green btn-sm" style="padding:2px 10px;font-size:11px;" title="補上實際收到的金額與付款方式" onclick="tkPayOpen('${t.id}')">收款</button>`:''}
                 ${(isDeskLike()&&t.status==='usable')?`<button class="btn btn-ghost btn-sm" style="padding:2px 10px;font-size:11px;color:var(--danger);" title="結束這張票：可選轉儲值金（營收保留）、全額退款、或扣 20％ 手續費退款" onclick="voidTicketAsk('${t.id}')">作廢</button>`:''}
 `;
-          return `<div class="bkd-tkcard" style="margin-bottom:10px;">
+          return `<div class="bkd-tkcard${_sharedFromMe?' bkd-tkcard-shared':''}" style="margin-bottom:10px;">${shrWm}
             <div class="bkd-tkcard-head"><span class="bkd-tkcard-name" style="display:flex;align-items:center;gap:6px;flex-wrap:wrap;">${(c.ctByTicket&&c.ctByTicket[t.id])?`<button class="btn btn-ghost btn-sm" style="padding:2px 9px;font-size:11px;flex:none;" onclick="openContractView('${c.ctByTicket[t.id]}')" title="查看合約">合約</button>`:''}${tkNoTag(sl.no)}${t.plan_name||'票券'}${_m2?stTag:''}${(()=>{
                 const f=tkAuditFlags(t,{net:_netTk[t.id], used});
                 /* 2026-08-26 使用者：「對帳是什麼意思　我要做什麼」——
                    原本只有 title 提示，而手機根本沒有 hover，等於掛了一個沒人看得懂的紅章。
                    改成可以點，跳出視窗把四個數字攤開講，並直接給「校正」的入口。 */
                 return f.length?`<button type="button" class="tk-audit" onclick="event.stopPropagation();tkAuditWhy('${t.id}')"
-                  title="點一下看是哪個數字對不上">⚠ 對帳</button>`:''; })()}</span>
+                  title="點一下看是哪個數字對不上">⚠ 對帳</button>`:''; })()}${
+              /* 同行會員接在課程名稱右邊（2026-09-23 使用者：「設定同行可以改在課程名稱右邊」）——
+                 ⚠ 章與按鈕**一起**放這裡，不要一個在名稱旁、一個在右上角：
+                   設定前後位置會跳，客人與櫃檯都要重新找。
+                 ⚠ 共享留在右上角不動（0830 使用者指示過），兩組就此分開：
+                   共享是「這張票還有誰能用」，同行是「這堂課還有誰一起上」。 */''}${ptTag||''}${
+                (_ptOk&&!_ptId)?`<button class="btn btn-ghost btn-sm" style="padding:2px 9px;font-size:11px;flex:none;" title="這位會員用這張票上 1V2 時，一起上課的第二位。課表會顯示兩個人的名字；不扣他的堂數、他也不能拿這張票約課" onclick="event.stopPropagation();openTicketPartner('${t.id}','${PP.id}')">設定同行</button>`:''}</span>
               ${/* 共享移到這裡（2026-08-30 使用者指示：「把[共享]·共享人改到右上角　剩餘課堂左邊」）——
                    共享是「這張票是誰在用」，屬於票券的身分，跟右下角那排動作不是同一件事。 */''}
               <span class="bkd-tkcard-share">${shrTag||''}${
@@ -54280,6 +54352,16 @@ async function openGrantModal(){
                把後果寫在欄位底下，選錯當場就看得出來。 */''}
           <div class="form-row"><label>票種 *（決定可約課程與簽到贈點）</label>${ashOptField('gt-c-type', _ttList, _ttCur, '選擇票種', 'grantCustomValidate()')}
             <div class="gt-unitbox" id="gt-c-bt"></div></div>
+          ${/* 授課類型（2026-09-23 使用者：「如果是自訂方案　有辦法區分嗎」）——
+               自訂銷售原本把 format 寫死 null，所以走這條路賣出的教練課票
+               **看不出是 1V1 還是 1V2**（正式庫 47 張叫「自訂方案」的票就是這樣，
+               40 張還有效）。票種清單分不出來 —— 那是「教練課／友善教練課」這個維度，
+               1V1／1V2 是另一個維度。
+               ⚠ 它決定：課表要不要畫兩份（會員 A／B）、能不能設同行會員、報表的課別統計。
+               ⚠ 只有教練課與友善教練課要問；團體課沒有這個維度（由 grantCustomValidate 控制顯示）。
+               ⚠ 不設成必填：8/26 之前賣的票也都沒有，硬性要求會讓櫃檯卡在這一格。 */''}
+          <div class="form-row" id="gt-c-fmt-row" style="display:none;"><label>授課類型<span class="lb-warn">1V2 才設得了同行會員</span></label>
+            ${ashOptField('gt-c-fmt', [{v:'',label:'不指定'},{v:'1V1',label:'1V1　一對一'},{v:'1V2',label:'1V2　一對二'}], '', '選擇授課類型', 'grantCustomValidate()')}</div>
           <input type="hidden" id="gt-c-name" value="${(_pre&&_pre.name)||'自訂方案'}">   <!-- 2026-07-28 使用者指示：方案名稱統一「自訂方案」；固定商品帶自己的名字 -->
         </div>
         <div class="form-2col">
@@ -54711,8 +54793,10 @@ function _grantCustomPlan(){
      但整包價另外用 list_price 原封不動帶著走：10000÷3 回推成 3333，
      再乘回去只有 9999，會憑空少 1 元。凡是要「整包多少錢」的地方一律讀 list_price。 */
   const totalPrice=Math.max(0,Number(v('gt-c-price').value)||0);
+  /* 授課類型（2026-09-23）：原本寫死 null，走自訂這條路賣出的教練課票因此
+     看不出 1V1／1V2（見欄位那邊的說明）。沒選就維持 null，行為與以前完全一樣。 */
   return { id:'__custom__', name:(v('gt-c-name').value||'').trim(), ticket_type_id:(v('gt-c-type').value||null),
-    format:null, unit_price:sessions>0?Math.round(totalPrice/sessions):0, list_price:totalPrice,
+    format:((v('gt-c-fmt')||{}).value||'')||null, unit_price:sessions>0?Math.round(totalPrice/sessions):0, list_price:totalPrice,
     sessions_base:sessions, sessions_bonus:0, valid_days:Math.max(1,Number(v('gt-c-valid').value)||365),
     plan_type:'general', installment:false, __custom:true };
 }
@@ -54791,10 +54875,37 @@ function grantCustomValidate(){
   grantCustomUnitHint(p);
   grantCustomBenefitHint(p);
   grantCustomSessionsHint(p);
+  grantCustomFmtRow(p);
+
   const ok=!!(p && p.name && p.ticket_type_id && p.sessions_base>0)
     && !gtSessionsBad(p&&p.sessions_base);   // 超過上限（非管理員）→ 下一步鎖住，理由寫在欄位底下
   const btn=document.getElementById('gt-next');
   if(btn){ btn.disabled=!ok; btn.style.opacity=ok?'1':'.4'; }
+}
+/* 授課類型那一列只給教練課（2026-09-23）——
+   團體課、自主訓練點數、折抵券都沒有 1V1／1V2 這個維度，欄位留著只會讓人以為要填。
+   ⚠ 用票種**名稱**判斷而不是 id：_CUSTOM_TT 本來就是用名稱過濾的（見那一份清單），
+     兩邊同一個判準才不會有一天對不上。
+   ⚠ 藏起來時要把值清掉 —— 櫃檯先選教練課選了 1V2、再改成團體課，
+     值留著就會把「團體課・1V2」賣出去。 */
+function grantCustomFmtRow(p){
+  const row=document.getElementById('gt-c-fmt-row'); if(!row) return;
+  const ttId=(p&&p.ticket_type_id)||'';
+  const ty=(window._ttCache||[]).find(x=>x&&x.id===ttId);
+  const nm=String((ty&&ty.name)||'');
+  const show = nm==='教練課' || nm==='友善教練課';
+  row.style.display = show ? '' : 'none';
+  /* ⚠ 清值要連按鈕上的字一起清：ashOptField 的值在 hidden input，顯示在 -btn 裡，
+     只改 input 的話畫面還寫著「1V2」而實際已經是空的。 */
+  if(!show){
+    const f=document.getElementById('gt-c-fmt');
+    if(f && f.value){
+      f.value='';
+      const btn=document.getElementById('gt-c-fmt-btn');
+      if(btn && btn.firstElementChild){ btn.firstElementChild.textContent='選擇授課類型';
+        btn.firstElementChild.className='adp-ph'; }
+    }
+  }
 }
 function refreshGrantPlans(){
   // 自訂銷售：不走方案篩選，改由自訂欄位驗證控制「下一步」
@@ -56839,6 +56950,120 @@ async function doGrantReqCancel(id){
   }catch(e){ showToast('取消失敗：'+((e&&e.message)||e)); }
 }
 // ── 分期：開通下一期（收款即解鎖）──
+/* 1V2 同行：這張票上「某一位的同行人是誰」（2026-09-23 定版）——
+   partners = { 上課那位的 member_id: 他的同行人 member_id }。
+   ⚠ 在誰的票卡上設，就是設誰的（使用者：「在爸爸的共享票這邊設定同行媽媽…
+     如果在兒子設定同行爸爸　用兒子的名字預約就會看到[兒子][爸爸]」）。
+   ⚠ 舊的單一欄位 partner_id 留著沒用（做不到一票多組），這裡當最後退路讀一次。 */
+function tkPartnerOf(t, mid){
+  if(!t||!mid) return '';
+  const m=(t&&t.partners&&typeof t.partners==='object')?t.partners:null;
+  const v=m?m[String(mid)]:'';
+  if(v) return String(v);
+  return (String(t.member_id)===String(mid) && t.partner_id) ? String(t.partner_id) : '';
+}
+/* ══ 1V2 同行會員（2026-09-23 使用者提案）══════════════════════════════════
+   「如果是1V2的方案　可以新增另一位會員進來…重點是課表本來是[會員A][會員B]
+     現在這樣可以帶入兩個會員的名字　教練紀錄的時候可以知道這張課表是給誰的」
+
+   ⚠⚠ 這跟隔壁的「共享設定」**不是同一件事**，使用者明講「跟共享這個按鈕的定義不一樣」：
+     ・共享（shared_with）：共用同一個堂數池，**對方可以拿這張票去約課、會扣堂數**
+     ・同行（partner_id） ：只是「這堂課還有這一位一起上」，**不扣他的課、他不能約課**
+     使用者確認的收費現況：「只有一位付錢、另一位跟著上」。
+   ⚠ 只給 1V2 的教練課票：1V1 沒有第二位，自主訓練與折抵券不是這回事。
+   ⚠ 談定的範圍只有兩件：課表顯示兩個真名 ＋ 第二位看得到這張票的課程預約。
+     合約簽名不做（紙本本來就只有一位代表簽）、自主訓練不送。 */
+/* @param for_member 幫**誰**設同行人（就是你現在開著的那位會員）。
+   同一張票在不同人的票卡上各設各的，互不影響。 */
+async function openTicketPartner(ticket_id,for_member){
+  if(!(isDeskLike())){ showToast('只有管理員或櫃台可設定同行會員'); return; }
+  const t=await dbGet('member_tickets',ticket_id); if(!t){ showToast('找不到票券'); return; }
+  const who=for_member||t.member_id;
+  const members=await dbGetAll('members');
+  window._tkPtState={ticket_id, back:who, who, pid:tkPartnerOf(t,who),
+    whoName:((members.find(x=>x.id===who)||{}).name||'—'), plan:t.plan_name||'票券'};
+  window._tkPtMembers=members;
+  renderTicketPartnerModal();
+}
+function renderTicketPartnerModal(){
+  const st=window._tkPtState, ms=window._tkPtMembers||[];
+  const nameOf=id=>{ const x=ms.find(y=>y.id===id); return x?x.name:'—'; };
+  const cur=st.pid
+    ? `<div style="display:flex;align-items:center;justify-content:space-between;gap:10px;padding:10px 12px;background:var(--card2);border-radius:10px;font-size:14px;">
+        <span><b>${escH(nameOf(st.pid))}</b> <span style="color:var(--t3);font-size:12px;">${fmtPhone((ms.find(y=>y.id===st.pid)||{}).phone)}</span></span>
+        <button class="btn btn-ghost btn-sm" onclick="tkPtClear()">移除</button></div>`
+    : '<div style="padding:10px 12px;background:var(--card2);border-radius:10px;color:var(--t3);font-size:13px;">尚未設定</div>';
+  /* ⚠ 標題要講清楚是幫**誰**設（2026-09-23 定版：同一張票在不同人的票卡上各設各的）——
+     不寫出來的話，櫃檯在爸爸的票卡設了媽媽，會以為整張票都變成「爸＋媽」。 */
+  showModal(`<div class="modal-title">${escH(st.whoName)} 的同行會員</div>
+    <div style="font-size:12.5px;color:var(--t2);line-height:1.8;margin-bottom:12px;">${escH(st.plan)}<br>
+      用 <b>${escH(st.whoName)}</b> 的名字預約 1V2 時，課表的第二格就寫這位。</div>
+    <div style="font-size:12px;color:var(--t2);font-weight:600;margin-bottom:6px;">目前的同行會員</div>
+    ${cur}
+    <div class="form-row" style="margin-top:14px;"><label>${st.pid?'換一位':'加入同行會員'}</label>
+      <input id="tkpt-q" placeholder="輸入姓名或手機搜尋" oninput="tkPtSearch()" autocomplete="off">
+      <div id="tkpt-res" style="max-height:150px;overflow:auto;margin-top:6px;"></div>
+    </div>
+    <div style="background:#fdf6e6;border:1px solid #e6d4a6;border-radius:10px;padding:11px 13px;font-size:12.5px;color:#7a5c14;line-height:1.75;margin-top:12px;">
+      設定後：課表的學員頁籤會顯示<b>兩個人的名字</b>，這位會員在「我的預約」也看得到這幾堂課。
+    </div>
+    <div style="font-size:11.5px;color:var(--t3);line-height:1.8;margin-top:10px;">
+      ・<b>不會</b>扣他的堂數，他也<b>不能</b>拿這張票去約課 —— 那是「共享設定」在做的事<br>
+      ・這張票的<b>其他使用人可以各自設自己的同行會員</b>，互不影響<br>
+      ・沒設定的話，課表維持「會員 A／會員 B」
+    </div>
+    <div class="modal-foot"><button class="btn btn-ghost" onclick="_tkShareBack('${st.back}')">取消</button>
+      <button class="btn btn-green" onclick="tkPtSave()">儲存</button></div>`);
+}
+function tkPtSearch(){
+  const q=(document.getElementById('tkpt-q')||{}).value||'';
+  const box=document.getElementById('tkpt-res'); if(!box) return;
+  const st=window._tkPtState, ms=window._tkPtMembers||[];
+  const key=q.trim().toLowerCase();
+  if(!key){ box.innerHTML=''; return; }
+  /* ⚠ 自己與目前已設的那位都不列出來：選自己當同行者沒有意義，
+     而且會讓課表兩個頁籤同名。
+     ⚠ 這裡的「自己」是 st.who（正在幫他設的那位），不是票持有人 ——
+       兒子買票給爸媽時，在爸爸的票卡設的是爸爸的同行人。 */
+  const hit=ms.filter(m=>m && m.id!==st.who && m.id!==st.pid
+      && ((m.name||'').toLowerCase().indexOf(key)>=0 || String(m.phone||'').indexOf(key)>=0)).slice(0,8);
+  box.innerHTML=hit.length?hit.map(m=>`<div style="display:flex;align-items:center;justify-content:space-between;gap:10px;padding:7px 0;border-bottom:1px solid var(--bd);font-size:13px;">
+      <span>${escH(m.name||'')} <span style="color:var(--t3);font-size:11px;">${fmtPhone(m.phone)}</span></span>
+      <button class="btn btn-ghost btn-sm" onclick="tkPtPick('${m.id}')">選這位</button></div>`).join('')
+    :'<div style="padding:8px 0;color:var(--t3);font-size:12px;">查無會員</div>';
+}
+function tkPtPick(id){ const st=window._tkPtState; if(!st) return; st.pid=id; renderTicketPartnerModal(); }
+function tkPtClear(){ const st=window._tkPtState; if(!st) return; st.pid=''; renderTicketPartnerModal(); }
+async function tkPtSave(){
+  const st=window._tkPtState; if(!st) return;
+  try{
+    const t=await dbGet('member_tickets',st.ticket_id); if(!t) throw new Error('找不到票券');
+    const before=tkPartnerOf(t, st.who);
+    /* ⚠ 寫的是「這一位的同行人」那一格，不是整張票（2026-09-23 定版）——
+       同一張票可以有好幾組（爸爸→媽媽、兒子→爸爸），互不影響。 */
+    const _map=(t.partners&&typeof t.partners==='object')?Object.assign({},t.partners):{};
+    if(st.pid) _map[String(st.who)]=String(st.pid); else delete _map[String(st.who)];
+    t.partners=_map;
+    /* ⚠ format 空白就順手補成 1V2（2026-09-23）——自訂銷售 0923 之前把 format 寫死 null，
+       正式庫 47 張叫「自訂方案」的票因此看不出 1V1／1V2（40 張還有效）。
+       **設定同行會員這個動作本身就說明了它是 1V2**，補上去課表才畫得出兩份。
+       ⚠ 只補空白的，不覆蓋已經寫了 1V1 的 —— 那種是櫃檯明確選過的，不該被這裡改掉。
+       ⚠ 移除同行者時不動 format：票本來就是 1V2，只是這次沒有第二位。 */
+    let _fmtFixed=false;
+    if(st.pid && !String(t.format||'').trim()){ t.format='1V2'; _fmtFixed=true; }
+    await dbPut('member_tickets',t);
+    const ms=window._tkPtMembers||[];
+    const nm=id=>{ const x=ms.find(y=>y.id===id); return x?x.name:id; };
+    /* 留一筆帳本：誰在什麼時候把誰設成同行者，日後查得到。
+       ⚠ delta 0 —— 這不動堂數。 */
+    await logTicket(t.id,'adjust',0,null,SESSION.name,
+      `同行會員（${st.whoName}）：${before?nm(before):'（無）'} → ${st.pid?nm(st.pid):'（無）'}${_fmtFixed?'｜授課類型補標 1V2':''}`);
+    showToast(st.pid
+      ? `${st.whoName} 的同行會員：${nm(st.pid)}${_fmtFixed?'（這張票已一併標成 1V2）':''}`
+      : `已移除 ${st.whoName} 的同行會員`, _fmtFixed?5000:3000);
+    _tkShareBack(st.back);
+  }catch(e){ console.error('同行會員設定失敗:',e); showToast('儲存失敗：'+((e&&e.message)||e)); }
+}
 /* ══ 票券共享設定（2026-07-26 使用者指示）════════════════════════════════
    舊系統的「共享方案」：一張票由持有人購買，指定其他會員共用同一個堂數池。
    持有人不變（營收仍歸他），只在 shared_with 加會員 id；任一人預約都扣同一張票。 */
@@ -64187,7 +64412,34 @@ async function openTrainingLog(bookingId){
     }
     if(!isFriendly && tkText.indexOf('友善')>=0) isFriendly=true;
   }catch(_){}
+  /* ══ 1V2 這一堂的第二位學員（2026-09-23 使用者定版）═══════════════════════
+     「該方案能夠使用的都可以成為同行人　只是上課只能選擇兩個名額寫課表」
+
+     ⚠ 兩層：booking.partner_id（這一堂實際是誰）優先，沒設才用
+       member_tickets.partner_id（這張票的預設）。
+       使用者舉的反例是「兒子買給爸媽 1V2 使用」——持有人不是學員，而且
+       爸媽之外還可能有阿姨輪流，所以第二位要能**逐堂**指定。
+     ⚠ 候選只有「這張票的可用人」（持有人＋共享者）——
+       共享決定**誰能當學員**，同行決定**這一堂是哪一位**。
+     ⚠ A 永遠是 booking 綁的那位（抬頭那位），不是票持有人 ——
+       兒子買票的情況下持有人根本不上課。
+     ⚠ 沒設就維持「會員 A／會員 B」（使用者 0922：「如果沒有新增另一位會員進來
+       還可以維持[會員A][會員B]的方式」）。 */
+  let partnerName='', partnerId='';
+  try{
+    let _tk=null;
+    if(b.ticket_id) _tk=await dbGet('member_tickets',b.ticket_id).catch(()=>null);
+    /* 這一堂的第二位＝票上「上課這位（A）的同行人」。
+       ⚠ A 是 booking 綁的那位，不是票持有人 —— 兒子買票給爸媽時持有人不上課。
+       ⚠ booking.partner_id 留著當覆寫（目前沒有 UI 在寫，見那支 migration 的檔頭）。 */
+    partnerId = b.partner_id || ((typeof tkPartnerOf==='function')?tkPartnerOf(_tk,b.member_id):'') || '';
+    if(partnerId){
+      const _pm=await dbGet('members',partnerId).catch(()=>null);
+      if(_pm) partnerName=_pm.name||'';
+    }
+  }catch(_){}
   window._tlMemName=memName; window._tlTkText=tkText; window._tlIsFriendly=isFriendly;
+  window._tlPartner=partnerName; window._tlPartnerId=partnerId;
   window._tlFmt=fmtOfBk;   /* 預約沒填就用票券的（見上方說明） */
   renderTrainingLogSheet();
 }
@@ -64349,8 +64601,28 @@ async function renderTrainingLogSheet(){
              所以真名查不到，A／B 是唯一誠實的標法。
              A ＝ 這張 booking 綁的會員（就是抬頭那位），B ＝ 現場的另一位。
              ⚠ 別再試著「找出配對的另一張 booking」—— 沒有那張。 */''}
-      ${_is1v2?`<div class="tl-slots">${[1,2].map(s=>
-        `<button type="button" class="tl-slot${_slot===s?' on':''}" onclick="tlSetSlot(${s})">會員 ${s===1?'A':'B'}</button>`).join('')}</div>`:''}
+      ${/* ⚠ 2026-09-23：B 那一格可以挑人（候選＝這張票的可用人，見 openTrainingLog）。
+           使用者定版：「該方案能夠使用的都可以成為同行人　只是上課只能選擇兩個名額寫課表」。
+           A ＝ 這張 booking 綁的會員（抬頭那位，不是票持有人 —— 兒子買票時持有人不上課）。
+           ⚠ 有候選才畫得下去的 ▾；沒有候選（票沒共享給別人）就維持純文字「會員 B」，
+             並在 title 講出怎麼辦 —— 不能只給一個點了沒反應的東西。 */''}
+      ${/* 學員頁籤（2026-09-23 使用者重新定義同行之後定版）——
+           「同行是1v2的方案限定　目的是要讓兩個會員都看得到預約
+             以及教練要填寫兩人的訓練紀錄使用」
+             「1v2同行 我們一開始就該綁定兩個會員的姓名」
+
+           所以這裡**純顯示、不給挑**：兩位在票上就綁好了，不是每堂選。
+           A ＝ 這張 booking 綁的會員（抬頭那位，不一定是票持有人 ——
+                兒子買給爸媽的情況下持有人根本不上課）
+           B ＝ 票上的同行者（member_tickets.partner_id）
+           ⚠ 沒綁就維持「會員 A／會員 B」（0922 定的，那是誠實的標法）。
+           ⚠⚠ 中間一度做成「可以逐堂挑人」（booking.partner_id ＋ ▾ 選單），
+             使用者定了「本來就不該由第三位會員一起使用該張票券」之後整組收掉 ——
+             沒有輪流，就沒有挑的必要。欄位留著沒用，將來真的要再接回來。 */''}
+      ${_is1v2?(()=>{ const _pn=String(window._tlPartner||'').trim();
+        const _nm=s=> _pn ? (s===1?(window._tlMemName||'會員 A'):_pn) : `會員 ${s===1?'A':'B'}`;
+        return `<div class="tl-slots">${[1,2].map(s=>
+          `<button type="button" class="tl-slot${_slot===s?' on':''}" onclick="tlSetSlot(${s})">${escH(_nm(s))}</button>`).join('')}</div>`; })():''}
       ${/* 凍結區到這裡為止（會員資料＋學員頁籤），下面的 .tl-scroll 才捲動（2026-09-11） */''}
       <div class="tl-scroll">
         <div class="tlh-label">今日訓練紀錄${logs.length?'<span class="tlh-hint">點一下可修改</span>':''}</div>

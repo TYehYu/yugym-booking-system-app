@@ -252,7 +252,8 @@ console.log('\n⑥ 1V2 的兩份課表（2026-09-15 使用者：「上方用兩�
      所以這裡包了一層 IIFE；「只有 1V2 才畫」這條規則本身沒變。 */
   ok('★★★ 只有 1V2 才畫頁籤（其他課畫面完全不變）',
      /const _is1v2 = fmt==='1V2';/.test(src)
-     && /\$\{_is1v2\?`<div class="tl-slots">/.test(src));
+     && /\$\{_is1v2\?\(\(\)=>\{ const _pn=String\(window\._tlPartner\|\|''\)\.trim\(\);/.test(src)
+     && /return `<div class="tl-slots">/.test(src));
   ok('★★★ 每次開抽屜都回到第 1 位（連開好幾堂課時，停在 2 會把下一位記錯格）',
      /window\._tlSlot=1;/.test(src));
   ok('★★ 切換要重畫整個抽屜（今日紀錄要換成那一位的）',

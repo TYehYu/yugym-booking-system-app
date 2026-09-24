@@ -66,7 +66,8 @@ console.log('\n③ 共享搬到右上角、剩餘堂數左邊');
 {
   /* 比對的是「同一張卡裡」的先後，不是全檔第一個 prog（別張卡也有 prog）。 */
   ok('★★★ 共享標與「設為共享」都在 head 那一列、剩餘堂數之前',
-     /<span class="bkd-tkcard-share">\$\{shrTag\|\|''\}[\s\S]{0,260}?<span class="bkd-tkcard-prog"><b class="num">\$\{used\}<\/b> \/ \$\{total\}<\/span><\/div>/.test(src));
+     /* 2026-09-23：同一列多了 1V2 的「同行」章與〔設定同行〕，所以放寬長度上限。 */
+     /<span class="bkd-tkcard-share">\$\{shrTag\|\|''\}[\s\S]{0,900}?<span class="bkd-tkcard-prog"><b class="num">\$\{used\}<\/b> \/ \$\{total\}<\/span><\/div>/.test(src));
   ok('★★ 名稱列不再重複掛共享標（同一件事不講兩次）',
      !/\$\{_m2\?stTag:''\}\$\{shrTag\}/.test(src));
   ok('★★ 動作列裡的「設為共享」已移走',
