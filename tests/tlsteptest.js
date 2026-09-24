@@ -67,9 +67,11 @@ console.log('\n④ 兩支都要有（同一個手勢不能只做一半）');
   ok('★★★ 修改紀錄：每一組兩格都接上 tleStep',
      /dec:`tleStep\(\$\{i\},'reps',-\$\{_sr\}\)`/.test(R1)
      && /inc:`tleStep\(\$\{i\},'weight',\$\{_sw\}\)`/.test(R1), 'tleRender');
-  ok('★★★ 記錄訓練：當前那一組接上 tlStepCur',
-     /dec:`tlStepCur\('reps',-\$\{_sr\}\)`/.test(R2)
-     && /inc:`tlStepCur\('weight',\$\{_sw\}\)`/.test(R2), 'renderAddExerciseSheet');
+  /* ⚠ 2026-09-24：「記錄訓練」與「修改紀錄」統一版面之後，這一頁**每一組**都可編輯
+     （原本只有最後一組是輸入框），所以 tlStepCur 換成逐組的 tlStepSet(i,…)。 */
+  ok('★★★ 記錄訓練：每一組兩格都接上 tlStepSet',
+     /dec:`tlStepSet\(\$\{i\},'reps',-\$\{_sr\}\)`/.test(R2)
+     && /inc:`tlStepSet\(\$\{i\},'weight',\$\{_sw\}\)`/.test(R2), 'renderAddExerciseSheet');
   ok('★★★ 次數固定 ±1，重量吃這個單位的主級距（見 ⑧）',
      /const _sr=1, _sw=tlStepSize\('weight',u\);/.test(R1)
      && /const _sr=1, _sw=tlStepSize\('weight',_u\);/.test(R2));
@@ -84,7 +86,7 @@ console.log('\n④ 兩支都要有（同一個手勢不能只做一半）');
 
 console.log('\n⑤ 按下去之後的行為');
 {
-  const A=grab('tleStep'), B=grab('tlStepCur');
+  const A=grab('tleStep'), B=grab('tlStepSet');
   ok('★★★ 先收值再算（使用者可能先用鍵盤改了別組再按這一組的 ±）',
      A.indexOf('tleReadSets();')>=0 && A.indexOf('tleReadSets();')<A.indexOf('tlStepVal(')
      && B.indexOf('tlReadCur();')>=0 && B.indexOf('tlReadCur();')<B.indexOf('tlStepVal('));
@@ -92,7 +94,7 @@ console.log('\n⑤ 按下去之後的行為');
      !/tleRender\(\)/.test(A) && !/renderAddExerciseSheet\(\)/.test(B)
      && /el\.value=v;/.test(A) && /el\.value=v;/.test(B));
   ok('★★★ state 與畫面一起更新（只改畫面的話，存檔會存到舊值）',
-     /E\.sets\[i\]\[f\]=v;/.test(A) && /cur\[f\]=v;/.test(B));
+     /E\.sets\[i\]\[f\]=v;/.test(A) && /st\.sets\[i\]\[f\]=v;/.test(B));
   ok('★★ 不重畫的理由寫在原地', /重畫會關掉輸入法鍵盤、連按幾下會一直閃/.test(src));
 }
 
@@ -130,13 +132,13 @@ ok('★★★ 欄寬與間距三行一起改（只改一行就回到 0915「沒�
 
 /* 2026-09-21 使用者：「前面的編號改簡單一點　1. 2.就好」——
    原本是品牌綠實心圓。它只是列序號，用最重的視覺畫會跟旁邊真正要看的數字搶注意力。 */
+/* ⚠ 2026-09-24：「記錄訓練」不再有「已完成組唯讀摘要」那種列
+   （與「修改紀錄」統一之後，每一組都是輸入框），所以 .done 那一款沒有用武之地。
+   樣式留著不刪 —— 它是 .ae-set-no 的一個修飾類，刪了也省不了什麼，
+   而唯讀列將來若再出現（例如會員端只讀版）還會用到。 */
 ok('★★★ 組別編號是純文字「1.」，不是綠色實心圓',
    /\.ae-set-no\{width:20px;height:auto;flex:none;border-radius:0;background:none;/.test(src)
-   && /<div class="ae-set-no">\$\{i\+1\}\.<\/div>/.test(src)
-   && /<div class="ae-set-no">\$\{curNo\}\.<\/div>/.test(src)
-   && /<div class="ae-set-no done">\$\{i\+1\}\.<\/div>/.test(src));
-ok('★★ 已完成組的編號更淡（那是已經記好的，不需要再被看見）',
-   /\.ae-set-no\.done\{background:none;color:var\(--t3\);\}/.test(src));
+   && (src.match(/<div class="ae-set-no">\$\{i\+1\}\.<\/div>/g)||[]).length===2);
 /* ⚠⚠ 2026-09-21 最難找的那一個：表頭的欄位規則沒有「>」，
    會把**巢狀**的 span 也當成欄位 —— .ae-head-unit 裡的 kg／lb 那組 .wpe-unit
    被 `span:first-child{width:20px}` 壓成 20px，裡面 32px 的鈕整個溢出去疊在旁邊
@@ -172,8 +174,8 @@ console.log('\n⑧〔+0.5〕在每一列，不在表頭（2026-09-21 四修）')
   const R1=grab('tleRender'), R2=grab('renderAddExerciseSheet');
   ok('★★★ 修改紀錄：每一列都有一顆〔+0.5〕，打的是那一列的重量',
      /class="ae-set-half"[\s\S]{0,160}?onclick="tleStep\(\$\{i\},'weight',0\.5\)">\+0\.5<\/button>/.test(R1));
-  ok('★★★ 記錄訓練：當前那一組也有',
-     /class="ae-set-half"[\s\S]{0,160}?onclick="tlStepCur\('weight',0\.5\)">\+0\.5<\/button>/.test(R2));
+  ok('★★★ 記錄訓練：每一組也有',
+     /class="ae-set-half"[\s\S]{0,160}?onclick="tlStepSet\(\$\{i\},'weight',0\.5\)">\+0\.5<\/button>/.test(R2));
   ok('★★★ 是動作不是模式：按一下直接 +0.5，沒有「先切換」那一步',
      /aria-label="這一組重量加 0\.5"/.test(R1));
   ok('★★ 次數沒有 0.5（次數不會有半下）',
@@ -181,12 +183,11 @@ console.log('\n⑧〔+0.5〕在每一列，不在表頭（2026-09-21 四修）')
   ok('★★★ ± 回到這個單位的正常級距（kg 1、lb 5）',
      /const _sr=1, _sw=tlStepSize\('weight',u\);/.test(R1)
      && /const _sr=1, _sw=tlStepSize\('weight',_u\);/.test(R2));
-  ok('★★ 表頭回到只有 kg／lb（修改紀錄）與純文字（記錄訓練）',
-     /<span class="ae-head-unit">重量<span class="wpe-unit">/.test(R1)
-     && /<span>重量 \$\{_u\}<\/span>/.test(R2));
-  ok('★★★ 唯讀列與當前組要補佔位格，五欄才對得起來',
-     /<span class="ae-set-pad"><\/span>/.test(R2)
-     && /\.ae-set-pad\{flex:none;width:28px;\}/.test(src));
+  /* 2026-09-24：兩支的表頭統一成同一句（單位切換就掛在「重量」後面）。 */
+  ok('★★ 兩支的表頭長得一樣（重量 ＋ kg／lb 切換）',
+     (src.match(/<span class="ae-head-unit">重量<span class="wpe-unit">/g)||[]).length===2);
+  ok('★★ 佔位格的樣式留著（將來若再有唯讀列還會用到）',
+     /\.ae-set-pad\{flex:none;width:28px;\}/.test(src));
 }
 ok('★★★ 圓形鈕：寬＝高，align-self 不能是 stretch（會被拉成膠囊）',
    /\.ae-set-pm\{flex:none;width:24px;height:24px;align-self:center;/.test(src)

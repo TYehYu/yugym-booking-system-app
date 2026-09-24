@@ -4220,6 +4220,11 @@ body.cxe-dragging-on .cxe-row{cursor:grabbing;}
 .cxe-pk input{width:16px;height:16px;}
 .ae-back{background:none;border:none;font-size:22px;color:var(--t2);cursor:pointer;width:28px;padding:0;}
 /* 第二頁：已選內容 */
+/* 「已帶入上次的數字」那一句（2026-09-24）——
+   0912 加的提示，原本掛在綠框裡的第二行；綠框在 0924 與「修改紀錄」統一時退場，
+   句子改掛在動作名稱下方。
+   ⚠ 這句不能省：不講的話教練會以為這幾組是自己剛剛打的（0912 原話）。 */
+.ae-lastnote{font-size:11.5px;color:#3f7a66;margin:-6px 0 2px;}
 .ae-chosen{margin:0 18px 12px;padding:12px 14px;background:#e3efe9;border-radius:11px;}
 .ae-chosen-ex{font-size:16px;font-weight:700;color:var(--green);}
 .ae-chosen-sub{font-size:12px;color:#3f7a66;margin-top:2px;}
@@ -13949,8 +13954,8 @@ function tbl(s){return TABLE_ALIAS[s]||s;}
 let sb=null;
 // ── 版本號（日期+時間格式：年後兩碼+月+日.時分，例 26620.1058 = 26年6/20 10:58）──
 // 每次改版手動更新這一行即可，畫面與 title 會一起更新
-const APP_VERSION = '260924.0904';
-const APP_VERSION_LABEL = 'v260924.0904';
+const APP_VERSION = '260924.0922';
+const APP_VERSION_LABEL = 'v260924.0922';
 const CLOUD = !!(window.YUGYM_CONFIG && window.YUGYM_CONFIG.url && window.YUGYM_CONFIG.anonKey);
 if(CLOUD){ sb = supabase.createClient(window.YUGYM_CONFIG.url, window.YUGYM_CONFIG.anonKey); }
 
@@ -64683,7 +64688,7 @@ async function tlStartAddExercise(){
      ⚠ 整張表單共用一個單位，不做成每組各選：同一個動作不會這組 kg、下一組 lb，
        而且 sets_detail 的 JSON 結構要是加了 unit，tlLogNums 那條
        「舊資料沒有單位欄一律當 kg」的退路就會被破壞。單位只存在 weight_unit 欄位。 */
-  window._tlState={page:1, body_part:null, exercise_name:'', posture:null, tool:null, _tpOpen:false,
+  window._tlState={page:1, body_part:null, exercise_name:'', posture:null, tool:null, _pick:'',
     unit:'kg', sets:[{reps:'',weight:''}]};
   /* 分類快捷籤每次開視窗都回到「全部」（2026-09-16）—— 停在上一個動作的分類，
      下一次新增就只看得到那一類，其他動作像是消失了。
@@ -64843,58 +64848,61 @@ async function renderAddExerciseSheet(){
         <div class="ae-foot"><button class="btn btn-green" style="width:100%;" onclick="tlGoPage2()">開始記錄 →</button></div>
       </div>`;
     setTimeout(()=>{ const i=document.getElementById('ae-name'); if(i){ i.focus(); i.setSelectionRange(i.value.length,i.value.length); } },60);
+  }else if(st.page===3){
+    /* 第三頁：挑姿勢／工具（2026-09-24）——
+       ⚠ 不用 showModal：這裡是 .ms-panel，再疊一張 modal 會有層級與返回路徑兩個問題。
+         切成面板內的一頁，返回就是回第二頁，跟「修改紀錄」那支的跳視窗體感一樣。
+       ⚠ 清單樣式沿用「修改紀錄」的 .tle-picklist／.ash-eirow，兩支長得一樣。 */
+    const fld=st._pick==='posture'?'posture':'tool';
+    const isP=fld==='posture';
+    const list=isP?TL_POSTURES:TL_TOOLS, cur=st[fld]||'';
+    host.innerHTML=`<div class="ms-backdrop" onclick="closeAddExercise()"></div>
+      <div class="ms-panel ae-panel">
+        <div class="ms-head">
+          <button class="ae-back" onclick="tlPickBack()">‹</button>
+          <div class="ms-title">選擇${isP?'姿勢':'工具'}</div>
+          <button class="ms-close" onclick="closeAddExercise()">✕</button>
+        </div>
+        <div class="ae-body">
+          <div class="ash-eihead">再點一次目前選的那一項就會取消選擇（這一欄本來就可以不填）。</div>
+          <div class="tle-picklist">${list.map(x=>`<button type="button" class="ash-eirow ash-ei-2c lot-row${x===cur?' lot-row-cur':''}" onclick="tlPickOpt('${fld}','${x}')">
+            <span class="ash-eilb">${x}</span>${x===cur?'<span class="ash-eisub">目前選的</span>':''}</button>`).join('')}</div>
+        </div>
+        <div class="ae-foot"><button class="btn btn-ghost" style="width:100%;" onclick="tlPickBack()">返回</button></div>
+      </div>`;
   }else{
-    // 第二頁：已完成的組顯示為摘要，最後一組為輸入；按「＋新增一組」定下當前組再開新組
-    const done = st.sets.slice(0, st.sets.length-1); // 已定下的組
-    const cur = st.sets[st.sets.length-1];           // 當前輸入組
+    /* ══ 第二頁：與「修改紀錄」（tleRender）統一成同一套版面（2026-09-24 使用者）══
+       「這是一個紀錄視窗　這也是一個修改紀錄的視窗　是不是可以統一介面　我覺得後者比較好用」
+
+       原本這一頁與 tleRender 是兩套：
+         · 動作名稱是綠框裡的唯讀字，要改得先點「修改」
+         · 姿勢／工具藏在「修改」後面，不展開看不到
+         · 只有**最後一組**是輸入框，前面幾組是唯讀摘要 —— 要改第 1 組得先把後面幾組刪掉
+         · 備註要先點「＋ 新增備註」才長出來
+       使用者選了後者，所以這裡照抄 tleRender 的四塊：
+         動作輸入框 → 姿勢／工具兩顆摘要鈕 → 每一組都可編輯（含 ✕）→ 備註輸入框。
+       ⚠ 容器維持 .ms-panel：這一頁前面還有「挑動作」那一頁（含常用動作清單），
+         換成 showModal 會在換頁時閃一下，而且返回鍵要重做。
+       ⚠ 「已帶入上次的數字」那句提示留著（0912 加的：不講的話教練會以為
+         這幾組是自己剛剛打的），改掛在動作名稱下方。 */
     const _u=wpUnitOf(st.unit);
-    /* 單位不再寫死 kg（2026-09-15）——已完成的組也要顯示當下選的單位 */
-    const doneHtml=done.map((s,i)=>`<div class="ae-set-done">
-      <div class="ae-set-no done">${i+1}.</div>
-      ${/* 拆成兩格才落得進「次數」「重量」兩欄（2026-09-15）——
-           原本是一整格「10 次　×　35 lb」靠左，跟表頭與下方輸入框都對不齊。
-           拆開後「×」就多餘了：表頭已經標明哪一欄是什麼。 */''}
-      <span class="ae-set-val">${s.reps||'-'} 次</span>
-      <span class="ae-set-val">${s.weight||'-'} ${_u}</span>
-      ${/* 第 4 欄是〔+0.5〕欄；已完成組是唯讀摘要，不給改，補一格佔位保持對齊 */''}
-      <span class="ae-set-pad"></span>
-      <button class="ae-set-del" onclick="tlDelSet(${i})">✕</button>
-    </div>`).join('');
-    const curNo=done.length+1;
-    /* ± 快速調整（2026-09-21）—— 與「修改紀錄」用同一組 tlStepSize／tlStepFieldHTML，
-       單位字從格子裡拿掉：下面的 .ae-sets-head 本來就寫著「重量」加上目前的單位。 */
-    const _sr=1, _sw=tlStepSize('weight',_u);
-    const curHtml=`<div class="ae-set-cur">
-      <div class="ae-set-no">${curNo}.</div>
+    const sets=(Array.isArray(st.sets)&&st.sets.length)?st.sets:[{reps:'',weight:''}];
+    const pickBtn=(field,label)=>`<button type="button" class="ae-opt tle-pick" onclick="tlPickOpen('${field}')">
+        <span>${label}</span><i>${st[field]?escH(st[field]):'未設定'}</i></button>`;
+    const setsHtml=sets.map((s,i)=>{
+      const _sr=1, _sw=tlStepSize('weight',_u);
+      return `<div class="ae-set-cur">
+      <div class="ae-set-no">${i+1}.</div>
       <div class="ae-cur-fields">
-        ${tlStepFieldHTML({id:'ae-cur-reps', step:_sr, mode:'numeric', ph:'次數', val:cur.reps,
-          dec:`tlStepCur('reps',-${_sr})`, inc:`tlStepCur('reps',${_sr})`})}
-        ${tlStepFieldHTML({id:'ae-cur-weight', step:_sw, mode:'decimal', ph:'徒手', val:cur.weight,
-          dec:`tlStepCur('weight',-${_sw})`, inc:`tlStepCur('weight',${_sw})`})}
+        ${tlStepFieldHTML({id:'ae-r-'+i, step:_sr, mode:'numeric', ph:'次數', val:(s.reps==null?'':s.reps),
+          dec:`tlStepSet(${i},'reps',-${_sr})`, inc:`tlStepSet(${i},'reps',${_sr})`})}
+        ${tlStepFieldHTML({id:'ae-w-'+i, step:_sw, mode:'decimal', ph:'徒手', val:(s.weight==null?'':s.weight),
+          dec:`tlStepSet(${i},'weight',-${_sw})`, inc:`tlStepSet(${i},'weight',${_sw})`})}
       </div>
       <button type="button" class="ae-set-half" tabindex="-1" aria-label="這一組重量加 0.5"
-        title="重量 +0.5" onclick="tlStepCur('weight',0.5)">+0.5</button>
-      ${/* 這一列沒有 ✕（當前組不能刪，要刪是按上面已完成組的 ✕），
-           補一格佔位讓欄位跟表頭／已完成組對齊 */''}
-      <span class="ae-set-pad"></span>
-    </div>
-    ${/* 單位切換（2026-09-15 使用者：「重量只有kg可以設定 沒有lb」）——
-         沿用「修改紀錄」視窗那組 .wpe-unit／.wpe-u，不另做一套樣式。
-         整張表單共用一個單位，所以放在組別列下方、不跟著每一組跑。 */''}
-    <div class="ae-unit-row">
-      <span class="ae-unit-lb">重量單位</span>
-      <div class="wpe-unit">${WP_UNITS.map(x=>`<button type="button" class="wpe-u${_u===x?' on':''}" onclick="tlUnit('${x}')">${x}</button>`).join('')}</div>
-    </div>`;
-    const noteBlock = st._noteOpen
-      ? `<textarea id="ae-note" class="ae-note" placeholder="輸入備註…">${st.note||''}</textarea>`
-      : `<button class="ae-add-note" onclick="tlOpenNote()">＋ 新增備註</button>`;
-    // 工具/姿勢：預設已從動作資料庫帶入，顯示於動作名下方；點「修改」才展開編輯
-    const tpBlock = st._tpOpen
-      ? `<div class="ae-tp" style="margin-top:8px;">
-          <div class="ae-label">使用工具</div><div class="ae-grid ae-grid-3">${TL_TOOLS.map(t=>`<button class="ae-opt ${st.tool===t?'active':''}" onclick="tlPickTool('${t}')">${t}</button>`).join('')}</div>
-          <div class="ae-label">使用姿勢</div><div class="ae-grid ae-grid-2">${TL_POSTURES.map(p=>`<button class="ae-opt ${st.posture===p?'active':''}" onclick="tlPickPosture('${p}')">${p}</button>`).join('')}</div>
-        </div>`
-      : '';
+        title="重量 +0.5" onclick="tlStepSet(${i},'weight',0.5)">+0.5</button>
+      <button class="ae-set-del" onclick="tlDelSet(${i})" title="刪掉這一組">✕</button>
+    </div>`;}).join('');
     host.innerHTML=`<div class="ms-backdrop" onclick="closeAddExercise()"></div>
       <div class="ms-panel ae-panel">
         <div class="ms-head">
@@ -64902,31 +64910,35 @@ async function renderAddExerciseSheet(){
           <div class="ms-title">記錄訓練</div>
           <button class="ms-close" onclick="closeAddExercise()">✕</button>
         </div>
-        <div class="ae-chosen">
-          <div class="ae-chosen-ex">${st.exercise_name}</div>
-          ${/* 數字是哪來的要講一句（2026-09-12）：不講的話，教練會以為這幾組是自己剛剛打的 */''}
-          <div class="ae-chosen-sub">${st._lastDate?`已帶入上次（${st._lastDate}）的數字　·　`:''}${[st.posture,st.tool].filter(Boolean).join('　·　')||'未設定工具姿勢'}　<button class="ae-chosen-edit" onclick="tlToggleTP()">${st._tpOpen?'收合':'修改'}</button></div>
-          ${tpBlock}
-        </div>
         <div class="ae-body">
-          ${/* 表頭的單位跟著切換走（2026-09-15 使用者附截圖：切到 lb 之後，
-               下面兩組都是 lb，只有表頭還寫 kg）——
-               寫死是歷史遺留（見 tlLoadQuickEx 附近那條註解：「當時畫面就寫死 kg」），
-               那時還沒有單位切換。_u 在上面已經算好，切換鈕自己也是用它畫的。 */''}
-          <div class="ae-sets-head"><span>組</span><span>次數 RM</span><span>重量 ${_u}</span></div>
-          ${doneHtml}
-          ${curHtml}
+          <div class="form-row"><label>動作 *</label>
+            <input type="text" id="ae-name2" value="${escH(st.exercise_name||'')}" autocomplete="off"></div>
+          ${st._lastDate?`<div class="ae-lastnote">已帶入上次（${st._lastDate}）的數字</div>`:''}
+          <div class="ae-grid ae-grid-2" style="margin:14px 0 4px;">
+            ${pickBtn('posture','姿勢')}${pickBtn('tool','工具')}
+          </div>
+          <div class="ae-sets-head"><span>組</span><span>次數</span>
+            <span class="ae-head-unit">重量<span class="wpe-unit">${WP_UNITS.map(x=>
+              `<button type="button" class="wpe-u${_u===x?' on':''}" onclick="tlUnit('${x}')">${x}</button>`).join('')}</span></span></div>
+          ${setsHtml}
           <button class="ae-add-set" onclick="tlAddSet()">＋ 新增一組</button>
-          <div style="margin-top:14px;">${noteBlock}</div>
+          <div class="form-row" style="margin-top:6px;"><label>備註（可留空）</label>
+            <input type="text" id="ae-note" value="${escH(st.note||'')}" autocomplete="off"></div>
         </div>
-        <div class="ae-foot"><button class="btn btn-green" style="width:100%;" onclick="tlSaveExercise()">儲存（共 ${curNo} 組）</button></div>
+        <div class="ae-foot"><button class="btn btn-green" style="width:100%;" onclick="tlSaveExercise()">儲存（共 ${sets.length} 組）</button></div>
       </div>`;
-    setTimeout(()=>{const r=document.getElementById('ae-cur-reps');if(r&&!cur.reps)r.focus();},60);
+    setTimeout(()=>{const r=document.getElementById('ae-r-0');if(r&&!sets[0].reps)r.focus();},60);
   }
 }
-function tlToggleTP(){ if(window._tlState.page===2)tlReadCur(); window._tlState._tpOpen=!window._tlState._tpOpen; renderAddExerciseSheet(); }
-function tlPickPosture(p){ if(window._tlState.page===2)tlReadCur(); window._tlState.posture=p; renderAddExerciseSheet(); }
-function tlPickTool(t){ if(window._tlState.page===2)tlReadCur(); window._tlState.tool=t; renderAddExerciseSheet(); }
+/* 姿勢／工具：進面板內的挑選頁（2026-09-24，與「修改紀錄」統一）——
+   ⚠ 進去之前一定要先 tlReadCur()：畫面上剛打、還沒回寫 state 的數字
+     會被重繪洗掉（與 tleReadSets 同一個道理）。 */
+function tlPickOpen(field){ tlReadCur(); const st=window._tlState;
+  st._pick=field; st.page=3; renderAddExerciseSheet(); }
+function tlPickBack(){ const st=window._tlState; st.page=2; renderAddExerciseSheet(); }
+/* 再點一次目前選的那一項＝取消選擇（這兩欄本來就可以不填）。 */
+function tlPickOpt(field,v){ const st=window._tlState;
+  st[field]=(st[field]===v)?'':v; st.page=2; renderAddExerciseSheet(); }
 function tlBackPage1(){ tlReadCur(); window._tlState.page=1; renderAddExerciseSheet(); }
 /* 只要有名稱就能開始記（2026-09-11）：部位不問、工具／姿勢選填（記錄頁點「修改」補） */
 function tlGoPage2(){
@@ -64935,26 +64947,33 @@ function tlGoPage2(){
   if(!String(st.exercise_name||'').trim()){ showToast('請輸入動作名稱'); if(i) i.focus(); return; }
   st.page=2; renderAddExerciseSheet();
 }
-// 讀取當前輸入組的值回 state
+/* 把畫面上的值收回 state（2026-09-24 起是**每一組**都收）——
+   ⚠ 名字沒改是刻意的：這支被七八個地方呼叫（切頁、加組、刪組、±、儲存），
+     改名要一起動，而它做的事仍然是「重繪前先把畫面上的東西收起來」。
+   ⚠ 動作名稱也要收：這一頁的名稱改成可編輯輸入框了，
+     不收的話教練改完名字按「＋新增一組」就被打回原名。 */
 function tlReadCur(){
-  const st=window._tlState; const cur=st.sets[st.sets.length-1];
-  const r=document.getElementById('ae-cur-reps'), w=document.getElementById('ae-cur-weight');
-  if(r)cur.reps=r.value; if(w)cur.weight=w.value;
+  const st=window._tlState; if(!st||!Array.isArray(st.sets)) return;
+  const nm=document.getElementById('ae-name2'); if(nm) st.exercise_name=nm.value;
+  st.sets.forEach((s,i)=>{
+    const r=document.getElementById('ae-r-'+i), w=document.getElementById('ae-w-'+i);
+    if(r)s.reps=r.value; if(w)s.weight=w.value;
+  });
   const n=document.getElementById('ae-note'); if(n)st.note=n.value;
 }
-/* 與 tleStep 同一套（見那支的說明）：先收值、只改那一格、不重畫整張表 */
-function tlStepCur(f,d){
+/* 與 tleStep 同一套（見那支的說明）：先收值、只改那一格、不重畫整張表。
+   ⚠ 2026-09-24 改成逐組（原本只動得了最後一組）。 */
+function tlStepSet(i,f,d){
   tlReadCur();
-  const st=window._tlState; if(!st||!Array.isArray(st.sets)||!st.sets.length) return;
-  const cur=st.sets[st.sets.length-1];
-  const v=tlStepVal(cur[f], d);
-  cur[f]=v;
-  const el=document.getElementById(f==='reps'?'ae-cur-reps':'ae-cur-weight');
+  const st=window._tlState; if(!st||!Array.isArray(st.sets)||!st.sets[i]) return;
+  const v=tlStepVal(st.sets[i][f], d);
+  st.sets[i][f]=v;
+  const el=document.getElementById((f==='reps'?'ae-r-':'ae-w-')+i);
   if(el) el.value=v;
 }
 function tlAddSet(){
   tlReadCur();
-  const st=window._tlState; const cur=st.sets[st.sets.length-1];
+  const st=window._tlState; const cur=st.sets[st.sets.length-1]||{reps:'',weight:''};
   if(cur.reps===''&&cur.weight===''){ showToast('請先填這一組的次數或重量'); return; }
   // 新一組預設沿用上一組的次數/重量（常見情境：同重量多組）
   st.sets.push({reps:cur.reps,weight:cur.weight});
@@ -64973,7 +64992,8 @@ function tlUnit(u){
   st.unit=wpUnitOf(u);
   renderAddExerciseSheet();
 }
-function tlOpenNote(){ tlReadCur(); window._tlState._noteOpen=true; renderAddExerciseSheet(); }
+/* 〔已移除〕tlOpenNote —— 備註改成常駐輸入框（2026-09-24 與「修改紀錄」統一），
+   不再需要「＋ 新增備註」那一步。 */
 
 async function tlSaveExercise(){
   tlReadCur();

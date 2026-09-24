@@ -54,8 +54,10 @@ console.log('\n①-2 重量單位 kg／lb（2026-09-15 使用者：「重量只�
    備註字串、存檔的 weight_unit。 */
 {
   const S=src;
+  /* ⚠ 2026-09-24：單位切換從獨立的 .ae-unit-row 搬進表頭的「重量」欄
+     （與「修改紀錄」統一版面，那支 0916 就是這樣做的）——少一整列。 */
   ok('★★★ 第二頁有單位切換鈕（沿用 .wpe-unit／.wpe-u，不另做一套）',
-     /<div class="ae-unit-row">/.test(S)
+     /<span class="ae-head-unit">重量<span class="wpe-unit">/.test(S)
      && /onclick="tlUnit\('\$\{x\}'\)"/.test(S)
      && /function tlUnit\(u\)\{/.test(S));
   /* 2026-09-15 使用者附截圖：「單手下拉這張　次數跟重量沒有對齊」——
@@ -63,14 +65,15 @@ console.log('\n①-2 重量單位 kg／lb（2026-09-15 使用者：「重量只�
      輸入組兩個框，右邊界還差一顆 ✕ 的寬度），改成共用同一套四欄 grid。
      已完成組那一整格因此拆成兩個 span（次數一格、重量一格），結尾 </div> → </span>。
      ⚠ 這一條要守的沒變：重量後面接的仍是 ${_u}，不是寫死的 kg。 */
-  ok('★★★ 四處不再寫死 kg：摘要／輸入框／備註／存檔',
-     /\$\{s\.weight\|\|'-'\} \$\{_u\}<\/span>/.test(S)          /* 已完成組摘要 */
+  /* ⚠ 2026-09-24：「已完成組唯讀摘要」整個退場（每一組都是輸入框了），
+     所以這一條改看表頭與級距 —— 兩處都是從 _u 推出來的，寫死不了。 */
+  ok('★★★ 不再寫死 kg：表頭／級距／備註／存檔',
+     /`<button type="button" class="wpe-u\$\{_u===x\?' on':''\}" onclick="tlUnit\('\$\{x\}'\)">\$\{x\}<\/button>`/.test(S)  /* 切換鈕吃目前單位 */
      /* 2026-09-21：格子裡的單位字拿掉換成 ± 兩顆（見 tlsteptest），
         「不寫死 kg」改由表頭與級距守 —— 表頭寫的是目前單位，
         級距也是從 _u 推出來的（lb 主級距就是 5），兩處都寫死不了。 */
      /* 2026-09-21 四修：表頭的［0.5］級距鈕收掉了（改成每一列的〔+0.5〕動作鈕，
         見 tlsteptest ⑧），表頭回到單純一個 span；「不寫死 kg」改由表頭與 ± 的級距守。 */
-     && /<span>重量 \$\{_u\}<\/span>/.test(S)
      && /const _sr=1, _sw=tlStepSize\('weight',_u\);/.test(S)
      && /'×'\+s\.weight\+_su/.test(S)                          /* 備註字串 */
      && /return w\.length\?_su:null;/.test(S));                /* 存檔的 weight_unit */
@@ -245,6 +248,8 @@ console.log('\n⑥ 1V2 的兩份課表（2026-09-15 使用者：「上方用兩�
      /comment on column public\.training_logs\.slot/.test(sqlSlot)
      && /第二位沒有自己的 member_id/.test(sqlSlot));
 
+  /* 2026-09-23：頁籤的字改成「票上設了同行會員就顯示兩個真名，沒設才是 A／B」，
+     所以這裡包了一層 IIFE；「只有 1V2 才畫」這條規則本身沒變。 */
   ok('★★★ 只有 1V2 才畫頁籤（其他課畫面完全不變）',
      /const _is1v2 = fmt==='1V2';/.test(src)
      && /\$\{_is1v2\?`<div class="tl-slots">/.test(src));
