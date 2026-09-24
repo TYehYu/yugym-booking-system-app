@@ -34,8 +34,10 @@ console.log('① 動作卡抽成共用（教練端與會員端同一份排版）
 
 console.log('② 會員端那一份真的不能改');
 {
-  ok('★★★ 不可編輯時不掛 onclick',
-     /\$\{editable\?` onclick="tlEditLog\('\$\{l\.id\}'\)"`:''\}/.test(CARD));
+  /* ⚠ 2026-09-25 起這一格還掛了拖移（data-lid ＋ onpointerdown）——
+     會員端唯讀一樣不掛，所以這條守的東西沒變：唯讀就是碰不到。 */
+  ok('★★★ 不可編輯時不掛 onclick，也不掛拖移',
+     /\$\{editable\?` data-lid="\$\{l\.id\}" onclick="tlEditLog\('\$\{l\.id\}'\)" onpointerdown="tlLpStart\(event,'\$\{l\.id\}'\)"`:''\}/.test(CARD));
   ok('★★★ 不可編輯時不畫 ✕',
      /\$\{editable\?`<button class="tl-del"[\s\S]*?`:''\}/.test(CARD));
   ok('★★★ 唯讀卡帶 .tlh-log-ro（游標與按壓回饋都要收掉）',
@@ -111,13 +113,17 @@ console.log('③-3 動作順序＝教練記錄的先後（2026-09-23 使用者�
 {
   /* 改版前這一頁吃外層那份**降冪**的 logs，每堂裡面是倒著看的
      —— 教練最後記的排在最上面，跟教練端正好相反。 */
-  ok('★★★ 一堂之內照 created_at 升冪（與教練端 renderTrainingLogSheet 同一個方向）',
-     /const _ls=ls\.slice\(\)\.sort\(\(a,b\)=>String\(a\.created_at\|\|''\)\.localeCompare\(String\(b\.created_at\|\|''\)\)\);/.test(PAGE));
-  ok('★★★ 教練端也是升冪（兩邊同方向，這條反過來就代表又不一致了）',
-     /const logs=allLogs\.filter\(l=>l\.booking_id===b\.id && \(!_is1v2 \|\| _slotOf\(l\)===_slot\)\)\s*\n\s*\.sort\(\(a,b\)=>\(a\.created_at\|\|''\)\.localeCompare\(b\.created_at\|\|''\)\);/.test(src));
+  /* ⚠⚠ 2026-09-25：排序鍵從 created_at 換成 seq（使用者要拖移調整順序）。
+     0923 定的「按照教練紀錄的順序」沒有被推翻 —— 沒拖過的課，seq 就是記錄的先後；
+     拖過之後「教練要的順序」才跟「記錄的先後」分家。細節見 tests/tlseqtest.js。
+     這一條要守的沒變：**兩端同一個排序函式**，不能一邊 seq 一邊 created_at。 */
+  ok('★★★ 一堂之內照 tlSeqSort（seq → created_at）',
+     /const _ls=tlSeqSort\(ls\);/.test(PAGE));
+  ok('★★★ 教練端用同一支（兩邊同方向，各寫一套遲早會漂）',
+     /const logs=tlSeqSort\(allLogs\.filter\(l=>l\.booking_id===b\.id && \(!_is1v2 \|\| _slotOf\(l\)===_slot\)\)\);/.test(src));
   ok('★★ 這一堂的時間取排序後的第一筆（取排序前的會拿到最後記的那筆，跨午夜會標錯天）',
      /return \{ bid, ls:_ls, t:\(_ls\[0\]&&_ls\[0\]\.created_at\)\|\|'' \}; \}\)/.test(PAGE));
-  ok('　 為什麼會倒過來，寫在原地', /教練最後記的那個動作排在最上面/.test(PAGE));
+  ok('　 為什麼會倒過來，寫在原地', /教練最後記的那個動作排在最上面/.test(src));
   /* 實跑：把排序照抄出來驗一次，不是只驗字串 */
   const mk=(t,n)=>({created_at:t, exercise_name:n});
   const raw=[mk('2026-09-23T11:50:13','硬舉'),mk('2026-09-23T11:22:11','懸吊抬腿'),

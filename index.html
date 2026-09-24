@@ -5112,6 +5112,16 @@ button.wp-tag.wp-tag-off:hover{background:var(--card2);color:var(--t2);border-co
 .wp-item.wp-ghost .wp-item-x{display:none;}
 .wp-item.wp-item-sel{border-color:var(--brand,#1f6f54);
   box-shadow:0 0 0 2px color-mix(in srgb,var(--brand,#1f6f54) 28%,transparent);}
+/* 課表動作的長按拖移（2026-09-25）——與訓練方案那組同一套視覺，
+   原列留在原位當佔位（虛線淡框），跟著手指跑的是 .tlh-ghost。
+   ⚠ 不要 transform、不要改內距：卡片大小不能變（方案那邊使用者明確要求過）。 */
+.tlh-log.tlh-dragging{opacity:.35;background:transparent;box-shadow:inset 0 0 0 1px var(--bd);}
+.tlh-log.tlh-dragging .tl-del{display:none;}
+.tlh-log.tlh-ghost{background:var(--card);border-radius:10px;opacity:1;
+  box-shadow:0 12px 28px rgba(30,25,15,.28);cursor:grabbing;}
+.tlh-log.tlh-ghost .tl-del{display:none;}
+body.tlh-dragging-on{touch-action:none;user-select:none;}
+body.tlh-dragging-on .tlh-log{cursor:grabbing;}
 /* 拖移進行中整頁不要跟著捲（pointermove 已經 preventDefault，這一條是保險） */
 body.wp-dragging-on{touch-action:none;user-select:none;}
 body.wp-dragging-on .wp-item{cursor:grabbing;}
@@ -13970,8 +13980,8 @@ function tbl(s){return TABLE_ALIAS[s]||s;}
 let sb=null;
 // ── 版本號（日期+時間格式：年後兩碼+月+日.時分，例 26620.1058 = 26年6/20 10:58）──
 // 每次改版手動更新這一行即可，畫面與 title 會一起更新
-const APP_VERSION = '260925.0006';
-const APP_VERSION_LABEL = 'v260925.0006';
+const APP_VERSION = '260925.0027';
+const APP_VERSION_LABEL = 'v260925.0027';
 const CLOUD = !!(window.YUGYM_CONFIG && window.YUGYM_CONFIG.url && window.YUGYM_CONFIG.anonKey);
 if(CLOUD){ sb = supabase.createClient(window.YUGYM_CONFIG.url, window.YUGYM_CONFIG.anonKey); }
 
@@ -50683,7 +50693,10 @@ async function ppOpenTraining(id){
   logs.sort((a,b)=>(b.created_at||'').localeCompare(a.created_at||''));
   const byBk={};
   logs.forEach(l=>{ (byBk[l.booking_id]=byBk[l.booking_id]||[]).push(l); });
-  const sessions=Object.entries(byBk).map(([bid,ls])=>({bid,ls,t:ls[0].created_at||''})).sort((a,b)=>b.t.localeCompare(a.t));
+  /* ⚠ 一堂之內照 seq（見 tlSeqSort）——原本沒排，吃外層那份**降冪**的 logs，
+     所以每堂裡面是倒著看的，跟教練端相反。 */
+  const sessions=Object.entries(byBk).map(([bid,ls])=>{ const _ls=tlSeqSort(ls);
+      return {bid, ls:_ls, t:(_ls[0]&&_ls[0].created_at)||''}; }).sort((a,b)=>b.t.localeCompare(a.t));
   const setLine=tlSetLine;
   const body = sessions.length===0
     ? '<div class="empty" style="padding:26px;"><div class="em-t">尚無訓練紀錄</div><div class="em-s">教練在課堂中記錄後，會顯示在這裡。</div></div>'
@@ -53397,13 +53410,130 @@ function tlLogCardHtml(l, editable){
   const _nt=l.note?String(l.note).replace(/\[[^\]]*\]/g,'').trim():'';
   const _sets=tlSetsFromLog(l).map(s=>{ const _w=wpWeightHtml(s.weight,l.weight_unit);
     return `<span class="tlh-setrow">${s.reps||'-'} 次${_w?' × '+_w:''}</span>`; }).join('');
-  return `<div class="tlh-log${editable?'':' tlh-log-ro'}"${editable?` onclick="tlEditLog('${l.id}')"`:''}>
+  /* 長按拖移排序（2026-09-25）——只有教練端（editable）給拖，會員端唯讀不給。
+     ⚠ 用長按而不是 HTML5 draggable：手機沒有 draggable，
+       而且整列本來就要能點開修改，直接可拖會跟「點一下」打架。
+       整套沿用訓練方案那支（wpLpStart），那邊已經把觸控的坑踩完了。 */
+  return `<div class="tlh-log${editable?'':' tlh-log-ro'}"${editable?` data-lid="${l.id}" onclick="tlEditLog('${l.id}')" onpointerdown="tlLpStart(event,'${l.id}')"`:''}>
     <div class="tlh-ex">${escH(l.exercise_name||'—')}</div>
     ${_pt?`<div class="tlh-pt">${escH(_pt)}</div>`:''}
     <div class="tlh-log-main"><div class="tlh-log-left">${_nt?`<div class="tlh-note">${escH(_nt)}</div>`:''}</div><span class="tlh-sets">${_sets}</span></div>
     ${/* ⚠ 整列點下去是修改（tlEditLog），✕ 要擋住冒泡，不然刪之前會先跳出修改視窗 */''}
     ${editable?`<button class="tl-del" onclick="event.stopPropagation();delTrainingLog('${l.id}')">✕</button>`:''}
   </div>`;
+}
+/* ══ 課表動作的長按拖移排序（2026-09-25）════════════════════════════════
+   使用者：「現在上課寫訓練課表的時候　可以拖移調整順序嗎」
+   情境：「紀錄的當下　已經寫完紀錄發現動作1跟2順序反了」
+   —— 兩筆都已經進資料庫，但人還在課上，要能當場一秒改掉。
+
+   整套沿用訓練方案那支（wpLpStart，2026-09-09 四修定版），那邊已經把
+   觸控的三個坑踩完了，這裡照抄不要自己重寫：
+     ① pointerdown 當下就關掉這一列的 touch-action（來得及影響這一次手勢）
+     ② 綁 non-passive 的 touchmove，長按成立後每次 preventDefault
+        —— 光靠 touch-action 改在半路沒有用
+     ③ 長按成立後不再把 pointercancel 當結束，改等 pointerup／touchend
+   ⚠ 拖移全程**只搬 DOM，不重畫清單** —— 重畫會把收到 pointerdown 的節點銷毀，
+     那也會觸發 pointercancel（方案那邊 v1805 就是這樣「浮起來一下子」）。
+   ⚠ 與方案那支的差別只有一個：那邊只改記憶體、按儲存才寫 DB；
+     這裡**拖完立刻寫回** —— 課表沒有「儲存」這一步，每一筆本來就是即時的。
+   ⚠ 只有教練端給拖（tlLogCardHtml 的 editable），會員端唯讀不掛這支。 */
+function tlLpStart(e,id){
+  if(e.target && e.target.closest && e.target.closest('.tl-del')) return;   /* ✕ 不進拖移 */
+  const el=e.currentTarget;
+  const box=el.parentElement; if(!box) return;
+  const startY=e.clientY;
+  let armed=false, ghost=null, offY=0, ended=false;
+  try{ el.style.touchAction='none'; }catch(_){}
+  const rowsNow=()=>[...box.querySelectorAll('.tlh-log[data-lid]')];
+  const lift=()=>{
+    const r=el.getBoundingClientRect();
+    offY=startY-r.top;
+    el.classList.add('tlh-dragging');
+    /* 浮起來、黏在手上：原尺寸的分身用 position:fixed 跟著手指跑，原本那一列留著當佔位。
+       ⚠ 不縮放（方案那邊使用者明確要求「卡片大小不要變」），只加陰影。
+       ⚠ z-index 要高過課表抽屜（#tl-sheet 是 9600）。 */
+    ghost=el.cloneNode(true);
+    ghost.className='tlh-log tlh-ghost';
+    ghost.style.cssText='position:fixed;left:'+r.left+'px;top:'+r.top+'px;width:'+r.width+'px;'
+      +'height:'+r.height+'px;margin:0;pointer-events:none;z-index:10200;box-sizing:border-box;';
+    document.body.appendChild(ghost);
+  };
+  const timer=setTimeout(()=>{
+    armed=true;
+    try{ if(navigator.vibrate) navigator.vibrate(15); }catch(_){}
+    document.body.classList.add('tlh-dragging-on');
+    lift();
+  },400);
+  const tmove=(ev)=>{ if(armed) ev.preventDefault(); };
+  const moveTo=(y)=>{
+    if(ghost) ghost.style.top=(y-offY)+'px';
+    let before=null;
+    for(const r of rowsNow()){
+      if(r===el) continue;
+      const b2=r.getBoundingClientRect();
+      if(y < b2.top + b2.height/2){ before=r; break; }
+    }
+    if(before){ if(before!==el.nextSibling) box.insertBefore(el, before); }
+    else if(el!==box.lastElementChild) box.appendChild(el);
+  };
+  const move=(ev)=>{
+    if(!armed){
+      if(Math.abs(ev.clientY-startY)>8){ clearTimeout(timer); finish(false); }   /* 還沒滿 400ms 就移動＝在捲畫面 */
+      return;
+    }
+    ev.preventDefault();
+    moveTo(ev.clientY);
+  };
+  const onCancel=()=>{ if(!armed) finish(false); };
+  const finish=(apply)=>{
+    if(ended) return; ended=true;
+    clearTimeout(timer);
+    cleanup();
+    try{ el.style.touchAction=''; }catch(_){}
+    if(ghost){ try{ ghost.remove(); }catch(_){} ghost=null; }
+    document.body.classList.remove('tlh-dragging-on');
+    el.classList.remove('tlh-dragging');
+    if(!apply || !armed) return;
+    window._tlDragged=1;                       /* 放開後那一次 click 不要開修改視窗 */
+    const ids=rowsNow().map(r=>r.getAttribute('data-lid')).filter(Boolean);
+    tlSaveOrder(ids);
+  };
+  const up=()=>finish(true);
+  const cleanup=()=>{
+    window.removeEventListener('pointermove',move);
+    window.removeEventListener('pointerup',up);
+    window.removeEventListener('pointercancel',onCancel);
+    window.removeEventListener('touchmove',tmove);
+    window.removeEventListener('touchend',up);
+    window.removeEventListener('touchcancel',up);
+  };
+  window.addEventListener('pointermove',move,{passive:false});
+  window.addEventListener('pointerup',up);
+  window.addEventListener('pointercancel',onCancel);
+  window.addEventListener('touchmove',tmove,{passive:false});
+  window.addEventListener('touchend',up);
+  window.addEventListener('touchcancel',up);
+}
+/* 把畫面上的順序寫回 seq（2026-09-25）——
+   ⚠ 只寫**有變的**那幾筆：交換相鄰兩個就只有 2 筆要寫，
+     不要整堂 18 筆全部 dbPut（每一次 dbPut 都會清快取）。
+     作法與常用動作那支 cxeSaveOrder 一樣。
+   ⚠ 不重畫課表：DOM 已經是對的順序了，重畫只會閃一下。
+     真的要重畫的時機是下一次打開課表（那時吃的是新的 seq）。 */
+async function tlSaveOrder(ids){
+  if(!Array.isArray(ids)||!ids.length) return;
+  try{
+    for(let k=0;k<ids.length;k++){
+      const rec=await dbGet('training_logs',ids[k]).catch(()=>null);
+      if(!rec || Number(rec.seq)===k+1) continue;
+      rec.seq=k+1;
+      await dbPut('training_logs',rec);
+    }
+    /* 手上這份快取也要同步，不然同一次開著課表再新增一筆，
+       tlNextSeq 會拿到舊的最大值、算出重複的 seq。 */
+    (window._tlAllLogs||[]).forEach(x=>{ const i=ids.indexOf(x&&x.id); if(i>=0) x.seq=i+1; });
+  }catch(e){ showToast('順序沒存成功：'+((e&&e.message)||e), 5000); }
 }
 /* 一堂課的動作清單（會員端與櫃檯端共用同一份排版） */
 function tlLogRowsHtml(ls){
@@ -53415,10 +53545,51 @@ function tlLogRowsHtml(ls){
   </div>${l.note?`<div class="tlv-note">${escH(String(l.note).replace(/\[[^\]]*\]/g,'').trim())}</div>`:''}`).join('');
 }
 /* 依課堂分組的歷史清單 */
+/* ══ 一堂課之內的動作順序（2026-09-25）══════════════════════════════════
+   使用者：「現在上課寫訓練課表的時候　可以拖移調整順序嗎」
+   「紀錄的當下　已經寫完紀錄發現動作1跟2順序反了」
+
+   原本完全靠 created_at（0923 使用者：「訓練紀錄的排序　要按照教練紀錄的順序」），
+   但「記錄的先後」與「實際做的順序」不見得一樣 —— 教練會漏記、補記、記反。
+   加了 training_logs.seq 之後，順序變成可以搬的東西。
+
+   ⚠ created_at 留著當第二鍵，不是退路而是**必要**：
+     seq 只保證同一堂課內唯一，跨堂比較沒有意義；而且拖曳只重排那一堂，
+     萬一哪天有漏網的 null，照時間排至少不會亂跳。
+   ⚠ 這支只管「一堂之內」。跨堂（哪一堂在前）一律照 created_at 降冪，兩件事不要混。
+   ⚠ 四個地方共用：教練課表、會員端每週紀錄、會員資料視窗、會員檔案頁 ——
+     少接一個，同一堂課在不同畫面就會有兩種順序。 */
+/* 這堂課（這一位）的下一個 seq —— 新記的動作一律排在最後。
+   ⚠ 一定要帶：不帶就是 null，tlSeqSort 會把它排到有 seq 的那些後面，
+     看起來剛好也對；但只要拖過一次順序，新舊就分成兩段，
+     使用者會看到「新記的那幾個怎麼都黏在最下面拖不上去」。
+   ⚠ 1V2 兩位在同一個 booking 裡各排各的，所以要按 slot 分開算。
+   ⚠ add 給「一次寫多筆」用（套用歷史／套用方案）：那時 _tlAllLogs 還沒更新，
+     只能自己往上加。 */
+function tlNextSeq(bid, add){
+  try{
+    const _sl=(Number(window._tlSlot)===2)?2:1;
+    const _mine=(window._tlAllLogs||[]).filter(x=>x && x.booking_id===bid
+      && ((Number(x&&x.slot)===2?2:1)===_sl));
+    return _mine.reduce((m,x)=>Math.max(m, Number(x&&x.seq)||0), 0) + 1 + (Number(add)||0);
+  }catch(_){ return null; }
+}
+function tlSeqSort(logs){
+  return (logs||[]).slice().sort((a,b)=>{
+    const sa=(a&&a.seq!=null)?Number(a.seq):null, sb=(b&&b.seq!=null)?Number(b.seq):null;
+    if(sa!=null && sb!=null && sa!==sb) return sa-sb;
+    if(sa!=null && sb==null) return -1;
+    if(sa==null && sb!=null) return 1;
+    return String((a&&a.created_at)||'').localeCompare(String((b&&b.created_at)||''));
+  });
+}
 function tlSessionsHtml(logs, limit){
   const byBk={};
   (logs||[]).forEach(l=>{ if(l&&l.booking_id) (byBk[l.booking_id]=byBk[l.booking_id]||[]).push(l); });
-  const sess=Object.entries(byBk).map(([bid,ls])=>({bid,ls,t:(ls[0]&&ls[0].created_at)||''}))
+  /* ⚠ 一堂之內照 seq（見 tlSeqSort）；t 取**排序後**的第一筆 ——
+     取排序前的 ls[0] 會拿到那堂最後記的那一筆，跨午夜記錄時會標錯天。 */
+  const sess=Object.entries(byBk).map(([bid,ls])=>{ const _ls=tlSeqSort(ls);
+      return {bid, ls:_ls, t:(_ls[0]&&_ls[0].created_at)||''}; })
     .sort((a,b)=>String(b.t).localeCompare(String(a.t)));
   if(!sess.length) return '';
   return sess.slice(0,limit||30).map(x=>`<div class="tlv-sess">
@@ -53462,8 +53633,7 @@ PAGES.mem_training=async function(){
      教練最後記的那個動作排在最上面，跟教練端（renderTrainingLogSheet 也是升冪）相反。
      ⚠ t（這一堂的時間）要取**排序後**的第一筆 —— 取排序前的 ls[0] 會拿到那堂最後記的
        那一筆，日期雖然多半一樣，但跨午夜記錄時會標錯天。 */
-  const sess=Object.entries(byBk).map(([bid,ls])=>{
-      const _ls=ls.slice().sort((a,b)=>String(a.created_at||'').localeCompare(String(b.created_at||'')));
+  const sess=Object.entries(byBk).map(([bid,ls])=>{ const _ls=tlSeqSort(ls);
       return { bid, ls:_ls, t:(_ls[0]&&_ls[0].created_at)||'' }; })
     .sort((a,b)=>String(b.t).localeCompare(String(a.t)));
 
@@ -53575,7 +53745,10 @@ PAGES.m_training=async function(){
   // 依課堂(booking_id)分組
   const byBk={};
   logs.forEach(l=>{ (byBk[l.booking_id]=byBk[l.booking_id]||[]).push(l); });
-  const sessions=Object.entries(byBk).map(([bid,ls])=>({bid,ls,t:ls[0].created_at||''})).sort((a,b)=>b.t.localeCompare(a.t));
+  /* ⚠ 一堂之內照 seq（見 tlSeqSort）——原本沒排，吃外層那份**降冪**的 logs，
+     所以每堂裡面是倒著看的，跟教練端相反。 */
+  const sessions=Object.entries(byBk).map(([bid,ls])=>{ const _ls=tlSeqSort(ls);
+      return {bid, ls:_ls, t:(_ls[0]&&_ls[0].created_at)||''}; }).sort((a,b)=>b.t.localeCompare(a.t));
   const exSet=new Set(logs.map(l=>l.exercise_name).filter(Boolean));
   const stats=lpStats([
     {label:'訓練堂數', value:sessions.length, unit:'堂'},
@@ -64501,6 +64674,8 @@ async function renderTrainingLogSheet(){
 
   let allLogs=[];
   try{ allLogs=await dbGetAll('training_logs'); }catch(_){}
+  /* 掛到 window：算下一個 seq 的那幾支是從別的面板呼叫的，拿不到這裡的區域變數。 */
+  window._tlAllLogs=allLogs;
   /* 預約沒填 format 時用票券的（openTrainingLog 算好放在 _tlFmt，見那支的說明）。
      ⚠ 兩個都空才是真的沒有 —— 只讀 b.format 會讓 1V2 的課表看不到「會員 A／B」。 */
   const fmt=String(window._tlFmt||b.format||'').toUpperCase();
@@ -64514,8 +64689,7 @@ async function renderTrainingLogSheet(){
        其中有 5 筆只存在第 2 張。留著過濾就等於把它們藏起來、也刪不掉。
      ⚠ slot 的過濾要留著 —— 那是「這筆不屬於這位學員」，與 sheet 完全不同一回事。 */
   // 今日（本堂課）紀錄 —— 1V2 只看當前那一位
-  const logs=allLogs.filter(l=>l.booking_id===b.id && (!_is1v2 || _slotOf(l)===_slot))
-    .sort((a,b)=>(a.created_at||'').localeCompare(b.created_at||''));
+  const logs=tlSeqSort(allLogs.filter(l=>l.booking_id===b.id && (!_is1v2 || _slotOf(l)===_slot)));
   // 動作明細顯示（次數 x 重量；多組）
   const setLine=tlSetLine;
 
@@ -64728,12 +64902,14 @@ async function tlDoApplyHist(srcBid){
   const b=window._tlBooking;
   let n=0;
   try{
+    let _sq=tlNextSeq(b.id);       /* 一次寫多筆：自己往上加（2026-09-25） */
     for(const s of srcLogs){
       const log={
         id:uid('TLOG'), booking_id:b.id, member_id:b.member_id, coach_id:SESSION.id,
         exercise_name:s.exercise_name, body_part:s.body_part, posture:s.posture, tool:s.tool,
         reps:s.reps, sets:s.sets, sets_detail:s.sets_detail,
         slot:(Number(window._tlSlot)===2)?2:null,   /* 套進來的也要落在當前那一位（2026-09-15） */
+        seq:(_sq!=null?_sq++:null),
         note:(s.note||'').replace(/\s*\(套用.*?\)\s*/g,'')+' (套用 '+((s.created_at||'').slice(0,10).replace(/-/g,'/'))+')',
         created_at:new Date().toISOString()
       };
@@ -64815,6 +64991,8 @@ async function delTrainingLog(id){
    ⚠ 手動一組一組記的紀錄（sets_detail）：數字沒動就原封不動留著逐組明細；
      數字改了就以這一組為準（統一的次數×組數×重量）。逐組本來就不一樣的，視窗上先講一句。 */
 async function tlEditLog(id){
+  /* 拖完放開時瀏覽器會補一個 click —— 吃掉那一次，不然一拖完就跳出修改視窗。 */
+  if(window._tlDragged){ window._tlDragged=0; return; }
   let l=null; try{ l=await dbGet('training_logs',id); }catch(_){}
   if(!l){ showToast('找不到這筆紀錄'); return; }
   const n=tlLogNums(l)||{reps:'',sets:'',weight:'',unit:'kg'};
@@ -65378,6 +65556,7 @@ async function tlSaveExercise(){
     /* 1V2 的第幾位（2026-09-15）：1 或 null 都是第一位，2 是第二位。
        非 1V2 一律存 null —— 不要在單人課上留下看不懂的 1。 */
     slot:(Number(window._tlSlot)===2)?2:null,
+    seq:tlNextSeq(b.id),           /* 排在這堂課的最後（2026-09-25，見 tlNextSeq） */
     /* 這筆寫在第幾張課表上（2026-09-16 使用者：「一堂課教練會拿兩份課表分別記錄不同的訓練」）。
        第一張存 null —— 與 slot 同一個慣例，不要在預設情況留下看不懂的 1。
        ⚠ 與 slot 無關：每一張都是這位會員的紀錄，歷史與三大項 PR 都要算進去。 */
@@ -65490,6 +65669,7 @@ async function _tlPlanApply(pid,useLast){
   const items=(Array.isArray(p.items)?p.items:[]).filter(it=>it&&String(it.name||'').trim());
   let n=0;
   try{
+    let _sq=tlNextSeq(b.id);       /* 一次寫多筆：自己往上加（2026-09-25） */
     for(const it of items){
       const L=useLast?tlLogNums(last[it.name]):null;
       const reps  =L&&L.reps!==''   ? Number(L.reps)   : (it.reps==null?null:Number(it.reps));
@@ -65505,6 +65685,7 @@ async function _tlPlanApply(pid,useLast){
         weight_unit:(weight!=null&&isFinite(weight)&&weight>0)?unit:null,
         sets_detail:null,
         slot:(Number(window._tlSlot)===2)?2:null,   /* 套方案也要落在當前那一位（2026-09-15） */
+        seq:(_sq!=null?_sq++:null),
         note:it.note||null,
         created_at:new Date().toISOString() });
       window._tlogBids&&window._tlogBids.add(b.id);

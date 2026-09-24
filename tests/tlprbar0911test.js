@@ -63,7 +63,7 @@ ok('★★ 三組專屬 CSS 也收掉（.tlh-prb-*／.tlh-pr-*／.prh-*）',
      只拆頁籤不拆過濾＝那些紀錄看不到也刪不掉。下面第一條就是守這件事。 */
 const codeOnly2=src.replace(/\/\*[\s\S]*?\*\//g,'').replace(/^\s*\/\/.*$/gm,'');
 ok('★★★⚠ 今日紀錄完全不看 sheet（留著過濾就會把舊的第 2 張藏起來）',
-   /const logs=allLogs\.filter\(l=>l\.booking_id===b\.id && \(!_is1v2 \|\| _slotOf\(l\)===_slot\)\)/.test(S)
+   /const logs=tlSeqSort\(allLogs\.filter\(l=>l\.booking_id===b\.id && \(!_is1v2 \|\| _slotOf\(l\)===_slot\)\)\);/.test(S)
    && !/_sheetOf/.test(codeOnly2));
 ok('★★★ 頁籤與三支操作都不留死碼',
    !/tl-sheets/.test(codeOnly2) && !/tlSetSheet|tlAddSheet|tlDelSheet/.test(codeOnly2)

@@ -11,9 +11,13 @@ const fn=name=>{ const i=src.indexOf('function '+name+'('); if(i<0) throw new Er
 console.log('① 入口');
 /* 2026-09-23：這張動作卡抽成共用的 tlLogCardHtml(l, editable)，
    教練端傳 true（可點可刪）、會員端傳 false（唯讀）。斷言跟著搬到那支裡。 */
+/* ⚠ 2026-09-25 起同一格還掛了長按拖移（data-lid ＋ onpointerdown，見 tlseqtest）——
+   點一下仍然是修改，兩者靠「長按 400ms」分開。 */
 ok('★★★ 點今日紀錄那一列就是修改（editable 才掛 onclick）',
-   /\$\{editable\?` onclick="tlEditLog\('\$\{l\.id\}'\)"`:''\}/.test(src)
+   /\$\{editable\?` data-lid="\$\{l\.id\}" onclick="tlEditLog\('\$\{l\.id\}'\)" onpointerdown="tlLpStart\(event,'\$\{l\.id\}'\)"`:''\}/.test(src)
    && /<div class="tlh-log\$\{editable\?'':' tlh-log-ro'\}"/.test(src));
+ok('★★★ 拖完那一次 click 要吃掉（不然一拖完就跳出修改視窗）',
+   /if\(window\._tlDragged\)\{ window\._tlDragged=0; return; \}/.test(src));
 ok('★★★ ✕ 擋住冒泡（刪之前不會先跳出修改視窗），而且只有可編輯時才畫',
    /\$\{editable\?`<button class="tl-del" onclick="event\.stopPropagation\(\);delTrainingLog\('\$\{l\.id\}'\)">✕<\/button>`:''\}/.test(src));
 ok('★★★ 教練端傳 editable=true', /tlLogCardHtml\(l, true\)/.test(src));

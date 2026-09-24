@@ -214,8 +214,11 @@ ok('★★ 管理員看到的是自己那份（老闆本身也是教練，isCoac
 console.log('\n⑩ Phase 3：會員看得到自己的訓練紀錄');
 {
   const g3=(a,b)=>{const i=src.indexOf(a); return src.slice(i, src.indexOf(b,i)+b.length);};
-  const SESS=new Function('escH','tlSetLine','tlLogRowsHtml','return '+g3('function tlSessionsHtml(logs, limit){','\n}'))
-    (x=>String(x), l=>'x', ls=>'<rows n="'+ls.length+'">');
+  /* ⚠ 2026-09-25 起 tlSessionsHtml 用 tlSeqSort 排一堂之內的順序（見 tlseqtest），
+     所以要把那支一起餵進來。 */
+  const SESS=new Function('escH','tlSetLine','tlLogRowsHtml','tlSeqSort','return '+g3('function tlSessionsHtml(logs, limit){','\n}'))
+    (x=>String(x), l=>'x', ls=>'<rows n="'+ls.length+'">',
+     new Function('return '+g3('function tlSeqSort(logs){','\n}'))());
   const L=[{booking_id:'B1',created_at:'2026-09-01T03:00'},
            {booking_id:'B1',created_at:'2026-09-01T03:05'},
            {booking_id:'B2',created_at:'2026-09-08T03:00'},
