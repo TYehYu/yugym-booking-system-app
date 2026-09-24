@@ -24,8 +24,13 @@ console.log('① 是不是今天建立的（2026-09-15 由 30 分鐘放寬成「
 {
   const ymd=d=>d.getFullYear()+'-'+String(d.getMonth()+1).padStart(2,'0')+'-'+String(d.getDate()).padStart(2,'0');
   const F=new Function('ymd', grabFn('saleUndoOk')+'\nreturn saleUndoOk;')(ymd);
-  const agoMin=m=>new Date(Date.now()-m*60000).toISOString();
-  const agoDay=d=>new Date(Date.now()-d*86400000).toISOString();
+  /* ⚠ 基準用「今天中午」不是 Date.now()（2026-09-25 修）——
+     saleUndoOk 比的是「跟今天同一天嗎」，而原本用 Date.now() 往前推 90 分鐘：
+     在凌晨 00:00–01:30 跑測試時那是**昨天**，這一條會無故變紅。
+     測試不該有「幾點跑會不一樣」的成分；中午當基準，±90 分鐘一定同一天。 */
+  const noon=(()=>{ const d=new Date(); d.setHours(12,0,0,0); return d.getTime(); })();
+  const agoMin=m=>new Date(noon-m*60000).toISOString();
+  const agoDay=d=>new Date(noon-d*86400000).toISOString();
   eq('★ 剛剛建立 → 可以退', F(agoMin(0)), true);
   eq('★★★ 90 分鐘前（同一天）→ 仍可以退（這就是放寬的重點）', F(agoMin(90)), true);
   eq('★★★ 昨天 → 不能退（跨日就走正規退費）', F(agoDay(1)), false);

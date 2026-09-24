@@ -13970,8 +13970,8 @@ function tbl(s){return TABLE_ALIAS[s]||s;}
 let sb=null;
 // ── 版本號（日期+時間格式：年後兩碼+月+日.時分，例 26620.1058 = 26年6/20 10:58）──
 // 每次改版手動更新這一行即可，畫面與 title 會一起更新
-const APP_VERSION = '260924.2227';
-const APP_VERSION_LABEL = 'v260924.2227';
+const APP_VERSION = '260925.0006';
+const APP_VERSION_LABEL = 'v260925.0006';
 const CLOUD = !!(window.YUGYM_CONFIG && window.YUGYM_CONFIG.url && window.YUGYM_CONFIG.anonKey);
 if(CLOUD){ sb = supabase.createClient(window.YUGYM_CONFIG.url, window.YUGYM_CONFIG.anonKey); }
 
@@ -15382,8 +15382,10 @@ function dateRollCheck(){
     const n=new Date(), d=new Date(n.getFullYear(),n.getMonth(),n.getDate());
     if(d.getTime()===TODAY.getTime()) return false;
     TODAY=d;
+    /* ⚠ 2026-09-25：跨日一天只會踩到一次，但道理一樣 —— 半夜十二點教練還在寫課表，
+       不該被收掉。TODAY 已經換好了，下一次換頁自然帶到新的日期。 */
     if(typeof navTo==='function' && typeof CUR_PAGE!=='undefined' && CUR_PAGE
-       && !document.getElementById('modal-bg')){
+       && !(typeof uiBusyReason==='function' ? uiBusyReason() : document.getElementById('modal-bg'))){
       navTo(CUR_PAGE, (typeof CUR_GROUP!=='undefined')?CUR_GROUP:undefined);
     }
     return true;
@@ -24613,6 +24615,32 @@ async function remoteSigChanged(){
 }
 /* 首頁背景重抓（SWR 的 revalidate 段）：把表抓成最新，簽章有變、且使用者還在首頁、
    沒開彈窗、沒展開課卡快捷鈕時，才悄悄重繪一次（navTo 會保留捲動位置）。 */
+/* ══ 背景重繪的煞車（2026-09-25 使用者回報）══════════════════════════════
+   「我在幫客人上課寫課表的時候　有時候課表會自己關閉　是因為首頁預約狀態更新嗎」
+   —— 是。navTo() 開頭就寫著「換頁就把課表抽屜收掉」（那是對的，否則舊課表會浮在
+   新頁面上），而兩支背景輪詢在資料有變時會呼叫 navTo(CUR_PAGE) 原地重繪，
+   於是**正在寫的課表被當成換頁收掉**。
+
+   健身房整天有人簽到／預約／收款，簽章幾乎一直在變 ——
+   行事曆 10 秒一輪、首頁 12 秒一輪，教練寫一堂課的過程中隨時會被關掉。
+
+   ⚠ 原本兩支各自維護一份「別打斷」清單，而且內容不一樣
+     （首頁看 .cal-ev-active，行事曆看 _expandedBkEl／.cal-ev.dragging），
+     所以新做的面板每次都得記得兩邊都加 —— 這次就是漏了課表。合成一支。
+   ⚠ 只擋「重繪」，不擋抓資料：資料照常更新進快取，收合後下一輪或下一次翻頁就帶到。
+   ⚠ 回傳字串而不是布林：掛 _dashDirty 時想知道是被什麼擋的（除錯用），
+     也讓下一個人加新面板時看得出這裡列的是什麼。 */
+function uiBusyReason(){
+  try{
+    if(document.getElementById('modal-bg')) return '彈窗';
+    if(document.getElementById('tl-sheet')) return '訓練課表';
+    if(document.getElementById('tl-add-sheet')) return '記錄訓練';
+    if(window._expandedBkEl) return '課卡展開';
+    if(document.querySelector('.cal-ev-active')) return '課卡快捷鈕';
+    if(document.querySelector('.cal-ev.dragging')) return '拖曳中';
+  }catch(_){}
+  return '';
+}
 async function dashRevalidate(tabs){
   if(window._dashRevalidating) return;
   window._dashRevalidating=true;
@@ -24623,9 +24651,11 @@ async function dashRevalidate(tabs){
     try{ dbCacheClear(tabs||[]); }catch(_){}
     await Promise.all((tabs||[]).map(t=>dbGetAll(t).catch(()=>null)));
     if(CUR_PAGE!==key) return;                            // 已切到別頁
-    /* 被彈窗／展開的課卡擋掉時掛 _dashDirty：輪詢下一輪會再試，收合後補重繪（2026-08-12） */
-    if(document.getElementById('modal-bg')){ window._dashDirty=true; return; }       // 彈窗開著不打斷
-    if(document.querySelector('.cal-ev-active')){ window._dashDirty=true; return; }  // 課卡快捷鈕/團課名單展開中
+    /* 被彈窗／課表／展開的課卡擋掉時掛 _dashDirty：輪詢下一輪會再試，收合後補重繪（2026-08-12）。
+       ⚠ 2026-09-25 改吃 uiBusyReason()：原本這裡只擋彈窗與課卡，
+         教練寫課表時照樣重繪、抽屜被 navTo 收掉（見 uiBusyReason 的說明）。 */
+    { const _busy=uiBusyReason();
+      if(_busy){ window._dashDirty=true; window._dashBusyBy=_busy; return; } }
     const[bk,att,pu,mt,ap,pr,mlr]=await Promise.all(
       ['bookings','attendance','purchases','member_tickets','purchase_applications','punch_requests','member_link_requests']
       .map(t=>dbGetAll(t).catch(()=>[])));
@@ -28028,11 +28058,11 @@ async function _calRevalidate(){
       coaches:cos||cached.coaches, members:mems||cached.members, types:tys||cached.types, _t:Date.now()};
     /* 有異動才重繪；使用者互動中（展開快捷鈕/拖曳/彈窗開著）不打斷——
        資料已更新進快取，下一次翻頁或操作自然帶到。 */
+    /* ⚠ 2026-09-25 改吃 uiBusyReason()：原本這三條沒包含訓練課表，
+       教練在行事曆上開著課表寫紀錄時，這裡照樣 navTo → 抽屜被收掉。 */
     if(changed && (CUR_PAGE==='calendar'||CUR_PAGE==='coach_calendar')
        && document.querySelector('.cal-body')
-       && !window._expandedBkEl
-       && !document.querySelector('.cal-ev.dragging')
-       && !document.getElementById('modal-bg')){
+       && !uiBusyReason()){
       window._calStepping=true;   // 重繪吃剛更新的快取（無網路等待、無翻頁動畫）
       navTo(CUR_PAGE);
     }

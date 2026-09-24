@@ -17,10 +17,14 @@ console.log('① 首頁輪詢不再漏接（_dashDirty 補追）');
   ok('★★ 輪詢條件：簽章變了「或」上次被擋（_dashDirty）都要重抓',
      /if\(await remoteSigChanged\(\) \|\| window\._dashDirty\) dashRevalidate\(_dashTabs\.map\(x=>x\.t\)\);/.test(src));
   const F=grabFn('dashRevalidate');
-  ok('★★ 被彈窗擋掉時掛 _dashDirty 再 return（下一輪補追）',
-     /if\(document\.getElementById\('modal-bg'\)\)\{ window\._dashDirty=true; return; \}/.test(F));
-  ok('★★ 被展開的課卡擋掉時也掛 _dashDirty',
-     /if\(document\.querySelector\('\.cal-ev-active'\)\)\{ window\._dashDirty=true; return; \}/.test(F));
+  /* ⚠ 2026-09-25：兩支輪詢原本各自維護一份「別打斷」清單，而且內容不一樣，
+     新做的面板每次都得記得兩邊都加 —— 使用者回報「寫課表時課表會自己關閉」就是漏了課表。
+     合成一支 uiBusyReason()，細節見 tests/tlkeepopentest.js。 */
+  ok('★★ 被擋掉時掛 _dashDirty 再 return（下一輪補追）',
+     /const _busy=uiBusyReason\(\);/.test(F)
+     && /if\(_busy\)\{ window\._dashDirty=true; window\._dashBusyBy=_busy; return; \}/.test(F));
+  ok('★★★ 擋的清單裡有訓練課表（這是 0925 回報的那一個）',
+     /if\(document\.getElementById\('tl-sheet'\)\) return '訓練課表';/.test(src));
   ok('★ 成功走到簽章比對就清掉 _dashDirty（不會無限重抓）',
      /window\._dashDirty=false;\s*\n\s*if\(dashDataSig\(/.test(F));
 }
