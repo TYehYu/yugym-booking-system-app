@@ -34,7 +34,7 @@ console.log('① 實跑 ticketTokens：請假名額收進實心');
       mids(b).forEach(id=>{ c[id]=(c[id]||0)+1; const k=c[id]>1?id+'#'+c[id]:id;
         if(String(id)===String(mid)&&att[k]==='leave') n++; }); return n; },
   };
-  const TT=new Function(...Object.keys(deps),'return '+grabFn('ticketTokens'))(...Object.values(deps));
+  const TT=new Function(...Object.keys(deps),grabFn('tkDoneMarker')+'\nreturn '+grabFn('ticketTokens'))(...Object.values(deps));
   // 徐翎娟情境：4 堂票、已扣滿（used=4）；7/3、7/18 已簽到，7/24、7/31 請假
   const T={id:'tk',sessions_total:4};
   const B=(id,d,att)=>({id,date:d,status:'checked_in',ticket_id:'tk',_grp:true,member_ids:[MID],attendance:{[MID]:att}});

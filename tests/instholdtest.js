@@ -24,7 +24,7 @@ console.log('① 圓形卡：保留課不畫超約紅圈（實跑 ticketTokens�
 {
   const deps={ tkVisual:()=>({accent:'#1f6f54'}), bkIsSelf:()=>false, bkIsGroup:()=>false,
     grpSeatAttCount:()=>0, parseYmd, bkSelfBooked:()=>false, selfVenueLabel:()=>'' };
-  const TT=new Function(...Object.keys(deps),'return '+grabFn('ticketTokens'))(...Object.values(deps));
+  const TT=new Function(...Object.keys(deps),grabFn('tkDoneMarker')+'\nreturn '+grabFn('ticketTokens'))(...Object.values(deps));
   // 12 堂分期、開通 4：已上 1、已約 3；另外 7 筆待繳費保留（ticket_id 空）
   const T={id:'tk',sessions_total:12,unlocked_sessions:4,installment:{count:3}};
   const B=(id,d,st,hold)=>({id,date:d,status:st,ticket_id:hold?null:'tk',pending_contract:!!hold});

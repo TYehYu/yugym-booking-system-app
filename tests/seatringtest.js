@@ -19,7 +19,7 @@ const parseYmd=x=>{const m=/^(\d{4})-(\d{2})-(\d{2})/.exec(String(x||''));return
 
 const deps={ tkVisual:()=>({accent:'#0a5044'}), bkIsSelf:()=>false, bkIsGroup:()=>true,
   grpSeatAttCount:()=>0, parseYmd, bkSelfBooked:()=>false };
-const TT=new Function(...Object.keys(deps),'return '+grabFn('ticketTokens'))(...Object.values(deps));
+const TT=new Function(...Object.keys(deps),grabFn('tkDoneMarker')+'\nreturn '+grabFn('ticketTokens'))(...Object.values(deps));
 
 /* 使用者的場景：4 堂票，B 堂（8/3）佔兩個名額、另約 8/7、8/11 */
 const B={id:'B',date:'2026-08-03',start_time:'19:00',status:'booked'};

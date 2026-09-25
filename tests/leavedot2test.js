@@ -26,7 +26,9 @@ const attObj=b=>{const v=b&&b.attendance;return (v&&typeof v==='object'&&!Array.
 
 /* 2026-08-08：逐名額的判定抽成 grpSeatMark（見 seatmarktest），沙箱要一起帶進來 */
 const FNS=['mids','seatKeys','seatMid','bkIsGroup','bkEatenCancel','grpSeatMark','grpSeatAttCount','grpSeatLeaveCount',
-  'grpTicketAlloc','ticketTokens'];
+  /* ⚠ 2026-09-25：ticketTokens 的「這一堂用掉了嗎」抽成 tkDoneMarker
+     （出席證明要共用同一份規則），要一起抽進來。 */
+  'grpTicketAlloc','tkDoneMarker','ticketTokens'];
 const box=new Function('ymd','TODAY','parseYmd','attObj','bkPocketNow','bkIsSelf','bkSelfBooked','selfVenueLabel','tkVisual',
   FNS.map(grabFn).join('\n')+'\nreturn {ticketTokens,grpTicketAlloc};')(
   ymd,TODAY,parseYmd,attObj,()=>({}),()=>false,()=>false,()=>'',()=>({accent:'#9a5a1e'}));

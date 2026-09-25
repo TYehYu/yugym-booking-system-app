@@ -10,7 +10,7 @@ const grab=n=>{const i=h.indexOf('function '+n+'(');let d=0;for(let k=h.indexOf(
 /* 2026-09-01：ticketTokens 的 md() 開始用 TODAY 判斷「這一堂是不是今年的」
    （跨年的圓點要多一行年份）—— 沙箱補上假時鐘，與各檔既有的測資年份一致。 */
 if(typeof globalThis.TODAY==='undefined') globalThis.TODAY=new Date(2026,8,1);   // 2026-09-01
-const src=[grab('tkVisual'),grab('bkSelfBooked'),grab('ticketTokens')].join('\n');
+const src=[grab('tkVisual'),grab('bkSelfBooked'),grab('tkDoneMarker'),grab('ticketTokens')].join('\n');
 const COURSE_SHAPE={};
 const parseYmd=s=>{const m=/^(\d{4})-(\d{2})-(\d{2})$/.exec(s||'');return m?new Date(+m[1],+m[2]-1,+m[3]):null;};
 const api=new Function('COURSE_SHAPE','parseYmd', src+'; return {ticketTokens};')(COURSE_SHAPE,parseYmd);

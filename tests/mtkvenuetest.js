@@ -19,7 +19,7 @@ const parseYmd=x=>{const m=/^(\d{4})-(\d{2})-(\d{2})/.exec(String(x||''));return
 const deps={ tkVisual:()=>({accent:'#6a655c'}), bkIsSelf:b=>b&&b.category==='自主訓練', bkIsGroup:()=>false,
   grpSeatAttCount:()=>0, parseYmd, bkSelfBooked:()=>false,
   selfVenueLabel:b=>{ const u=String(b.venue_unit||''); return u.startsWith('treadmill')?'跑步機':(u.startsWith('group')?'教室':''); } };
-const TT=new Function(...Object.keys(deps),'return '+grabFn('ticketTokens'))(...Object.values(deps));
+const TT=new Function(...Object.keys(deps),grabFn('tkDoneMarker')+'\nreturn '+grabFn('ticketTokens'))(...Object.values(deps));
 
 const T={id:'tk',sessions_total:3};
 const B=(id,vu)=>({id,date:'2026-08-06',start_time:'17:00',status:'booked',category:'自主訓練',venue_unit:vu});

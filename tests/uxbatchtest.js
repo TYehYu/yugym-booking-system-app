@@ -197,7 +197,9 @@ ok('　　只帶今天以後、且依課別歸戶（2026-07-31 起用票券五�
   const g=(a,b)=>{const i=src.indexOf(a);return src.slice(i,src.indexOf(b,i)+b.length);};
   const alloc=new Function(g('function allocBookingsToTickets(','\n}\n')+'\nreturn allocBookingsToTickets;')();
   /* 2026-08-01：圓點多了「會員自行預約」的金點標記，沙箱一併注入判斷函式 */
-  const tokens=new Function('tkVisual','parseYmd','bkSelfBooked',g('function ticketTokens(','\n}\n')+'\nreturn ticketTokens;')
+  /* ⚠ 2026-09-25：「這一堂用掉了嗎」抽成 tkDoneMarker（出席證明共用），一起抽進來。 */
+  const tokens=new Function('tkVisual','parseYmd','bkSelfBooked',
+    g('function tkDoneMarker(','\n}\n')+g('function ticketTokens(','\n}\n')+'\nreturn ticketTokens;')
     (()=>({accent:'#9a5a1e'}), x=>{const m=/^(\d{4})-(\d{2})-(\d{2})$/.exec(x||'');return m?new Date(+m[1],+m[2]-1,+m[3]):null;}, ()=>false);
   const TM={'tt-g':{name:'團體課',category:'小班肌力'}};
   const top={id:'TK',ticket_type_id:'tt-g',format:null,sessions_total:10,sessions_remaining:0,

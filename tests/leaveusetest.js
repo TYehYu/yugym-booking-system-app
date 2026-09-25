@@ -78,7 +78,7 @@ console.log('\n② 圓形卡：請假那一格填滿、紅色');
     grpSeatAttCount:box.buildWallet && ((b,mid)=>{const a=attObj(b);return (b.member_ids||[]).filter((x,i)=>String(x)===String(mid)&&a[x]==='checked_in').length;}),
     grpSeatLeaveCount:box.grpSeatLeaveCount, bkEatenCancel:box.bkEatenCancel,
   };
-  const TT=new Function(...Object.keys(deps),'return '+grabFn('ticketTokens'))(...Object.values(deps));
+  const TT=new Function(...Object.keys(deps),grabFn('tkDoneMarker')+'\nreturn '+grabFn('ticketTokens'))(...Object.values(deps));
   const t4=of('T4');
   const h=TT(TK4, t4.stamps, TYPES, t4.used, 'B0808', ME, null);
   eq('★ 四格全滿（沒有空心、沒有超約圈）',

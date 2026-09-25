@@ -13980,8 +13980,8 @@ function tbl(s){return TABLE_ALIAS[s]||s;}
 let sb=null;
 // ── 版本號（日期+時間格式：年後兩碼+月+日.時分，例 26620.1058 = 26年6/20 10:58）──
 // 每次改版手動更新這一行即可，畫面與 title 會一起更新
-const APP_VERSION = '260925.1135';
-const APP_VERSION_LABEL = 'v260925.1135';
+const APP_VERSION = '260925.1149';
+const APP_VERSION_LABEL = 'v260925.1149';
 const CLOUD = !!(window.YUGYM_CONFIG && window.YUGYM_CONFIG.url && window.YUGYM_CONFIG.anonKey);
 if(CLOUD){ sb = supabase.createClient(window.YUGYM_CONFIG.url, window.YUGYM_CONFIG.anonKey); }
 
@@ -49738,6 +49738,15 @@ function ppRecordHtml(){
                抽成 .tkc-acts ＋ 常數之後兩張卡（持有中／歷史）共用同一套寫法，
                比原本各寫一份好維護。位置本身一格都沒變。 */
           const _tkActs = `
+                ${/* 出席證明（2026-09-25 使用者：「有些公司補助運動需要出席證明」）——
+                     ⚠ 只在**真的有人到場**時才長出來（used>0 不夠：那個數字含請假與
+                       取消未退，人是沒來的；沒到場卻給一顆印得出空白證明的鈕很怪）。
+                     ⚠ 歷史／已過期的票也要能印 —— 公司補助常常是事後才申請，
+                       所以放在這一排、不看 t.status。 */''}
+                ${(()=>{ try{
+                  return tkAttendedList(t, bks, PP.id).length
+                    ? `<button class="btn btn-ghost btn-sm" style="padding:2px 10px;font-size:11px;" title="列印這張票的到場紀錄（公司補助用）；不含金額" onclick="event.stopPropagation();tkAttendCert('${t.id}')">出席證明</button>` : '';
+                }catch(_){ return ''; } })()}
                 ${/* 合約鈕已移到表頭（票券編號左邊）；
                      票券預設使用人（2026-08-04 使用者指示：票券指定家庭成員，預約自動帶使用人） */''}
                 ${/* 會員資料在這個函式裡是 PP.rec（2026-08-04 初版誤用表頭的 r → ReferenceError，
@@ -49909,6 +49918,15 @@ function ppRecordHtml(){
                抽成 .tkc-acts ＋ 常數之後兩張卡（持有中／歷史）共用同一套寫法，
                比原本各寫一份好維護。位置本身一格都沒變。 */
           const _tkActs = `
+                ${/* 出席證明（2026-09-25 使用者：「有些公司補助運動需要出席證明」）——
+                     ⚠ 只在**真的有人到場**時才長出來（used>0 不夠：那個數字含請假與
+                       取消未退，人是沒來的；沒到場卻給一顆印得出空白證明的鈕很怪）。
+                     ⚠ 歷史／已過期的票也要能印 —— 公司補助常常是事後才申請，
+                       所以放在這一排、不看 t.status。 */''}
+                ${(()=>{ try{
+                  return tkAttendedList(t, bks, PP.id).length
+                    ? `<button class="btn btn-ghost btn-sm" style="padding:2px 10px;font-size:11px;" title="列印這張票的到場紀錄（公司補助用）；不含金額" onclick="event.stopPropagation();tkAttendCert('${t.id}')">出席證明</button>` : '';
+                }catch(_){ return ''; } })()}
                 ${(c.ctByTicket&&c.ctByTicket[t.id])?`<button class="btn btn-ghost btn-sm" style="padding:2px 10px;font-size:11px;" onclick="openContractView('${c.ctByTicket[t.id]}')">合約</button>`:''}
                 ${/* 用完／過期的票也要能校正（2026-08-25）——黃喬莉那三張 1V2 全在這一區，
                      入口只做在「持有中」的話，最需要更正的舊票反而點不到。 */''}
@@ -65958,28 +65976,21 @@ function bkSelfBooked(b, memberId, selfSet){
    ⚠ 預設關閉：全系統既有的呼叫點一個都不受影響，圓點照舊只有紅虛線那顆點得動。
    ⚠ 只有「已預約未上」的點可以調（已上完、請假、未開通的都不行）—— 那是唯一
      還能改期的狀態，其餘點下去只會在後面被 bkMoveBlockReason 擋掉。 */
-function ticketTokens(t,bks,typeMap,usedCount,curId,memberId,selfSet,seatN,opts){
-  const TK_DOT_MAX=60;
-  const total=Math.max(Number(t.sessions_total)||0,0);
-  const v=tkVisual(t,typeMap);
-  /* 無限卡整張只畫一顆 ∞（2026-08-29 使用者附截圖：「這張親友自主訓練 改成無限卡
-     出現一個圓形卡的圖案就好　中間給一個無限的符號　只能約自主訓練效期1年」）——
-     圓點格子是拿來數「剩幾堂」的，無限卡沒有這件事，9,955 顆畫出來只是噪音
-     （原本畫 60 顆再補一張「不限堂數」的籤）。
-     ⚠ 判準用 tkUnlimited，與票券夾、會員 KPI 同一支，不要在這裡另寫一個門檻。
-     ⚠ 擺在最前面：後面整段都在算 used／stamps／超約，對無限卡一律沒有意義。 */
-  if(typeof tkUnlimited==='function' && tkUnlimited(t)){
-    return `<span class="mtk mtk-inf" style="--tk-acc:${v.accent};" title="無限卡・不限堂數">∞</span>`;
-  }
-  /* 自主訓練依時長展開（2026-07-27 楊慧淳案例：120 分鐘＝扣 2 點 → 圓形卡畫 2 顆同日期） */
-  const expand=list=>{ const out=[]; (list||[]).forEach(b=>{
-      const n=(bkIsSelf(b))?Math.max(1,Math.round((Number(b.duration)||60)/60)):1;
-      for(let k=0;k<n;k++) out.push(b);
-    }); return out; };
+/* ══ 這一堂在這張票上算「用掉了」嗎（2026-09-25 從 ticketTokens 抽出來）══════
+   回傳 'att'（有來）／'leave'（請假・堂數照扣人沒來）／'eaten'（取消未退）／''（還沒）。
+
+   ⚠⚠ 抽出來是因為「出席證明」要用**同一份規則**，但取的是更窄的一種：
+     只有 'att' 才算出席 —— 請假與取消未退雖然都佔掉一堂，人是沒有來的，
+     印進出席證明等於幫客人向公司多報了幾次。
+   ⚠ 自帶狀態（_grpLeft）所以做成「產生 marker 的函式」而不是純函式：
+     團課逐名額要一堂一堂分配「已簽到幾個、請假幾個」，每一輪都要重新開始。
+     ⚠ 也就是說**一輪掃描配一個 marker**，不能跨兩份清單共用同一顆。
+   ⚠ 規則本身一格都沒改，只是搬家 —— 沿革（0803／0804／0806／0807）留在原處。 */
+function tkDoneMarker(t, memberId){
   /* 團課逐名額分實心（2026-08-03 使用者回報：簽到第一個客人，其他人的圓形卡跟著實心）——
      stamps 裡同一堂團課每個名額出現一次；這位會員簽到幾個名額，就只有幾顆實心。 */
   const _grpLeft={};
-  const _isDoneOcc=b=>{
+  return function(b){
     if(typeof bkEatenCancel==='function' && bkEatenCancel(b)) return 'eaten';   // 取消未退（2026-08-06）
     if(typeof grpSeatAttCount!=='function' || !bkIsGroup(b))
       return (b.status==='checked_in'||b.status==='completed')?'att':'';
@@ -66005,6 +66016,47 @@ function ticketTokens(t,bks,typeMap,usedCount,curId,memberId,selfSet,seatN,opts)
     if(_q.lv>0){ _q.lv--; return 'leave'; }
     return '';
   };
+}
+/* 這張票上「人真的有來」的那幾堂（2026-09-25）——出席證明的唯一資料來源。
+   ⚠ 比圓點的「已使用」更窄：
+     ・請假（堂數照扣、人沒來）不算
+     ・取消未退不算
+     ・教練請假已結課／整堂取消不算（人也沒來，而且堂數早就退回）
+   ⚠ **不做自主訓練的時長展開**：120 分鐘在圓點上是兩顆（扣 2 點），
+     但人只去了一次 —— 出席證明數的是「去了幾次」，不是「扣了幾點」。
+   ⚠ 依上課日期排序，證明書上由早到晚。 */
+function tkAttendedList(t, bks, memberId){
+  const mark=tkDoneMarker(t, memberId);
+  const out=[];
+  (bks||[]).forEach(b=>{
+    if(!b) return;
+    if(typeof bkLeaveRefunded==='function' && bkLeaveRefunded(b)) return;   // 教練請假已結課
+    if(b.coach_leave===true && b.status==='cancelled') return;              // 教練請假整堂取消
+    if(b.pending_contract && !b.ticket_id) return;                          // 分期待繳費保留
+    if(mark(b)==='att') out.push(b);
+  });
+  return out.sort((a,b)=>((a.date||'')+(a.start_time||''))
+    .localeCompare((b.date||'')+(b.start_time||'')));
+}
+function ticketTokens(t,bks,typeMap,usedCount,curId,memberId,selfSet,seatN,opts){
+  const TK_DOT_MAX=60;
+  const total=Math.max(Number(t.sessions_total)||0,0);
+  const v=tkVisual(t,typeMap);
+  /* 無限卡整張只畫一顆 ∞（2026-08-29 使用者附截圖：「這張親友自主訓練 改成無限卡
+     出現一個圓形卡的圖案就好　中間給一個無限的符號　只能約自主訓練效期1年」）——
+     圓點格子是拿來數「剩幾堂」的，無限卡沒有這件事，9,955 顆畫出來只是噪音
+     （原本畫 60 顆再補一張「不限堂數」的籤）。
+     ⚠ 判準用 tkUnlimited，與票券夾、會員 KPI 同一支，不要在這裡另寫一個門檻。
+     ⚠ 擺在最前面：後面整段都在算 used／stamps／超約，對無限卡一律沒有意義。 */
+  if(typeof tkUnlimited==='function' && tkUnlimited(t)){
+    return `<span class="mtk mtk-inf" style="--tk-acc:${v.accent};" title="無限卡・不限堂數">∞</span>`;
+  }
+  /* 自主訓練依時長展開（2026-07-27 楊慧淳案例：120 分鐘＝扣 2 點 → 圓形卡畫 2 顆同日期） */
+  const expand=list=>{ const out=[]; (list||[]).forEach(b=>{
+      const n=(bkIsSelf(b))?Math.max(1,Math.round((Number(b.duration)||60)/60)):1;
+      for(let k=0;k<n;k++) out.push(b);
+    }); return out; };
+  const _isDoneOcc=tkDoneMarker(t, memberId);
   const _doneL=[], _bookedL=[], _clvAttL=[];
   (bks||[]).forEach(b=>{
     /* 教練請假（2026-08-14 使用者指示：「中間用課種色填滿、旁邊保持紅圈」；
@@ -67507,6 +67559,80 @@ function printMemberStatement(mid, purId){
       <div class="stmt-seal"><span>本公司蓋章</span><i></i></div>
     </div>`);
 }
+/* ══ 出席證明書（2026-09-25 使用者：「票券可以列印出席紀錄嗎?
+      有些公司補助運動需要出席證明」）══════════════════════════════════════
+   使用者定的兩件事：**一張票一份**（從票券卡列印）、**不印金額**。
+   ⚠ 不印金額是刻意的：要證明付了多少錢，客人拿電子發票或既有的「消費明細」——
+     兩張紙各司其職。金額印在「出席證明」上容易被當成收據，而它不是發票。
+   ⚠ 賣方用**公司登記名**（筋實堂，統編 91788490），不是品牌名 —— 對外文件的慣例，
+     與消費明細同一套表頭（見 BIZ_INFO 上方的說明）。
+   ⚠⚠ 堂數只算「人真的有來」的（tkAttendedList）：請假與取消未退雖然都扣了堂數，
+     人是沒有來的，印進出席證明等於幫客人向公司多報幾次。
+   ⚠ 沿用消費明細那套列印管道（stmtPrintOpen）：自帶「列印／存 PDF」，
+     而且不會被「收進兩頁」壓縮 —— 出席清單有幾頁印幾頁。 */
+function tkAttendCert(ticket_id){
+  if(!isDeskLike()){ showToast('僅管理員／櫃台可列印'); return; }
+  const c=(PP&&PP.ctx)||{};
+  const t=(c.myTk||[]).find(x=>x&&String(x.id)===String(ticket_id));
+  if(!t){ showToast('找不到票券'); return; }
+  const m=(PP&&PP.rec)||{};
+  const esc=x=>String(x==null?'':x).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
+  /* 戳記來源與票券卡的圓點同一份（票券夾算好的 sl.stamps），
+     所以證明書上的堂數一定跟卡片對得起來。 */
+  const sl=((window.WAL&&WAL.slots)||[]).find(x=>x&&x.t&&String(x.t.id)===String(t.id));
+  const bks=(sl&&sl.stamps)||[];
+  const list=tkAttendedList(t, bks, PP.id);
+  if(!list.length){ showToast('這張票還沒有出席紀錄'); return; }
+  const cmap=window._coachNameMap||{};
+  const CAT={pt:'教練課',friendly:'友善教練課',group:'團體課',self:'自主訓練',trial:'體驗課'};
+  const d2=x=>String(x||'').replace(/-/g,'/');
+  const rows=list.map((b,i)=>{
+    const cc=(typeof bkCC==='function')?bkCC(b):'';
+    const nm=(b.category||CAT[cc]||'課程');
+    const co=cmap[b.substitute_coach_id||b.coach_id]||'';
+    return `<tr><td class="ac-n">${i+1}</td><td>${d2(b.date)}</td>`
+      +`<td>${esc(b.start_time||'')}</td><td>${esc(nm)}</td><td>${esc(co)}</td></tr>`;
+  }).join('');
+  /* 期間：票券的起訖。未開通的票沒有 start_date，用第一堂與最後一堂代替。 */
+  const _s=t.start_date||(list[0]&&list[0].date)||'';
+  const _e=t.expire_date||(list[list.length-1]&&list[list.length-1].date)||'';
+  stmtPrintOpen(
+    ctPdfName(['出席證明',m.name||'',ymd(TODAY).replace(/-/g,'')]),
+    `<div class="stmt-doc">
+      <div class="stmt-hd">
+        <div class="stmt-biz">
+          <div class="stmt-biz-n">${BIZ_INFO.name}</div>
+          <div class="stmt-biz-s">${BIZ_INFO.brand}</div>
+        </div>
+        <div class="stmt-biz-i">
+          統一編號 ${BIZ_INFO.ubn}<br>${BIZ_INFO.addr}<br>TEL ${BIZ_INFO.tel}
+        </div>
+      </div>
+      <h1>運 動 出 席 證 明</h1>
+      <div class="stmt-meta">
+        <span>姓名：<b>${esc(m.name||'—')}</b>${m.phone?`　（${esc(m.phone)}）`:''}</span>
+        <span>列印日期：${ymd(TODAY).replace(/-/g,'/')}</span>
+      </div>
+      <table class="stmt-kv">
+        <tr><th>方案</th><td><b>${esc(t.plan_name||'—')}</b>${
+          (Number(t.sessions_total)||0)?`　（全期 ${Number(t.sessions_total)} 堂）`:''}</td></tr>
+        <tr><th>期間</th><td>${d2(_s)||'—'} ～ ${d2(_e)||'—'}</td></tr>
+      </table>
+      <table class="ac-tb">
+        <thead><tr><th class="ac-n">次</th><th>日期</th><th>時間</th><th>項目</th><th>教練</th></tr></thead>
+        <tbody>${rows}</tbody>
+      </table>
+      <div class="stmt-total"><span>已出席堂數</span><b>${list.length} 堂</b></div>
+      ${/* ⚠ 這一句是底線：講清楚「這是出席紀錄、不是收據」。
+           與消費明細那張的「並非統一發票」同一個作用 —— 蓋了公司章之後，
+           沒有這句話就會被當成正式憑證。 */''}
+      <div class="stmt-note">
+        <b>本證明僅記載實際到場上課之紀錄，並非統一發票或收據。</b><br>
+        如需付款證明，請另索取消費明細或電子發票。
+      </div>
+      <div class="stmt-seal"><span>本公司蓋章</span><i></i></div>
+    </div>`);
+}
 /* 與 ctPrintOpen 同一套，只是不載入 CT_PDF_JS 的「收進兩頁」——
    明細的長度由消費筆數決定，不該被壓縮。 */
 function stmtPrintOpen(title, inner){
@@ -67548,6 +67674,17 @@ const STMT_CSS=`
   break-inside:avoid;page-break-inside:avoid;}
 .stmt-seal span{font-size:9.5pt;color:#555;padding-top:2mm;}
 .stmt-seal i{display:block;flex:none;width:38mm;height:38mm;border:1px dashed #bbb;border-radius:2mm;}
+/* 出席清單的表（2026-09-25）——沿用明細那套線條與字級，只是多了欄位。
+   ⚠ 次數欄窄而置中：它是編號不是數量，不要跟日期搶寬度。
+   ⚠ thead 在每一頁重複：出席多的客人會跨頁，沒有表頭的第二頁讀不懂。 */
+.ac-tb{width:100%;border-collapse:collapse;font-size:10.5pt;margin-top:4mm;}
+.ac-tb thead{display:table-header-group;}
+.ac-tb th{text-align:left;font-weight:500;color:#666;background:#faf7f0;
+  border-top:1px solid #e2ddd3;border-bottom:1px solid #e2ddd3;padding:2.4mm 2mm;}
+.ac-tb td{border-bottom:1px solid #eee7da;padding:2.4mm 2mm;
+  font-variant-numeric:tabular-nums;}
+.ac-tb .ac-n{width:10mm;text-align:center;color:#888;}
+.ac-tb tr{break-inside:avoid;page-break-inside:avoid;}
 @media print{ .stmt-doc{--ct-fit:1;} }`;
 function ctPrintOpen(title, inner, opts){
   const w=window.open('','_blank');

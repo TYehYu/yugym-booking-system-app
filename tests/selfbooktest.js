@@ -57,7 +57,7 @@ console.log('\n② 圓形卡上的標記');
   const COURSE_SHAPE={};
   const parseYmd=x=>{const m=/^(\d{4})-(\d{2})-(\d{2})/.exec(String(x||''));return m?new Date(+m[1],+m[2]-1,+m[3]):null;};
   const api=new Function('COURSE_SHAPE','parseYmd','bkIsSelf',
-    [grabFn('tkVisual'),grabFn('bkSelfBooked'),grabFn('ticketTokens')].join('\n')
+    [grabFn('tkVisual'),grabFn('bkSelfBooked'),grabFn('tkDoneMarker'),grabFn('ticketTokens')].join('\n')
     +'\nreturn ticketTokens;')(COURSE_SHAPE,parseYmd,()=>false);
 
   const T={id:'t1',member_id:'MEM-1',ticket_type_id:'tt-pt',plan_name:'教練課',sessions_total:4};
