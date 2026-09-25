@@ -5082,7 +5082,17 @@ button.wp-tag.wp-tag-off:hover{background:var(--card2);color:var(--t2);border-co
    與 .ae-opt／.ae-pre-row 同一個語彙（底米、卡白），那兩處先前已經改過。
    ⚠ 拖移三態不受影響：wp-ghost（跟著手指跑的分身）靠品牌色邊框＋陰影辨識，
      wp-dragging（留在原位的佔位）是 background:transparent、會透出米底容器。 */
-.wp-item{position:relative;background:#fff;border:1px solid var(--bd);border-radius:11px;
+/* 姿勢・工具浮水印（2026-09-25）——規格沿用票券卡的 .tkwm。
+   ⚠ 字級 17px 不是 30px：那邊是「共享」兩個字，這裡可能是「站姿・史密斯」六個字，
+     同樣的字級會橫跨整張卡、連名稱都蓋掉。
+   ⚠ overflow:hidden 在 .wp-item 本體（下面那一條已經有 position:relative）；
+     字往外伸會破版，被內容蓋住則是刻意的。 */
+.wp-item>*:not(.wp-item-wm){position:relative;z-index:1;}
+.wp-item-wm{position:absolute;right:30px;top:50%;transform:translateY(-50%);
+  z-index:0;pointer-events:none;user-select:none;white-space:nowrap;
+  font-size:17px;font-weight:800;line-height:1;letter-spacing:-.02em;
+  opacity:.13;color:var(--t2);}
+.wp-item{position:relative;overflow:hidden;background:#fff;border:1px solid var(--bd);border-radius:11px;
   padding:10px 34px 10px 12px;margin-bottom:7px;cursor:pointer;
   /* ⚠ 長按會選到文字（2026-09-09 使用者回報：「然後還會一直選到文字」）——
      body.wp-dragging-on 那一條要等 400ms armed 之後才加上，那 400ms 正好就是
@@ -6282,6 +6292,20 @@ body.wp-dragging-on .wp-item{cursor:grabbing;}
 .tcard-3c .t3-main{min-width:0;display:flex;flex-direction:column;gap:1px;}
 .tcard-3c .t3-l1{font-size:11px;font-weight:600;opacity:.85;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;}
 .tcard-3c .t3-l2{font-size:14.5px;font-weight:800;line-height:1.25;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;}
+/* 姓名向右延伸到右欄下方（2026-09-25 使用者附截圖：「會員姓名被斷句　是因為右邊的
+   浮水印嗎　浮水印被壓沒關係」）——
+   ⚠ **不是浮水印造成的**：.tcard-seq 是 position:absolute，一格寬度都不佔。
+     量出來的帳是這樣（165px 卡）：
+       章 22 ＋ 中欄 84 ＋ 右欄 31 ＋ 內距與間距 28 ＝ 165
+     姓名的可用寬就是中欄的 84px，而「蕭育筑・媽媽」6 字 × 14.5px ≒ 87px，超出 3px。
+   ⚠ 右欄雖然佔 31px，但它是「時間在上、教練在下」的 space-between，
+     **垂直中間是空的**；姓名正好落在那一段，借過去不會壓到任何字
+     （量過五種名字：壓到時間 0、壓到教練 0、溢出卡外 0、卡高不變 100px）。
+   ⚠⚠ 兩條缺一不可：光給負邊距沒有用 —— .tcard-mem 有 max-width:100%，
+     100% 算的是中欄的 84px，會把負邊距讓出來的空間又收回去。
+   ⚠ line-clamp:2 保留：真的很長的（「王大明 李小美 陳阿花」）還是折兩行，
+     只是門檻從 84px 放寬到 115px，常見的「姓名・家庭成員」都放得下了。 */
+.tcard-3c .t3-l2{margin-right:-31px;max-width:none;position:relative;z-index:2;}
 .tcard-3c .t3-venue{opacity:.7;font-size:10.5px;}   /* 0903：11→10.5px，見上方寬度帳 */
 .tcard-3c .t3-l3{font-size:10.5px;font-family:var(--num);opacity:.72;}
 /* 時間那一列：徽章在左、時間在右，並排不重疊（2026-09-03，見上面標記處的說明） */
@@ -13980,8 +14004,8 @@ function tbl(s){return TABLE_ALIAS[s]||s;}
 let sb=null;
 // ── 版本號（日期+時間格式：年後兩碼+月+日.時分，例 26620.1058 = 26年6/20 10:58）──
 // 每次改版手動更新這一行即可，畫面與 title 會一起更新
-const APP_VERSION = '260925.1654';
-const APP_VERSION_LABEL = 'v260925.1654';
+const APP_VERSION = '260925.1709';
+const APP_VERSION_LABEL = 'v260925.1709';
 const CLOUD = !!(window.YUGYM_CONFIG && window.YUGYM_CONFIG.url && window.YUGYM_CONFIG.anonKey);
 if(CLOUD){ sb = supabase.createClient(window.YUGYM_CONFIG.url, window.YUGYM_CONFIG.anonKey); }
 
@@ -65008,6 +65032,16 @@ async function tlDoApplyHist(srcBid){
         id:uid('TLOG'), booking_id:b.id, member_id:b.member_id, coach_id:SESSION.id,
         exercise_name:s.exercise_name, body_part:s.body_part, posture:s.posture, tool:s.tool,
         reps:s.reps, sets:s.sets, sets_detail:s.sets_detail,
+        /* ⚠⚠ 2026-09-25 使用者回報：「客戶套用上次的訓練紀錄時　單位都會變成 kg
+           不會仿照上次訓練的」——
+           這一路複製了 sets_detail（逐組的次數與重量**數字**），卻漏了 weight_unit，
+           顯示端 wpWeightHtml(s.weight, l.weight_unit) 拿到 null 就 fallback 成 kg。
+           症狀因此很像「數字對、單位錯」，其實是單位根本沒被複製過來。
+           ⚠ weight 也要一起帶：那一欄是「最重的那一組」，
+             「沿用上次的數字」兩條路都讀它（見 tlSaveExercise 裡的說明）——
+             不帶的話，這次套用的紀錄下次就帶不出數字，是會滾下去的。
+           ⚠ 另外兩條複製路徑（套用訓練方案、常用動作帶入上次）本來就有帶，只有這一支漏。 */
+        weight:s.weight, weight_unit:s.weight_unit,
         slot:(Number(window._tlSlot)===2)?2:null,   /* 套進來的也要落在當前那一位（2026-09-15） */
         seq:(_sq!=null?_sq++:null),
         note:(s.note||'').replace(/\s*\(套用.*?\)\s*/g,'')+' (套用 '+((s.created_at||'').slice(0,10).replace(/-/g,'/'))+')',
@@ -71014,6 +71048,17 @@ function wpPaint(){
           ${/* 第一列＝動作名稱靠左、第二列＝次數×組數×重量靠右（2026-09-09 使用者指定） */''}
           ${/* 順序編號（2026-09-09 使用者：「動作小卡在名稱旁邊加上順序編號」）——
                編號是「第幾個做」，拖移之後會跟著重排，所以直接用當下的位置算，不另外存。 */''}
+          ${/* 姿勢・工具的浮水印（2026-09-25 使用者：「這邊也可以加姿勢跟工具的浮水印」）——
+               0925 稍早才讓「動作設定」填得了這兩欄，填了就要在卡片上看得到，
+               否則教練設完回到清單，畫面上一點痕跡都沒有。
+               ⚠ 做成浮水印而不是一般文字：卡片上已經有名稱、數字、備註三層，
+                 再加一行會把清單推長；姿勢工具是「這個動作長什麼樣」的背景資訊，
+                 掃過去知道就好。規格沿用票券卡的 .tkwm（靠右、垂直置中、大字、低透明度）。
+               ⚠⚠ 內容要墊到浮水印上面：浮水印是 absolute＋z-index:0，
+                 在同一個堆疊裡會蓋過**沒有定位**的兄弟元素（.tkwm 那邊 0917、0922 各踩過一次）。
+               ⚠ 兩欄都空就整個不畫，不要留一個空盒子。 */''}
+          ${(()=>{ const _w=[it.posture,it.tool].filter(Boolean).join('・');
+            return _w?`<span class="wp-item-wm" aria-hidden="true">${escH(_w)}</span>`:''; })()}
           <div class="wp-item-nm"><i class="wp-item-no">${i+1}</i>${escH(it.name||'')||'<span class="wp-card-empty">點一下設定這個動作</span>'}</div>
           ${(()=>{ const _n=wpItemNumsHtml(it); return _n?`<div class="wp-item-num">${_n}</div>`:''; })()}
           ${it.note?`<div class="wp-item-n">${escH(it.note)}</div>`:''}

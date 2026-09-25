@@ -72,12 +72,14 @@ ok('★★ 白底浮起來、按下去縮一下', /\.wp-item\.tlpp-card\{backgro
    ⚠ 這一條守的本意**不是「顏色是什麼」**，而是「.tlpp-card 的樣式只掛在挑選視窗、
      沒有波及編輯器」。兩者現在都白底，區別改由 tlpp-card 的透明邊框＋陰影承擔，
      所以改釘那個差異，不要再拿背景色當識別。 */
+/* ⚠ 2026-09-25 動作卡加了姿勢・工具浮水印，.wp-item 多了 overflow:hidden
+   （字往外伸會破版）——這兩條守的「白底＋實線邊框」沒變，只是選擇器要跟著調。 */
 ok('★★ 只掛在挑選視窗 —— 編輯器的 .wp-item 有自己的實線邊框，沒被 tlpp-card 波及',
-   /\.wp-item\{position:relative;background:#fff;border:1px solid var\(--bd\);/.test(src)
+   /\.wp-item\{position:relative;overflow:hidden;background:#fff;border:1px solid var\(--bd\);/.test(src)
    && /\.wp-item\.tlpp-card\{background:#fff;border-color:transparent;box-shadow:/.test(src));
 ok('★★ 訓練方案編輯器的動作卡是白底（米底視窗上要看得出一張張卡）',
-   /\.wp-item\{position:relative;background:#fff;/.test(src)
-   && !/\.wp-item\{position:relative;background:var\(--card2\);/.test(src));
+   /\.wp-item\{position:relative;overflow:hidden;background:#fff;/.test(src)
+   && !/\.wp-item\{[^}]*background:var\(--card2\);/.test(src));
 
 console.log('\n'+pass+' 過 / '+fail+' 敗');
 process.exit(fail?1:0);
