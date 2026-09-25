@@ -13980,8 +13980,8 @@ function tbl(s){return TABLE_ALIAS[s]||s;}
 let sb=null;
 // ── 版本號（日期+時間格式：年後兩碼+月+日.時分，例 26620.1058 = 26年6/20 10:58）──
 // 每次改版手動更新這一行即可，畫面與 title 會一起更新
-const APP_VERSION = '260925.1010';
-const APP_VERSION_LABEL = 'v260925.1010';
+const APP_VERSION = '260925.1135';
+const APP_VERSION_LABEL = 'v260925.1135';
 const CLOUD = !!(window.YUGYM_CONFIG && window.YUGYM_CONFIG.url && window.YUGYM_CONFIG.anonKey);
 if(CLOUD){ sb = supabase.createClient(window.YUGYM_CONFIG.url, window.YUGYM_CONFIG.anonKey); }
 
@@ -49580,7 +49580,27 @@ function ppTopUp(mid){
   if(window._grantPreMemberSet) window._grantPreMemberSet(mid);
   openSalesModal();
 }
-function ppShowRecord(kind){ PP.recView=kind; if(kind==='bookings'){ const td=new Date(TODAY); window._memMonth={y:td.getFullYear(),m:td.getMonth()}; } ppRenderBody(); }
+function ppShowRecord(kind){ PP.recView=kind; if(kind==='bookings'){ const td=new Date(TODAY); window._memMonth={y:td.getFullYear(),m:td.getMonth()}; } ppRenderBody();
+  /* 訓練紀錄是**進頁時沒撈**的那一份（見 ppLoadCtx 裡的說明）——
+     切到這一頁才補載，載完重畫一次。 */
+  if(kind==='training') ppLoadTrain(); }
+/* 補載訓練紀錄（2026-09-25）——
+   ⚠ 只載一次：_trainLoaded 記在 PP.ctx 上，換會員時 ctx 整個重建（見 openPP 的 ctx:{}），
+     旗標自然跟著清掉，不會把上一位的紀錄留給下一位。
+   ⚠ 載完要確認還停在這一頁才重畫：使用者可能在載入中就切走了。
+   ⚠ tlBkMetaLoad 一起載 —— 那一頁的日期要用 booking 的上課日（見 tlSessKey），
+     而 tlSessionsHtml 是同步的，對照表必須在它之前備好。 */
+async function ppLoadTrain(){
+  const c=PP&&PP.ctx; if(!c || c._trainLoaded) return;
+  const _id=PP.id;
+  try{
+    /* ⚠ 濾掉 slot=2（2026-09-15）：1V2 第二位的紀錄借掛在這位會員身上，不是他的 */
+    c.trainLogs=(await dbGetAll('training_logs')).filter(l=>l&&l.member_id===_id && Number(l.slot)!==2);
+    await tlBkMetaLoad();
+  }catch(_){ c.trainLogs=[]; }
+  c._trainLoaded=true;
+  if(PP && PP.id===_id && PP.recView==='training') ppRenderBody();
+}
 function ppTkTab(k){ PP.tkTab=k; ppRenderBody(); }
 function ppRecordBack(){ PP.recView=null; ppRenderBody(); }
 function ppRecordHtml(){
@@ -51106,14 +51126,17 @@ async function ppLoadCtx(){
     /* 訓練紀錄（2026-09-09 Phase 3）：那一頁原本是空的，資料一直都在。
        ⚠ 只有真的要看時才撈 —— 這個 ctx 每開一位會員就組一次，
          多撈一張表會拖慢每一次開會員資料，而訓練紀錄是四個分頁裡最少人點的那個。 */
-    c.trainLogs=[];
-    if(PP.recView==='training'){
-      /* ⚠ 濾掉 slot=2（2026-09-15）：1V2 第二位的紀錄借掛在這位會員身上，不是他的 */
-      try{ c.trainLogs=(await dbGetAll('training_logs')).filter(l=>l&&l.member_id===PP.id && Number(l.slot)!==2); }catch(_){}
-      /* 上課日要從 booking 拿（2026-09-25，見 tlSessKey）——
-         ⚠ tlSessionsHtml 是同步的，對照表必須在呼叫它之前就備好。 */
-      try{ await tlBkMetaLoad(); }catch(_){}
-    }
+    c.trainLogs=[]; c._trainLoaded=false;
+    /* ⚠⚠ 2026-09-25 使用者回報：「這邊的訓練紀錄　沒有同步嗎　還是因為我不是該會員的教練呢」
+       —— 都不是，這個分頁**從 0909 做好以來一直是空的**。
+       成因是順序：ppLoadCtx 只在 `PP.recView==='training'` 時才撈，
+       而**進會員頁時 recView 還是 null**（預設落在「票券」，見 ppRecordHtml 開頭），
+       所以這裡永遠不成立；之後點「訓練紀錄」走的是 ppRenderBody()，
+       那是同步的、不會重跑 ppLoadCtx —— 於是 c.trainLogs 永遠是 []。
+       ⚠ 「只有真的要看時才撈」這個原意是對的（ctx 每開一位會員就組一次，
+         多撈一張大表會拖慢每一次開會員資料），所以不是改成一律撈，
+         而是把補撈搬到「切到那一頁的時候」（見 ppLoadTrain）。 */
+    if(PP.recView==='training'){ await ppLoadTrain(); }
     /* 共享章顯示名字用（2026-08-04 使用者指示：「共享人顯示清楚一點」）——
        2026-08-23：改用上面那一批一起抓回來的 membersAll，不要再 await 一次
        （原本的註解說「有快取、不多花往返」，但冷快取時它就是一整輪往返）。 */
