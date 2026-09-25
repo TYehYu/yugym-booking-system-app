@@ -528,9 +528,10 @@ console.log('\n⑪ 動作設定要有姿勢與工具（2026-09-25 使用者：�
      R.indexOf("wpe-name") < R.indexOf("wpePick") && R.indexOf("wpePick") < R.indexOf("'sets','組數'"));
   const P=grabFn('wpePickSet');
   ok('★★★ 再點一次就取消選擇（這兩欄可以不填）', /it\[field\]=\(it\[field\]===v\)\?'':v;/.test(P));
-  ok('★★★ 挑選清單沿用 tlePick 那套樣式',
+  /* ⚠ 2026-09-25：清單改吃 tlOptList（內建 ＋ 自訂 − 藏起來的），不再直接讀常數。 */
+  ok('★★★ 挑選清單沿用 tlePick 那套樣式，內容吃可自訂的清單',
      /class="tle-picklist"/.test(grabFn('wpePick'))
-     && /TL_POSTURES:TL_TOOLS/.test(grabFn('wpePick')));
+     && /tlOptList\(isP\?'posture':'tool'\)/.test(grabFn('wpePick')));
   ok('★★★ 套用方案時 posture 要一起帶過去（原本寫死 null，設了也會消失）',
      /posture:it\.posture\|\|null, tool:it\.tool\|\|null,/.test(src)
      && !/posture:null, tool:it\.tool\|\|null,/.test(src));

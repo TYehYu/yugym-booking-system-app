@@ -4363,6 +4363,25 @@ body.cxe-dragging-on .cxe-row{cursor:grabbing;}
 /* 重量單位切換（2026-09-15）：整張表單一個單位，擺在組別列下方靠右 */
 /* 姿勢／工具的摘要鈕（2026-09-16）：左邊欄位名、右邊目前選的值。
    ⚠ 沿用 .ae-opt 的底與圓角，只改內部排法 —— 它跟其他選項鈕是同一種東西（可點的卡）。 */
+/* 管理清單的入口（2026-09-25）——虛線淡框，與 .ae-add-note 同一個語彙：
+   「這不是選項，是多一件可以做的事」。擺在清單底部，不跟選項搶眼。 */
+.tlo-mgr{display:block;width:100%;margin-top:8px;background:transparent;
+  border:1px dashed var(--bd);border-radius:10px;padding:10px;
+  color:var(--t2);font-weight:600;font-family:inherit;font-size:12.5px;cursor:pointer;}
+.tlo-mgr:active{background:var(--card2);}
+/* 管理視窗的清單：一列一項，名稱靠左、標籤與 ✕ 靠右 */
+.tlo-list{display:flex;flex-direction:column;gap:6px;margin-top:4px;}
+.tlo-row{display:flex;align-items:center;gap:8px;background:var(--card);
+  border:1px solid var(--bd);border-radius:10px;padding:9px 10px 9px 13px;}
+.tlo-n{flex:1 1 auto;min-width:0;font-size:13.5px;font-weight:600;
+  white-space:nowrap;overflow:hidden;text-overflow:ellipsis;}
+.tlo-tag{flex:none;font-size:10.5px;font-weight:700;padding:1px 7px;border-radius:999px;
+  background:var(--sage-bg,#e7ebe0);color:var(--green,#003d32);}
+.tlo-tag-b{background:var(--card2);color:var(--t3);}
+.tlo-x{flex:none;background:none;border:none;color:var(--t3);font-size:15px;
+  cursor:pointer;padding:4px 6px;font-family:inherit;}
+.tlo-x:active{color:var(--danger,#7E2828);}
+.tlo-list-hid .tlo-n{color:var(--t3);text-decoration:line-through;}
 .tle-pick{display:flex;align-items:center;justify-content:space-between;gap:8px;text-align:left;padding:12px 14px;}
 .tle-pick i{font-style:normal;font-weight:400;font-size:12px;color:var(--t3);}
 /* 挑選姿勢／工具的那張視窗，沿用抽獎改項目那套「白底列＋選中的那一列品牌綠底」
@@ -14004,8 +14023,8 @@ function tbl(s){return TABLE_ALIAS[s]||s;}
 let sb=null;
 // ── 版本號（日期+時間格式：年後兩碼+月+日.時分，例 26620.1058 = 26年6/20 10:58）──
 // 每次改版手動更新這一行即可，畫面與 title 會一起更新
-const APP_VERSION = '260925.1709';
-const APP_VERSION_LABEL = 'v260925.1709';
+const APP_VERSION = '260925.1725';
+const APP_VERSION_LABEL = 'v260925.1725';
 const CLOUD = !!(window.YUGYM_CONFIG && window.YUGYM_CONFIG.url && window.YUGYM_CONFIG.anonKey);
 if(CLOUD){ sb = supabase.createClient(window.YUGYM_CONFIG.url, window.YUGYM_CONFIG.anonKey); }
 
@@ -64650,6 +64669,158 @@ const TL_POSTURES=['站姿','跪姿','坐姿','趴姿','躺姿'];
 const CXE_CATS=['上肢推','上肢拉','下肢推','下肢拉','其他'];
 const cxeCatOf=e=>{ const c=String((e&&e.category)||'').trim(); return CXE_CATS.indexOf(c)>=0?c:'其他'; };
 const TL_TOOLS=['啞鈴','壺鈴','槓鈴','SSB槓鈴','四角槓','史密斯','Cable','TRX','彈力帶','徒手'];
+/* ══ 工具／姿勢清單可自己增刪（2026-09-25 使用者）══════════════════════════
+   上面兩份常數留著當**內建預設**，training_options 只記「差異」：
+     ・新增的自訂項目   hidden=false
+     ・隱藏掉的內建項目 hidden=true（name 就是內建那一個）
+   清單 ＝ 內建（扣掉被隱藏的）＋ 自訂。
+
+   ⚠⚠ 為什麼不把整份清單搬進資料庫：
+     ① TL_TOOLS 是同步常數，十幾個呼叫端直接讀；改成非同步要動很多地方，
+        而且每一處都多一個「還沒載好」的狀態。
+     ② 表讀不到時，只存差異會**退回內建清單照常能用**；整份搬進去就是清單全空。
+   ⚠⚠ 「刪除」內建項目是**隱藏**不是真刪：training_logs 裡已經有 tool='四角槓'
+     的紀錄，真刪會讓歷史的標籤對不上。隱藏只影響「之後還能不能選」。
+   ⚠ 快取在 window._tlOpts：dbGetAll 本來就有快取，這裡只是讓同步的呼叫端拿得到。
+   ⚠⚠ **每位教練各一份**（2026-09-25 使用者：「教練各自新增刪除應該不會影響彼此吧」）——
+     第一版做成全店共用，使用者這一問才發現預期相反。
+     回頭看也確實該各自一份：常用動作（coach_exercises）本來就是自己一份
+     （0909「自建的只有自己看得到」），工具／姿勢是那些動作的屬性。
+     ⚠ RLS 已經只讓人讀到自己的，前端這一層再濾一次是保險
+       （管理員讀得到全部，不濾的話會看到別人的自訂項目）。 */
+function tlOptList(kind){
+  const BUILT=(kind==='posture')?TL_POSTURES:TL_TOOLS;
+  const _me=String((SESSION&&SESSION.id)||'');
+  const rows=(window._tlOpts||[]).filter(o=>o&&o.kind===kind&&String(o.coach_id)===_me);
+  if(!rows.length) return BUILT.slice();
+  const hid=new Set(rows.filter(o=>o.hidden).map(o=>String(o.name)));
+  const out=BUILT.filter(n=>!hid.has(n));
+  rows.filter(o=>!o.hidden).sort((a,b)=>(Number(a.sort_order)||0)-(Number(b.sort_order)||0))
+      .forEach(o=>{ const n=String(o.name||'').trim(); if(n && out.indexOf(n)<0) out.push(n); });
+  return out;
+}
+/* 找「我自己的」那一列 —— 三支寫入都要用它，不要各自寫一份 filter
+   （漏掉 coach_id 就會改到別位教練的設定）。
+   ⚠⚠ 不可以寫 window.SESSION：SESSION 是 `let SESSION=null`（15489 行），
+     **不掛在 window 上**，window.SESSION 永遠 undefined ——
+     那會讓 me 變成空字串、一個自訂項目都篩不出來（看起來像功能沒生效）。
+     這顆地雷程式裡已經記過兩次（0728 與 38498 行），0925 又踩一次，測試當場抓到。 */
+function tlOptFind(kind,name){
+  const me=String((SESSION&&SESSION.id)||'');
+  return (window._tlOpts||[]).find(o=>o&&o.kind===kind
+    && String(o.coach_id)===me && String(o.name)===String(name));
+}
+/* 內建的還是自訂的 —— 管理清單要分開標，而且刪法不同（隱藏 vs 真刪）。 */
+/* ══ 管理工具／姿勢清單（2026-09-25）════════════════════════════════════
+   使用者：「工具／姿勢的選項要能自己增刪」（店裡進了新器材就加不進去）。
+
+   ⚠ 入口放在挑選清單底部，不是常駐在每一項旁邊加一顆 ✕ ——
+     挑選是每天在用的路徑，管理一個月一次；把刪除鈕擺在常用路徑上只會誤觸。
+   ⚠ 內建與自訂分開標，刪法也不同（見 tlOptList 上方的說明）：
+     自訂的真刪、內建的只是隱藏，而且隱藏的可以還原。
+   ⚠ 全店共用：「店裡有什麼器材」是全店的事實，不是每位教練各一份。 */
+function tlOptMgr(kind, backFn){
+  window._tlOptBack=backFn||window._tlOptBack||'';
+  window._tlOptKind=kind;
+  tlOptMgrRender();
+}
+function tlOptMgrRender(){
+  const kind=window._tlOptKind, LB=(kind==='posture')?'姿勢':'工具';
+  const _me=String((SESSION&&SESSION.id)||'');
+  const rows=(window._tlOpts||[]).filter(o=>o&&o.kind===kind&&String(o.coach_id)===_me);
+  const hid=rows.filter(o=>o.hidden);
+  const list=tlOptList(kind);
+  const row=n=>{
+    const own=!tlOptIsBuiltin(kind,n);
+    return `<div class="tlo-row">
+      <span class="tlo-n">${escH(n)}</span>
+      ${own?'<span class="tlo-tag">自訂</span>':'<span class="tlo-tag tlo-tag-b">內建</span>'}
+      <button type="button" class="tlo-x" title="${own?'刪除這個自訂項目':'把這個內建項目藏起來（既有紀錄不受影響）'}"
+        onclick="tlOptDel('${escH(n).replace(/'/g,"\\'")}')">✕</button>
+    </div>`;
+  };
+  showModal(`<div class="ash-sheetmk"></div><div class="modal-title">管理${LB}清單</div>
+    <div class="ash-eihead">全店共用。刪掉內建項目只是<b>藏起來</b>，既有紀錄照常顯示得出來。</div>
+    <div class="form-row"><label>新增${LB}</label>
+      <div style="display:flex;gap:8px;">
+        <input type="text" id="tlo-new" placeholder="例如：${kind==='posture'?'單腳站姿':'飛輪'}" autocomplete="off"
+          onkeydown="if(event.key==='Enter'&&!event.isComposing){event.preventDefault();tlOptAdd();}">
+        <button class="btn btn-green btn-sm" style="flex:none;" onclick="tlOptAdd()">新增</button>
+      </div></div>
+    <div class="tlo-list">${list.map(row).join('')}</div>
+    ${hid.length?`<div class="ae-label" style="margin-top:12px;">已藏起來的（${hid.length}）</div>
+      <div class="tlo-list tlo-list-hid">${hid.map(o=>`<div class="tlo-row">
+        <span class="tlo-n">${escH(o.name)}</span>
+        <button type="button" class="btn btn-ghost btn-sm" style="flex:none;padding:2px 10px;font-size:11px;"
+          onclick="tlOptUnhide('${escH(o.name).replace(/'/g,"\\'")}')">還原</button>
+      </div>`).join('')}</div>`:''}
+    <div class="modal-foot"><button class="btn btn-ghost" onclick="tlOptBack()">返回</button></div>`);
+  setTimeout(()=>{ const i=document.getElementById('tlo-new'); if(i) i.focus(); },60);
+}
+function tlOptBack(){
+  const b=window._tlOptBack;
+  if(typeof b==='function'){ b(); return; }
+  closeModal();
+}
+async function tlOptAdd(){
+  const kind=window._tlOptKind;
+  const i=document.getElementById('tlo-new'); if(!i) return;
+  const n=String(i.value||'').trim();
+  if(!n){ showToast('請先輸入名稱'); i.focus(); return; }
+  if(tlOptList(kind).indexOf(n)>=0){ showToast(`「${n}」已經在清單裡了`); return; }
+  /* 之前被藏起來的內建項目，再新增同名＝還原它（不要多一筆自訂的同名項目） */
+  const old=tlOptFind(kind,n);
+  try{
+    if(old){ await dbPut('training_options', Object.assign({}, old, {hidden:false})); }
+    else{
+      const ord=(window._tlOpts||[]).filter(o=>o&&o.kind===kind&&String(o.coach_id)===String(SESSION.id))
+        .reduce((m,o)=>Math.max(m, Number(o.sort_order)||0), 0)+1;
+      await dbPut('training_options', {id:uid('TOPT'), coach_id:SESSION.id, kind, name:n, hidden:false,
+        sort_order:ord, created_at:new Date().toISOString()});
+    }
+    await tlOptLoad(true);
+    tlOptMgrRender();
+    showToast(`已新增「${n}」`);
+  }catch(e){ showToast('新增失敗：'+((e&&e.message)||e)); }
+}
+async function tlOptDel(name){
+  const kind=window._tlOptKind;
+  const built=tlOptIsBuiltin(kind,name);
+  const old=tlOptFind(kind,name);
+  try{
+    if(built){
+      /* 內建的只藏起來：既有紀錄還寫著這個名字（見 tlOptList 上方的說明） */
+      if(old) await dbPut('training_options', Object.assign({}, old, {hidden:true}));
+      else await dbPut('training_options', {id:uid('TOPT'), coach_id:SESSION.id, kind, name:String(name),
+        hidden:true, sort_order:null, created_at:new Date().toISOString()});
+    }else if(old){
+      await dbDel('training_options', old.id);
+    }
+    await tlOptLoad(true);
+    tlOptMgrRender();
+    showToast(built?`已把「${name}」藏起來`:`已刪除「${name}」`);
+  }catch(e){ showToast('刪除失敗：'+((e&&e.message)||e)); }
+}
+async function tlOptUnhide(name){
+  const kind=window._tlOptKind;
+  const old=tlOptFind(kind,name);
+  if(!old) return;
+  try{
+    await dbPut('training_options', Object.assign({},old,{hidden:false}));
+    await tlOptLoad(true);
+    tlOptMgrRender();
+    showToast(`已還原「${name}」`);
+  }catch(e){ showToast('還原失敗：'+((e&&e.message)||e)); }
+}
+function tlOptIsBuiltin(kind,name){
+  return ((kind==='posture')?TL_POSTURES:TL_TOOLS).indexOf(String(name))>=0;
+}
+async function tlOptLoad(force){
+  if(window._tlOpts && !force) return window._tlOpts;
+  try{ window._tlOpts=await dbGetAll('training_options'); }
+  catch(_){ window._tlOpts=window._tlOpts||[]; }   /* 讀不到就退回內建清單（見上方說明） */
+  return window._tlOpts;
+}
 window._tlState=null; // 新增動作流程暫存
 
 // 入口：點訓練紀錄 → 開紀錄清單 sheet
@@ -64800,6 +64971,10 @@ async function renderTrainingLogSheet(){
   try{ allLogs=await dbGetAll('training_logs'); }catch(_){}
   /* 掛到 window：算下一個 seq 的那幾支是從別的面板呼叫的，拿不到這裡的區域變數。 */
   window._tlAllLogs=allLogs;
+  /* 工具／姿勢清單（2026-09-25）——挑選視窗是同步的，要在這裡先備好。
+     ⚠ dbGetAll 有快取，只有第一次真的打網路；讀不到就退回內建清單（見 tlOptList）。 */
+  try{ await tlOptLoad(); }catch(_){}
+
   /* 預約沒填 format 時用票券的（openTrainingLog 算好放在 _tlFmt，見那支的說明）。
      ⚠ 兩個都空才是真的沒有 —— 只讀 b.format 會讓 1V2 的課表看不到「會員 A／B」。 */
   const fmt=String(window._tlFmt||b.format||'').toUpperCase();
@@ -65127,6 +65302,10 @@ async function delTrainingLog(id){
 async function tlEditLog(id){
   /* 拖完放開時瀏覽器會補一個 click —— 吃掉那一次，不然一拖完就跳出修改視窗。 */
   if(window._tlDragged){ window._tlDragged=0; return; }
+  /* 工具／姿勢清單（2026-09-25）——挑選視窗是同步的，要在這裡先備好。
+     ⚠ dbGetAll 有快取，只有第一次真的打網路；讀不到就退回內建清單（見 tlOptList）。 */
+  try{ await tlOptLoad(); }catch(_){}
+
   let l=null; try{ l=await dbGet('training_logs',id); }catch(_){}
   if(!l){ showToast('找不到這筆紀錄'); return; }
   const n=tlLogNums(l)||{reps:'',sets:'',weight:'',unit:'kg'};
@@ -65283,11 +65462,14 @@ function tlePick(field){
   tleReadSets();
   const E=window._tle; if(!E) return;
   const isP=field==='posture';
-  const list=isP?TL_POSTURES:TL_TOOLS, cur=E[field]||'';
+  const list=tlOptList(isP?'posture':'tool'), cur=E[field]||'';
   showModal(`<div class="modal-title">選擇${isP?'姿勢':'工具'}</div>
     <div class="ash-eihead">再點一次目前選的那一項就會取消選擇（這一欄本來就可以不填）。</div>
     <div class="tle-picklist">${list.map(x=>`<button type="button" class="ash-eirow ash-ei-2c lot-row${x===cur?' lot-row-cur':''}" onclick="tlePickSet('${field}','${x}')">
       <span class="ash-eilb">${x}</span>${x===cur?'<span class="ash-eisub">目前選的</span>':''}</button>`).join('')}</div>
+    ${/* 管理入口（2026-09-25）——擺在清單底部、虛線淡框：
+         挑選是每天在用的路徑，管理一個月一次，不要把它做得跟選項一樣搶眼。 */''}
+    <button type="button" class="tlo-mgr" onclick="tlOptMgr('${isP?'posture':'tool'}', ()=>tlePick(field))">＋ 新增或刪除${isP?'姿勢':'工具'}</button>
     <div class="modal-foot"><button class="btn btn-ghost" onclick="tleRender()">返回</button></div>`);
 }
 function tlePickSet(field,v){
@@ -65525,7 +65707,7 @@ async function renderAddExerciseSheet(){
        ⚠ 清單樣式沿用「修改紀錄」的 .tle-picklist／.ash-eirow，兩支長得一樣。 */
     const fld=st._pick==='posture'?'posture':'tool';
     const isP=fld==='posture';
-    const list=isP?TL_POSTURES:TL_TOOLS, cur=st[fld]||'';
+    const list=tlOptList(isP?'posture':'tool'), cur=st[fld]||'';
     host.innerHTML=`<div class="ms-backdrop" onclick="closeAddExercise()"></div>
       <div class="ms-panel ae-panel">
         <div class="ms-head">
@@ -70917,6 +71099,10 @@ function wpShared(list){ const me=(SESSION&&SESSION.id)||'';
     && Array.isArray(p.shared_with) && p.shared_with.map(String).indexOf(String(me))>=0); }
 
 PAGES.coach_plans=async function(){
+  /* 工具／姿勢清單（2026-09-25）——挑選視窗是同步的，要在這裡先備好。
+     ⚠ dbGetAll 有快取，只有第一次真的打網路；讀不到就退回內建清單（見 tlOptList）。 */
+  try{ await tlOptLoad(); }catch(_){}
+
   const C=document.getElementById('content');
   C.innerHTML='<div class="card"><div class="pp-card-tip">載入中…</div></div>';
   let plans=[],coaches=[],quickEx=[];
@@ -71368,11 +71554,14 @@ function wpItemRender(){
 function wpePick(field){
   const S=window._wp, it=S&&S.items[window._wpI]; if(!it) return;
   const isP=field==='posture';
-  const list=isP?TL_POSTURES:TL_TOOLS, cur=it[field]||'';
+  const list=tlOptList(isP?'posture':'tool'), cur=it[field]||'';
   showModal(`<div class="ash-sheetmk"></div><div class="modal-title">選擇${isP?'姿勢':'工具'}</div>
     <div class="ash-eihead">再點一次目前選的那一項就會取消選擇（這一欄本來就可以不填）。</div>
     <div class="tle-picklist">${list.map(x=>`<button type="button" class="ash-eirow ash-ei-2c lot-row${x===cur?' lot-row-cur':''}" onclick="wpePickSet('${field}','${x}')">
       <span class="ash-eilb">${x}</span>${x===cur?'<span class="ash-eisub">目前選的</span>':''}</button>`).join('')}</div>
+    ${/* 管理入口（2026-09-25）——擺在清單底部、虛線淡框：
+         挑選是每天在用的路徑，管理一個月一次，不要把它做得跟選項一樣搶眼。 */''}
+    <button type="button" class="tlo-mgr" onclick="tlOptMgr('${isP?'posture':'tool'}', ()=>wpePick(field))">＋ 新增或刪除${isP?'姿勢':'工具'}</button>
     <div class="modal-foot"><button class="btn btn-ghost" onclick="wpItemRender()">返回</button></div>`);
 }
 /* 再點一次目前選的那一項＝取消選擇（這兩欄本來就可以不填）。 */
@@ -71694,6 +71883,10 @@ function cxeCardHtml(list){
   </div>`;
 }
 async function cxeEdit(id){
+  /* 工具／姿勢清單（2026-09-25）——挑選視窗是同步的，要在這裡先備好。
+     ⚠ dbGetAll 有快取，只有第一次真的打網路；讀不到就退回內建清單（見 tlOptList）。 */
+  try{ await tlOptLoad(); }catch(_){}
+
   /* ⚠ 新增時的 category 預設吃「目前正在看的那個分類頁籤」（2026-09-16）——
      教練在「下肢推」那一頁按新增，十之八九就是要加一個下肢推的動作。 */
   let e={id:'',name:'',tool:'',posture:'',category:(window._cxeCat||''),created_at:'',sort_order:null};
@@ -71753,12 +71946,15 @@ function cxePick(field){
   const e=window._cxe; if(!e) return;
   const i=document.getElementById('cxe-name'); if(i) e.name=i.value;
   const LB={category:'分類',tool:'工具',posture:'姿勢'};
-  const list=field==='category'?CXE_CATS:(field==='posture'?TL_POSTURES:TL_TOOLS);
+  const list=field==='category'?CXE_CATS:tlOptList(field==='posture'?'posture':'tool');
   const cur=e[field]||'';
   showModal(`<div class="ash-sheetmk"></div><div class="modal-title">選擇${LB[field]||''}</div>
     <div class="ash-eihead">再點一次目前選的那一項就會取消選擇${field==='category'?'（分類會回到「其他」）':'（這一欄本來就可以不填）'}。</div>
     <div class="tle-picklist">${list.map(x=>`<button type="button" class="ash-eirow ash-ei-2c lot-row${x===cur?' lot-row-cur':''}" onclick="cxePickSet('${field}','${x}')">
       <span class="ash-eilb">${x}</span>${x===cur?'<span class="ash-eisub">目前選的</span>':''}</button>`).join('')}</div>
+    ${/* 分類不給改：它決定動作出現在哪一個頁籤底下，是系統的骨架，
+         跟「店裡有什麼器材」不是同一種東西。 */''}
+    ${field==='category'?'':`<button type="button" class="tlo-mgr" onclick="tlOptMgr('${field}', ()=>cxePick('${field}'))">＋ 新增或刪除${LB[field]||''}</button>`}
     <div class="modal-foot"><button class="btn btn-ghost" onclick="cxeRender()">返回</button></div>`);
 }
 function cxePickSet(field,v){
