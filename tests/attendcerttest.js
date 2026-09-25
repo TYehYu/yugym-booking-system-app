@@ -105,9 +105,19 @@ console.log('\n⑥ 證明書本體');
   ok('★★★ 堂數來自 tkAttendedList，不是 sessions_total 或 used',
      /const list=tkAttendedList\(t, bks, PP\.id\);/.test(F)
      && /<b>\$\{list\.length\} 堂<\/b>/.test(F));
+  /* ⚠⚠ 2026-09-25 使用者回報「這張票尚未有出席證明　為什麼不能按」——
+     第一版寫成 WAL.slots.find(...)，而 WAL 根本沒有 slots
+     （只有 stampsOf(id)／noOf(id)／selfBk），所以永遠拿到空陣列。
+     症狀很誤導：按鈕**出現了**（它用卡片 scope 裡現成的 bks），
+     點下去才說「尚未有出席紀錄」—— 兩邊各查各的就會打架。 */
   ok('★★★ 戳記來源與票券卡的圓點同一份（堂數一定對得起來）',
-     /const sl=\(\(window\.WAL&&WAL\.slots\)\|\|\[\]\)\.find/.test(F)
-     && /const bks=\(sl&&sl\.stamps\)\|\|\[\];/.test(F));
+     /const bks=\(window\.WAL&&typeof WAL\.stampsOf==='function'\)\?\(WAL\.stampsOf\(t\.id\)\|\|\[\]\):\[\];/.test(F));
+  /* ⚠ 要先剝掉註解 —— 上面那段說明裡就寫著「WAL.slots」四個字，
+     直接掃全檔會命中自己（記憶 yugym-assert-hits-comment，這是第四次）。 */
+  ok('★★★ WAL.slots 不存在，不准再用（這就是按不下去的原因）',
+     !/WAL\.slots/.test(src.replace(/\/\*[\s\S]*?\*\//g,' ')));
+  ok('★★★ WAL 真的有 stampsOf（別的地方也在用，不是我猜的）',
+     (src.match(/WAL\.stampsOf\(/g)||[]).length>=3);
   ok('★★★ 沒有出席就不印空白證明', /if\(!list\.length\)\{ showToast\('這張票還沒有出席紀錄'\); return; \}/.test(F));
   ok('★★★ 講清楚「不是發票或收據」（蓋了公司章之後最需要的那一句）',
      /本證明僅記載實際到場上課之紀錄，並非統一發票或收據。/.test(F));
