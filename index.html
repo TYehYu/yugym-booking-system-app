@@ -13980,8 +13980,8 @@ function tbl(s){return TABLE_ALIAS[s]||s;}
 let sb=null;
 // ── 版本號（日期+時間格式：年後兩碼+月+日.時分，例 26620.1058 = 26年6/20 10:58）──
 // 每次改版手動更新這一行即可，畫面與 title 會一起更新
-const APP_VERSION = '260925.0027';
-const APP_VERSION_LABEL = 'v260925.0027';
+const APP_VERSION = '260925.1010';
+const APP_VERSION_LABEL = 'v260925.1010';
 const CLOUD = !!(window.YUGYM_CONFIG && window.YUGYM_CONFIG.url && window.YUGYM_CONFIG.anonKey);
 if(CLOUD){ sb = supabase.createClient(window.YUGYM_CONFIG.url, window.YUGYM_CONFIG.anonKey); }
 
@@ -50690,13 +50690,18 @@ async function ppOpenTraining(id){
   let logs=[];
   /* ⚠ 濾掉 slot=2：那是 1V2 第二位的紀錄，只是借掛在這位會員身上（2026-09-15） */
   try{ logs=(await dbGetAll('training_logs')).filter(l=>l.member_id===id && Number(l&&l.slot)!==2); }catch(_){}
+  /* 上課日要從 booking 拿（2026-09-25，見 tlSessKey）——
+     ⚠ bookings 幾乎一定已經在快取裡（每一頁都在用），這一行不會多打網路；
+       會員端也讀得到自己的（RLS bookings_select_member）。 */
+  try{ await tlBkMetaLoad(); }catch(_){}
+
   logs.sort((a,b)=>(b.created_at||'').localeCompare(a.created_at||''));
   const byBk={};
   logs.forEach(l=>{ (byBk[l.booking_id]=byBk[l.booking_id]||[]).push(l); });
   /* ⚠ 一堂之內照 seq（見 tlSeqSort）——原本沒排，吃外層那份**降冪**的 logs，
      所以每堂裡面是倒著看的，跟教練端相反。 */
   const sessions=Object.entries(byBk).map(([bid,ls])=>{ const _ls=tlSeqSort(ls);
-      return {bid, ls:_ls, t:(_ls[0]&&_ls[0].created_at)||''}; }).sort((a,b)=>b.t.localeCompare(a.t));
+      return {bid, ls:_ls, t:tlSessKey(bid,_ls)}; }).sort((a,b)=>b.t.localeCompare(a.t));
   const setLine=tlSetLine;
   const body = sessions.length===0
     ? '<div class="empty" style="padding:26px;"><div class="em-t">尚無訓練紀錄</div><div class="em-s">教練在課堂中記錄後，會顯示在這裡。</div></div>'
@@ -51105,6 +51110,9 @@ async function ppLoadCtx(){
     if(PP.recView==='training'){
       /* ⚠ 濾掉 slot=2（2026-09-15）：1V2 第二位的紀錄借掛在這位會員身上，不是他的 */
       try{ c.trainLogs=(await dbGetAll('training_logs')).filter(l=>l&&l.member_id===PP.id && Number(l.slot)!==2); }catch(_){}
+      /* 上課日要從 booking 拿（2026-09-25，見 tlSessKey）——
+         ⚠ tlSessionsHtml 是同步的，對照表必須在呼叫它之前就備好。 */
+      try{ await tlBkMetaLoad(); }catch(_){}
     }
     /* 共享章顯示名字用（2026-08-04 使用者指示：「共享人顯示清楚一點」）——
        2026-08-23：改用上面那一批一起抓回來的 membersAll，不要再 await 一次
@@ -53574,6 +53582,31 @@ function tlNextSeq(bid, add){
     return _mine.reduce((m,x)=>Math.max(m, Number(x&&x.seq)||0), 0) + 1 + (Number(add)||0);
   }catch(_){ return null; }
 }
+/* ══ 這一堂是哪一天（2026-09-25 使用者回報）══════════════════════════════
+   「這個會員幫我查一下　為什麼這四張課表都是同一天　張雅雯」
+
+   四堂課分別在 9/05、9/12、9/19、9/25，但教練 9/24 晚上 18:07–18:16
+   十分鐘內一次補記完 —— 畫面顯示的是 **created_at（記錄時間）**，
+   所以四張都寫 9/24，連「本週 4 次」都跟著錯（那四堂分屬四個不同週）。
+
+   訓練紀錄要回答的是「**哪一天上的課**」，不是「教練哪一天打的字」。
+   ⚠ 教練補記、跨午夜記錄、套用歷史課表，這三種情況都會讓兩者分家 ——
+     補記在這家店很常見（張雅雯這四堂就是），不是邊緣案例。
+   ⚠ 排序鍵帶上 start_time：同一天上兩堂（早上教練課、晚上自主）要分得出先後。
+   ⚠ 查不到 booking 才退回 created_at —— 舊資料或 booking 被刪掉時至少有個日期，
+     不要變成空白。 */
+async function tlBkMetaLoad(){
+  const m={};
+  try{ (await dbGetAll('bookings')).forEach(b=>{
+    if(b&&b.id&&b.date) m[b.id]={d:String(b.date).slice(0,10), t:String(b.start_time||'')};
+  }); }catch(_){}
+  window._tlBkMeta=m; return m;
+}
+function tlSessKey(bid, ls){
+  const b=(window._tlBkMeta||{})[bid];
+  if(b&&b.d) return b.d+(b.t?' '+b.t:'');
+  return String(((ls&&ls[0])||{}).created_at||'').slice(0,10);
+}
 function tlSeqSort(logs){
   return (logs||[]).slice().sort((a,b)=>{
     const sa=(a&&a.seq!=null)?Number(a.seq):null, sb=(b&&b.seq!=null)?Number(b.seq):null;
@@ -53589,7 +53622,7 @@ function tlSessionsHtml(logs, limit){
   /* ⚠ 一堂之內照 seq（見 tlSeqSort）；t 取**排序後**的第一筆 ——
      取排序前的 ls[0] 會拿到那堂最後記的那一筆，跨午夜記錄時會標錯天。 */
   const sess=Object.entries(byBk).map(([bid,ls])=>{ const _ls=tlSeqSort(ls);
-      return {bid, ls:_ls, t:(_ls[0]&&_ls[0].created_at)||''}; })
+      return {bid, ls:_ls, t:tlSessKey(bid,_ls)}; })
     .sort((a,b)=>String(b.t).localeCompare(String(a.t)));
   if(!sess.length) return '';
   return sess.slice(0,limit||30).map(x=>`<div class="tlv-sess">
@@ -53620,6 +53653,11 @@ PAGES.mem_training=async function(){
   /* ⚠ 濾掉 slot=2（2026-09-15）：1V2 第二位的紀錄借掛在這位會員身上，
      不濾的話會員會看到別人的動作與重量 */
   try{ logs=(await dbGetAll('training_logs')).filter(l=>l&&l.member_id===SESSION.id && Number(l.slot)!==2); }catch(_){}
+  /* 上課日要從 booking 拿（2026-09-25，見 tlSessKey）——
+     ⚠ bookings 幾乎一定已經在快取裡（每一頁都在用），這一行不會多打網路；
+       會員端也讀得到自己的（RLS bookings_select_member）。 */
+  try{ await tlBkMetaLoad(); }catch(_){}
+
   logs.sort((a,b)=>String((b&&b.created_at)||'').localeCompare(String((a&&a.created_at)||'')));
   const exs=new Set(logs.map(l=>l.exercise_name).filter(Boolean));
   /* 依課堂分組（一堂＝一天的一筆訓練）。
@@ -53634,7 +53672,7 @@ PAGES.mem_training=async function(){
      ⚠ t（這一堂的時間）要取**排序後**的第一筆 —— 取排序前的 ls[0] 會拿到那堂最後記的
        那一筆，日期雖然多半一樣，但跨午夜記錄時會標錯天。 */
   const sess=Object.entries(byBk).map(([bid,ls])=>{ const _ls=tlSeqSort(ls);
-      return { bid, ls:_ls, t:(_ls[0]&&_ls[0].created_at)||'' }; })
+      return { bid, ls:_ls, t:tlSessKey(bid,_ls) }; })
     .sort((a,b)=>String(b.t).localeCompare(String(a.t)));
 
   if(!logs.length){
@@ -53741,6 +53779,11 @@ PAGES.m_training=async function(){
   let logs=[];
   /* ⚠ 濾掉 slot=2（2026-09-15，同上） */
   try{ logs=(await dbGetAll('training_logs')).filter(l=>l.member_id===mid && Number(l&&l.slot)!==2); }catch(_){}
+  /* 上課日要從 booking 拿（2026-09-25，見 tlSessKey）——
+     ⚠ bookings 幾乎一定已經在快取裡（每一頁都在用），這一行不會多打網路；
+       會員端也讀得到自己的（RLS bookings_select_member）。 */
+  try{ await tlBkMetaLoad(); }catch(_){}
+
   logs.sort((a,b)=>(b.created_at||'').localeCompare(a.created_at||''));
   // 依課堂(booking_id)分組
   const byBk={};
@@ -53748,7 +53791,7 @@ PAGES.m_training=async function(){
   /* ⚠ 一堂之內照 seq（見 tlSeqSort）——原本沒排，吃外層那份**降冪**的 logs，
      所以每堂裡面是倒著看的，跟教練端相反。 */
   const sessions=Object.entries(byBk).map(([bid,ls])=>{ const _ls=tlSeqSort(ls);
-      return {bid, ls:_ls, t:(_ls[0]&&_ls[0].created_at)||''}; }).sort((a,b)=>b.t.localeCompare(a.t));
+      return {bid, ls:_ls, t:tlSessKey(bid,_ls)}; }).sort((a,b)=>b.t.localeCompare(a.t));
   const exSet=new Set(logs.map(l=>l.exercise_name).filter(Boolean));
   const stats=lpStats([
     {label:'訓練堂數', value:sessions.length, unit:'堂'},
@@ -64757,7 +64800,7 @@ async function renderTrainingLogSheet(){
   /* ⚠ t 取該組**最早**那筆（排序後就是第一筆）—— 原本寫的也是 ls[0]，
      但在沒排序的情況下那只是「碰巧被放在第一個」的那筆，
      於是「最近三次」挑中哪三堂、以及這三堂的先後，都可能不對。 */
-  let hist=Object.entries(byBk).map(([bid,ls])=>({bid,ls,t:ls[0].created_at||''}))
+  let hist=Object.entries(byBk).map(([bid,ls])=>({bid,ls,t:tlSessKey(bid,ls)}))
     .sort((a,b2)=>String(b2.t).localeCompare(String(a.t))).slice(0,3);
   window._tlHistCache=Object.fromEntries(hist.map(h=>[h.bid,h.ls])); // 供套用取用
   const sec4 = hist.length===0

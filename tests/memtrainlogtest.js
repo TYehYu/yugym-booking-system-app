@@ -121,8 +121,12 @@ console.log('③-3 動作順序＝教練記錄的先後（2026-09-23 使用者�
      /const _ls=tlSeqSort\(ls\);/.test(PAGE));
   ok('★★★ 教練端用同一支（兩邊同方向，各寫一套遲早會漂）',
      /const logs=tlSeqSort\(allLogs\.filter\(l=>l\.booking_id===b\.id && \(!_is1v2 \|\| _slotOf\(l\)===_slot\)\)\);/.test(src));
-  ok('★★ 這一堂的時間取排序後的第一筆（取排序前的會拿到最後記的那筆，跨午夜會標錯天）',
-     /return \{ bid, ls:_ls, t:\(_ls\[0\]&&_ls\[0\]\.created_at\)\|\|'' \}; \}\)/.test(PAGE));
+  /* ⚠⚠ 2026-09-25：這一堂是哪一天改成讀 **booking 的上課日**（tlSessKey），
+     不再用 created_at —— 使用者回報張雅雯四張課表都寫 9/24，
+     實際上那四堂在 9/05、9/12、9/19、9/25，只是教練 9/24 晚上一次補記完。
+     細節見 tests/tlsessdatetest.js。 */
+  ok('★★★ 這一堂的日期＝booking 的上課日，不是記錄時間',
+     /return \{ bid, ls:_ls, t:tlSessKey\(bid,_ls\) \}; \}\)/.test(PAGE));
   ok('　 為什麼會倒過來，寫在原地', /教練最後記的那個動作排在最上面/.test(src));
   /* 實跑：把排序照抄出來驗一次，不是只驗字串 */
   const mk=(t,n)=>({created_at:t, exercise_name:n});
