@@ -545,3 +545,46 @@ create unique index ux_ticket_types_code on public.ticket_types using btree (cod
 create index idx_tlog_booking on public.training_logs using btree (booking_id);
 create index idx_tlog_created on public.training_logs using btree (created_at);
 create index idx_tlog_member on public.training_logs using btree (member_id);
+
+/* ══ GRANT 補寫（2026-09-25）══════════════════════════════════════════════
+   Supabase 公告：自 2026/10/30 起 public schema 中**新建立的 table**
+   不再自動取得 Data API 存取權限；migration 建立、preview branch、
+   本機 supabase db reset 重建的表都必須明確 GRANT。
+
+   這一段是**補寫**，不是修改：內容與正式庫目前的權限完全一致，
+   對正式庫執行是 no-op。目的是讓「重建環境／db reset」跑完之後，
+   權限與正式庫一樣，不會因為缺 GRANT 而 permission denied。
+   ⚠ 一格都沒有放寬或收緊 —— 公告第 6 點：不要為了這次更新動既有 grants。
+   ⚠ anon 那幾張是 baseline 時代留下的（Supabase 預設就給），
+     靠 RLS policy 的 auth.uid() IS NOT NULL 擋著。**新表不要跟進**，
+     範本見 _TEMPLATE_new_table.sql。 */
+
+   ⚠ 後六張（category／member_level／reward_rules／space_resources／spaces／
+     ticket_type_member_levels）只給 service_role —— 正式庫現況就是這樣，
+     那幾張沒有任何程式在用（0909 全庫掃描時確認過，刻意不補）。
+
+grant select, insert, update, delete on public.app_state to anon, authenticated, service_role;
+grant select, insert, update, delete on public.attendance to anon, authenticated, service_role;
+grant select, insert, update, delete on public.bookings to anon, authenticated, service_role;
+grant select, insert, update, delete on public.course_plans to anon, authenticated, service_role;
+grant select, insert, update, delete on public.employees to anon, authenticated, service_role;
+grant select, insert, update, delete on public.exercises to anon, authenticated, service_role;
+grant select, insert, update, delete on public.leave_settlements to anon, authenticated, service_role;
+grant select, insert, update, delete on public.member_tickets to anon, authenticated, service_role;
+grant select, insert, update, delete on public.members to anon, authenticated, service_role;
+grant select, insert, update, delete on public.notifications to anon, authenticated, service_role;
+grant select, insert, update, delete on public.punch_requests to anon, authenticated, service_role;
+grant select, insert, update, delete on public.purchase_applications to anon, authenticated, service_role;
+grant select, insert, update, delete on public.purchases to anon, authenticated, service_role;
+grant select, insert, update, delete on public.salary_templates to anon, authenticated, service_role;
+grant select, insert, update, delete on public.shifts to anon, authenticated, service_role;
+grant select, insert, update, delete on public.ticket_logs to anon, authenticated, service_role;
+grant select, insert, update, delete on public.ticket_types to anon, authenticated, service_role;
+grant select, insert, update, delete on public.training_logs to anon, authenticated, service_role;
+grant select, insert, update, delete on public.venues to anon, authenticated, service_role;
+grant select, insert, update, delete on public.category to service_role;
+grant select, insert, update, delete on public.member_level to service_role;
+grant select, insert, update, delete on public.reward_rules to service_role;
+grant select, insert, update, delete on public.space_resources to service_role;
+grant select, insert, update, delete on public.spaces to service_role;
+grant select, insert, update, delete on public.ticket_type_member_levels to service_role;

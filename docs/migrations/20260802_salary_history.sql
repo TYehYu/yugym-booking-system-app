@@ -43,3 +43,14 @@ notify pgrst, 'reload schema';
 --   ・「境妤老師」（2026/01–03 共 8,000）未匯入 —— 外聘老師，不建員工資料
 --     （2026-08-02 使用者確認）。之後再看到這個名字不用再問一次。
 -- 共 205 筆。
+
+/* ══ 補 service_role（2026-09-25）═══════════════════════════════════════
+   這一支當初只寫了 authenticated，漏了 service_role。
+   正式庫沒出事是因為 0812 那次 `grant all on all tables` 順手補上了
+   （見 20260812_restore_service_role_grants.sql），但**重建環境就會壞** ——
+   Edge Function 用 SERVICE_ROLE_KEY，碰不到這張表。
+   ⚠ 與正式庫現況一致，對正式庫執行是 no-op。
+   ⚠ 症狀很難認：SELECT 失敗會被 catch 吞掉（回空陣列），
+     畫面只是「還沒有資料」，一直到 INSERT 才爆權限不足（0909 踩過）。 */
+
+grant select, insert, update, delete on public.salary_history to service_role;

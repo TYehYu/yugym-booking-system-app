@@ -26,6 +26,29 @@
 - 跨工作階段快取（2026-08-04 第三批第二段）：每張表的快取（含簽章與日誌水位）會存進 IndexedDB（`yugym-cache`），下次開場 `cacheHydrate(uid)` 先載回來，再走簽章校驗——載回來的一律 `t=0`，**一定先校驗才會被採用**。存檔鍵含 auth uid、超過 1 天不用、`doLogout` 會 `cacheWipe()` 清空。
 - `LEAN_DROP`（2026-08-04 讀取量優化）：列出列表讀取「不搬」的欄位，`dbGetAll` 不會把它們撈回來。兩組理由不同：**bookings 的 9 欄是全程式碼沒人用**（整表 6.4MB→5.1MB）；**contracts 的 3 欄（`body_snapshot`／`fill_snapshot`／`signature`）有人用，但只在「打開某一份合約」時用**，而那條路走的是單筆 `dbGet`（全欄位）——那三欄佔整張表 96%，而櫃檯每點開一位會員就會整表搬一次（2026-08-09）。欄位清單是**從實際回傳的資料學來的**，資料庫加欄位會自動被涵蓋，不需同步任何清單。若日後要開始使用其中某個欄位，**先把它從 `LEAN_DROP` 移除**（`tests/leanselecttest.js` 會擋下沒移除就使用的情況）。單筆 `dbGet` 仍是 `select('*')`，`dbPut` 有護欄會在回寫前補齊缺欄位。
 
+## 新增資料表的規矩（2026/10/30 Supabase 變更）
+
+Supabase 公告：**自 2026/10/30 起，`public` schema 中新建立的 table 不再自動取得 Data API 存取權限**。
+之後才建的表（migration 建立、preview branch、本機 `supabase db reset` 重建）
+都必須在**同一支 migration 裡**明確 GRANT，否則 Data API 會 `permission denied`。
+
+照 `docs/migrations/_TEMPLATE_new_table.sql` 抄，四件事缺一不可：
+建表 → `enable row level security` → **GRANT** → policy。
+
+```sql
+grant select, insert, update, delete on public.<新表> to authenticated;
+grant select, insert, update, delete on public.<新表> to service_role;
+-- anon 預設不給（公告第 3 點）。真的需要「未登入就要讀」才給 select，並寫明理由。
+```
+
+- **`authenticated`** ＝ 登入後的所有人（會員／教練／櫃檯／管理員都是它）。身分判斷全靠 RLS policy，不是 Postgres role，所以一律給四個權限。
+- **`service_role`** ＝ Edge Function 用，繞過 RLS，**一張都不能漏**。
+- **`anon`** ＝ 未登入。22 張舊表有 anon 權限是 baseline 時代的遺留（靠 policy 的 `auth.uid() IS NOT NULL` 擋著），**照現況保留、新表不要跟進**。
+
+⚠ **現有的表不受這次變更影響，不要為了它去動既有 grants** —— 0812 就是被一次大範圍 REVOKE 害到，service_role 在 30 張表失效，而失敗還被 catch 吞掉。
+⚠ 漏 GRANT 的症狀是**靜默的**：SELECT 失敗被 `dbGetAll` 的 catch 吞掉（回空陣列），畫面只是「還沒有資料」，一直到 INSERT 才爆權限不足（0812、0909 各踩一次）。
+⚠ `tests/migrationgranttest.js` 會掃 `docs/migrations/*.sql` 守住這件事。
+
 ## Supabase
 
 - 專案：`rlpiomzplckzqnqrvrwc.supabase.co`（本 session 可透過 Supabase MCP 工具直接查表、跑 SQL、看 logs）

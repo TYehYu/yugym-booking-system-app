@@ -60,3 +60,14 @@ where not exists (select 1 from cron.job where jobname='change_log_prune');
 
 -- 同日追加：fn_table_sigs 一併回傳日誌水位 _log，讓前端把「簽章」與「已套用到哪裡」
 -- 記在同一個瞬間（見 20260804_fn_table_sigs.sql 的最新版本）。
+
+/* ══ 補 service_role（2026-09-25）═══════════════════════════════════════
+   這一支當初只寫了 authenticated，漏了 service_role。
+   正式庫沒出事是因為 0812 那次 `grant all on all tables` 順手補上了
+   （見 20260812_restore_service_role_grants.sql），但**重建環境就會壞** ——
+   Edge Function 用 SERVICE_ROLE_KEY，碰不到這張表。
+   ⚠ 與正式庫現況一致，對正式庫執行是 no-op。
+   ⚠ 症狀很難認：SELECT 失敗會被 catch 吞掉（回空陣列），
+     畫面只是「還沒有資料」，一直到 INSERT 才爆權限不足（0909 踩過）。 */
+
+grant select, insert, update, delete on public.change_log to service_role;
