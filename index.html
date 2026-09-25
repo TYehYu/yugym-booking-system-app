@@ -13980,8 +13980,8 @@ function tbl(s){return TABLE_ALIAS[s]||s;}
 let sb=null;
 // ── 版本號（日期+時間格式：年後兩碼+月+日.時分，例 26620.1058 = 26年6/20 10:58）──
 // 每次改版手動更新這一行即可，畫面與 title 會一起更新
-const APP_VERSION = '260925.1156';
-const APP_VERSION_LABEL = 'v260925.1156';
+const APP_VERSION = '260925.1202';
+const APP_VERSION_LABEL = 'v260925.1202';
 const CLOUD = !!(window.YUGYM_CONFIG && window.YUGYM_CONFIG.url && window.YUGYM_CONFIG.anonKey);
 if(CLOUD){ sb = supabase.createClient(window.YUGYM_CONFIG.url, window.YUGYM_CONFIG.anonKey); }
 
@@ -49744,8 +49744,16 @@ function ppRecordHtml(){
                      ⚠ 歷史／已過期的票也要能印 —— 公司補助常常是事後才申請，
                        所以放在這一排、不看 t.status。 */''}
                 ${(()=>{ try{
-                  return tkAttendedList(t, bks, PP.id).length
-                    ? `<button class="btn btn-ghost btn-sm" style="padding:2px 10px;font-size:11px;" title="列印這張票的到場紀錄（公司補助用）；不含金額" onclick="event.stopPropagation();tkAttendCert('${t.id}')">出席證明</button>` : '';
+                  /* ⚠⚠ 算出來的清單**就地存起來**給 tkAttendCert 用（2026-09-25 三改）——
+                     前兩版讓證明書自己再查一次票券夾，兩次都查錯地方
+                     （WAL.slots 不存在、WAL 是 ppRecordHtml 的區域 const 不在 window 上），
+                     症狀都是「按鈕出現了、點下去說沒紀錄」。
+                     兩邊各查各的就是會打架；同一份資料只算一次就不可能不一致。
+                   ⚠ 不會陳舊：這一段每次重繪票券卡都會重寫，而按鈕只有重繪後才點得到。 */
+                  const _at=tkAttendedList(t, bks, PP.id);
+                  if(!_at.length) return '';
+                  (window._tkAttCache=window._tkAttCache||{})[t.id]=_at;
+                  return `<button class="btn btn-ghost btn-sm" style="padding:2px 10px;font-size:11px;" title="列印這張票的到場紀錄（公司補助用）；不含金額" onclick="event.stopPropagation();tkAttendCert('${t.id}')">出席證明</button>`;
                 }catch(_){ return ''; } })()}
                 ${/* 合約鈕已移到表頭（票券編號左邊）；
                      票券預設使用人（2026-08-04 使用者指示：票券指定家庭成員，預約自動帶使用人） */''}
@@ -49924,8 +49932,16 @@ function ppRecordHtml(){
                      ⚠ 歷史／已過期的票也要能印 —— 公司補助常常是事後才申請，
                        所以放在這一排、不看 t.status。 */''}
                 ${(()=>{ try{
-                  return tkAttendedList(t, bks, PP.id).length
-                    ? `<button class="btn btn-ghost btn-sm" style="padding:2px 10px;font-size:11px;" title="列印這張票的到場紀錄（公司補助用）；不含金額" onclick="event.stopPropagation();tkAttendCert('${t.id}')">出席證明</button>` : '';
+                  /* ⚠⚠ 算出來的清單**就地存起來**給 tkAttendCert 用（2026-09-25 三改）——
+                     前兩版讓證明書自己再查一次票券夾，兩次都查錯地方
+                     （WAL.slots 不存在、WAL 是 ppRecordHtml 的區域 const 不在 window 上），
+                     症狀都是「按鈕出現了、點下去說沒紀錄」。
+                     兩邊各查各的就是會打架；同一份資料只算一次就不可能不一致。
+                   ⚠ 不會陳舊：這一段每次重繪票券卡都會重寫，而按鈕只有重繪後才點得到。 */
+                  const _at=tkAttendedList(t, bks, PP.id);
+                  if(!_at.length) return '';
+                  (window._tkAttCache=window._tkAttCache||{})[t.id]=_at;
+                  return `<button class="btn btn-ghost btn-sm" style="padding:2px 10px;font-size:11px;" title="列印這張票的到場紀錄（公司補助用）；不含金額" onclick="event.stopPropagation();tkAttendCert('${t.id}')">出席證明</button>`;
                 }catch(_){ return ''; } })()}
                 ${(c.ctByTicket&&c.ctByTicket[t.id])?`<button class="btn btn-ghost btn-sm" style="padding:2px 10px;font-size:11px;" onclick="openContractView('${c.ctByTicket[t.id]}')">合約</button>`:''}
                 ${/* 用完／過期的票也要能校正（2026-08-25）——黃喬莉那三張 1V2 全在這一區，
@@ -67577,17 +67593,19 @@ function tkAttendCert(ticket_id){
   if(!t){ showToast('找不到票券'); return; }
   const m=(PP&&PP.rec)||{};
   const esc=x=>String(x==null?'':x).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
-  /* 戳記來源與票券卡的圓點同一份（票券夾算好的），堂數才對得起來。
-     ⚠⚠ 2026-09-25 使用者回報「這張票尚未有出席證明　為什麼不能按」——
-       第一版寫成 `WAL.slots.find(...)`，而 **WAL 根本沒有 slots 這個東西**
-       （它只有 stampsOf(id)／noOf(id)／selfBk），所以永遠拿到空陣列。
-       症狀特別容易誤導：按鈕**出現了**（它用的是卡片 scope 裡現成的 bks），
-       點下去才說「尚未有出席紀錄」—— 兩邊各查各的，就會這樣打架。
-     ⚠ 不含 WAL 的 _lo（超約、沒票可扣的那幾堂）：卡片上會把它們掛到最後一張票
-       畫成紅圈，但它們不屬於這張票。證明書寧可少算也不要替客人多報。 */
-  const bks=(window.WAL&&typeof WAL.stampsOf==='function')?(WAL.stampsOf(t.id)||[]):[];
-  const list=tkAttendedList(t, bks, PP.id);
-  if(!list.length){ showToast('這張票還沒有出席紀錄'); return; }
+  /* ══ 出席清單：直接用畫按鈕時算好的那一份（2026-09-25 三改）══
+     ⚠⚠ 前兩版讓這裡自己再查一次票券夾，兩次都查錯地方：
+       ① `WAL.slots.find(...)` —— WAL 沒有 slots（只有 stampsOf／noOf／selfBk）
+       ② `window.WAL.stampsOf(...)` —— **WAL 是 ppRecordHtml 裡的區域 const**，
+          不在 window 上，所以 window.WAL 永遠是 undefined
+     兩次的症狀一模一樣，而且很會騙人：按鈕**出現了**（它用的是票券卡 scope 裡
+     現成的 bks），點下去才說「尚未有出席紀錄」。
+     **根因不是查錯地方，是兩邊各查各的** —— 同一份資料算兩次就有機會不一致。
+     改成畫按鈕時算一次、就地存進 _tkAttCache，這裡直接拿。
+     ⚠ 不會陳舊：那一段每次重繪票券卡都會重寫，而按鈕只有重繪後才點得到。
+     ⚠ 拿不到就老實說「請重新整理」，不要再自己補算一份 —— 補算就是第三種答案。 */
+  const list=((window._tkAttCache||{})[t.id])||[];
+  if(!list.length){ showToast('讀不到出席紀錄，請重新整理這一頁再試'); return; }
   const cmap=window._coachNameMap||{};
   const CAT={pt:'教練課',friendly:'友善教練課',group:'團體課',self:'自主訓練',trial:'體驗課'};
   const d2=x=>String(x||'').replace(/-/g,'/');

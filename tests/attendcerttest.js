@@ -102,23 +102,30 @@ console.log('\n⑥ 證明書本體');
      !/deal_amount|toLocaleString\(\)/.test(F.replace(/\/\*[\s\S]*?\*\//g,'')));
   ok('★★★ 賣方用公司登記名，不是品牌名（對外文件）',
      /BIZ_INFO\.name/.test(F) && /統一編號 \$\{BIZ_INFO\.ubn\}/.test(F));
-  ok('★★★ 堂數來自 tkAttendedList，不是 sessions_total 或 used',
-     /const list=tkAttendedList\(t, bks, PP\.id\);/.test(F)
-     && /<b>\$\{list\.length\} 堂<\/b>/.test(F));
-  /* ⚠⚠ 2026-09-25 使用者回報「這張票尚未有出席證明　為什麼不能按」——
-     第一版寫成 WAL.slots.find(...)，而 WAL 根本沒有 slots
-     （只有 stampsOf(id)／noOf(id)／selfBk），所以永遠拿到空陣列。
-     症狀很誤導：按鈕**出現了**（它用卡片 scope 裡現成的 bks），
-     點下去才說「尚未有出席紀錄」—— 兩邊各查各的就會打架。 */
-  ok('★★★ 戳記來源與票券卡的圓點同一份（堂數一定對得起來）',
-     /const bks=\(window\.WAL&&typeof WAL\.stampsOf==='function'\)\?\(WAL\.stampsOf\(t\.id\)\|\|\[\]\):\[\];/.test(F));
-  /* ⚠ 要先剝掉註解 —— 上面那段說明裡就寫著「WAL.slots」四個字，
-     直接掃全檔會命中自己（記憶 yugym-assert-hits-comment，這是第四次）。 */
-  ok('★★★ WAL.slots 不存在，不准再用（這就是按不下去的原因）',
-     !/WAL\.slots/.test(src.replace(/\/\*[\s\S]*?\*\//g,' ')));
-  ok('★★★ WAL 真的有 stampsOf（別的地方也在用，不是我猜的）',
-     (src.match(/WAL\.stampsOf\(/g)||[]).length>=3);
-  ok('★★★ 沒有出席就不印空白證明', /if\(!list\.length\)\{ showToast\('這張票還沒有出席紀錄'\); return; \}/.test(F));
+  ok('★★★ 堂數來自那份出席清單，不是 sessions_total 或 used',
+     /<b>\$\{list\.length\} 堂<\/b>/.test(F)
+     && !/sessions_total\}[\s]*堂<\/b>/.test(F));
+  /* ⚠⚠ 2026-09-25 使用者連報兩次「按鈕出現了、點下去說沒紀錄」——
+     兩版都是讓證明書**自己再查一次**票券夾，而且兩次都查錯地方：
+       ① WAL.slots.find(...)      → WAL 沒有 slots（只有 stampsOf／noOf／selfBk）
+       ② window.WAL.stampsOf(...) → WAL 是 ppRecordHtml 的區域 const，不在 window 上
+     根因不是查錯地方，是**兩邊各查各的**：按鈕用票券卡 scope 裡現成的 bks，
+     證明書另外查一次 —— 同一份資料算兩次就有機會不一致。
+     定版：畫按鈕時算一次、就地存進 _tkAttCache，證明書直接拿。 */
+  const CODE=src.replace(/\/\*[\s\S]*?\*\//g,' ');
+  ok('★★★ 證明書直接用畫按鈕時算好的那一份，不自己再查一次',
+     /const list=\(\(window\._tkAttCache\|\|\{\}\)\[t\.id\]\)\|\|\[\];/.test(F));
+  ok('★★★ 按鈕那一側算完就存（兩張卡都要）',
+     (CODE.match(/\(window\._tkAttCache=window\._tkAttCache\|\|\{\}\)\[t\.id\]=_at;/g)||[]).length===2);
+  ok('★★★ 證明書裡不准再出現任何一種「自己查票券夾」的寫法',
+     !/WAL\.slots/.test(CODE)
+     && !/window\.WAL/.test(CODE)
+     && !/buildWallet/.test(F.replace(/\/\*[\s\S]*?\*\//g,' ')));
+  ok('★★ 拿不到就老實說「請重新整理」，不要再補算第三種答案',
+     /showToast\('讀不到出席紀錄，請重新整理這一頁再試'\)/.test(F)
+     && /補算就是第三種答案/.test(src));
+  ok('★★★ 沒有出席就不印空白證明（按鈕本來就不會出現，這是第二道）',
+     /if\(!list\.length\)\{ showToast\(/.test(F));
   ok('★★★ 講清楚「不是發票或收據」（蓋了公司章之後最需要的那一句）',
      /本證明僅記載實際到場上課之紀錄，並非統一發票或收據。/.test(F));
   ok('★★ 沿用消費明細那套列印管道（不會被「收進兩頁」壓縮）',
@@ -130,7 +137,7 @@ console.log('\n⑦ 入口');
   ok('★★★ 兩張票券卡都有（持有中＋歷史／已過期）',
      (src.match(/onclick="event\.stopPropagation\(\);tkAttendCert\('\$\{t\.id\}'\)">出席證明<\/button>/g)||[]).length===2);
   ok('★★★ 只在真的有人到場時才長出來（used>0 不夠 —— 那個數字含請假）',
-     /return tkAttendedList\(t, bks, PP\.id\)\.length/.test(src)
+     /const _at=tkAttendedList\(t, bks, PP\.id\);\s*\n\s*if\(!_at\.length\) return '';/.test(src)
      && /used>0 不夠：那個數字含請假與/.test(src));
   ok('★★ 歷史票也能印（公司補助常常事後才申請），理由寫在原地',
      /公司補助常常是事後才申請/.test(src));
