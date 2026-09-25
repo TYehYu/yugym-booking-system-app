@@ -13980,8 +13980,8 @@ function tbl(s){return TABLE_ALIAS[s]||s;}
 let sb=null;
 // ── 版本號（日期+時間格式：年後兩碼+月+日.時分，例 26620.1058 = 26年6/20 10:58）──
 // 每次改版手動更新這一行即可，畫面與 title 會一起更新
-const APP_VERSION = '260925.1202';
-const APP_VERSION_LABEL = 'v260925.1202';
+const APP_VERSION = '260925.1654';
+const APP_VERSION_LABEL = 'v260925.1654';
 const CLOUD = !!(window.YUGYM_CONFIG && window.YUGYM_CONFIG.url && window.YUGYM_CONFIG.anonKey);
 if(CLOUD){ sb = supabase.createClient(window.YUGYM_CONFIG.url, window.YUGYM_CONFIG.anonKey); }
 
@@ -65779,7 +65779,9 @@ async function _tlPlanApply(pid,useLast){
       await dbPut('training_logs',{
         id:uid('TLOG'), booking_id:b.id, member_id:b.member_id, coach_id:SESSION.id,
         exercise_name:String(it.name).trim(), body_part:it.body_part||null,
-        posture:null, tool:it.tool||null,
+        /* ⚠ 2026-09-25：posture 原本寫死 null —— 方案裡設了姿勢，套用之後整個消失。
+           tool 本來就有帶，只是 UI 到 0925 才補上（見 wpItemRender）。 */
+        posture:it.posture||null, tool:it.tool||null,
         reps:isFinite(reps)?reps:null, sets:isFinite(sets)?sets:null,
         weight:(weight!=null&&isFinite(weight)&&weight>0)?weight:null,
         weight_unit:(weight!=null&&isFinite(weight)&&weight>0)?unit:null,
@@ -71289,6 +71291,18 @@ function wpItemRender(){
       </div>
       <div id="wpe-exlist" class="wpe-exlist"></div>
     </div>
+    ${/* 姿勢／工具（2026-09-25 使用者：「這邊要加上姿勢跟工具」）——
+         ⚠ 版型與「記錄訓練／修改紀錄」那兩張完全一樣（.ae-opt.tle-pick ＋ 跳清單）：
+           教練在三個地方填同一件事，長得不一樣只會讓人以為是不同的東西。
+         ⚠ tool 本來就在資料裡（wpPickEx 會從常用動作帶入），只是一直沒有 UI —— 
+           所以舊方案打開就看得到它原本帶的工具，不是空的。
+         ⚠ 擺在動作名稱下面、數字上面：它們是「這個動作長什麼樣」，
+           跟組數次數重量（「這次做多少」）是兩件事。 */''}
+    <div class="ae-grid ae-grid-2" style="margin:12px 0 4px;">
+      ${[['posture','姿勢'],['tool','工具']].map(([f,lb])=>
+        `<button type="button" class="ae-opt tle-pick" onclick="wpePick('${f}')">
+          <span>${lb}</span><i>${it[f]?escH(it[f]):'未設定'}</i></button>`).join('')}
+    </div>
     ${stepRow('sets','組數','組',[1])}
     ${stepRow('reps','次數','次',[1])}
     <div class="wpe-row">
@@ -71302,6 +71316,25 @@ function wpItemRender(){
     <div class="modal-foot"><button class="btn btn-ghost" onclick="wpRender()">返回</button>
       <button class="btn btn-green" onclick="wpItemDone()">儲存這個動作</button></div>`);
   wpExList();
+}
+/* 姿勢／工具的挑選（2026-09-25）——與「修改紀錄」的 tlePick 同一套清單樣式。
+   ⚠ 這一張本來就是 modal，所以直接再開一張 modal（返回時重畫動作設定）；
+     課表那邊是 .ms-panel，才需要改成面板內切頁。兩邊的體感一樣。 */
+function wpePick(field){
+  const S=window._wp, it=S&&S.items[window._wpI]; if(!it) return;
+  const isP=field==='posture';
+  const list=isP?TL_POSTURES:TL_TOOLS, cur=it[field]||'';
+  showModal(`<div class="ash-sheetmk"></div><div class="modal-title">選擇${isP?'姿勢':'工具'}</div>
+    <div class="ash-eihead">再點一次目前選的那一項就會取消選擇（這一欄本來就可以不填）。</div>
+    <div class="tle-picklist">${list.map(x=>`<button type="button" class="ash-eirow ash-ei-2c lot-row${x===cur?' lot-row-cur':''}" onclick="wpePickSet('${field}','${x}')">
+      <span class="ash-eilb">${x}</span>${x===cur?'<span class="ash-eisub">目前選的</span>':''}</button>`).join('')}</div>
+    <div class="modal-foot"><button class="btn btn-ghost" onclick="wpItemRender()">返回</button></div>`);
+}
+/* 再點一次目前選的那一項＝取消選擇（這兩欄本來就可以不填）。 */
+function wpePickSet(field,v){
+  const S=window._wp, it=S&&S.items[window._wpI]; if(!it) return;
+  it[field]=(it[field]===v)?'':v;
+  wpItemRender();
 }
 async function wpExList(){
   const box=document.getElementById('wpe-exlist'); if(!box) return;
@@ -71643,25 +71676,55 @@ function cxeRender(){
     </div>
     <div class="form-row"><label>動作名稱 *</label>
       <input type="text" id="cxe-name" value="${escH(e.name)}" placeholder="例如：保加利亞分腿蹲" oninput="window._cxe.name=this.value"></div>
-    ${/* 分類放在最前面（2026-09-16）：它決定這個動作會出現在哪一個頁籤底下，
-         比工具／姿勢更關鍵，所以排在它們之前。
-         ⚠ 再點一次＝取消選擇（回到「其他」）—— 與工具姿勢同一個手勢，cxeSet 已經這樣做了。 */''}
-    <div class="ae-label">分類</div>
-    <div class="ae-grid ae-grid-3">${CXE_CATS.map(c=>`<button type="button" class="ae-opt${e.category===c?' active':''}" onclick="cxeSet('category','${c}')">${c}</button>`).join('')}</div>
-    <div class="ae-label">使用工具（可不選）</div>
-    <div class="ae-grid ae-grid-3">${TL_TOOLS.map(t=>`<button type="button" class="ae-opt${e.tool===t?' active':''}" onclick="cxeSet('tool','${t}')">${t}</button>`).join('')}</div>
-    <div class="ae-label">使用姿勢（可不選）</div>
-    <div class="ae-grid ae-grid-2">${TL_POSTURES.map(p=>`<button type="button" class="ae-opt${e.posture===p?' active':''}" onclick="cxeSet('posture','${p}')">${p}</button>`).join('')}</div>
+    ${/* ══ 三組選項收成摘要鈕（2026-09-25 使用者：「這邊要收斂頁面」）══
+         原本三組平鋪要 9 列（分類 5 顆＋工具 10 顆＋姿勢 5 顆），
+         在手機上要捲三四個畫面才看得到儲存鈕。
+         ⚠ 版型與另外三張視窗完全一樣（記錄訓練／修改紀錄／動作設定都是 .ae-opt.tle-pick）——
+           教練在四個地方填同一件事，長得不一樣只會讓人以為是不同的東西。
+         ⚠⚠ 三顆擠一列會把「分類」「工具」的標籤壓成**直排**（使用者附截圖回報）：
+           .tle-pick 是標籤與值左右分置，一欄 100px 放不下。
+           改成分類整寬一列、工具｜姿勢並排 —— 後者與另外三張的排法也一致。
+         ⚠ 分類排在最前面（2026-09-16）：它決定這個動作出現在哪一個頁籤底下，
+           比工具／姿勢更關鍵。
+         ⚠ 再點一次＝取消選擇（分類回到「其他」）—— 三者同一個手勢，見 cxePickSet。 */''}
+    <div class="ae-grid" style="margin:14px 0 6px;">
+      <button type="button" class="ae-opt tle-pick" onclick="cxePick('category')">
+        <span>分類</span><i>${e.category?escH(e.category):'未設定'}</i></button>
+    </div>
+    <div class="ae-grid ae-grid-2" style="margin:0 0 4px;">
+      ${[['tool','工具'],['posture','姿勢']].map(([f,lb])=>
+        `<button type="button" class="ae-opt tle-pick" onclick="cxePick('${f}')">
+          <span>${lb}</span><i>${e[f]?escH(e[f]):'未設定'}</i></button>`).join('')}
+    </div>
     <div class="modal-foot">
       <button class="btn btn-ghost" onclick="closeModal()">取消</button>
       <button class="btn btn-green" onclick="cxeSave()">儲存</button></div>`);
 }
-/* 再點一次＝取消選擇（工具姿勢本來就可以不填）；重畫前先把輸入框的名稱收回來，不然會被洗掉 */
-function cxeSet(f,v){
+/* 分類／工具／姿勢的挑選（2026-09-25 收斂版面之後改成跳清單）——
+   與「修改紀錄」的 tlePick、「動作設定」的 wpePick 同一套。
+   ⚠ 開清單之前一定要先把輸入框的名稱收回來（同 cxeSet 的理由）：
+     showModal 會把現在這張換掉，沒收的話教練剛打的名字就沒了。 */
+function cxePick(field){
   const e=window._cxe; if(!e) return;
   const i=document.getElementById('cxe-name'); if(i) e.name=i.value;
-  e[f]=(e[f]===v)?'':v; cxeRender();
+  const LB={category:'分類',tool:'工具',posture:'姿勢'};
+  const list=field==='category'?CXE_CATS:(field==='posture'?TL_POSTURES:TL_TOOLS);
+  const cur=e[field]||'';
+  showModal(`<div class="ash-sheetmk"></div><div class="modal-title">選擇${LB[field]||''}</div>
+    <div class="ash-eihead">再點一次目前選的那一項就會取消選擇${field==='category'?'（分類會回到「其他」）':'（這一欄本來就可以不填）'}。</div>
+    <div class="tle-picklist">${list.map(x=>`<button type="button" class="ash-eirow ash-ei-2c lot-row${x===cur?' lot-row-cur':''}" onclick="cxePickSet('${field}','${x}')">
+      <span class="ash-eilb">${x}</span>${x===cur?'<span class="ash-eisub">目前選的</span>':''}</button>`).join('')}</div>
+    <div class="modal-foot"><button class="btn btn-ghost" onclick="cxeRender()">返回</button></div>`);
 }
+function cxePickSet(field,v){
+  const e=window._cxe; if(!e) return;
+  e[field]=(e[field]===v)?'':v;
+  cxeRender();
+}
+/* 〔已移除〕cxeSet —— 2026-09-25 版面收斂後，三組選項都改走 cxePick／cxePickSet，
+   畫面上再也沒有呼叫它的按鈕。它做的事（toggle ＋ 重畫）已經在 cxePickSet 裡。
+   ⚠ 「先把輸入框的名稱收回來」那一步沒有跟著消失：搬到了 cxePick 的開頭
+     —— showModal 會把現在這張換掉，沒收的話教練剛打的名字就沒了。 */
 async function cxeSave(){ return onceAct('cxesave', _cxeSave); }
 async function _cxeSave(){
   const e=window._cxe; if(!e) return;

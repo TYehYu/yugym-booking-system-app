@@ -8,6 +8,10 @@ let pass=0,fail=0;
 const ok=(n,c,x)=>{ if(c){pass++;console.log('  ✓ '+n);} else {fail++;console.log('  ✗ '+n+(x!==undefined?'  → '+JSON.stringify(x):''));} };
 const eq=(n,a,b)=>ok(n,JSON.stringify(a)===JSON.stringify(b),{得到:a,預期:b});
 const g=(a,b)=>{const i=src.indexOf(a); if(i<0) throw new Error('找不到 '+a); return src.slice(i, src.indexOf(b,i)+b.length);};
+/* 依大括號配對切出整支函式（⑪段用）—— g() 要自己指定結尾標記，對長函式不好用。 */
+const grabFn=n=>{let i=src.indexOf('function '+n+'(');if(i<0)i=src.indexOf('async function '+n+'(');
+  if(i<0)throw new Error('切不到 '+n);
+  let d=0;for(let k=src.indexOf('{',i);k<src.length;k++){if(src[k]==='{')d++;else if(src[k]==='}'){d--;if(!d)return src.slice(i,k+1);}}};
 const fn=(sig,end)=>new Function('WP_UNITS','WP_STEPS','SESSION','return '+g(sig,end))
   (['kg','lb'],{kg:[1,0.5],lb:[5]},{id:'C1',role:'coach'});
 
@@ -505,6 +509,34 @@ ok('★★ 左欄擋得住長備註（min-width:0）',
 ok('★★ 右邊那段不被壓縮；一組一列之後，不折行改由每一列負責',
    /\.tlh-sets\{[^}]*flex:none;display:flex;flex-direction:column;align-items:flex-end;/.test(src)
    && /\.tlh-setrow\{white-space:nowrap;\}/.test(src));
+
+
+console.log('\n⑪ 動作設定要有姿勢與工具（2026-09-25 使用者：「這邊要加上姿勢跟工具」）');
+{
+  /* ⚠ tool 本來就在資料裡（wpPickEx 從常用動作帶入），只是一直沒有 UI；
+     而 posture 更糟 —— 套用方案寫 training_logs 時被寫死 null，
+     就算設了也會整個消失。 */
+  const R=grabFn('wpItemRender');
+  ok('★★★ 設定視窗有姿勢與工具兩顆摘要鈕',
+     /\[\['posture','姿勢'\],\['tool','工具'\]\]\.map/.test(R)
+     && /onclick="wpePick\('\$\{f\}'\)"/.test(R));
+  ok('★★★ 鈕上寫著現在選的是什麼（沒選就「未設定」）',
+     /<i>\$\{it\[f\]\?escH\(it\[f\]\):'未設定'\}<\/i>/.test(R));
+  ok('★★ 版型與「記錄訓練／修改紀錄」同一套（同一件事不要長三種樣子）',
+     /class="ae-opt tle-pick"/.test(R) && /class="ae-grid ae-grid-2"/.test(src));
+  ok('★★ 擺在動作名稱之後、組數之前',
+     R.indexOf("wpe-name") < R.indexOf("wpePick") && R.indexOf("wpePick") < R.indexOf("'sets','組數'"));
+  const P=grabFn('wpePickSet');
+  ok('★★★ 再點一次就取消選擇（這兩欄可以不填）', /it\[field\]=\(it\[field\]===v\)\?'':v;/.test(P));
+  ok('★★★ 挑選清單沿用 tlePick 那套樣式',
+     /class="tle-picklist"/.test(grabFn('wpePick'))
+     && /TL_POSTURES:TL_TOOLS/.test(grabFn('wpePick')));
+  ok('★★★ 套用方案時 posture 要一起帶過去（原本寫死 null，設了也會消失）',
+     /posture:it\.posture\|\|null, tool:it\.tool\|\|null,/.test(src)
+     && !/posture:null, tool:it\.tool\|\|null,/.test(src));
+  ok('★★ 為什麼 tool 早就有、posture 沒有，寫在原地',
+     /posture 原本寫死 null —— 方案裡設了姿勢，套用之後整個消失/.test(src));
+}
 
 console.log('\n'+pass+' 過 / '+fail+' 敗');
 process.exit(fail?1:0);

@@ -218,5 +218,41 @@ ok('★★ 舊動作庫 43 個已匯進當時在用的那位教練', /insert int
    && /not exists \(select 1 from coach_exercises c where c\.coach_id='c-mqjjpdszw1ze' and c\.name=x\.name\)/.test(sql));
 ok('★★ 現有 4 份方案清掉這件事有寫下來', /delete from workout_plans;   ← 已執行/.test(sql));
 
+
+console.log('\n⑫ 常用動作視窗收斂（2026-09-25 使用者：「這邊要收斂頁面」）');
+{
+  const R=(()=>{let i=src.indexOf('function cxeRender(');let d=0;
+    for(let k=src.indexOf('{',i);k<src.length;k++){if(src[k]==='{')d++;else if(src[k]==='}'){d--;if(!d)return src.slice(i,k+1);}}})();
+  ok('★★★ 三組選項都收成摘要鈕（原本 9 列平鋪）',
+     /onclick="cxePick\('category'\)"/.test(R)
+     && /\[\['tool','工具'\],\['posture','姿勢'\]\]\.map/.test(R));
+  ok('★★★ 舊的平鋪已經收乾淨（不能兩套並存）',
+     !/CXE_CATS\.map\(c=>`<button type="button" class="ae-opt/.test(R)
+     && !/TL_TOOLS\.map\(t=>`<button type="button" class="ae-opt/.test(R));
+  /* ⚠⚠ 三顆擠一列會把「分類」「工具」的標籤壓成直排（使用者附截圖回報）：
+     .tle-pick 是標籤與值左右分置，一欄 100px 放不下。 */
+  ok('★★★ 分類整寬一列、工具｜姿勢並排（三顆一列會把標籤壓成直排）',
+     /<div class="ae-grid" style="margin:14px 0 6px;">\s*\n\s*<button type="button" class="ae-opt tle-pick" onclick="cxePick\('category'\)">/.test(R)
+     && /<div class="ae-grid ae-grid-2" style="margin:0 0 4px;">/.test(R));
+  ok('★★ 鈕上寫著現在選什麼（收起來也看得到狀態）',
+     /<i>\$\{e\.category\?escH\(e\.category\):'未設定'\}<\/i>/.test(R)
+     && /<i>\$\{e\[f\]\?escH\(e\[f\]\):'未設定'\}<\/i>/.test(R));
+  ok('★★★ 刪除鈕維持在標題列右上角（0916 使用者指定的位置）',
+     /onclick="cxeDelAsk\(\)">刪除<\/button>/.test(R));
+  const P=(()=>{let i=src.indexOf('function cxePick(');let d=0;
+    for(let k=src.indexOf('{',i);k<src.length;k++){if(src[k]==='{')d++;else if(src[k]==='}'){d--;if(!d)return src.slice(i,k+1);}}})();
+  ok('★★★ 開清單前先把輸入框的名稱收回來（不然剛打的名字會被洗掉）',
+     /const i=document\.getElementById\('cxe-name'\); if\(i\) e\.name=i\.value;/.test(P)
+     && P.indexOf("e.name=i.value") < P.indexOf('showModal'));
+  ok('★★★ 再點一次＝取消選擇（三者同一個手勢）',
+     /e\[field\]=\(e\[field\]===v\)\?'':v;/.test(src));
+  ok('★★ 分類的提示要說清楚會回到「其他」（工具姿勢是「可以不填」）',
+     /field==='category'\?'（分類會回到「其他」）':'（這一欄本來就可以不填）'/.test(P));
+  ok('★★★ cxeSet 已經沒有呼叫端，收成〔已移除〕不留死碼',
+     !/function cxeSet\(/.test(src) && /〔已移除〕cxeSet/.test(src));
+  ok('★★ 清單樣式與 tlePick／wpePick 同一套（四個視窗一致）',
+     /class="tle-picklist"/.test(P) && /class="ash-eirow ash-ei-2c lot-row/.test(P));
+}
+
 console.log('\n'+pass+' 通過 / '+fail+' 失敗');
 process.exit(fail?1:0);
