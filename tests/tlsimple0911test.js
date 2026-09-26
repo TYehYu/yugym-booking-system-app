@@ -61,11 +61,24 @@ ok('★★ 「訓練堂數／最近訓練」兩格與常練／部位退場；三
       1V2 才多一排學員頁籤。 */
    && !/const overview=`<div class="tlh-prb"/.test(S)
    && !/<div class="tl-sheets">/.test(S));
-ok('★★ 沒有歷史課表 → 整區（含標題與動作查詢）不畫', /\$\{hist\.length\?`<div class="tlh-label"/.test(S) && !/尚無歷史課表/.test(S));
+ok('★★ 沒有歷史課表 → 整區（含標題）不畫', /\$\{hist\.length\?`<div class="tlh-label"/.test(S) && !/尚無歷史課表/.test(S));
 ok('★ 空狀態一行', /'<div class="tls-empty">還沒有紀錄<\/div>'/.test(S));
 
 console.log('\n④ 套用方案看得出點得下去');
-ok('★★★ 每張方案卡右邊一顆「套用 ›」', /<div class="wp-item tlpp-card" onclick="tlPlanAsk\('\$\{p\.id\}'\)">\s*\n\s*<span class="tlpp-go">套用 ›<\/span>/.test(src));
+/* 2026-09-26 改成「右邊一直欄」（使用者在三案裡選 C）：按鈕從絕對定位搬進右欄，
+   「N 個・做過 N」也跟著搬過去，左欄只剩名稱與預覽各一行。 */
+ok('★★★ 每張方案卡右邊一顆「套用 ›」（在右欄裡，不再是絕對定位）',
+   /<div class="wp-item tlpp-card" onclick="tlPlanAsk\('\$\{p\.id\}'\)">/.test(src)
+   && /<div class="tlpp-r">[\s\S]{0,220}?<span class="tlpp-go">套用 ›<\/span>/.test(src)
+   && !/\.tlpp-go\{position:absolute/.test(src));
+ok('★★★ 左欄兩行都切齊（各自一行、超出省略）—— 卡片高度才不會跟著名稱長短跳',
+   /\.tlpp-nm\{[^}]*white-space:nowrap;overflow:hidden;text-overflow:ellipsis;/.test(src)
+   && /\.tlpp-sub\{[^}]*white-space:nowrap;overflow:hidden;text-overflow:ellipsis;/.test(src));
+ok('★★ 「幾個動作・做過幾個」在右欄上方，做過那一段才上金色',
+   /<div class="tlpp-meta">\$\{items\.length\} 個\$\{hit\?`・<b>做過 \$\{hit\}<\/b>`:''\}<\/div>/.test(src)
+   && /\.tlpp-meta b\{color:var\(--gold-d\);/.test(src));
+ok('★★ 絕對定位那顆的 padding-right:84px 要跟著拿掉（不然右邊留一塊空白）',
+   !/\.wp-item\.tlpp-card\{[^}]*padding-right:84px/.test(src));
 ok('★★ 白底浮起來、按下去縮一下', /\.wp-item\.tlpp-card\{background:#fff;/.test(src) && /\.wp-item\.tlpp-card:active\{transform:scale\(\.98\);/.test(src));
 /* 2026-09-16：訓練方案編輯器的動作卡也改成白底（使用者附截圖：「動作卡片 要用白框」）——
    視窗底是米色，卡片也米色就看不出一張張的邊界（與 .ae-opt／.ae-pre-row 同一個語彙）。

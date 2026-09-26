@@ -15,7 +15,7 @@ console.log('① 入口');
    點一下仍然是修改，兩者靠「長按 400ms」分開。 */
 ok('★★★ 點今日紀錄那一列就是修改（editable 才掛 onclick）',
    /\$\{editable\?` data-lid="\$\{l\.id\}" onclick="tlEditLog\('\$\{l\.id\}'\)" onpointerdown="tlLpStart\(event,'\$\{l\.id\}'\)"`:''\}/.test(src)
-   && /<div class="tlh-log\$\{editable\?'':' tlh-log-ro'\}"/.test(src));
+   && /<div class="tlh-log\$\{editable\?' tlh-log-cmp':' tlh-log-ro'\}"/.test(src));
 ok('★★★ 拖完那一次 click 要吃掉（不然一拖完就跳出修改視窗）',
    /if\(window\._tlDragged\)\{ window\._tlDragged=0; return; \}/.test(src));
 ok('★★★ ✕ 擋住冒泡（刪之前不會先跳出修改視窗），而且只有可編輯時才畫',

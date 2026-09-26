@@ -265,8 +265,10 @@ console.log('\n⑥ 1V2 的兩份課表（2026-09-15 使用者：「上方用兩�
      （PR 完全從 training_logs 推導，沒有獨立來源）。 */
   const guards=(src.match(/Number\(l(&&l)?\.slot\)!==2/g)||[]).length
              + (src.match(/_slotOf\(l\)!==2/g)||[]).length;
-  ok('★★★ 七處會員向讀取端都濾掉 slot=2（漏一處就會出現「別人的 PR 算到我頭上」）',
-     guards===7, guards);
+  /* 2026-09-26：動作查詢（tlOpenExerciseHistory）整支移除，它那一道跟著走，七處→六處。
+     ⚠ 少的是「入口被移除」不是「防線被拆」—— 剩下的六處都還在。 */
+  ok('★★★ 六處會員向讀取端都濾掉 slot=2（漏一處就會出現「別人的 PR 算到我頭上」）',
+     guards===6, guards);
   ok('★★★ 會員端自己那一頁有濾',
      /filter\(l=>l&&l\.member_id===SESSION\.id && Number\(l\.slot\)!==2\)/.test(src));
   ok('★★★ PR 的來源（memAllLogs）有濾 —— 不濾的話紀錄會被另一個人蓋掉',

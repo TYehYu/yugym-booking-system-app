@@ -57,9 +57,10 @@ console.log('① 開課表時問「要不要套用上次的課表」');
 console.log('\n② 套用方案帶入之前的紀錄（0912 就有；這裡補 1V2 的漏洞）');
 {
   const P=grab('tlOpenPlanPick'), K=grab('tlPlanAsk'), Y=grab('_tlPlanApply');
-  ok('★★ 功能本來就在：方案卡寫出「N 個做過」',
+  /* 2026-09-26 排版改成「右邊一直欄」後，那一段字從「N 個做過」變成右欄的「做過 N」 */
+  ok('★★ 功能本來就在：方案卡寫出做過幾個',
      /const hit=items\.filter\(it=>it&&last\[it\.name\]\)\.length;/.test(P)
-     && /\$\{hit\} 個做過/.test(P));
+     && /做過 \$\{hit\}/.test(P));
   ok('★★ 有做過才問「要沿用上次的數字嗎？」；一個都沒做過就直接套',
      /if\(!hits\.length\) return tlPlanApply\(pid,false\);/.test(K)
      && /要沿用上次的數字嗎？/.test(K));

@@ -41,7 +41,7 @@ console.log('② 會員端那一份真的不能改');
   ok('★★★ 不可編輯時不畫 ✕',
      /\$\{editable\?`<button class="tl-del"[\s\S]*?`:''\}/.test(CARD));
   ok('★★★ 唯讀卡帶 .tlh-log-ro（游標與按壓回饋都要收掉）',
-     /<div class="tlh-log\$\{editable\?'':' tlh-log-ro'\}"/.test(CARD)
+     /<div class="tlh-log\$\{editable\?' tlh-log-cmp':' tlh-log-ro'\}"/.test(CARD)
      && /\.tlh-log-ro\{cursor:default;padding-right:15px;\}/.test(src)
      && /\.tlh-log-ro:active\{background:var\(--card\);\}/.test(src));
   ok('★★ 會員端沒有「點一下可修改」那句（那是教練端的提示）',
