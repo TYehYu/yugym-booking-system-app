@@ -248,9 +248,11 @@ ok('★★★ 會員多一頁「訓練紀錄」看歷史', /\{key:'mem_training'
    && /PAGES\.mem_training=async function\(\)\{/.test(src));
 /* 2026-09-15：多了 slot 過濾（1V2 第二位的紀錄借掛在第一位的 member_id 上，
    不濾掉的話會員會看到別人的動作與重量）。這條的語意沒變，反而更嚴。 */
-ok('★★★ 會員只讀自己的（RLS 也有一條，這裡是畫面）',
-   /\.filter\(l=>l&&l\.member_id===SESSION\.id && Number\(l\.slot\)!==2\)/.test(src)
-   && /這裡只讀不寫 —— 會員不能改教練記的東西/.test(src));
+/* 2026-09-26：會員端那一頁改成「顯示但標名字」（同行會員上線後 slot=2 有主人了），
+   所以這裡改驗「只讀不寫」那一半；可見範圍由 RLS 與 tlWhoOf 的分段負責。 */
+ok('★★★ 會員端只讀不寫（可見範圍交給 RLS，見 20260926_1v2_partner_access.sql）',
+   /這裡只讀不寫 —— 會員不能改教練記的東西/.test(src)
+   && /tlLogCardHtml\(l,false\)/.test(src));
 ok('★★★ 櫃檯那張「功能開發中」的空頁換成真的內容',
    !/功能開發中，敬請期待/.test(src)
    && /<div class="pp-card-t">訓練紀錄（\$\{_tl\.length\}）<\/div>/.test(src));

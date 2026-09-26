@@ -126,7 +126,7 @@ console.log('③-3 動作順序＝教練記錄的先後（2026-09-23 使用者�
      實際上那四堂在 9/05、9/12、9/19、9/25，只是教練 9/24 晚上一次補記完。
      細節見 tests/tlsessdatetest.js。 */
   ok('★★★ 這一堂的日期＝booking 的上課日，不是記錄時間',
-     /return \{ bid, ls:_ls, t:tlSessKey\(bid,_ls\) \}; \}\)/.test(PAGE));
+     /t:tlSessKey\(bid,_ls\) \}; \}\)/.test(PAGE));
   ok('　 為什麼會倒過來，寫在原地', /教練最後記的那個動作排在最上面/.test(src));
   /* 實跑：把排序照抄出來驗一次，不是只驗字串 */
   const mk=(t,n)=>({created_at:t, exercise_name:n});
@@ -147,14 +147,21 @@ console.log('④ 返回與狀態（不開新 PAGES）');
   ok('★★★ 那一堂被刪掉時退回列表，不是畫一片空白',
      /if\(window\._mtDay && !_day\) window\._mtDay=null;/.test(PAGE));
   ok('★★ 沒有紀錄時也把旗標清掉（不然會卡在不存在的那一天）',
-     /if\(!logs\.length\)\{\s*\n\s*window\._mtDay=null;/.test(PAGE));
+     /if\(!sess\.length\)\{\s*\n\s*window\._mtDay=null;/.test(PAGE));
   ok('★★ 進內容頁要捲到最上面', /window\.scrollTo\(0,0\)/.test(PAGE));
 }
 
 console.log('⑤ 1V2 的防線沒有被改動弄丟');
 {
-  ok('★★★ 會員端仍濾掉 slot=2（那是另一位的紀錄，只是借掛在這位身上）',
-     /filter\(l=>l&&l\.member_id===SESSION\.id && Number\(l\.slot\)!==2\)/.test(PAGE));
+  /* ⚠⚠ 2026-09-26 起**不再濾掉 slot=2** —— 0923 有了同行會員（partners）之後，
+     slot=2 是「誰的」查得出來了，使用者要的是「Ａ跟Ｂ都看得到對方的訓練紀錄」。
+     防線改成兩道：RLS（會員只讀得到自己的＋有同行關係的那幾堂）＋ 畫面上分段標名字。 */
+  ok('★★★ 同一堂分成「我的」與「同行那位的」，各自標名字',
+     /const _isMine=l=>\(Number\(l&&l\.slot\)===2\)===w\.meIsPartner;/.test(PAGE)
+     && /mine:_ls\.filter\(_isMine\), other:_ls\.filter\(l=>!_isMine\(l\)\)/.test(PAGE)
+     && /的訓練<\/div>/.test(PAGE));
+  ok('★★★ 本週統計只算自己的動作（一起算會讓客人以為自己練了兩倍）',
+     /const _wkActs=_wkSess\.reduce\(\(a,x\)=>a\+x\.mine\.length,0\);/.test(PAGE));
 }
 
 console.log((fail?'✗ ':'✓ ')+pass+' 通過 / '+fail+' 失敗');

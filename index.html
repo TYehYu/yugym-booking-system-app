@@ -4088,6 +4088,10 @@ tr.pe-row:hover td{background:var(--sage-bg,#eef4ee);}
 .mtl-head{font-family:var(--num),inherit;font-size:21px;font-weight:800;color:var(--text);
   letter-spacing:-.01em;margin-bottom:2px;}
 .mtl-sub{font-size:13px;color:var(--t2);margin-bottom:14px;}
+/* 1V2 兩個人的訓練分段標題（2026-09-26）——同一堂課裡「我的」與「同行那位的」。
+   ⚠ 只有真的有同行那位時才畫，一般的課完全不變。 */
+.mtl-who{font-size:11.5px;font-weight:800;color:var(--t2);letter-spacing:.04em;margin:4px 0 8px;}
+.mtl-who-o{margin-top:18px;color:var(--gold-d);}
 .tlh-hint{font-weight:400;color:var(--t3);font-size:11px;margin-left:8px;letter-spacing:0;}
 .tls-empty{text-align:center;color:var(--t3);padding:24px 0;font-size:13.5px;line-height:1.8;}
 /* 第四區：歷史課表 */
@@ -9391,6 +9395,9 @@ body.mc-mode .tb-right .rf-btn{background:rgba(255,255,255,.16);border-color:rgb
   padding:11px 14px;box-shadow:0 10px 30px rgba(20,18,14,.22);}
 #mem-task-pop .mtp-mname{display:flex;align-items:center;gap:7px;font-size:15px;font-weight:800;color:var(--text);}
 #mem-task-pop .mtp-msub{font-size:11.5px;color:var(--t3);margin-top:3px;line-height:1.6;}
+/* 1V2「和 ○○○ 一起上」（2026-09-26）：金色，與上面那行票券資訊分得開 */
+#mem-task-pop .mtp-ptn{color:var(--gold-d);}
+#mem-task-pop .mtp-ptn b{font-weight:800;}
 #mem-task-pop .mtp-mtag{flex:none;font-size:10.5px;font-weight:800;border-radius:999px;padding:2px 8px;}
 #mem-task-pop .mtp-mtag-ok{color:var(--green);background:var(--sage-bg,#E4EAD9);}
 #mem-task-pop .mtp-mtag-leave{color:#b5372e;background:#fbeceb;}
@@ -14058,8 +14065,8 @@ function tbl(s){return TABLE_ALIAS[s]||s;}
 let sb=null;
 // ── 版本號（日期+時間格式：年後兩碼+月+日.時分，例 26620.1058 = 26年6/20 10:58）──
 // 每次改版手動更新這一行即可，畫面與 title 會一起更新
-const APP_VERSION = '260926.1359';
-const APP_VERSION_LABEL = 'v260926.1359';
+const APP_VERSION = '260926.1415';
+const APP_VERSION_LABEL = 'v260926.1415';
 const CLOUD = !!(window.YUGYM_CONFIG && window.YUGYM_CONFIG.url && window.YUGYM_CONFIG.anonKey);
 if(CLOUD){ sb = supabase.createClient(window.YUGYM_CONFIG.url, window.YUGYM_CONFIG.anonKey); }
 
@@ -53768,10 +53775,53 @@ function tlNextSeq(bid, add){
      不要變成空白。 */
 async function tlBkMetaLoad(){
   const m={};
+  /* ⚠ 2026-09-26 加了 mid（這一堂掛在誰名下）與 tk（用哪張票）——
+       會員端要分辨「這幾個動作是我的還是同行那位的」：
+       slot!==2 是 mid 那位，slot===2 是他的同行人。 */
   try{ (await dbGetAll('bookings')).forEach(b=>{
-    if(b&&b.id&&b.date) m[b.id]={d:String(b.date).slice(0,10), t:String(b.start_time||'')};
+    if(b&&b.id&&b.date) m[b.id]={d:String(b.date).slice(0,10), t:String(b.start_time||''),
+      mid:String(b.member_id||''), tk:String(b.ticket_id||'')};
   }); }catch(_){}
   window._tlBkMeta=m; return m;
+}
+/* ══ 同行會員的姓名字典（2026-09-26）════════════════════════════════════
+   會員之間讀不到彼此的任何資料（members_select 只給自己與帶過他的教練），
+   所以課卡與訓練紀錄寫不出「和 ○○○ 一起上」。
+   走 fn_partner_names（security definer，只回 id＋姓名），
+   與 0912 為行事曆開的 fn_member_names 同一套做法 —— 不放寬 members 的 RLS。
+   ⚠ 兩個方向都會回：我是上課那位時回我的同行人，我是同行人時回上課那位。
+   ⚠ 只有會員需要（員工本來就讀得到 members）；拿到空字典時所有顯示自動退回原樣。 */
+let _ptDirCache=null, _ptDirBusy=null;
+async function partnerDirectory(){
+  if(_ptDirCache) return _ptDirCache;
+  if(_ptDirBusy) return _ptDirBusy;
+  _ptDirBusy=(async()=>{
+    const map={};
+    try{
+      if(CLOUD && sb && SESSION && SESSION.role==='member'){
+        const {data,error}=await sb.rpc('fn_partner_names');
+        if(!error && Array.isArray(data)) data.forEach(m=>{ if(m&&m.id) map[m.id]=m.name; });
+      }
+    }catch(_){}
+    _ptDirCache=map; window._ptNames=map; _ptDirBusy=null;
+    return map;
+  })();
+  return _ptDirBusy;
+}
+/* 這一堂課，這幾筆紀錄分別是誰的 —— 回 {meIsPartner, otherName}。
+   ⚠ 「我」不一定是 booking 綁的那位：1V2 的同行那位讀得到這堂課（RLS 0926 開的），
+     對他而言 booking.member_id 是**對方**。 */
+function tlWhoOf(bid){
+  const b=(window._tlBkMeta||{})[bid]||{};
+  const me=String((SESSION&&SESSION.id)||'');
+  const dir=window._ptNames||{};
+  /* ① booking 不是掛在我名下 → 我就是同行那位，對方是 b.mid */
+  if(b.mid && me && b.mid!==me) return {meIsPartner:true, otherId:b.mid, otherName:dir[b.mid]||''};
+  /* ② booking 掛在我名下 → 同行是誰要看**票**（一張票每位使用人各一組，見 tkPartnerOf）。
+     ⚠ 不要從姓名字典裡隨便挑一個：一位會員可能在不同票上有不同的同行人。 */
+  const t=(window._allTkCache||[]).find(x=>x&&x.id===b.tk);
+  const pid=(t&&typeof tkPartnerOf==='function')?tkPartnerOf(t,me):'';
+  return {meIsPartner:false, otherId:pid||'', otherName:pid?(dir[pid]||''):''};
 }
 function tlSessKey(bid, ls){
   const b=(window._tlBkMeta||{})[bid];
@@ -53821,9 +53871,23 @@ PAGES.mem_training=async function(){
   const C=document.getElementById('content');
   C.innerHTML='<div class="card"><div class="pp-card-tip">載入中…</div></div>';
   let logs=[];
-  /* ⚠ 濾掉 slot=2（2026-09-15）：1V2 第二位的紀錄借掛在這位會員身上，
-     不濾的話會員會看到別人的動作與重量 */
-  try{ logs=(await dbGetAll('training_logs')).filter(l=>l&&l.member_id===SESSION.id && Number(l.slot)!==2); }catch(_){}
+  /* ⚠⚠ 2026-09-26 起**不再一律濾掉 slot=2** —— 使用者 0924 的要求是
+       「Ａ跟Ｂ都要能看到對方的訓練紀錄」。
+     0915 濾掉是對的（那時第二位沒有身分，slot=2 就是個沒人認領的借掛紀錄）；
+     0923 有了同行會員（partners）之後，slot=2 是**誰的**已經查得出來，
+     所以改成「照樣顯示，但標出是誰的」（見 tlWhoOf 與下面的 _mine／_other）。
+   ⚠ 安全性不靠這一行：會員讀得到哪些紀錄由 RLS 決定
+     （自己的 ＋ 有同行關係的那幾堂，見 20260926_1v2_partner_access.sql），
+     這裡只是把讀回來的分組。
+   ⚠ 票要撈：tlWhoOf 要從票上的 partners 找出「我的同行人是誰」。 */
+  try{
+    const [_lg,_tk]=await Promise.all([
+      dbGetAll('training_logs'),
+      dbGetAll('member_tickets').catch(()=>[])]);
+    window._allTkCache=_tk||[];
+    logs=(_lg||[]).filter(l=>l&&l.booking_id);
+  }catch(_){}
+  try{ await partnerDirectory(); }catch(_){}
   /* 上課日要從 booking 拿（2026-09-25，見 tlSessKey）——
      ⚠ bookings 幾乎一定已經在快取裡（每一頁都在用），這一行不會多打網路；
        會員端也讀得到自己的（RLS bookings_select_member）。 */
@@ -53842,11 +53906,18 @@ PAGES.mem_training=async function(){
      教練最後記的那個動作排在最上面，跟教練端（renderTrainingLogSheet 也是升冪）相反。
      ⚠ t（這一堂的時間）要取**排序後**的第一筆 —— 取排序前的 ls[0] 會拿到那堂最後記的
        那一筆，日期雖然多半一樣，但跨午夜記錄時會標錯天。 */
+  /* 一堂之內分成「我的」與「同行那位的」（2026-09-26）——
+     slot===2 永遠是同行那位、slot!==2 永遠是上課那位（booking 綁的那位）；
+     我是哪一邊看 tlWhoOf。一般的課沒有同行，other 就是空的、畫面完全照舊。 */
   const sess=Object.entries(byBk).map(([bid,ls])=>{ const _ls=tlSeqSort(ls);
-      return { bid, ls:_ls, t:tlSessKey(bid,_ls) }; })
+      const w=tlWhoOf(bid);
+      const _isMine=l=>(Number(l&&l.slot)===2)===w.meIsPartner;
+      return { bid, ls:_ls, who:w,
+        mine:_ls.filter(_isMine), other:_ls.filter(l=>!_isMine(l)),
+        t:tlSessKey(bid,_ls) }; })
     .sort((a,b)=>String(b.t).localeCompare(String(a.t)));
 
-  if(!logs.length){
+  if(!sess.length){
     window._mtDay=null;
     C.innerHTML=`<div class="card"><div class="card-title">訓練紀錄</div>
       <div class="empty wp-empty" style="padding:34px 10px;"><div class="em-t">還沒有訓練紀錄</div>
@@ -53865,8 +53936,14 @@ PAGES.mem_training=async function(){
     C.innerHTML=`<div class="card">
       <button type="button" class="mtl-back" onclick="mtBackToList()">‹ 所有訓練紀錄</button>
       <div class="mtl-head">${d.replace(/-/g,'/')}${wd}</div>
-      <div class="mtl-sub">${_day.ls.length} 個動作</div>
-      <div class="tlh-logs">${_day.ls.map(l=>tlLogCardHtml(l,false)).join('')}</div>
+      <div class="mtl-sub">${_day.mine.length} 個動作${_day.other.length
+        ? `　·　同行 ${escH(_day.who.otherName||'另一位')} ${_day.other.length} 個` : ''}</div>
+      ${/* 1V2 有同行那位時分兩段，各自標名字（2026-09-26 使用者：「Ａ跟Ｂ都要能看到對方的訓練紀錄」）——
+           不分段的話兩個人的動作混在一起，看起來像自己一堂做了十幾個動作。 */''}
+      ${_day.other.length ? `<div class="mtl-who">我的訓練</div>` : ''}
+      <div class="tlh-logs">${_day.mine.map(l=>tlLogCardHtml(l,false)).join('')}</div>
+      ${_day.other.length ? `<div class="mtl-who mtl-who-o">${escH(_day.who.otherName||'同行會員')} 的訓練</div>
+        <div class="tlh-logs">${_day.other.map(l=>tlLogCardHtml(l,false)).join('')}</div>` : ''}
     </div>`;
     try{ C.scrollTop=0; window.scrollTo(0,0); }catch(_){}
     return;
@@ -53894,8 +53971,10 @@ PAGES.mem_training=async function(){
   /* 頂部：本週卡 —— 練了幾次、哪幾天、練了些什麼 */
   const _wkSess=sess.filter(x=>_wkStart(String(x.t).slice(0,10))===_thisWk);
   const _wkDays=new Set(_wkSess.map(x=>String(x.t).slice(0,10)));
-  const _wkNames=[...new Set(_wkSess.flatMap(x=>x.ls.map(l=>l.exercise_name)).filter(Boolean))];
-  const _wkActs=_wkSess.reduce((a,x)=>a+x.ls.length,0);
+  /* ⚠ 本週統計只算**我自己的**動作（2026-09-26）—— 同行那位的動作也在這一堂裡，
+     一起算會讓客人以為自己練了兩倍。 */
+  const _wkNames=[...new Set(_wkSess.flatMap(x=>x.mine.map(l=>l.exercise_name)).filter(Boolean))];
+  const _wkActs=_wkSess.reduce((a,x)=>a+x.mine.length,0);
   const _dots=Array.from({length:7},(_,i)=>{
     const x=parseYmd(_thisWk); x.setDate(x.getDate()+i); const ds=ymd(x);
     const on=_wkDays.has(ds), today=ds===_today;
@@ -53927,8 +54006,9 @@ PAGES.mem_training=async function(){
       const wd=(()=>{ const y=parseYmd(d); return y?'（'+'日一二三四五六'[y.getDay()]+'）':''; })();
       /* 副標給「做了什麼」的線索，不然幾列日期長得一模一樣。
          ⚠ 只列前三個動作，再多就用「等 N 個動作」收掉 —— 這一列的主角是日期。 */
-      const names=[...new Set(x.ls.map(l=>l.exercise_name).filter(Boolean))];
-      const tip=names.slice(0,3).join('、')+(names.length>3?` 等 ${x.ls.length} 個動作`:`　·　${x.ls.length} 個動作`);
+      const names=[...new Set(x.mine.map(l=>l.exercise_name).filter(Boolean))];
+      const tip=names.slice(0,3).join('、')+(names.length>3?` 等 ${x.mine.length} 個動作`:`　·　${x.mine.length} 個動作`)
+        + (x.other.length?`　·　和 ${x.who.otherName||'同行會員'} 一起`:'');
       return `<button type="button" class="mtl-day${_now?'':' mtl-past'}" onclick="mtOpenDay('${x.bid}')">
         <span class="mtl-day-b">
           <span class="mtl-day-d">${d.replace(/-/g,'/')}${wd}</span>
@@ -62173,19 +62253,28 @@ async function _memh2Tap(id){
   /* 這一堂的訓練紀錄（2026-09-09）：只有教練記過才畫。
      ⚠ 只讀 —— 會員不能改教練記的東西。
      ⚠ 撈不到就整塊不畫，不要在課卡上留一個「載入失敗」的空盒子。 */
-  let _tlBlock='';
+  let _tlBlock='', _ptName='';
   try{
-    /* ⚠ 這一處**刻意不濾 slot**（2026-09-26 盤點時確認）——
-         會員端其他四處（mem_training／m_training／ppLoadTrain／ppOpenTraining）都濾掉 slot=2，
-         只有這裡是整堂收。結果是：1V2 的課，會員 A 在自己的課卡上看得到兩個人的動作。
-       ⚠ 這正好是使用者要的方向（0924：「Ａ跟Ｂ都要能看到對方的訓練紀錄」），
-         所以不要「順手修成跟別處一致」—— 缺的是**標示**（哪幾個動作是同行那位的），
-         那件事跟會員端的同行顯示一起做，不在這一輪。 */
+    /* ⚠ 這一處**刻意整堂收、不濾 slot** —— 1V2 兩個人的動作都要看得到
+         （使用者 0924：「Ａ跟Ｂ都要能看到對方的訓練紀錄」）。
+       ⚠ 但要**標出是誰的**（2026-09-26）：不標的話兩個人的動作混成一串，
+         看起來像自己一堂做了十幾個動作。分段規則與訓練紀錄頁同一套（見 tlWhoOf）。
+       ⚠ 安全性靠 RLS，不是靠這一行（見 20260926_1v2_partner_access.sql）。 */
     const _tl=(await dbGetAll('training_logs')).filter(l=>l&&l.booking_id===b.id);
+    /* ⚠ 同行那位是誰要**在 if 外面**算：即使教練還沒記任何動作，
+         課卡上那一行「和 ○○○ 一起上」也該寫得出來。 */
+    try{ await tlBkMetaLoad(); await partnerDirectory(); }catch(_){}
+    const _w=tlWhoOf(b.id);
+    _ptName=_w.otherName||'';
     if(_tl.length){
       _tl.sort((a,c)=>String((a&&a.created_at)||'').localeCompare(String((c&&c.created_at)||'')));
-      _tlBlock=`<div class="mtp-card mtp-tl"><div class="mtp-tl-h">今日訓練<i>${_tl.length} 個動作</i></div>
-        ${tlLogRowsHtml(_tl)}</div>`;
+      const _isMine=l=>(Number(l&&l.slot)===2)===_w.meIsPartner;
+      const _mine=_tl.filter(_isMine), _oth=_tl.filter(l=>!_isMine(l));
+      _tlBlock=`<div class="mtp-card mtp-tl"><div class="mtp-tl-h">今日訓練<i>${_mine.length} 個動作</i></div>
+        ${_oth.length?'<div class="mtl-who">我的訓練</div>':''}
+        ${tlLogRowsHtml(_mine)}
+        ${_oth.length?`<div class="mtl-who mtl-who-o">${escH(_w.otherName||'同行會員')} 的訓練</div>
+          ${tlLogRowsHtml(_oth)}`:''}</div>`;
     }
   }catch(_){}
   memTaskClose();
@@ -62207,6 +62296,9 @@ async function _memh2Tap(id){
       <div class="mtp-mcard">
         <div class="mtp-mname"><span>${escH(_myNm)}</span>${_mBadge}</div>
         ${_tkLine?`<div class="mtp-msub">${escH(_tkLine)}</div>`:''}
+        ${/* 1V2 同行（2026-09-26 使用者：「會員看不到會員B也沒得切換」）——
+             先讓兩邊都看得到「這堂是誰跟誰」。 */''}
+        ${_ptName?`<div class="mtp-msub mtp-ptn">和 <b>${escH(_ptName)}</b> 一起上</div>`:''}
         ${_dots}
       </div>
       <div class="mtp-orbs">${ckBtn}${edBtn}${cxBtn}</div>

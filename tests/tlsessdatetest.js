@@ -70,8 +70,9 @@ console.log('\n④ 五個列訓練紀錄的地方都改了');
 
 console.log('\n⑤ 對照表要先載好（tlSessionsHtml 是同步的）');
 {
-  ok('★★★ 四個入口都 await tlBkMetaLoad()',
-     (src.match(/await tlBkMetaLoad\(\);/g)||[]).length===4);
+  /* 2026-09-26 多了一個入口：會員端課卡彈窗（1V2 要分出「誰的動作」，見 tlWhoOf）。 */
+  ok('★★★ 每個入口都 await tlBkMetaLoad()',
+     (src.match(/await tlBkMetaLoad\(\);/g)||[]).length>=4);
   ok('★★ 會員檔案頁那支載在呼叫 tlSessionsHtml 之前',
      src.indexOf('await tlBkMetaLoad(); }catch(_){}\n    }') < src.indexOf('const _body=tlSessionsHtml(_tl,40);')
      || /c\.trainLogs=\(await dbGetAll\('training_logs'\)\)[\s\S]{0,300}?await tlBkMetaLoad\(\)/.test(src));
