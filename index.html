@@ -14058,8 +14058,8 @@ function tbl(s){return TABLE_ALIAS[s]||s;}
 let sb=null;
 // ── 版本號（日期+時間格式：年後兩碼+月+日.時分，例 26620.1058 = 26年6/20 10:58）──
 // 每次改版手動更新這一行即可，畫面與 title 會一起更新
-const APP_VERSION = '260926.0941';
-const APP_VERSION_LABEL = 'v260926.0941';
+const APP_VERSION = '260926.1359';
+const APP_VERSION_LABEL = 'v260926.1359';
 const CLOUD = !!(window.YUGYM_CONFIG && window.YUGYM_CONFIG.url && window.YUGYM_CONFIG.anonKey);
 if(CLOUD){ sb = supabase.createClient(window.YUGYM_CONFIG.url, window.YUGYM_CONFIG.anonKey); }
 
@@ -17096,6 +17096,15 @@ function applyDeepLink(){
 /* 店長＝櫃台級權限（2026-07-27 使用者定案：桌機同櫃台介面＋店長導覽列）。
    前端所有「後台人員」判斷統一走這裡；資料庫層 is_staff_desk() 已同步納入店長。 */
 function isDeskLike(){ return !!(SESSION && (SESSION.role==='admin'||SESSION.role==='front_desk'||(SESSION.role==='coach'&&SESSION.is_manager))); }
+/* 設定 1V2 同行會員＝櫃檯以上**再加上教練**（2026-09-26 使用者回報：
+   「教練的桌機看不到同行的按鈕」，並選了「能設，走專用函式」）。
+   ⚠ 為什麼教練該有：這一格記的是「這一堂還有誰一起上」，上課當下最清楚的就是教練。
+     它不動錢也不動堂數（同行那位不扣課、也不能拿這張票約課）。
+   ⚠ 真正的防線在資料庫：寫入一律走 fn_ticket_set_partner，那支會檢查
+     「這位教練確實帶過這位會員」（can_coach_see_member），而且只改 partners 這一欄 ——
+     member_tickets 的表級寫入權限**沒有**放寬給教練（見 20260926_1v2_partner_access.sql）。
+   ⚠ 所以這一支只管畫不畫按鈕；教練若按到不是自己學員的票，後端會擋並回訊息。 */
+function canSetPartner(){ return !!(isDeskLike() || (SESSION && SESSION.role==='coach')); }
 /* 指派代課教練＝櫃檯／店長以上（2026-08-23 使用者指示：「教練端移除［指定代課教練］
    這個功能只給櫃檯 店長以上」）——換誰上課會連動業績歸屬、薪資與班表，那是櫃檯在管的事；
    教練要換人請走「教練請假」或跟櫃檯講。
@@ -42796,8 +42805,15 @@ async function openMemberDetail(member_id){
     const canShare=(isDeskLike())&&tkCategoryOf(t)==='course';
     /* 1V2 同行會員（2026-09-23）：只有 1V2 的教練課票才有第二位。
        ⚠ 與共享是兩件事，兩顆按鈕並排時字要分得開（「同行會員」vs「共享設定」）。 */
-    const _isV2=String(t.format||'').toUpperCase()==='1V2';
-    const canPartner=canShare && _isV2;
+    /* ⚠ 2026-09-26：format 空白也放行（原本只認明確的 1V2）——
+         自訂銷售 0923 以前把 format 寫死 null，正式庫那 47 張「自訂方案」其實可能是 1V2。
+         PP 那一側（_ptOk）0923 就是這樣判的，兩邊本來就該一致。
+       ⚠ 1V1 明確標過的不放行：1V1 沒有第二位。 */
+    const _fmtU2=String(t.format||'').toUpperCase();
+    const _isV2=(_fmtU2==='1V2'||_fmtU2==='');
+    /* ⚠ 同行不跟著 canShare（那一支綁 isDeskLike）—— 2026-09-26 起教練也能設同行，
+         但**共享仍然只有櫃檯以上**（共享會動到堂數池，那是錢的事）。 */
+    const canPartner=canSetPartner() && tkCategoryOf(t)==='course' && _isV2;
     const _ptIdM=(typeof tkPartnerOf==='function')?tkPartnerOf(t,member_id):'';
     const _ptName=_ptIdM ? (peerName[_ptIdM]||'') : '';
     /* 設了同行會員就標在票名旁（2026-09-23）——櫃檯掃一眼就知道這張票是誰跟誰。
@@ -49785,7 +49801,7 @@ function ppRecordHtml(){
           /* ⚠ 持有人**與共享者**的票卡都能設（2026-09-23 定版）——
              設的是「這一位的同行人」，不是整張票。兒子買票給爸媽時，
              櫃檯開著爸爸的資料就在爸爸的票卡設，不必跑去兒子那邊。 */
-          const _ptOk=isDeskLike()&&t.status==='usable'&&tab==='pt'
+          const _ptOk=canSetPartner()&&t.status==='usable'&&tab==='pt'
             &&(typeof tkUsableBy==='function'?tkUsableBy(t,PP.id):t.member_id===PP.id)
             &&(_fmtU==='1V2'||_fmtU==='');
           const _ptId=(typeof tkPartnerOf==='function')?tkPartnerOf(t,PP.id):'';
@@ -57377,10 +57393,22 @@ function tkPartnerOf(t, mid){
 /* @param for_member 幫**誰**設同行人（就是你現在開著的那位會員）。
    同一張票在不同人的票卡上各設各的，互不影響。 */
 async function openTicketPartner(ticket_id,for_member){
-  if(!(isDeskLike())){ showToast('只有管理員或櫃台可設定同行會員'); return; }
+  if(!canSetPartner()){ showToast('只有管理員、櫃台或教練可設定同行會員'); return; }
   const t=await dbGet('member_tickets',ticket_id); if(!t){ showToast('找不到票券'); return; }
   const who=for_member||t.member_id;
   const members=await dbGetAll('members');
+  /* ⚠ 教練讀得到的 members 只有「自己帶過的那些」（RLS：can_coach_see_member）——
+       不補名字的話，教練一打開搜尋框就是「查無會員」（2026-09-26）。
+       走 memberDirectory（fn_member_names，只回 id＋姓名的那條窄路，0912 為行事曆開的），
+       不放寬 members 的 RLS。
+     ⚠ 目錄沒有電話，所以補進來的那幾位只能用姓名搜到 —— 教練端本來就不該看電話。 */
+  if(!isDeskLike()){
+    try{
+      const dir=await memberDirectory();
+      const have=new Set(members.map(m=>m&&m.id));
+      Object.keys(dir||{}).forEach(id=>{ if(!have.has(id)) members.push({id, name:dir[id]}); });
+    }catch(_){}
+  }
   window._tkPtState={ticket_id, back:who, who, pid:tkPartnerOf(t,who),
     whoName:((members.find(x=>x.id===who)||{}).name||'—'), plan:t.plan_name||'票券'};
   window._tkPtMembers=members;
@@ -57444,7 +57472,7 @@ async function tkPtSave(){
        同一張票可以有好幾組（爸爸→媽媽、兒子→爸爸），互不影響。 */
     const _map=(t.partners&&typeof t.partners==='object')?Object.assign({},t.partners):{};
     if(st.pid) _map[String(st.who)]=String(st.pid); else delete _map[String(st.who)];
-    t.partners=_map;
+    t.partners=_map;   /* 只是為了下面的 toast 與 format 判斷；真正寫入走 RPC */
     /* ⚠ format 空白就順手補成 1V2（2026-09-23）——自訂銷售 0923 之前把 format 寫死 null，
        正式庫 47 張叫「自訂方案」的票因此看不出 1V1／1V2（40 張還有效）。
        **設定同行會員這個動作本身就說明了它是 1V2**，補上去課表才畫得出兩份。
@@ -57452,13 +57480,22 @@ async function tkPtSave(){
        ⚠ 移除同行者時不動 format：票本來就是 1V2，只是這次沒有第二位。 */
     let _fmtFixed=false;
     if(st.pid && !String(t.format||'').trim()){ t.format='1V2'; _fmtFixed=true; }
-    await dbPut('member_tickets',t);
+    /* ⚠⚠ 寫入走 fn_ticket_set_partner，不走 dbPut（2026-09-26）——
+         教練對 member_tickets 只有讀的權限（mt_coach_read），dbPut 會被 RLS 擋下來，
+         而且 dbPut 是整列 upsert：真要讓教練走那條路，等於把金額、堂數、效期
+         整張票都交給他改。那支函式只改 partners 一欄，並在資料庫端檢查
+         「這位教練確實帶過這位會員」。
+       ⚠ 櫃檯也一起改走同一條路 —— 兩套寫法遲早會分岔（帳本格式、format 補標的規則）。
+       ⚠ 帳本那一筆改由函式裡寫（同一個交易，不會出現「票改了但沒留痕」）。
+       ⚠ 繞過 dbPut 就要自己清快取（CLAUDE.md 的規矩），不然本機看不到自己的改動。 */
+    const {data:_newMap,error:_e}=await sb.rpc('fn_ticket_set_partner',{
+      p_ticket_id:st.ticket_id, p_who:String(st.who),
+      p_partner_id:st.pid?String(st.pid):null, p_operator:(SESSION&&SESSION.name)||''});
+    if(_e) throw new Error(_e.message||_e);
+    void _newMap;
+    try{ dbCacheClear(['member_tickets','ticket_logs']); }catch(_){}
     const ms=window._tkPtMembers||[];
     const nm=id=>{ const x=ms.find(y=>y.id===id); return x?x.name:id; };
-    /* 留一筆帳本：誰在什麼時候把誰設成同行者，日後查得到。
-       ⚠ delta 0 —— 這不動堂數。 */
-    await logTicket(t.id,'adjust',0,null,SESSION.name,
-      `同行會員（${st.whoName}）：${before?nm(before):'（無）'} → ${st.pid?nm(st.pid):'（無）'}${_fmtFixed?'｜授課類型補標 1V2':''}`);
     showToast(st.pid
       ? `${st.whoName} 的同行會員：${nm(st.pid)}${_fmtFixed?'（這張票已一併標成 1V2）':''}`
       : `已移除 ${st.whoName} 的同行會員`, _fmtFixed?5000:3000);
@@ -62138,6 +62175,12 @@ async function _memh2Tap(id){
      ⚠ 撈不到就整塊不畫，不要在課卡上留一個「載入失敗」的空盒子。 */
   let _tlBlock='';
   try{
+    /* ⚠ 這一處**刻意不濾 slot**（2026-09-26 盤點時確認）——
+         會員端其他四處（mem_training／m_training／ppLoadTrain／ppOpenTraining）都濾掉 slot=2，
+         只有這裡是整堂收。結果是：1V2 的課，會員 A 在自己的課卡上看得到兩個人的動作。
+       ⚠ 這正好是使用者要的方向（0924：「Ａ跟Ｂ都要能看到對方的訓練紀錄」），
+         所以不要「順手修成跟別處一致」—— 缺的是**標示**（哪幾個動作是同行那位的），
+         那件事跟會員端的同行顯示一起做，不在這一輪。 */
     const _tl=(await dbGetAll('training_logs')).filter(l=>l&&l.booking_id===b.id);
     if(_tl.length){
       _tl.sort((a,c)=>String((a&&a.created_at)||'').localeCompare(String((c&&c.created_at)||'')));

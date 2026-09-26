@@ -16,6 +16,7 @@
             自主訓練（那是另一張票的權益，跟著送等於白送點數）。 */
 const fs=require('fs');
 const root=process.env.HOME+'/Projects/yugym-booking-system-app/';
+const MIG=require('fs').readFileSync(process.env.HOME+'/Projects/yugym-booking-system-app/docs/migrations/20260926_1v2_partner_access.sql','utf8');
 const src=fs.readFileSync(root+'index.html','utf8');
 let pass=0,fail=0;
 const ok=(n,c,x)=>{ if(c){pass++;console.log('  ✓ '+n);} else {fail++;console.log('  ✗ '+n+(x!==undefined?'  → '+JSON.stringify(x):''));} };
@@ -74,10 +75,12 @@ console.log('①-2 一張票可以有好幾組同行（2026-09-23 定版）');
 console.log('② 櫃檯的設定入口');
 {
   const F=(src.match(/async function openTicketPartner\(ticket_id,for_member\)\{[\s\S]*?\n\}/)||[''])[0];
-  ok('★★★ 只有櫃檯以上能設', /if\(!\(isDeskLike\(\)\)\)\{ showToast\('只有管理員或櫃台可設定同行會員'\); return; \}/.test(F));
-  ok('★★★ 按鈕只給 1V2 的教練課票',
-     /const _isV2=String\(t\.format\|\|''\)\.toUpperCase\(\)==='1V2';/.test(src)
-     && /const canPartner=canShare && _isV2;/.test(src)
+  /* 2026-09-26：教練也能設（使用者「教練的桌機看不到同行的按鈕」→ 選「能設，走專用函式」）。
+     判準抽成 canSetPartner()，細節見 tests/partner0926test.js。 */
+  ok('★★★ 櫃檯以上或教練能設', /if\(!canSetPartner\(\)\)\{ showToast\('只有管理員、櫃台或教練可設定同行會員'\); return; \}/.test(F));
+  ok('★★★ 按鈕只給 1V2（或 format 空白的自訂方案）的教練課票',
+     /const _isV2=\(_fmtU2==='1V2'\|\|_fmtU2===''\);/.test(src)
+     && /const canPartner=canSetPartner\(\) && tkCategoryOf\(t\)==='course' && _isV2;/.test(src)
      && /\$\{canPartner\?`<button class="btn btn-ghost btn-sm" onclick="openTicketPartner\(/.test(src));
   ok('★★★ 不能把自己選成同行者（會讓課表兩個頁籤同名）',
      /m\.id!==st\.who && m\.id!==st\.pid/.test(src));
@@ -92,8 +95,11 @@ console.log('② 櫃檯的設定入口');
   ok('★★ 視窗標題講清楚是幫誰設（否則櫃檯會以為整張票都變了）',
      /<div class="modal-title">\$\{escH\(st\.whoName\)\} 的同行會員<\/div>/.test(src)
      && /這張票的<b>其他使用人可以各自設自己的同行會員<\/b>，互不影響/.test(src));
+  /* 2026-09-26：帳本那一筆搬進 fn_ticket_set_partner（與票的更新同一個交易，
+     不會出現「票改了卻沒留痕」），所以這裡改驗 migration。 */
   ok('★★★ 留一筆帳本（誰在什麼時候把誰設成同行者），但 delta 0 不動堂數',
-     /await logTicket\(t\.id,'adjust',0,null,SESSION\.name,\s*\n\s*`同行會員（\$\{st\.whoName\}）：/.test(S));
+     /insert into public\.ticket_logs\(id, ticket_id, action, delta, operator, note, created_at\)/.test(MIG)
+     && /'adjust', 0,/.test(MIG) && /'同行會員（' \|\| coalesce\(_nm_who, p_who\) \|\| '）：'/.test(MIG));
   ok('★★ 票名旁標出同行者，而且與共享的綠色標籤分得開',
      /const partnerTag=\(_isV2 && _ptIdM && _ptName\)/.test(src)
      && /background:#faf3e3;color:#8a6a20/.test(src)
@@ -111,7 +117,7 @@ console.log('②-2 會員檔案頁那張卡也要有（同一件事有好幾張�
      我第一版只掛在 md-tk-item，而他實際在用的是會員檔案頁的 bkd-tkcard。
      見記憶 yugym-card-template-copy：改了一張不等於改好。 */
   ok('★★★ bkd-tkcard（會員檔案頁）也有入口',
-     /const _ptOk=isDeskLike\(\)&&t\.status==='usable'&&tab==='pt'/.test(src)
+     /const _ptOk=canSetPartner\(\)&&t\.status==='usable'&&tab==='pt'/.test(src)
      && /openTicketPartner\('\$\{t\.id\}','\$\{PP\.id\}'\)/.test(src));
   ok('★★★ 兩張卡都有（md-tk-item ＋ bkd-tkcard）',
      (src.match(/openTicketPartner\(/g)||[]).length>=4);
@@ -148,8 +154,8 @@ console.log('②-3 自訂方案分不出 1V1／1V2（使用者：「如果是自
      /if\(st\.pid && !String\(t\.format\|\|''\)\.trim\(\)\)\{ t\.format='1V2'; _fmtFixed=true; \}/.test(S));
   ok('★★★ 不覆蓋已經寫了 1V1 的（那是櫃檯明確選過的）',
      /!String\(t\.format\|\|''\)\.trim\(\)/.test(S) && !/t\.format='1V2';\s*\n\s*await dbPut/.test(S));
-  ok('★★ 補標了要講出來（吐司與帳本都寫）',
-     /（這張票已一併標成 1V2）/.test(S) && /授課類型補標 1V2/.test(S));
+  ok('★★ 補標了要講出來（吐司在前端、帳本在函式裡）',
+     /（這張票已一併標成 1V2）/.test(S) && /授課類型補標 1V2/.test(MIG));
   ok('★★ 移除同行者時不動 format（票本來就是 1V2，只是這次沒有第二位）',
      /移除同行者時不動 format/.test(S));
   const R=(src.match(/function grantCustomFmtRow\(p\)\{[\s\S]*?\n\}/)||[''])[0];
