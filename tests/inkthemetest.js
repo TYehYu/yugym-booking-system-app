@@ -228,7 +228,8 @@ ok('★★ 色點只在 Ink 層出現，舊版一個字都沒變',
      color-mix(--course-accent 18%) 的規則，用整份找會抓到那一條（第一版就誤判了）。 */
   const card=(RULES.match(/background:color-mix\(in srgb, var\(--course-soft,#EAF3EF\) (\d+)%/)||[])[1];
   const chip=(RULES.match(/background:color-mix\(in srgb, var\(--csoft,#EAF3EF\) (\d+)%/)||[])[1];
-  eq('★★ chip 的淡底與課卡同一個百分比（視覺才真的一致）', [card,chip,card===chip], ['30','30',true]);
+  /* 2026-09-28 使用者：「所有課卡顏色可以再加深一點」→ 四級裡挑 80%。兩邊一起改。 */
+  eq('★★ chip 的淡底與課卡同一個百分比（視覺才真的一致）', [card,chip,card===chip], ['80','80',true]);
   const cardB=(RULES.match(/border:1px solid color-mix\(in srgb, var\(--course-accent,#3D7039\) (\d+)%/)||[])[1];
   const chipB=(RULES.match(/border:1px solid color-mix\(in srgb, var\(--ccol,#8a8178\) (\d+)%/)||[])[1];
   eq('★★ 框線的百分比也一樣', [cardB,chipB,cardB===chipB], ['20','20',true]);
@@ -266,8 +267,8 @@ ok('★★ 姓名是主角（墨色、加粗），不是靠字級撐大',
    /body\.ink \.cal-ev\.cal-ev-std \.evc-name\{color:var\(--text\);font-weight:700;/.test(src));
 
 console.log('\n④-2 兩套獨立的顏色對應（使用者第 3～5 點）');
-ok('★★ 課卡底色由「課程類型」決定：淡的同色底（course-soft 混出來）',
-   /background:color-mix\(in srgb, var\(--course-soft,#EAF3EF\) 30%, #FFFDF8\) !important;/.test(src));
+ok('★★ 課卡底色由「課程類型」決定：同色底（course-soft 混出來；2026-09-28 濃度 30%→80%）',
+   /background:color-mix\(in srgb, var\(--course-soft,#EAF3EF\) 80%, #FFFDF8\) !important;/.test(src));
 ok('★★ 左側 3px 類型色條（course-accent）',
    /body\.ink \.cal-ev\.cal-ev-std \.evc-body::before\{width:3px;border-radius:0;\s*\n\s*background:var\(--course-accent,#3D7039\);\}/.test(src));
 ok('★★ 教練顏色只上在名字文字：底、內距、框全部拿掉',
@@ -346,7 +347,7 @@ console.log('\n⑥ 首頁總覽（2026-08-26 使用者：「首頁參考這張�
   ok('★ 月曆「今天」仍是金框（語意不變）',
      /body\.ink \.cdash-cell\.cdash-today\{box-shadow:0 0 0 2px var\(--gold-d\) inset;\}/.test(src));
   ok('★★ 今日教練任務卡與行事曆課卡同一張臉（同一組 color-mix 百分比）',
-     /body\.ink \.tcard\.tcard-std \.tcard-body\{\s*\n\s*background:color-mix\(in srgb, var\(--course-soft,#EAF3EF\) 30%, #FFFDF8\) !important;/.test(src)
+     /body\.ink \.tcard\.tcard-std \.tcard-body\{[\s\S]{0,400}?background:color-mix\(in srgb, var\(--course-soft,#EAF3EF\) 80%, #FFFDF8\) !important;/.test(src)
      && /body\.ink \.tcard\.tcard-std \.tcard-body::before\{width:3px;border-radius:0;/.test(src));
   ok('　 待簽約／待繳費仍走 .tcard-pend 的暗化（沒有被邊框那條蓋到）',
      /\.cal-ev\.cal-ev-std\.cal-ev-pend,\s*\n\s*\.tcard\.tcard-std\.tcard-pend\{ filter:/.test(src));

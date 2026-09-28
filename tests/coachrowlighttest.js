@@ -74,7 +74,8 @@ console.log('\n③④ 課卡：去陰影、降對比、縮高度，但課程色�
      && Math.round((98-82)/98*100)===16);
   ok('★★ 課程類型仍看得出來：左側 3px 色條 ＋ 極淡同色底',
      /body\.ink \.tcard\.tcard-std \.tcard-body::before\{width:3px;\}/.test(src)
-     && /body\.ink \.tcard\.tcard-std \.tcard-body\{\s*\n\s*background:color-mix\(in srgb, var\(--course-soft,#EAF3EF\) 30%, #FFFDF8\) !important;/.test(src));
+     /* 2026-09-28：濃度 30%→80%（使用者挑的），配方沒變 */
+     && /body\.ink \.tcard\.tcard-std \.tcard-body\{[\s\S]{0,400}?background:color-mix\(in srgb, var\(--course-soft,#EAF3EF\) 80%, #FFFDF8\) !important;/.test(src));
   ok('　 色條的顏色仍是課程色 token（沒有另訂一份）',
      /background:var\(--course-accent,#3D7039\);/.test(src));
 }
