@@ -3478,6 +3478,18 @@ body.mc-mode #tl-sheet,body.mc-mode #tl-add-sheet{top:60px;}
 .mck-renew-s{display:block;font-size:12px;color:var(--t2);line-height:1.6;}
 /* ── 會員卡（Membership Card）── */
 .mck-section-label{font-size:11px;letter-spacing:0.14em;color:var(--t3);font-weight:600;margin:24px 4px 12px;}
+/* 同行的課程（2026-09-26）—— 別人的票，我只是一起上課的那一位。
+   ⚠ 刻意跟自己的票卡長得不一樣（淡金底＋虛線框）：一眼就看得出「這不是我的票」，
+     不然客人會以為自己有兩張票、可以拿去約課。 */
+/* 同行那張卡就是一張正常的票券卡，只多一枚右側浮水印（2026-09-26 使用者二修）。
+   ⚠ 浮水印那一套要三件事一起（規格同共享票的 .tkwm，0917／0922 各踩過一次）：
+     卡片 position:relative＋overflow:hidden，內容全部墊到 z-index:1，
+     不墊的話文字會被壓在浮水印底下。 */
+.mck-card.mck-ptk{position:relative;overflow:hidden;}
+.mck-card.mck-ptk>*:not(.tkwm){position:relative;z-index:1;}
+.mck-badge-pt{background:#f3e6cc;color:#8a5e28;margin-left:7px;}
+/* 卡下那一行說明：正常卡看起來就像自己的票，不寫清楚會有人拿去約課 */
+.mck-ptk-note{font-size:11px;color:#8a5e28;line-height:1.75;margin:-4px 4px 12px;}
 /* ══ 圓角收斂（2026-09-05）════════════════════════════════════════════════
    管理員手機首頁原本有 18 種圓角。其中 1／3／4／5／6px 是刻意的（細線、捲軸、
    Ink 主題自己那套 4px），不動；真正隨手挑的是容器那 9 種（10–24px）。
@@ -14065,8 +14077,8 @@ function tbl(s){return TABLE_ALIAS[s]||s;}
 let sb=null;
 // ── 版本號（日期+時間格式：年後兩碼+月+日.時分，例 26620.1058 = 26年6/20 10:58）──
 // 每次改版手動更新這一行即可，畫面與 title 會一起更新
-const APP_VERSION = '260926.1415';
-const APP_VERSION_LABEL = 'v260926.1415';
+const APP_VERSION = '260928.1331';
+const APP_VERSION_LABEL = 'v260928.1331';
 const CLOUD = !!(window.YUGYM_CONFIG && window.YUGYM_CONFIG.url && window.YUGYM_CONFIG.anonKey);
 if(CLOUD){ sb = supabase.createClient(window.YUGYM_CONFIG.url, window.YUGYM_CONFIG.anonKey); }
 
@@ -66752,7 +66764,20 @@ PAGES.mem_tickets=async function(){
   const mine=WAL.tickets;
   /* 儲值金（2026-08-30 使用者指示：「會員要能看到」）——
      _me 本來就抓了，餘額直接跟著走，不多打一次資料庫；明細等點開才抓。 */
-  _memTkData={mine,typeMap,logs,WAL,tier:memTierInfo(_me,bookings,tickets),credit:creditOf(_me)};
+  /* 1V2 同行的票（2026-09-26）——「我是別人票上的同行人」那幾張。
+     ⚠ **不能**丟進 mine：mine 是票券夾（tkUsableBy＝持有人或共享者）算出來的，
+       那份是「我能拿去約課、會扣我堂數」的票。同行不扣課、也不能約課，
+       混進去會讓餘額、可約堂數、等級統計全部多算。
+     ⚠ 判斷用 partners 的**值**＝我（key 是上課那位）。
+       讀得到這幾張票是 0926 開的 RLS（mt_select_partner）。 */
+  const _me2=String(SESSION.id);
+  const partnerTks=(tickets||[]).filter(t=>t && !tkUsableBy(t,_me2)
+    && t.partners && typeof t.partners==='object'
+    && Object.keys(t.partners).some(k=>String(t.partners[k])===_me2))
+    .map(t=>{ const owner=Object.keys(t.partners).find(k=>String(t.partners[k])===_me2)||'';
+      return Object.assign({}, t, {_ptWho:owner}); });
+  if(partnerTks.length){ try{ await partnerDirectory(); }catch(_){} }
+  _memTkData={mine,typeMap,logs,WAL,partnerTks,tier:memTierInfo(_me,bookings,tickets),credit:creditOf(_me)};
   renderMemTickets();
 };
 /* 會員端等級資訊（2026-08-05 使用者指示：「我的票券」上方改列等級、升降級規則、
@@ -66921,6 +66946,7 @@ function mtkPickTab(k){ window._mtkTab=k; try{ renderMemTickets(); }catch(_){} }
 function renderMemTickets(){
   if(!_memTkData) return;
   const {mine,typeMap,logs,WAL,tier}=_memTkData;
+  const partnerTks=_memTkData.partnerTks||[];
   const today=ymd(TODAY);
   /* 會員端 V2（2026-08-22）：只有管理員預覽會員視角時走新版型（同 memh2On 的判斷） */
   const mtkV2=(typeof memh2On==='function')&&memh2On();
@@ -66966,7 +66992,15 @@ function renderMemTickets(){
     const soon=!dim&&days!=null&&days<=7&&days>=0;
     /* 圓點與數字同源（2026-07-26 使用者回報：1 顆實心卻寫 3/4）——
        2026-07-31 起兩者都直接問票券夾，不可能再對不上。 */
-    const _sl=WAL.of(t.id)||{stamps:[],used:0};
+    /* ⚠ 同行票不在票券夾裡（WAL 只收 tkUsableBy 過的票），所以自己算一份：
+         ・used＝總堂數 − 剩餘（票上的欄位，那是票本身的事實，一定對）
+         ・stamps＝我讀得到的那幾堂（RLS 只給「有同行關係的」那些）
+       ticketTokens 會把「帳面已用、卻找不到課卡」的差額畫成沒有日期的實心點（_ghost），
+       所以**顆數與已用數都正確**，只是我沒參與的那幾堂看不到日期 —— 那正是該有的樣子。 */
+    const _sl=WAL.of(t.id)||(pt
+      ? {stamps:(_memTkData.bookings||[]).filter(b=>b&&b.ticket_id===t.id&&b.status!=='cancelled'),
+         used:Math.max(0,(Number(t.sessions_total)||0)-(Number(t.sessions_remaining)||0)), no:''}
+      : {stamps:[],used:0});
     const _bksC=_sl.stamps, usedCnt=_sl.used;
     const open=!!_mcOpen[t.id];
     const name=t.plan_name||(ty?ty.name:'票券');
@@ -66998,10 +67032,11 @@ function renderMemTickets(){
       const _dates=_ex ? `${_st?_st.replace(/-/g,'/'):'—'} ～ ${_ex.replace(/-/g,'/')}` : fmtExpire(null,t);
       const _tag=dim?`<span class="mck-badge">${(t.status==='expired'||(t.expire_date&&t.expire_date<today))?'已到期':'已使用完'}</span>`
                    :(soon?`<span class="mck-badge mck-badge-warn">${days} 天後到期</span>`:'');
-      return `<div class="mck-card mck-v2 mck-${color}${dim?' mck-dim':''}">
+      return `<div class="mck-card mck-v2 mck-${color}${dim?' mck-dim':''}${pt?' mck-ptk':''}">
+        ${pt?`<span class="tkwm" title="${escH(pt.who?pt.who+' 的票券':'同行')}：一起上課，不扣你的堂數">同行</span>`:''}
         <div class="mck-head">
           <div class="mck-top">
-            <div class="mck-name">${tkNoTag(_sl.no)}${name}${fmt}${t.member_id!==SESSION.id?`<span class="mck-badge" style="background:#f5ede0;color:#8a5e28;margin-left:6px;" title="共享票券：這張票掛在對方名下，你們共用同一個堂數池">享</span>`:''}</div>
+            <div class="mck-name">${tkNoTag(_sl.no)}${name}${fmt}${(!pt&&t.member_id!==SESSION.id)?`<span class="mck-badge" style="background:#f5ede0;color:#8a5e28;margin-left:6px;" title="共享票券：這張票掛在對方名下，你們共用同一個堂數池">享</span>`:''}${pt?`<span class="mck-badge mck-badge-pt" title="同行會員：一起上課，不扣你的堂數">同行</span>`:''}</div>
             <div class="mck-v2-use" title="已銷課堂數／總堂數"><b>${usedCnt}</b><span>/${total}</span></div>
           </div>
           ${(()=>{ const _cid=(window._ctSignByTicket||{})[t.id];
@@ -67029,12 +67064,13 @@ function renderMemTickets(){
         </div>
       </div>`;
     }
-    return `<div class="mck-card mck-${color}${dim?' mck-dim':''}">
+    return `<div class="mck-card mck-${color}${dim?' mck-dim':''}${pt?' mck-ptk':''}">
+      ${pt?`<span class="tkwm" title="${escH(pt.who?pt.who+' 的票券':'同行')}：一起上課，不扣你的堂數">同行</span>`:''}
       <div class="mck-head">
         <div class="mck-top">
           ${/* 共享來的票標「享」（2026-08-04 使用者指示：「在本人帳號顯示另一個人的票券上標個享」）——
                持有人掛在對方名下、共用同一個堂數池；會員端讀不到對方姓名（RLS），只標章。 */''}
-          <div class="mck-name">${tkNoTag(_sl.no)}${name}${fmt}${t.member_id!==SESSION.id?`<span class="mck-badge" style="background:#f5ede0;color:#8a5e28;margin-left:6px;" title="共享票券：這張票掛在對方名下，你們共用同一個堂數池">享</span>`:''}</div>
+          <div class="mck-name">${tkNoTag(_sl.no)}${name}${fmt}${(!pt&&t.member_id!==SESSION.id)?`<span class="mck-badge" style="background:#f5ede0;color:#8a5e28;margin-left:6px;" title="共享票券：這張票掛在對方名下，你們共用同一個堂數池">享</span>`:''}${pt?`<span class="mck-badge mck-badge-pt" title="同行會員：一起上課，不扣你的堂數">同行</span>`:''}</div>
           ${dim?`<span class="mck-badge">${(t.status==='expired'||(t.expire_date&&t.expire_date<today))?'已到期':'已使用完'}</span>`
                 :(soon?`<span class="mck-badge mck-badge-warn">${days} 天後到期</span>`:'')}${tkExtBadge(t)}
         </div>
@@ -67102,6 +67138,25 @@ function renderMemTickets(){
   /* 2026-08-05 使用者指示：移除「我的票券」大標，上方改成等級卡——
      目前等級、本月達標進度、升級進度／降級提醒、升降級規則。 */
   /* V2：等級卡換成三條進度表版；自主訓練與折抵券的獨立入口改由上方分頁承接 */
+  /* ══ 同行的課程（2026-09-26 使用者：「會員看不到會員B」）═══════════════════
+     我是別人票上的同行人 → 看得到這張票，但這**不是我的票**：
+     不扣我的堂數、我也不能拿它約課（那是「共享」在做的事）。
+     ⚠ 使用者 0926 二修：「這邊還是畫一張正常的課卡　加個右邊浮水印同行」——
+       第一版做成簡版小卡（淡金底＋虛線、不畫圓點），使用者要的是跟自己的票一樣的卡，
+       右邊掛一枚「同行」浮水印（規格沿用共享票那一枚 .tkwm）。
+     ⚠ 圓點畫得出來：ticketTokens 會把「帳面已用、卻找不到課卡」的差額補成
+       沒有日期的實心點，所以顆數與已用數都對（見 card() 裡 _sl 的說明）。
+     ⚠ 底下那一行只寫「不扣你的堂數」——
+       **不要寫「不能用這張票預約」**（2026-09-26 使用者：「本來會員就不能預約跟取消教練課
+       都是統一由教練處理」）。會員端根本沒有那個按鈕，寫出來反而像在暗示別人可以。 */
+  const ptBlock=partnerTks.length ? `<div class="mck-section-label" style="margin-top:18px;">同行的課程</div>`
+    + partnerTks.map(t=>{
+        const who=(window._ptNames||{})[t._ptWho]||'';
+        return card(t,false,{who})
+          + `<div class="mck-ptk-note">這是${who?escH(who):'對方'}的票券。你是同行會員 —— 一起上課、教練會幫你記訓練紀錄，不會扣你的堂數。</div>`;
+      }).join('')
+    : '';
+
   const tabRow=mtkV2&&_tabs.length>1
     ? `<div class="mtk-tabs">${_tabs.map(([k,l])=>
         `<button class="mtk-tab${window._mtkTab===k?' on':''}" onclick="mtkPickTab('${k}')">${l}</button>`).join('')}</div>`
@@ -67117,6 +67172,7 @@ function renderMemTickets(){
     ? '<div class="card"><div class="empty" style="padding:40px 16px;"><div class="em-t">目前沒有票券</div><div style="font-size:12.5px;color:var(--t2);margin-top:8px;line-height:1.8;">購課請洽櫃檯或您的教練，<br>完成後票券會自動出現在這裡。</div></div></div>'
     : ''}
   ${usable.map(t=>card(t,false)).join('')}
+  ${ptBlock}
   ${inactive.length>0?`<details class="mck-hist"><summary class="mck-section-label" style="cursor:pointer;list-style:none;">歷史票券（${inactive.length}）　<span style="font-size:11px;color:var(--t3);">點開查看</span></summary>${inactive.map(t=>card(t,true)).join('')}</details>`:''}`;
 }
 

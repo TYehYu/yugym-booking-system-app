@@ -96,5 +96,42 @@ console.log('\n④ 會員課卡：和誰一起上 ＋ 今日訓練分段');
      && /\.mtl-who\{font-size:11\.5px;font-weight:800;/.test(src));
 }
 
+console.log('\n⑤ 同行的票券卡（別人的票，我只是一起上）');
+{
+  const PG=(src.match(/PAGES\.mem_tickets=async function\(\)\{[\s\S]*?\n\};/)||[''])[0];
+  const R=grab('renderMemTickets');
+  /* ⚠⚠ 最重要的一條：同行票**不能**混進票券夾的 mine —— 那份是「能拿去約課、會扣我堂數」的票。 */
+  ok('★★★ 同行票另外一份，沒有混進 mine（混進去餘額、可約堂數、等級統計全會多算）',
+     /const partnerTks=\(tickets\|\|\[\]\)\.filter\(t=>t && !tkUsableBy\(t,_me2\)/.test(PG)
+     && /_memTkData=\{mine,typeMap,logs,WAL,partnerTks,/.test(PG));
+  ok('★★★ 判斷是 partners 的**值**＝我（key 是上課那位）',
+     /Object\.keys\(t\.partners\)\.some\(k=>String\(t\.partners\[k\]\)===_me2\)/.test(PG));
+  ok('★★★ 記住上課那位是誰（一張票可能有好幾組同行）',
+     /_ptWho:owner/.test(PG) && /Object\.keys\(t\.partners\)\.find\(k=>String\(t\.partners\[k\]\)===_me2\)/.test(PG));
+  ok('★★ 有同行票才去要名字（沒有就不必多打一支 RPC）',
+     /if\(partnerTks\.length\)\{ try\{ await partnerDirectory\(\); \}catch\(_\)\{\} \}/.test(PG));
+  /* ⚠ 不要寫「不能用這張票預約」（2026-09-26 使用者：「本來會員就不能預約跟取消教練課
+     都是統一由教練處理」）—— 會員端根本沒有那個按鈕。 */
+  ok('★★★ 卡上寫「不會扣你的堂數」，且不提「不能預約」',
+     /不會扣你的堂數/.test(R) && !/不能用這張票預約/.test(R.replace(/\/\*[\s\S]*?\*\//g,' ')));
+  ok('★★ 卡下那一行字要留（正常卡看起來就像自己的票，不寫清楚會有人拿去約課）',
+     /mck-ptk-note/.test(R));
+  /* 2026-09-26 二修（使用者：「這邊還是畫一張正常的課卡　加個右邊浮水印同行」）——
+     第一版做成簡版小卡，改回正常票券卡＋右側「同行」浮水印（規格同共享票的 .tkwm）。 */
+  ok('★★★ 就是一張正常的票券卡（同一支 card()），只多一枚浮水印',
+     /return card\(t,false,\{who\}\)/.test(R)
+     && /\$\{pt\?`<span class="tkwm"/.test(src));
+  ok('★★★ 浮水印三件事要一起（卡片 relative＋overflow、內容墊 z-index，否則文字被壓住）',
+     /\.mck-card\.mck-ptk\{position:relative;overflow:hidden;\}/.test(src)
+     && /\.mck-card\.mck-ptk>\*:not\(\.tkwm\)\{position:relative;z-index:1;\}/.test(src));
+  ok('★★★ 圓點畫得出來且數字正確：已用＝總堂數−剩餘，讀不到的那幾堂補成無日期實心點',
+     /used:Math\.max\(0,\(Number\(t\.sessions_total\)\|\|0\)-\(Number\(t\.sessions_remaining\)\|\|0\)\)/.test(R)
+     && /stamps:\(_memTkData\.bookings\|\|\[\]\)\.filter\(b=>b&&b\.ticket_id===t\.id/.test(R));
+  ok('★★★ 不要標成共享的「享」章（那是另一回事）',
+     /\$\{\(!pt&&t\.member_id!==SESSION\.id\)\?/.test(src)
+     && /\$\{pt\?`<span class="mck-badge mck-badge-pt"/.test(src));
+  ok('★★ 沒有同行票時整區不畫', /const ptBlock=partnerTks\.length \?/.test(R) && /: '';/.test(R));
+}
+
 console.log('\n'+(fail?'✗ ':'✓ ')+pass+' 通過 / '+fail+' 失敗');
 process.exit(fail?1:0);

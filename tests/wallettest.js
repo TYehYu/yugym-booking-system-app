@@ -196,7 +196,8 @@ ok('★ 五個票券畫面都標編號',
    && /\$\{tkNoTag\(WAL\.noOf\(t\.id\)\)\}\$\{t\.plan_name\|\|'票券'\}/.test(src)  // 歷史卡
    && /<div class="md-tk-name">\$\{tkNoTag\(WAL\.noOf\(t\.id\)\)\}/.test(src)      // 教練名片
    && /<div class="mwtk-name">\$\{tkNoTag\(WAL\.noOf\(t\.id\)\)\}/.test(src)      // 管理員票券頁
-   && /<div class="mck-name">\$\{tkNoTag\(_sl\.no\)\}\$\{name\}\$\{fmt\}\$\{t\.member_id!==SESSION\.id\?/.test(src));  // 會員端我的票券（2026-08-04 加了共享「享」章）
+   /* 2026-09-26：那一串後面多了 pt（同行票）的判斷，「享」章的條件跟著變成 (!pt&&…) */
+   && /<div class="mck-name">\$\{tkNoTag\(_sl\.no\)\}\$\{name\}\$\{fmt\}\$\{\(!pt&&t\.member_id!==SESSION\.id\)\?/.test(src));  // 會員端我的票券
 
 console.log('\n會員可選擇用哪一套，預設快過期的先用');
 ok('★ 自主訓練：多套就出下拉，預設最快到期',
