@@ -2042,6 +2042,9 @@ body.mc-mode .layout{padding-top:8px;}
 .mk-key.gold{border-color:#d9bf8f;background:#f7efe0;color:#8a5e28;}
 .mk-key.green{border-color:#cfe3d8;background:#eef5f1;color:#1f6f54;}
 .mk-pts{margin:10px 0 0;padding-left:20px;font-size:12.5px;color:var(--t2);line-height:2;}
+/* 主管展延的快捷天數（2026-09-29）：常用的四個，點了就填進上面的天數欄 */
+.tkmx-quick{display:flex;gap:6px;flex-wrap:wrap;margin-top:-4px;}
+.tkmx-quick .btn{padding:4px 12px;font-size:12px;}
 .mk-pts li b{color:var(--text);}
 /* 說明收成一行（2026-09-07 使用者：「新增團體課·步驟2的視窗 內容收斂一下 好雜亂」）——
    六條規則常駐佔掉半個視窗高度，而櫃檯開課看第二次以後就只是擋路。
@@ -14092,8 +14095,8 @@ function tbl(s){return TABLE_ALIAS[s]||s;}
 let sb=null;
 // ── 版本號（日期+時間格式：年後兩碼+月+日.時分，例 26620.1058 = 26年6/20 10:58）──
 // 每次改版手動更新這一行即可，畫面與 title 會一起更新
-const APP_VERSION = '260928.1341';
-const APP_VERSION_LABEL = 'v260928.1341';
+const APP_VERSION = '260929.1513';
+const APP_VERSION_LABEL = 'v260929.1513';
 const CLOUD = !!(window.YUGYM_CONFIG && window.YUGYM_CONFIG.url && window.YUGYM_CONFIG.anonKey);
 if(CLOUD){ sb = supabase.createClient(window.YUGYM_CONFIG.url, window.YUGYM_CONFIG.anonKey); }
 
@@ -15712,7 +15715,8 @@ function tkExtInfo(t, logs){
   const _isExt=n=>{ const x=String(n||'');
     /* 校正／收回的紀錄不是一次展延；被事後收回的那一筆也不算（會在原紀錄補「已收回」） */
     if(x.indexOf('校正')>=0 || x.indexOf('收回')>=0 || x.indexOf('已收回')>=0) return false;
-    return x.indexOf('教練請假展延')>=0 || x.indexOf('展延一次')>=0; };
+    /* 2026-09-29 起第三種：主管展延（天數自填、不限次數、**不影響退費**） */
+    return x.indexOf('教練請假展延')>=0 || x.indexOf('展延一次')>=0 || x.indexOf('主管展延')>=0; };
   const mine=(logs||[]).filter(l=>l && String(l.ticket_id)===String(t.id) && _isExt(l.note))
     .sort((a,b)=>String(a.created_at||'').localeCompare(String(b.created_at||'')));
   if(!mine.length) return null;
@@ -15720,13 +15724,16 @@ function tkExtInfo(t, logs){
     return m?{from:m[1].replace(/\//g,'-'), to:m[2].replace(/\//g,'-')}:null; };
   const first=pick(mine[0].note), last=pick(mine[mine.length-1].note);
   const isClv=l=>String(l.note||'').indexOf('教練請假展延')>=0;
+  const isMgr=l=>String(l.note||'').indexOf('主管展延')>=0;
   return { n:mine.length,
     nClv:mine.filter(isClv).length,          // 教練展延（店家補償，不影響退費）
-    nMan:mine.filter(l=>!isClv(l)).length,   // 櫃檯展延（依合約不得退費）
+    nMgr:mine.filter(isMgr).length,          // 主管展延（自訂天數，不影響退費）
+    nMan:mine.filter(l=>!isClv(l)&&!isMgr(l)).length,   // 櫃檯展延（依合約不得退費）
     from:(first&&first.from)||null,                                   // 最初的到期日
     to:(last&&last.to)||(t.expire_date?String(t.expire_date).slice(0,10):null),
     at:String(mine[mine.length-1].created_at||'').slice(0,10)||null,  // 最後一次展延的日子
-    why:String(mine[mine.length-1].note||'').indexOf('教練請假')>=0?'教練請假':'櫃檯展延' };
+    why:(()=>{ const n=String(mine[mine.length-1].note||'');
+      return n.indexOf('教練請假')>=0?'教練請假':(n.indexOf('主管展延')>=0?'主管展延':'櫃檯展延'); })() };
 }
 /* 效期旁邊那一枚短標籤（2026-08-30 使用者指示：「這種有教練請假的　要在第二列
    效期旁邊新增· 教練展延」）—— 那一行是櫃檯第一眼會看的地方；
@@ -15739,6 +15746,8 @@ function tkExtTagHTML(t, logs){
   const f=x=>x?String(x).slice(0,10).replace(/-/g,'/'):'';
   const to=f(e.to);
   return (e.nClv?`　·　<b class="tkx tkx-clv">教練展延${e.nClv>1?` ×${e.nClv}`:''}</b>${to?` <span class="tkx-d">${to}</span>`:''}`:'')
+    /* 主管展延用綠（同教練展延那一枚）：它不影響退費，不該套「要小心」的金色（紅>金>綠） */
+    +(e.nMgr?`　·　<b class="tkx tkx-clv">展延${e.nMgr>1?` ×${e.nMgr}`:''}</b>${to?` <span class="tkx-d">${to}</span>`:''}`:'')
     +(e.nMan?`　·　<b class="tkx tkx-man">展延（不退費）</b>${to?` <span class="tkx-d">${to}</span>`:''}`:'');
 }
 /* 效期那一段（2026-09-23 使用者：「效期如果有展延會多一段文字　是不是可以
@@ -15760,7 +15769,9 @@ function tkExpireSeg(t, logs, label){
   /* 展延過就把**標籤本身**換掉（2026-09-23 使用者：「就變成購買日·展延效期」），
      日期寫展延後的。誰延的、展延前到期日收進 title。 */
   const _orig=String(e.from||'').slice(0,10).replace(/-/g,'/');
-  const _who=e.nClv?(e.nMan?'教練請假＋櫃檯展延':'教練請假展延'):'櫃檯展延';
+  /* 2026-09-29 多了主管展延（自訂天數）—— 三種可能混著出現，直接把有的列出來 */
+  const _who=[e.nClv?'教練請假展延':'', e.nMgr?'主管展延':'', e.nMan?'櫃檯展延':'']
+    .filter(Boolean).join('＋')||'展延';
   const _ti=` title="${_who}；展延前到期日 ${_orig||'—'}"`;
   /* ⚠ 「不退費」只在**櫃檯展延**時留一枚 —— 那是合約後果，不能只藏在 title 裡。
      教練請假展延不寫 extended_from，本來就不影響退費（見 tkExtBadge）。 */
@@ -15842,6 +15853,105 @@ async function doTicketExtend(id){
     `您的「${t.plan_name||'票券'}」已展延至 ${to.replace(/-/g,'/')}（剩 ${t.sessions_remaining} 堂）。依合約，展延之課程不得申請退費。`); }catch(_){}
   closeModal();
   showToast(`已展延至 ${to.replace(/-/g,'/')}`);
+  navTo(CUR_PAGE);
+ }catch(e){ showToast('展延失敗：'+((e&&e.message)||e)); }
+}
+/* ══ 主管展延：天數自己填（2026-09-29 使用者：「有教練或客人因為出國要手動展延有辦法嗎」）══
+   現行那支 openTicketExtend 卡得很緊：一張票一次、天數固定＝原方案期限，而且
+   「還上得完」時按不下去。客人出國兩個月這種情況，堂數明明還上得完，反而動不了。
+
+   使用者定的四條（0929）：
+     ① 只給**主管以上**（管理員與店長，櫃檯沒有）—— 天數自己填等於可以無限延，要有人負責
+     ② 天數自己填
+     ③ 不限次數
+     ④ **不影響退費** —— 出國不是客人的錯，不該連帶剝奪退費權
+
+   ⚠⚠ 所以這一支**不寫 extended_from／no_refund** ——
+     那兩個欄位是舊展延「一次為限＋不得退費」的旗標（見 tkIsExtended／TK_EXT_TEXT）。
+     寫下去就會變成：第二次按不動、而且客人不能退費，剛好違反 ③ 與 ④。
+   ⚠ 歷史完全記在 ticket_logs：帳本本來就是展延顯示的唯一來源（見 tkExtInfo），
+     所以不限次數也不必加欄位，每一次都是帳本上的一列。
+   ⚠ note 的格式要跟得上 tkExtInfo 的解析（`日期 → 日期`），否則卡片上顯示不出來。 */
+function tkMgrExtTo(t, days){
+  const base=(t&&t.expire_date)?String(t.expire_date).slice(0,10):ymd(TODAY);
+  /* ⚠ 已經過期的票從**今天**起算，不是從舊到期日 ——
+     從舊到期日加 60 天，對一張去年到期的票等於什麼都沒延。 */
+  const from=(base<ymd(TODAY))?ymd(TODAY):base;
+  const d=parseYmd(from); if(!d) return '';
+  d.setDate(d.getDate()+(Number(days)||0));
+  return ymd(d);
+}
+async function openTicketExtendMgr(id){
+  if(!isManagerUp()){ showToast('自訂天數的展延只有管理員或主管可以操作'); return; }
+  const t=await dbGet('member_tickets',id);
+  if(!t){ showToast('找不到票券'); return; }
+  if(['refunded','void','cancelled'].includes(t.status)){ showToast('已作廢／已退費的票不能展延'); return; }
+  window._tkMgrExt={id, days:30,
+    name:(t.plan_name||'票券')+(t.format?' · '+String(t.format).toUpperCase():''),
+    rem:Math.max(0,Number(t.sessions_remaining)||0),
+    cur:String(t.expire_date||'').slice(0,10)||ymd(TODAY)};
+  renderTicketExtendMgr();
+}
+function renderTicketExtendMgr(){
+  const st=window._tkMgrExt; if(!st) return;
+  const f=x=>x?String(x).slice(0,10).replace(/-/g,'/'):'—';
+  const cur=st.cur||'', to=st.to||'';
+  showModal(`<div class="modal-title">主管展延</div>
+    <div style="font-size:13.5px;color:var(--text);padding:2px 0 12px;">${escH(st.name||'票券')}　·　剩 <b>${st.rem||0}</b> 堂</div>
+    <div style="background:var(--card2);border:1px solid var(--bd);border-radius:12px;padding:13px 15px;font-size:13px;line-height:2;">
+      <div>目前到期　<b class="num">${f(cur)}</b></div>
+      <div style="color:var(--green);font-weight:700;">展延後到期　<b class="num" id="tkmx-to">${f(to)}</b></div>
+    </div>
+    <div class="form-row" style="margin-top:14px;"><label>延幾天 *</label>
+      <input type="number" id="tkmx-days" inputmode="numeric" min="1" max="730" value="${st.days}"
+        oninput="tkMgrExtCalc()" onchange="tkMgrExtCalc()"></div>
+    <div class="tkmx-quick">${[30,60,90,180].map(n=>
+      `<button type="button" class="btn btn-ghost btn-sm" onclick="tkMgrExtPick(${n})">${n} 天</button>`).join('')}</div>
+    <div class="form-row" style="margin-top:10px;"><label>原因 *</label>
+      <input type="text" id="tkmx-why" placeholder="例：出國三個月、受傷休養" maxlength="60"></div>
+    ${/* ⚠ 兩句話都要寫出來：櫃檯與主管對「展延」的既有印象是「一次、不能退費」，
+         這一支兩條都不一樣，不明講會被當成同一件事。 */''}
+    <ul class="mk-pts" style="margin-top:12px;">
+      <li>這種展延<b>不影響退費</b>，也<b>不限次數</b></li>
+      <li>原因會寫進票券帳本，日後查得到是誰延的</li>
+    </ul>
+    <div class="modal-foot"><button class="btn btn-ghost" onclick="closeModal()">取消</button>
+      <button class="btn btn-green" onclick="doTicketExtendMgr()">確認展延</button></div>`);
+  setTimeout(()=>{ try{ tkMgrExtCalc(); }catch(_){} },0);
+}
+function tkMgrExtPick(n){ const el=document.getElementById('tkmx-days'); if(el){ el.value=n; tkMgrExtCalc(); } }
+function tkMgrExtCalc(){
+  const st=window._tkMgrExt; if(!st) return;
+  const el=document.getElementById('tkmx-days');
+  let n=Math.max(1, Math.min(730, Number(el&&el.value)||0));
+  st.days=n;
+  const to=tkMgrExtTo({expire_date:st.cur}, n);
+  st.to=to;
+  const box=document.getElementById('tkmx-to'); if(box) box.textContent=String(to).replace(/-/g,'/');
+}
+async function doTicketExtendMgr(){
+ try{
+  const st=window._tkMgrExt; if(!st) return;
+  if(!isManagerUp()){ showToast('自訂天數的展延只有管理員或主管可以操作'); return; }
+  const why=String((document.getElementById('tkmx-why')||{}).value||'').trim();
+  if(!why){ showToast('請填展延原因'); return; }
+  const days=Math.max(1, Math.min(730, Number(st.days)||0));
+  const t=await dbGet('member_tickets',st.id);
+  if(!t){ showToast('找不到票券'); return; }
+  const from=String(t.expire_date||'').slice(0,10)||ymd(TODAY);
+  const to=tkMgrExtTo(t, days);
+  if(!to){ showToast('算不出新的到期日'); return; }
+  t.expire_date=to;
+  if(t.status==='expired') t.status='usable';   // 期限延了就回可用（堂數本來就還有）
+  await dbPut('member_tickets',t);
+  /* ⚠ note 的「日期 → 日期」格式是給 tkExtInfo 解析用的，不要改寫法。 */
+  try{ await logTicket(st.id,'adjust',0,null,(SESSION&&SESSION.name)||'',
+    `主管展延：${from} → ${to}（${days} 天）｜原因：${why}`); }catch(_){}
+  try{ if(t.member_id) await pushNotification(t.member_id,'announce','票券已展延',
+    `您的「${t.plan_name||'票券'}」已展延至 ${to.replace(/-/g,'/')}（剩 ${t.sessions_remaining} 堂）。`); }catch(_){}
+  window._tkMgrExt=null;
+  closeModal();
+  showToast(`已展延 ${days} 天，到 ${to.replace(/-/g,'/')}`);
   navTo(CUR_PAGE);
  }catch(e){ showToast('展延失敗：'+((e&&e.message)||e)); }
 }
@@ -17130,6 +17240,10 @@ function applyDeepLink(){
 /* 店長＝櫃台級權限（2026-07-27 使用者定案：桌機同櫃台介面＋店長導覽列）。
    前端所有「後台人員」判斷統一走這裡；資料庫層 is_staff_desk() 已同步納入店長。 */
 function isDeskLike(){ return !!(SESSION && (SESSION.role==='admin'||SESSION.role==='front_desk'||(SESSION.role==='coach'&&SESSION.is_manager))); }
+/* 主管以上＝管理員與主管（employees.is_manager），**不含一般櫃檯**（2026-09-29 使用者：「要放寬 但是只給主管以上帳號權限」）。
+   ⚠ 與 isDeskLike() 的差別就是那一個 front_desk —— 有些事情櫃檯做得了、
+     有些（例如自己填天數的展延）要主管點頭，所以兩支要分開，不要在呼叫端寫 &&。 */
+function isManagerUp(){ return !!(SESSION && (SESSION.role==='admin' || SESSION.is_manager)); }
 /* 設定 1V2 同行會員＝櫃檯以上**再加上教練**（2026-09-26 使用者回報：
    「教練的桌機看不到同行的按鈕」，並選了「能設，走專用函式」）。
    ⚠ 為什麼教練該有：這一格記的是「這一堂還有誰一起上」，上課當下最清楚的就是教練。
@@ -49913,6 +50027,10 @@ function ppRecordHtml(){
                   return _w
                     ? `<button class="btn btn-ghost btn-sm" style="padding:2px 10px;font-size:11px;opacity:.45;cursor:not-allowed;" disabled title="${escH(_w)}">展延</button>`
                     : `<button class="btn btn-gold btn-sm" style="padding:2px 10px;font-size:11px;" title="展延一次，期限同原方案；展延後依合約不得退費" onclick="openTicketExtend('${t.id}')">展延</button>`; })():''}
+                ${/* 自訂天數的展延（2026-09-29 使用者：「有教練或客人因為出國要手動展延有辦法嗎」）——
+                     只給主管以上。與左邊那顆「展延」是兩件事：那顆是合約寫的一次性展延（不得退費），
+                     這顆是店家通融（天數自填、不限次數、不影響退費），所以字也不一樣。 */''}
+                ${(isManagerUp()&&t.status!=='refunded'&&t.status!=='void'&&t.status!=='cancelled')?`<button class="btn btn-ghost btn-sm" style="padding:2px 10px;font-size:11px;" title="自己填天數（例如出國、受傷）；不限次數，不影響退費。主管以上才看得到" onclick="openTicketExtendMgr('${t.id}')">主管展延</button>`:''}
                 ${/* 待付款（2026-08-28 使用者定案：「只要付款狀態選未付款 就會先出現在會員方案顯示待付款」）——
                      票券照發、客人可以先上課；錢還沒收，櫃檯之後點這顆把金額與付款方式定案。
                      ⚠ 只給櫃檯以上：這一步會寫進營收。 */''}
@@ -50079,6 +50197,8 @@ function ppRecordHtml(){
                 ${(SESSION&&SESSION.role==='admin')?`<button class="btn btn-ghost btn-sm pp-hist-btn" onclick="event.stopPropagation();tkTidyOpen('${t.id}')" title="這張票蓋了哪幾堂（含已上過的）；改完票面餘額自動重算">校正</button>`:''}
                 ${canExtBtn?`<button class="btn btn-ghost btn-sm pp-hist-btn" onclick="event.stopPropagation();openTicketExtend('${t.id}')" title="剩 ${Number(t.sessions_remaining)||0} 堂沒用完，可展延 ${tkPlanDays(t)} 天至 ${String(tkExtendTo(t)).replace(/-/g,'/')}">展延</button>`
                   :(canExt?`<span class="pp-hist-tag" title="剩 ${Number(t.sessions_remaining)||0} 堂沒用完，可請櫃檯展延">可展延</span>`:'')}
+                ${/* 過期票最常需要自訂天數的展延（客人出國回來才發現過期）—— 主管以上限定 */''}
+                ${(isManagerUp()&&(Number(t.sessions_remaining)||0)>0&&t.status!=='refunded'&&t.status!=='void'&&t.status!=='cancelled')?`<button class="btn btn-ghost btn-sm pp-hist-btn" onclick="event.stopPropagation();openTicketExtendMgr('${t.id}')" title="自己填天數（例如出國、受傷）；不限次數，不影響退費。主管以上才看得到">主管展延</button>`:''}
 `;
           return `<div class="bkd-tkcard bkd-tkcard-hist${canExt?' bkd-tkcard-ext':''}">
             <div class="bkd-tkcard-head"><span class="bkd-tkcard-name">${tkNoTag(WAL.noOf(t.id))}${t.plan_name||'票券'}${shrTag}${tkExtBadge(t)}</span>
@@ -66794,7 +66914,7 @@ PAGES.mem_tickets=async function(){
     .map(t=>{ const owner=Object.keys(t.partners).find(k=>String(t.partners[k])===_me2)||'';
       return Object.assign({}, t, {_ptWho:owner}); });
   if(partnerTks.length){ try{ await partnerDirectory(); }catch(_){} }
-  _memTkData={mine,typeMap,logs,WAL,partnerTks,tier:memTierInfo(_me,bookings,tickets),credit:creditOf(_me)};
+  _memTkData={mine,typeMap,logs,WAL,partnerTks,bookings,tier:memTierInfo(_me,bookings,tickets),credit:creditOf(_me)};
   renderMemTickets();
 };
 /* 會員端等級資訊（2026-08-05 使用者指示：「我的票券」上方改列等級、升降級規則、
@@ -67001,7 +67121,15 @@ function renderMemTickets(){
       return (b.expire_date||'').localeCompare(a.expire_date||'');
     });
 
-  const card=(t,dim)=>{
+  /* 第三個參數 pt＝這是「同行的票」（別人的票，我只是一起上）——
+     2026-09-26 使用者：「這邊還是畫一張正常的課卡　加個右邊浮水印同行」。
+     ⚠⚠ 2026-09-29 事故：這一行當初沒有跟著改（改動腳本中途失敗，只寫進了函式**內部**
+       用到 pt 的那幾段），結果 pt 是未宣告的變數 → ReferenceError →
+       會員端「我的票券」整頁畫不出來，連待簽合約卡也跟著不見
+       （使用者回報：「我的票券讀取不到　客人要簽約沒有畫面」）。
+     ⚠ 教訓寫在 tests/memtkrendertest.js：那一頁現在有「實跑一次」的測試，
+       只驗字串的測試抓不到這種漏掉參數的錯。 */
+  const card=(t,dim,pt)=>{
     const ty=typeMap[t.ticket_type_id];
     const color=ty?ty.color:'pt';
     const remain=t.sessions_remaining||0, total=t.sessions_total||0;
