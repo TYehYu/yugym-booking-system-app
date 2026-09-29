@@ -14095,8 +14095,8 @@ function tbl(s){return TABLE_ALIAS[s]||s;}
 let sb=null;
 // ── 版本號（日期+時間格式：年後兩碼+月+日.時分，例 26620.1058 = 26年6/20 10:58）──
 // 每次改版手動更新這一行即可，畫面與 title 會一起更新
-const APP_VERSION = '260929.1629';
-const APP_VERSION_LABEL = 'v260929.1629';
+const APP_VERSION = '260929.1635';
+const APP_VERSION_LABEL = 'v260929.1635';
 const CLOUD = !!(window.YUGYM_CONFIG && window.YUGYM_CONFIG.url && window.YUGYM_CONFIG.anonKey);
 if(CLOUD){ sb = supabase.createClient(window.YUGYM_CONFIG.url, window.YUGYM_CONFIG.anonKey); }
 
@@ -55255,7 +55255,19 @@ function gtSaleKindOpts(hasPt){
        沒有教練課紀錄 → 新約 或 分期
        有教練課紀錄   → 續約 或 分期（新約消失，0901 定案）
      ⚠ 拿掉的只有「不合身分的那一顆」，分期兩邊都在。 */
-  const allow=k=>zero ? (k==='gift') : (k!=='gift' && (k==='installment' || (hasPt?(k!=='new'):(k==='new'))));
+  /* ⚠⚠ 用**內建分期**賣的時候，「分期」這一顆要拿掉（2026-09-29 使用者附截圖：
+       「這一筆是續約　但是浮水印顯示分期」—— 楊慧淳那張 12 堂分三期，
+       櫃檯在約別那一格選了「分期」，浮水印就寫分期，而且**續約獎金會默默不見**）。
+     0907 已經定過「分期繳費不等於約別分期」，但只寫成一句提示，選項還留著 ——
+     提示擋不住手滑。這一次直接把它從清單拿掉：
+       ・用內建分期賣（分期數 > 1）→ 後面各期的收款列系統自己會標「分期」，
+         票券這一格只該回答「第一次買／用完再買」。
+       ・沒有用內建分期（分期數 = 1）→ 「分期」仍然留著，那是陳瀚竣那種
+         「舊合約的後續期數，第一期在別的地方收過」的情況（0907 定案）。
+     ⚠ 這一格直接連到教練的續約獎金，選錯就是少一筆錢，所以寧可少一個選項。 */
+  const _instN=Number((document.getElementById('gt-install')||{}).value||1)>1;
+  const allow=k=>zero ? (k==='gift')
+    : (k!=='gift' && ((k==='installment' && !_instN) || (hasPt?(k!=='new'):(k==='new'))));
   const keep=OPTS.filter(([k])=>allow(k));
   sel.innerHTML=keep.map(([k,lb])=>`<option value="${k}">${lb}</option>`).join('');
   /* ⚠ 退路要退到「還在清單裡的第一個」——退成寫死的 'new' 的話，
@@ -55327,6 +55339,10 @@ function gtSaleKindSync(){
        使用者看過紙本合約後手動定為分期的）—— 改成畫出來讓人選，不要替他決定。
      ⚠ 這一格直接連到教練的續約獎金：自動標成分期＝那筆續約獎金默默不見。 */
   const inst=Number((document.getElementById('gt-install')||{}).value||1)>1;
+  /* ⚠⚠ 2026-09-29：改分期數要**重算選項** —— 用內建分期賣的時候「分期」那一顆
+     會被 gtSaleKindOpts 拿掉（見那裡的說明）。不重算的話，先選方案、後改分期數，
+     那一顆還留在清單上，楊慧淳那筆就是這樣被選成分期的。 */
+  try{ if(typeof window._gtHasPt!=='undefined') gtSaleKindOpts(!!window._gtHasPt); }catch(_){}
   row.style.display='';
   note.style.display='none';
   if(hint){
@@ -55407,6 +55423,7 @@ function grantGoStep(n){
        誰先到都要能自己把畫面收成正確的樣子。 */
     const _planNow=window._grantPlanCache;
     if(_planNow) sel.dataset.cat=(tm[_planNow.ticket_type_id]||{}).category||'';
+    window._gtHasPt=!!_hasPt;   /* 改分期數時要重算選項，見 gtSaleKindSync */
     gtSaleKindOpts(_hasPt);
     gtSaleKindSync();   /* ⚠ 一定排在 Opts 後面：Opts 會把提示行重新打開 */
     if(!gtSaleKindNeed()) return;   /* 不是教練課系 → 不預選、不寫值 */

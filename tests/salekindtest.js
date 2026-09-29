@@ -224,9 +224,19 @@ ok('★★★ 判準只有一支 memHasPtHistory（賣的時候與事後改共�
    會用自訂方案建立一份新的分期合約　因為第一期已經用其他方式開立」）——
    「分期」不是「有沒有買過」的下游，它是另一個維度（這張票是不是某份舊合約的後續期數）。
    新客也可能是分期。所以兩邊都保留分期，只拿掉不合身分的那一顆。 */
-ok('★★★ 有紀錄 → 新約不列；沒紀錄 → 續約不列；分期兩邊都在',
-   /const allow=k=>zero \? \(k==='gift'\) : \(k!=='gift' && \(k==='installment' \|\| \(hasPt\?\(k!=='new'\):\(k==='new'\)\)\)\);/.test(src)
+/* ⚠ 2026-09-29 多一條：用**內建分期**賣的時候，「分期」那一顆也不列
+   （使用者附截圖「這一筆是續約　但是浮水印顯示分期」—— 楊慧淳那張 12 堂分三期，
+    櫃檯選了分期，浮水印寫分期，續約獎金也跟著不見）。 */
+ok('★★★ 有紀錄 → 新約不列；沒紀錄 → 續約不列；用內建分期賣時「分期」也不列',
+   /const allow=k=>zero \? \(k==='gift'\)\s*\n\s*: \(k!=='gift' && \(\(k==='installment' && !_instN\) \|\| \(hasPt\?\(k!=='new'\):\(k==='new'\)\)\)\);/.test(src)
+   && /const _instN=Number\(\(document\.getElementById\('gt-install'\)\|\|\{\}\)\.value\|\|1\)>1;/.test(src)
    && /選項直接不列，而不是列出來讓人選了才擋/.test(src));
+ok('★★★ 沒用內建分期時「分期」仍留著（舊合約的後續期數那種，0907 定案）',
+   /\(k==='installment' && !_instN\)/.test(src)
+   && /舊合約的後續期數，第一期在別的地方收過/.test(src));
+ok('★★★ 改分期數要重算選項（先選方案、後改期數，不重算就還留在清單上）',
+   /try\{ if\(typeof window\._gtHasPt!=='undefined'\) gtSaleKindOpts\(!!window\._gtHasPt\); \}catch\(_\)\{\}/.test(src)
+   && /window\._gtHasPt=!!_hasPt;/.test(src));
 ok('★★★ 事後改約別同一條規則（少一邊就是一個多領獎金的後門）',
    /const _allow=k=>_zero \? \(k==='gift'\) : \(k!=='gift' && \(k==='installment' \|\| \(_hasPt\?\(k!=='new'\):\(k==='new'\)\)\)\);/.test(src));
 ok('★★★ 新客也選得到分期（舊合約的後續期數，第一期在別的地方收過）',
@@ -363,7 +373,7 @@ ok('★★★ 兩張對照表都加了 gift（少一邊，約別章會畫成空�
    /const SALE_KIND_LB=\{new:'新約', renewal:'續約', installment:'分期', gift:'贈送'\};/.test(src)
    && /const SALE_KIND_AB=\{new:'新', renewal:'續', installment:'分', gift:'贈'\};/.test(src));
 ok('★★★ $0 只列「贈送」，有金額的不列它（沿用這一欄「不合用就不列」的作法）',
-   /const allow=k=>zero \? \(k==='gift'\) : \(k!=='gift'/.test(src)
+   /const allow=k=>zero \? \(k==='gift'\)/.test(src)
    && /const _allow=k=>_zero \? \(k==='gift'\) : \(k!=='gift'/.test(src));
 ok('★★★ 判斷 $0 的算法與 refreshGrantInfo 同一套（自訂吃 list_price、模板單價×堂數）',
    /function gtIsZeroDeal\(\)\{/.test(src)
