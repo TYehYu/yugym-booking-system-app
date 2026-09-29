@@ -4625,10 +4625,31 @@ button.pp-name-edit:hover{border-bottom-color:var(--gold);}
 /* 薪資分頁最上面那張「這個月領多少」（2026-09-29）——
    原本一路列到最後才寫應發合計，而看這一頁的人第一個想知道的就是這個數字。 */
 .pp-sal-hero{background:#fff;border:1px solid var(--ok,#3D7039);border-radius:14px;
-  padding:13px 16px;margin-bottom:12px;}
+  padding:13px 16px;margin-bottom:12px;
+  display:flex;align-items:center;justify-content:space-between;gap:14px;flex-wrap:wrap;}
+.pp-sal-tx{min-width:0;}
 .pp-sal-l{font-size:11.5px;font-weight:700;letter-spacing:.06em;color:var(--t3);}
-.pp-sal-v{font-family:var(--num),inherit;font-size:29px;font-weight:800;line-height:1.2;color:var(--ok,#3D7039);}
+.pp-sal-v{font-family:var(--num),inherit;font-size:29px;font-weight:800;line-height:1.2;
+  color:var(--ok,#3D7039);text-align:right;flex:none;}
 .pp-sal-s{font-size:11.5px;color:var(--t2);margin-top:3px;}
+/* 薪資明細的一列（payrollCalcRows 的 rowL，2026-09-29 從 inline style 抽成 class）——
+   多了「採用／未採用」兩態：二選一的兩列要一眼看得出哪一筆真的入帳。 */
+.sal-line{display:flex;align-items:baseline;justify-content:space-between;gap:12px;
+  padding:7px 0;border-bottom:1px solid var(--bd);font-size:13px;}
+.sal-line-l{color:var(--t2);min-width:0;}
+.sal-line-s{color:var(--t3);font-size:11.5px;}
+.sal-line-v{font-weight:600;color:var(--text);white-space:nowrap;font-family:var(--num),inherit;}
+.sal-line-tag{font-size:10px;font-weight:800;border-radius:5px;padding:2px 6px;margin-left:6px;
+  background:var(--card2);color:var(--t3);}
+.sal-line-tag.on{background:#e7efe3;color:var(--ok,#3D7039);}
+/* 未採用：淡化但不隱藏 —— 那個數字仍然是這個月的事實（有比較才知道為什麼取另一邊） */
+.sal-line-dim{opacity:.5;}
+.sal-line-pick{background:color-mix(in srgb,var(--ok,#3D7039) 5%,transparent);border-radius:8px;
+  padding-left:8px;padding-right:8px;margin:0 -8px;}
+.sal-line-pick .sal-line-v{color:var(--ok,#3D7039);font-weight:800;}
+.sal-line-neg .sal-line-v{color:var(--danger,#8C4A3E);}
+/* 薪資分頁的分段標題（目前只有「扣項」用到） */
+.pp-sal-grp{font-size:10px;font-weight:800;letter-spacing:.1em;color:var(--t3);margin:14px 2px 4px;}
 /* 員工編輯視窗（2026-09-29）——欄位沿用 PP 的 .pp-card，只是換個外框。 */
 .ppe-who{font-size:13px;font-weight:600;color:var(--t3);}
 .ppe-body{max-height:64vh;overflow-y:auto;overscroll-behavior:contain;margin:0 -2px;padding:0 2px;}
@@ -14151,8 +14172,8 @@ function tbl(s){return TABLE_ALIAS[s]||s;}
 let sb=null;
 // ── 版本號（日期+時間格式：年後兩碼+月+日.時分，例 26620.1058 = 26年6/20 10:58）──
 // 每次改版手動更新這一行即可，畫面與 title 會一起更新
-const APP_VERSION = '260929.1717';
-const APP_VERSION_LABEL = 'v260929.1717';
+const APP_VERSION = '260929.2006';
+const APP_VERSION_LABEL = 'v260929.2006';
 const CLOUD = !!(window.YUGYM_CONFIG && window.YUGYM_CONFIG.url && window.YUGYM_CONFIG.anonKey);
 if(CLOUD){ sb = supabase.createClient(window.YUGYM_CONFIG.url, window.YUGYM_CONFIG.anonKey); }
 
@@ -46383,15 +46404,26 @@ async function openPerfDetail(empId, month){
     const leaderMgrs = emp.is_manager ? leaderMgrsOf(_allStaff, ym) : null;
     const sal=calcSalary(empAtMonth(emp,ym), ptDone, groupHeads, dutyHours, leave, 0, {renewCount, leaderRows, leaderMgrs, month:ym, dutyOverlapRows:dutyOvRows});
     const money=n=>'$'+Math.round(Number(n)||0).toLocaleString();
-    const row=(label,formula,amount,opt)=>`<div class="pfd-row${opt&&opt.sum?' pfd-sum':''}${opt&&opt.neg?' pfd-neg':''}">
-      <span class="pfd-l">${label}${formula?`<span class="pfd-f">${formula}</span>`:''}</span>
+    const row=(label,formula,amount,opt)=>`<div class="pfd-row${opt&&opt.sum?' pfd-sum':''}${opt&&opt.neg?' pfd-neg':''}${
+      opt&&opt.dim?' pfd-dim':''}${opt&&opt.pick?' pfd-pick':''}">
+      <span class="pfd-l">${label}${opt&&opt.tag?`<span class="pfd-tag${opt.pick?' on':''}">${opt.tag}</span>`:''}${
+        formula?`<span class="pfd-f">${formula}</span>`:''}</span>
       <span class="pfd-v">${amount}</span></div>`;
     let rows='';
     if(sal.base>0){
-      /* 2026-07-31 使用者指示：叫「保障底薪」才看得出下面那條「取數字高者」在比什麼 */
-      rows+=row('保障底薪', sal.schedHours>0?`月薪制・當月排班 ${fmtHours(sal.schedHours)} 小時`:'月薪制', money(sal.base));
-      rows+=row('教練課費', sal.ptDetail||`${ptDone} 堂`, money(sal.ptPay));
-      rows+=row('教練課收入', `取數字高者 → ${sal.ptIsFloor?'保障底薪':'教練課費'}`, money(sal.ptIncome), {sum:true});
+      /* ══ 底薪與課費是「二選一取高者」（2026-09-29 二修）══════════════════════
+         使用者附截圖：「這邊是不是可以再簡化　留下保障底薪　教練課費　兩列就好」。
+         在那之前是三列（底薪／課費／教練課收入），第三列才是真正入帳的那一筆 ——
+         三列排在一起看起來像三筆都加，而且加起來跟應發合計對不上（0929 使用者先問的就是這個）。
+         現在兩列講完：被採用的那一列標「採用」並用品牌色，沒被採用的淡化標「未採用」。
+         ⚠ 金額仍然是 sal.ptIncome（取高者的結果）—— 只是把它掛在勝出的那一列上，
+           不另外多一列。合計那邊一個字都沒動。
+         ⚠ 2026-07-31 定的「保障底薪」這個名字留著：它要讓人看得出在跟什麼比。 */
+      const _floor=!!sal.ptIsFloor;
+      rows+=row('保障底薪', sal.schedHours>0?`月薪制・當月排班 ${fmtHours(sal.schedHours)} 小時`:'月薪制',
+        money(sal.base), {dim:!_floor, pick:_floor, tag:_floor?'採用':'未採用'});
+      rows+=row('教練課費', sal.ptDetail||`${ptDone} 堂`,
+        money(sal.ptPay), {dim:_floor, pick:!_floor, tag:_floor?'未採用':'採用'});
     }else{
       rows+=row('教練課費', sal.ptDetail||`${ptDone} 堂`, money(sal.ptPay));
     }
@@ -46689,18 +46721,33 @@ function payrollCalcRows(r){
     h2+=`<div style="font-size:11px;color:var(--t3);padding:6px 0;">系統從 2026 年 7 月開始使用，這個月份是匯入的紀錄，不重新計算。</div>`;
     return h2;
   }
-const rowL=(label,val,sub)=>`<div style="display:flex;justify-content:space-between;padding:5px 0;border-bottom:1px solid var(--bd);font-size:13px;"><span style="color:var(--t2);">${label}${sub?`<span style="color:var(--t3);font-size:11.5px;"> ${sub}</span>`:''}</span><span style="font-weight:600;color:var(--text);">${val}</span></div>`;
+/* 一列：可以標「採用／未採用」並淡化（2026-09-29，見下方底薪與課費那一段） */
+const rowL=(label,val,sub,opt)=>`<div class="sal-line${opt&&opt.dim?' sal-line-dim':''}${opt&&opt.pick?' sal-line-pick':''}"><span class="sal-line-l">${label}${
+  opt&&opt.tag?`<span class="sal-line-tag${opt.pick?' on':''}">${opt.tag}</span>`:''}${
+  sub?`<span class="sal-line-s"> ${sub}</span>`:''}</span><span class="sal-line-v">${val}</span></div>`;
             const rowDeduct=(label,val)=>`<div style="display:flex;justify-content:space-between;padding:5px 0 5px 16px;border-bottom:1px solid var(--bd);font-size:12.5px;"><span style="color:var(--t3);">${label}</span><span style="color:#c0392b;font-weight:600;">−$${val.toLocaleString()}</span></div>`;
             let h='';
             // 正職：底薪 + 請假扣 → 取高
             if(s.base>0){
-              h+=rowL('底薪',`$${s.base.toLocaleString()}`);
-              if(s.baseHourly>0) h+=`<div style="padding:2px 0 6px 16px;font-size:11px;color:var(--t3);">請假時薪 $${s.baseHourly.toLocaleString()}（底薪 $${s.base.toLocaleString()} ÷ ${s.divisor}h）</div>`;
+              /* ══ 底薪與課費是「二選一取高者」（2026-09-29）══════════════════════
+                 使用者：「這邊是不是可以再簡化　留下保障底薪　教練課費　兩列就好」。
+                 在那之前是三列（底薪／課費／教練課收入），第三列才是真正入帳的那一筆 ——
+                 三列排在一起看起來像三筆都加，加起來還跟應發合計對不上
+                 （使用者先問的就是這個：「這邊有優化建議嗎」）。
+                 現在兩列講完：勝出的標「採用」並用品牌色，另一列淡化標「未採用」。
+                 ⚠ 金額與合計一個字都沒動 —— 合計吃的一直是 s.ptIncome（取高者的結果），
+                   這裡只是不再把它單獨列成第三列。 */
+              const _floor=!!s.ptIsFloor;
+              h+=rowL('保障底薪',`$${s.base.toLocaleString()}`, '月薪制',
+                {dim:!_floor, pick:_floor, tag:_floor?'採用':'未採用'});
+              /* ⚠ 請假時薪只在**真的有請假扣薪**時才寫（2026-09-29 使用者：那是請假才用得到的數字）——
+                 原本不管有沒有請假都印一行，看的人會以為這個月被扣了什麼。 */
+              if(s.baseHourly>0 && s.leaveDeduct>0) h+=`<div style="padding:2px 0 6px 16px;font-size:11px;color:var(--t3);">請假時薪 $${s.baseHourly.toLocaleString()}（底薪 $${s.base.toLocaleString()} ÷ ${s.divisor}h）</div>`;
               /* 2026-08-01：請假扣薪移到最後統一扣，底薪這裡只列不扣薪的假別 */
               if(r.leave.特休>0) h+=`<div style="display:flex;justify-content:space-between;padding:5px 0 5px 16px;border-bottom:1px solid var(--bd);font-size:12.5px;"><span style="color:var(--t3);">特休 ${r.leave.特休} 小時</span><span style="color:var(--t3);">不扣薪</span></div>`;
               if(r.leave.其他>0) h+=`<div style="display:flex;justify-content:space-between;padding:5px 0 5px 16px;border-bottom:1px solid var(--bd);font-size:12.5px;"><span style="color:var(--t3);">其他假 ${r.leave.其他} 小時</span><span style="color:var(--t3);">不扣薪</span></div>`;
-              h+=rowL('教練課費',`$${s.ptPay.toLocaleString()}`, `${r.ptDone} 堂`);
-              h+=rowL('教練課收入',`<b>$${s.ptIncome.toLocaleString()}</b>`, s.ptIsFloor?'取底薪':'取課費');
+              h+=rowL('教練課費',`$${s.ptPay.toLocaleString()}`, `${r.ptDone} 堂`,
+                {dim:_floor, pick:!_floor, tag:_floor?'未採用':'採用'});
             } else {
               // 兼職/合作/工讀：教練課費（如有）
               if(r.ptDone>0||s.ptPay>0) h+=rowL('教練課費',`$${s.ptPay.toLocaleString()}`, `${r.ptDone} 堂`);
@@ -50627,19 +50674,36 @@ async function ppEmpSalaryHtml(id){
      ⚠ 有扣項（勞健保、請假扣薪）的人要寫**實領**，那才是入帳金額；
        沒有扣項的人（多數合作教練）應發＝實領，就只寫一個數字，不要硬湊兩行。
      ⚠ 數字全部來自 r.sal，與薪資彙總、完整薪資單同一套計算 —— 這裡不自己算。 */
+  const sal=(r&&r.sal)||{};
   const _g=Math.round(Number(r.sal&&r.sal.grossPay)||0);
   const _n=Math.round(Number(r.sal&&r.sal.netPay)||0);
   const _cut=_g-_n;
+  /* ⚠ 金額靠右（2026-09-29 使用者：「最上面那一格 薪水可以靠右」）——
+     左邊是標題與算式，右邊是結論數字，跟下面每一列（項目在左、金額在右）同一個方向。 */
   return `<div class="pp-sal-hero">
-      <div class="pp-sal-l">${Number(M)} 月${_cut>0?'實領':'應發'}</div>
+      <div class="pp-sal-tx">
+        <div class="pp-sal-l">${Number(M)} 月${_cut>0?'實領':'應發'}</div>
+        <div class="pp-sal-s">${_cut>0
+          ? `應發 ${_m(_g)}　−　勞健保與扣項 ${_m(_cut)}`
+          : '沒有勞健保與扣項，應發＝實領'}</div>
+      </div>
       <div class="pp-sal-v">${_m(_cut>0?_n:_g)}</div>
-      <div class="pp-sal-s">${_cut>0
-        ? `應發 ${_m(_g)}　−　勞健保與扣項 ${_m(_cut)}`
-        : '沒有勞健保與扣項，應發＝實領'}</div>
     </div>
     <div class="pp-emp-sub">${Y} 年 ${M} 月　·　與薪資彙總同一套計算</div>
     ${payrollCalcRows(r)}
-    <div class="pp-emp-row pp-emp-sum"><span>應發合計</span><b>${_m(_g)}</b></div>
+    ${/* 扣項直接列出來（2026-09-29 使用者：上面寫了「勞健保與扣項 $2,368」，
+         下面卻沒說是哪些，要再點「開啟完整薪資單」才看得到）——
+         ⚠ 數字全部讀 r.sal，與完整薪資單同一套，不自己算。 */''}
+    ${_cut>0?`<div class="pp-sal-grp">扣項</div>`+[
+      (Number(sal.leaveDeduct)>0)?['請假扣薪', sal.leaveDeductDetail||'事假全扣・病假半薪', sal.leaveDeduct]:null,
+      (Number(sal.insLaborEmp)>0)?['勞保（員工負擔）', sal.insGrade?`投保級距 ${Number(sal.insGrade).toLocaleString()}`:'', sal.insLaborEmp]:null,
+      (Number(sal.insHealthEmp)>0)?[(sal.insIdentity==='owner'?'健保（雇主自負額）':'健保（員工負擔）'),
+        sal.insGrade?`投保級距 ${Number(sal.insGrade).toLocaleString()}`:'', sal.insHealthEmp]:null,
+    ].filter(Boolean).map(([lb,sub,v])=>`<div class="sal-line sal-line-neg"><span class="sal-line-l">${lb}${
+      sub?`<span class="sal-line-s"> ${escH(sub)}</span>`:''}</span><span class="sal-line-v">−${_m(v)}</span></div>`).join(''):''}
+    ${/* 最後一列＝實領（2026-09-29）——上面 hero 已經寫過應發，同一個數字不講兩遍。
+         沒有扣項的人（應發＝實領）就照舊寫「應發合計」，不要憑空冒出一個新名詞。 */''}
+    <div class="pp-emp-row pp-emp-sum"><span>${_cut>0?'實領':'應發合計'}</span><b>${_m(_cut>0?_n:_g)}</b></div>
     <div style="text-align:right;margin-top:10px;">
       <button class="btn btn-ghost btn-sm" onclick="ppOpenEmpSalary('${id}')">開啟完整薪資單 ›</button></div>`;
 }
