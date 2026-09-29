@@ -7685,10 +7685,16 @@ body.wp-dragging-on .wp-item{cursor:grabbing;}
    當時三組長了三種樣子：底色用 --card 不是 --card2、hover 只換文字色、
    用 --green 不是 --olive、還多一層陰影。
    ⚠ 拿掉陰影另有依據：Ink 主題整套在拿掉陰影（body.ink 底下 8 條 box-shadow:none）。 */
+/* ⚠⚠ z-index 要比教練列（.tcol-head 的 9）高（2026-09-29 使用者回報：
+     「今天有七個教練上課　第七的教練無法顯示　而且桌機沒辦法左右拖移畫面　要設計一個按鈕」）——
+     翻頁鈕其實 0902 就做好了，但同一天為了修「課卡從縫裡透出教練列」把 .tcol-head
+     從 3 提到 9，這兩顆 7 的按鈕就整個被壓在教練列底下，等於不存在。
+     ⚠ 桌機沒有橫向捲軸可拖（scrollbar-width:none），這兩顆是唯一的出路，一定要看得到。
+     ⚠ 再加一點陰影與實底：它現在浮在教練名字上面，沒有邊界會看不出是個按鈕。 */
 .tcol-pg{position:absolute;top:calc(var(--tcolhead,46px) / 2);transform:translateY(-50%);display:none;
   width:26px;height:26px;border-radius:50%;align-items:center;justify-content:center;
   background:var(--card2);border:1px solid var(--bd);color:var(--t2);font-size:15px;line-height:1;
-  cursor:pointer;z-index:7;box-shadow:none;}
+  cursor:pointer;z-index:11;box-shadow:0 1px 6px rgba(30,25,15,.18);}
 .tcol-pg:hover{background:var(--olive,#556B45);border-color:var(--olive,#556B45);color:#F2EFE4;}
 /* 「今天」的狀態版（2026-09-02）：不是按鈕，只是告訴你「你正在看今天」。
    ⚠ 這一顆是 <span> 不是 <button>：按鈕的文字預設就會置中，span 不會
@@ -14172,8 +14178,8 @@ function tbl(s){return TABLE_ALIAS[s]||s;}
 let sb=null;
 // ── 版本號（日期+時間格式：年後兩碼+月+日.時分，例 26620.1058 = 26年6/20 10:58）──
 // 每次改版手動更新這一行即可，畫面與 title 會一起更新
-const APP_VERSION = '260929.2006';
-const APP_VERSION_LABEL = 'v260929.2006';
+const APP_VERSION = '260929.2014';
+const APP_VERSION_LABEL = 'v260929.2014';
 const CLOUD = !!(window.YUGYM_CONFIG && window.YUGYM_CONFIG.url && window.YUGYM_CONFIG.anonKey);
 if(CLOUD){ sb = supabase.createClient(window.YUGYM_CONFIG.url, window.YUGYM_CONFIG.anonKey); }
 
@@ -65684,7 +65690,18 @@ async function renderTrainingLogSheet(){
   // ── P1-1 會員訓練總覽（跨課程統計）──
   /* ⚠ 一律濾掉 slot=2：那是 1V2 第二位的紀錄，只是借掛在這位會員的 member_id 上。
      不濾的話，這位會員的三大項 PR 會被另一個人的成績蓋掉（PR 全部從 training_logs 推導）。 */
-  const memAllLogs=allLogs.filter(l=>l.member_id===b.member_id && _slotOf(l)!==2);
+  /* ⚠⚠ 2026-09-29 使用者回報：「1v2會員課表紀錄　會員A跟會員B套用上次的紀錄
+       只會會出現其中一位」——
+     這兩條（總覽統計與歷史課表）原本一律 `_slotOf(l)!==2`，也就是**永遠只看第一位**。
+     0915 那樣寫是對的：當時第二位沒有身分，slot=2 是沒人認領的借掛紀錄。
+     但課表 0915 起就有「會員 A／B」兩個頁籤了 —— 切到 B 的時候，
+     他看到的歷史、按下「套用」帶進來的，全都是 A 的動作。
+     改成跟著**當前頁籤**走（與上面 logs 那一行同一個判準）：
+       ・非 1V2：完全不變（沒有 slot=2 的紀錄）
+       ・1V2 看 A：只收 slot!==2 ← 與原本一樣
+       ・1V2 看 B：只收 slot===2 ← 這次補的
+     ⚠ 判準要跟 logs 那一行一字不差，三個地方（今日、總覽、歷史）講的必須是同一個人。 */
+  const memAllLogs=allLogs.filter(l=>l.member_id===b.member_id && (!_is1v2 || _slotOf(l)===_slot));
   const memBkSet=new Set(memAllLogs.map(l=>l.booking_id));
   const sessionCount=memBkSet.size;                       // 有訓練紀錄的課堂數
   const lastTrainDate=memAllLogs.length
@@ -65733,7 +65750,7 @@ async function renderTrainingLogSheet(){
      ⚠ 排序做在**分組之前**：byBk 各組就自然是升冪，
        預覽、_tlHistCache、套用三處一次到位，不必在套用端再排一次。
      ⚠ 回呼參數避開 b —— 外層的 b 是這堂 booking，用 b 當參數名會把它遮蔽掉。 */
-  const memLogs=allLogs.filter(l=>l.member_id===b.member_id && l.booking_id!==b.id && _slotOf(l)!==2)
+  const memLogs=allLogs.filter(l=>l.member_id===b.member_id && l.booking_id!==b.id && (!_is1v2 || _slotOf(l)===_slot))
     .sort((a,b2)=>String(a.created_at||'').localeCompare(String(b2.created_at||'')));
   const byBk={};
   memLogs.forEach(l=>{ (byBk[l.booking_id]=byBk[l.booking_id]||[]).push(l); });

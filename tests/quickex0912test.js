@@ -265,17 +265,21 @@ console.log('\n⑥ 1V2 的兩份課表（2026-09-15 使用者：「上方用兩�
      （PR 完全從 training_logs 推導，沒有獨立來源）。 */
   const guards=(src.match(/Number\(l(&&l)?\.slot\)!==2/g)||[]).length
              + (src.match(/_slotOf\(l\)!==2/g)||[]).length;
-  /* 2026-09-26 兩次調整，剩五處：
-       ・動作查詢（tlOpenExerciseHistory）整支移除，它那一道跟著走
-       ・會員端訓練紀錄那一頁改成「顯示但標名字」（同行會員上線後 slot=2 有主人了）
-     ⚠ 少的都是「入口改了」不是「防線被拆」：教練端那幾處（PR 來源、歷史課表）都還在，
-       會員端的可見範圍改由 RLS 把關（20260926_1v2_partner_access.sql）。 */
-  ok('★★★ 五處讀取端仍濾掉 slot=2（漏一處就會出現「別人的 PR 算到我頭上」）',
-     guards===5, guards);
+  /* 三次調整後剩四處：
+       ・0926 動作查詢整支移除，它那一道跟著走
+       ・0926 會員端訓練紀錄改成「顯示但標名字」（同行會員上線後 slot=2 有主人了）
+       ・0929 教練端的總覽與歷史課表改成「跟著當前頁籤」（切到 B 就看 B 的）
+     ⚠ 少的都是「判準換了」不是「防線被拆」：會員端的可見範圍由 RLS 把關，
+       教練端則改成 (!_is1v2 || _slotOf(l)===_slot) —— 非 1V2 的行為完全不變。 */
+  ok('★★★ 四處讀取端仍濾掉 slot=2（漏一處就會出現「別人的紀錄算到我頭上」）',
+     guards===4, guards);
+  /* 四處：今日紀錄／上次的數字（_prevByEx）／總覽統計／歷史課表 */
+  ok('★★★ 教練端四處（今日／上次數字／總覽／歷史）跟著當前頁籤，判準一字不差',
+     (src.match(/\(!_is1v2 \|\| _slotOf\(l\)===_slot\)/g)||[]).length===4);
   ok('★★★ 會員端那一頁改成分段標名字，不再一律濾掉',
      /const _isMine=l=>\(Number\(l&&l\.slot\)===2\)===w\.meIsPartner;/.test(src));
-  ok('★★★ PR 的來源（memAllLogs）有濾 —— 不濾的話紀錄會被另一個人蓋掉',
-     /const memAllLogs=allLogs\.filter\(l=>l\.member_id===b\.member_id && _slotOf\(l\)!==2\);/.test(src));
+  ok('★★★ 總覽的來源（memAllLogs）跟著頁籤 —— 不然切到 B 看到的是 A 的統計',
+     /const memAllLogs=allLogs\.filter\(l=>l\.member_id===b\.member_id && \(!_is1v2 \|\| _slotOf\(l\)===_slot\)\);/.test(src));
 
   ok('★★★ 三個寫入點都帶 slot（新增動作／套歷史課表／套方案）',
      (src.match(/slot:\(Number\(window\._tlSlot\)===2\)\?2:null/g)||[]).length===3);
