@@ -48,15 +48,19 @@ ok('★★ 上方摘要那一行也跟著藏，不會留下「本月課堂 0/0 �
    && /const cap=_capBits\.length\?/.test(src));
 
 console.log('\n③ 特休時數移到上方基本資料');
-ok('★★★ 特休掛在員工的 meta 列（會員那半邊不受影響）',
-   /\+ mv\('Email', r\.email,'email'\) \+ empChips \+ empAl \+ empLine;/.test(src));
+/* 2026-09-29 員工卡改版：欄位從一長串 meta 改成左右兩組格子（empFields）。 */
+ok('★★★ 特休在員工卡的「任職」那一組（會員那半邊不受影響）',
+   /<div class="ppf-gl">任職<\/div>/.test(src) && /\$\{empAl\}/.test(src)
+   && /const meta = isM\s*\n\s*\? \(ppSelfView\(\)\?'':tierItem \+ coachItem\)/.test(src));
 ok('★★★ 合作教練寫「不適用」而不是 0 —— 0 會被讀成「休完了」',
-   /if\(_rule\.leaveApplicable===false\)/.test(src) && /不適用<\/span><\/div>/.test(src));
+   /if\(_rule\.leaveApplicable===false\)/.test(src)
+   && /_eBox\('特休','<span class="ppf-none">不適用<\/span>'\)/.test(src));
 ok('★★ 判準跟特休管理頁同一句（EMP_RULES[normEmp(...)].leaveApplicable）',
    /const _et=normEmp\(r\.employment_type\|\|r\.pay_type\);/.test(src)
    && /const _rule=EMP_RULES\[_et\]\|\|\{\};/.test(src));
 ok('★★ 櫃檯以上點得開特休設定，教練自己看純顯示',
-   /const _canAl = isDeskLike\(\);/.test(src) && /onclick="openLeaveEdit\('\$\{r\.id\}'\)"/.test(src));
+   /const _canAl = isDeskLike\(\);/.test(src)
+   && /_canAl\?`openLeaveEdit\('\$\{r\.id\}'\)`:''/.test(src));
 ok('★★ 下方工作紀錄不再重複顯示特休（同一個數字兩個地方會對不起來）',
    !/特休 <b>\$\{al\}<\/b> 小時可用/.test(src) && !/const al = ppAlAvailable\(PP\.rec\);/.test(src));
 

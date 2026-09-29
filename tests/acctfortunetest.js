@@ -333,8 +333,9 @@ ok('　　主教練／家庭成員抽成具名變數，兩種版面共用同一�
    && /const famItem = \(isM&&_canBase\)\?/.test(src)
    /* 2026-08-22：會員看自己時 tierItem/coachItem 收起來（ppSelfView），組法不變 */
    && /const meta = isM\s*\n\s*\? \(ppSelfView\(\)\?'':tierItem \+ coachItem\) \+ ecItem \+ lineItem \+ carrierItem \+ emailItem \+ famItem/.test(src));
-ok('　　姓名與大頭照抽成共用變數，兩種版面各用一次（沒有複製兩份）',
-   (ph.match(/\$\{_avatar\}/g)||[]).length===2 && (ph.match(/\$\{_nameHtml\}/g)||[]).length===2);
+/* 2026-09-29：員工卡改成自己一支 return（左右分組），所以變成三個版面各用一次。 */
+ok('　　姓名與大頭照抽成共用變數，每種版面各用一次（沒有複製多份）',
+   (ph.match(/\$\{_avatar\}/g)||[]).length===3 && (ph.match(/\$\{_nameHtml\}/g)||[]).length===3);
 ok('　　員工資料／其他角色維持原本的橫向表頭', ph.includes('return `<div class="pp-head">'));
 ok('★ 活動紀錄改成一列按鈕，點了下方換內容（同表頭，0821 一併放寬到櫃檯以上）',
    /const _m2=\(typeof isDeskLike==='function'\) \? isDeskLike\(\) : !!\(SESSION && SESSION\.role==='admin'\);/.test(src)

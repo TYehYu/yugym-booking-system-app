@@ -16,13 +16,15 @@ const grabFn=n=>{const i=src.indexOf('function '+n+'(');if(i<0)return'';let d=0;
 
 console.log('① 員工資料 → 綁定 LINE 入口');
 {
-  ok('★ 員工表頭有 LINE 欄（empLine 併進 meta）', /empChips \+ empAl \+ empLine;/.test(src));
+  /* 2026-09-29：員工卡改成格子版，LINE 是「聯絡」那一組的一格。 */
+  ok('★ 員工卡有 LINE 欄（在「聯絡」那一組）',
+     /<div class="ppf-gl">聯絡<\/div>/.test(src) && /\$\{empLine\}/.test(src));
   const seg=src.slice(src.indexOf('const empLine = !isM'), src.indexOf('const ecItem = isM'));
   ok('★ 未綁定 → 點擊開 ppStaffLineBind', /ppStaffLineBind\('\$\{r\.id\}'\)/.test(seg));
   ok('★ 已綁定 → 顯示「已綁定」且可解除', /已綁定/.test(seg) && /ppStaffLineUnbind/.test(seg));
   ok('★ 權限：櫃檯以上或本人（對齊 employees 的 update policy）',
      /isDeskLike\(\) \|\| \(SESSION && SESSION\.id===r\.id\)/.test(seg));
-  ok('　　沒權限的人只看到「未綁定」不可點', /canBind\?'＋ 綁定 LINE':'未綁定'/.test(seg));
+  ok('　　沒權限的人只看到「未綁定」不可點', /canBind\?'＋ 綁定':'未綁定'/.test(seg));
 }
 
 console.log('\n② 產 QR：一次性 token 寫進 employees.line_bind_token');
