@@ -22,15 +22,18 @@ ok('★★★ 算薪與請假統計都是 s.emp_id===emp.id 逐人比對 —— 
    /if\(s\.emp_id===emp\.id/.test(src) && !/SUB_ROSTER_ID/.test(g('function leaveSummary','\n}')));
 
 console.log('\n② 表格');
+/* 2026-09-29 使用者改名：補班人員 → 支援班。 */
 ok('★★★ 固定排在最後一列（在員工那幾列 .join 之後接上去）',
-   /\}\)\.join\(''\)\s*\n\s*\/\* 補班人員：固定排在最後一列/.test(TAB));
+   /\}\)\.join\(''\)\s*\n\s*\/\* 支援班：固定排在最後一列/.test(TAB));
 ok('★★★ 一格裡兩件事：班別章在上、補班人員的名字在下',
    /return main\+\(s\.sub_name\?`<span class="sh-subnm\$\{_paid\?' paid':''\}"/.test(TAB));
 ok('★★ 班別吃手填的 code，留空才依起迄時間推導',
    /const code=s\.code\|\|shiftCode\(s\.start_time,s\.end_time,s\.date\);/.test(TAB));
-ok('★★ 抬頭寫「補班人員」＋「班別與人員手填・不計薪」，不會被當成某位員工',
-   /<span class="shn-name">補班人員<\/span>/.test(TAB)
-   && /班別與人員手填・不計薪/.test(TAB));
+/* ⚠ 2026-09-29 使用者：「這一列要支薪　只是如果是主管職就不用另外給薪」——
+   計薪規則沒變（掛在真員工身上就照算），抬頭那句話改成講得出這件事。 */
+ok('★★ 抬頭寫「支援班」＋計薪說明，不會被當成某位員工',
+   /<span class="shn-name">支援班<\/span>/.test(TAB)
+   && /班別與人員手填・員工照算值班費（主管職除外）/.test(TAB));
 ok('★★ 沒有「週期」鈕（這一列不是人，沒有週期可排）',
    !/sh-subrow[\s\S]{0,600}openWeeklyShift/.test(TAB));
 ok('★★★ 時數照樣算進空班檢查 —— 有人補班就是有人顧店',
@@ -52,7 +55,7 @@ ok('★★★ 補班列多「班別」與「補班人員」兩格手填',
 ok('★★★ 補班列不畫請假登記（這一列不是員工，沒有假可以請）',
    /\$\{\(cur&&!_isSub\)\?`<div style="border-top:1px solid var\(--bd\);padding-top:12px/.test(EDIT));
 ok('★★★ 補班列不畫「設為每週固定」', /\$\{_isSub\?'':`<div style="margin-bottom:10px;padding-top:10px/.test(EDIT));
-ok('★★ 視窗標題分得出來是哪一種', /\$\{_isSub\?'補班人員 · ':'排班 · '\}/.test(EDIT));
+ok('★★ 視窗標題分得出來是哪一種', /\$\{_isSub\?'支援班 · ':'排班 · '\}/.test(EDIT));
 ok('★★ 兩種補班人員各自講清楚計不計薪，而且都算進空班檢查',
    /挑<b>店裡的員工<\/b>→ 這個班算他的，<b>值班費照算<\/b>/.test(EDIT)
    && /挑<b>店外人員<\/b>→ 只是記錄誰來顧店，<b>不計薪<\/b>/.test(EDIT)
@@ -83,8 +86,9 @@ ok('★★★ 從員工自己那一列點開同一筆時，旗標與名字不能
    /\}else if\(cur0 && cur0\.is_sub\)\{/.test(SAVE)
    && /obj\.is_sub=true; obj\.sub_name=cur0\.sub_name\|\|null;/.test(SAVE)
    && /const cur0=id\?\(\(window\._shiftsCache\|\|\[\]\)\.find\(x=>x&&x\.id===id\)\|\|null\):null;/.test(SAVE));
-ok('★★ 員工自己那一列會標「補」，不然多一個班卻看不出來是怎麼多的',
-   /return main\+\(shIsSub\(s\)\?'<span class="sh-subtag">補<\/span>':''\)\+leaveTag;/.test(TAB));
+/* 2026-09-29 改名「支援班」之後，chip 上那個字從「補」改成「援」 */
+ok('★★ 員工自己那一列會標「援」，不然多一個班卻看不出來是怎麼多的',
+   /<span class="sh-subtag" title="支援班">援<\/span>/.test(TAB));
 ok('★★ 補班列上，掛在真員工身上的名字標成深色（一眼看得出有沒有牽涉到薪水）',
    /const _paid=!shIsSubRoster\(s\.emp_id\);/.test(TAB)
    && /\.sh-subnm\.paid\{color:var\(--green\);font-weight:700;\}/.test(src));

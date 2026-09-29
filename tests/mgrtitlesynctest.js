@@ -31,15 +31,22 @@ ok('★★ 只有兩處寫 is_manager，都同步到了（沒有第三條漏網�
 ok('★★ 職稱下拉仍留著「店長（舊稱）」，舊資料看得到',
    /\['店長','店長（舊稱）'\]/.test(src));
 
-console.log('\n② 員工列表姓名格底色');
-ok('★★★ 管理員一個底色、主管另一個（管理員優先）',
-   /class="st-l-who\$\{c\.role==='admin'\?' st-who-adm':\(c\.is_manager\?' st-who-mgr':''\)\}"/.test(src));
-ok('★★★ 用中性墨色，不借紅／金（那兩色是警示與次要提示，標常態身分會讀成有事發生）',
-   /\.st-l-who\.st-who-adm\{background:color-mix\(in srgb,var\(--text-primary,#2b2b2b\) 10%,transparent\);\}/.test(src)
-   && /\.st-l-who\.st-who-mgr\{background:color-mix\(in srgb,var\(--text-primary,#2b2b2b\) 5%,transparent\);\}/.test(src)
-   && /不用紅或金/.test(src));
-ok('★★★ 用負邊距把底色往外撐 —— 直接加 padding 會把名字往內推、整欄對不齊',
-   /\.st-l-who\.st-who-adm,\.st-l-who\.st-who-mgr\{border-radius:9px;padding:3px 9px;margin:-3px -9px;\}/.test(src));
+console.log('\n② 員工列表的職等標示');
+/* 2026-09-29：姓名格底色（0909）→ 姓名前一枚章（六種樣式裡使用者選了「只有一枚章」）。
+   ⚠ 整列底色改成聘僱類型 20% 之後，姓名格再加一塊底色就變成色塊疊色塊。 */
+ok('★★★ 管理員與主管各一枚章（管理員優先）',
+   /const _lv=c\.role==='admin'\?'adm':\(c\.is_manager\?'mgr':''\);/.test(src)
+   && /<span class="st-lv st-lv-\$\{_lv\}">/.test(src));
+/* ⚠ 章上的字用職稱（老闆／主管），判準仍是權限 —— 職稱給人看、權限給系統認 */
+ok('★★★ 章上寫職稱，沒填才退回權限名稱',
+   /escH\(c\.job_title\|\|\(_lv==='adm'\?'管理員':'主管'\)\)/.test(src));
+ok('★★★ 兩階同一枚章、只差質感（老闆加漸層與陰影，不換色）',
+   /\.st-lv\{[\s\S]{0,200}?background:var\(--gold-d,#8A6E42\);\}/.test(src)
+   && /\.st-lv-adm\{background:linear-gradient\(135deg,#C9A227,var\(--gold-d,#8A6E42\)\);/.test(src));
+ok('★★ 舊的姓名格底色已經收掉（不留死 class）',
+   !/st-who-adm|st-who-mgr/.test(src.replace(/\/\*[\s\S]*?\*\//g,' ')));
+ok('★★ 章不會把名字擠掉（只佔幾個字寬，margin-right 6px）',
+   /\.st-lv\{[\s\S]{0,160}?margin-right:6px;/.test(src));
 ok('★★ 左邊那條色帶仍是聘僱類型，沒有被搶走',
    /border-left:4px solid var\(--pc,#8a8478\);/.test(src)
    && /style="--pc:\$\{etc\};"/.test(src));
