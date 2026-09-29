@@ -50,6 +50,11 @@ ok('★★ 員工列表的 🎂 不再亮金，也不寫「會發放」',
    && /const hit=!!payMM && payMM===bd\.slice\(5,7\) && !_off;/.test(src)
    && /這位不發生日禮金/.test(src));
 ok('★★ 生日本身照樣顯示（只是不發禮金）', /🎂 \$\{md\}/.test(src));
+/* ⚠ 2026-09-29 使用者附截圖「這邊還有紅包」—— 薪資那邊不算了，紅包還亮著就是在騙人。
+   三處要吃同一個開關：calcSalary 的 bdayPay、stBdayTag 的 🎂、員工列表那一枚 🧧。 */
+ok('★★★ 員工列表的 🧧 紅包也不掛',
+   /if\(c&&c\.birthday_bonus_off\) return '';/.test(src)
+   && /st-l-red/.test(src));
 
 console.log('\n'+(fail?'✗ ':'✓ ')+pass+' 通過 / '+fail+' 失敗');
 process.exit(fail?1:0);
