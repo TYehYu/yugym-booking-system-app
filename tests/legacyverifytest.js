@@ -50,9 +50,10 @@ console.log('\n①-2 會員資料視窗的右上角也有同一顆');
 /* 2026-08-08：管理員多了一顆「刪除會員」，並排在同一列（見 delmembertest.js） */
 /* 2026-08-11 退場：lvBtn 改固定空字串（原因寫在同一行註解），並排結構不動 ——
    delBtn 等鄰居不受影響。 */
+/* 2026-09-29：員工的〔編輯〕改成開視窗（openEmpEditModal），右上多一枚 LINE 狀態標籤。 */
 ok('★ 表頭右上那顆也收起（lvBtn 固定空字串，並排結構保留，2026-08-11 退場）',
    /const lvBtn = '';\s*\/\/ 新舊系統票券核對已退場（2026-08-11 使用者指示，舊系統核對完成）/.test(src)
-   && /: \(isM \? lvBtn\+delBtn : pwBtn\+`<button class="btn btn-ghost btn-sm" onclick="ppEdit\(\)">編輯<\/button>`\);/.test(src));
+   && /: \(isM \? lvBtn\+delBtn\s*\n\s*: empLineTag\+pwBtn\+`<button class="btn btn-ghost btn-sm" onclick="openEmpEditModal\('\$\{r\.id\}'\)">編輯<\/button>`\);/.test(src));
 ok('　　員工的表頭不受影響（重設密碼與編輯照舊）',
    /const pwBtn = \(!isM && r\.phone && SESSION && SESSION\.role==='admin'\)/.test(src));
 ok('　　編輯模式時讓位給取消／儲存（不會三顆擠在一起）',

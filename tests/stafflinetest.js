@@ -16,9 +16,15 @@ const grabFn=n=>{const i=src.indexOf('function '+n+'(');if(i<0)return'';let d=0;
 
 console.log('① 員工資料 → 綁定 LINE 入口');
 {
-  /* 2026-09-29：員工卡改成格子版，LINE 是「聯絡」那一組的一格。 */
-  ok('★ 員工卡有 LINE 欄（在「聯絡」那一組）',
-     /<div class="ppf-gl">聯絡<\/div>/.test(src) && /\$\{empLine\}/.test(src));
+  /* 2026-09-29 二修（使用者：「這個改成標籤放在右上角」）——
+     卡片上只剩一枚狀態標籤，綁定／解除移到編輯視窗那一列。 */
+  ok('★ 員工卡右上角有 LINE 狀態標籤',
+     /const empLineTag = \(!isM && r\.line_user_id\)/.test(src)
+     && /empLineTag\+pwBtn/.test(src));
+  ok('★ 綁定／解除在編輯視窗裡（多一列 LINE 綁定）',
+     /<div class="pp-card-t">LINE 綁定<\/div>/.test(src)
+     && /closeModal\(\);ppStaffLineBind\('\$\{r\.id\}'\)/.test(src)
+     && /closeModal\(\);ppStaffLineUnbind\('\$\{r\.id\}'\)/.test(src));
   const seg=src.slice(src.indexOf('const empLine = !isM'), src.indexOf('const ecItem = isM'));
   ok('★ 未綁定 → 點擊開 ppStaffLineBind', /ppStaffLineBind\('\$\{r\.id\}'\)/.test(seg));
   ok('★ 已綁定 → 顯示「已綁定」且可解除', /已綁定/.test(seg) && /ppStaffLineUnbind/.test(seg));

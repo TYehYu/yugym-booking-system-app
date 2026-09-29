@@ -4606,6 +4606,35 @@ button.pp-name-edit:hover{border-bottom-color:var(--gold);}
 .pp-emp-row.pp-emp-sum{border-color:var(--green);background:color-mix(in srgb,var(--green) 4%,#fff);}
 .pp-emp-row.pp-emp-sum b{color:var(--green);font-size:16px;}
 .pp-rectabs{display:flex;gap:5px;margin-bottom:14px;}
+/* ══ 出勤分頁裡面的小切換（課堂／值班打卡）與薪資規則的摺疊（2026-09-29）══
+   外層分頁四個併成兩個（出勤／薪資）之後，內層需要一組**份量比外層輕**的鈕 ——
+   同樣做成膠囊會讓人分不出哪一層是哪一層。這一組用線框、選中才填色。 */
+.pp-subtabs{display:flex;gap:6px;margin:-4px 0 12px;}
+.pp-subtab{font-family:inherit;font-size:12px;font-weight:700;color:var(--t2);
+  background:transparent;border:1px solid var(--bd);border-radius:999px;padding:5px 14px;cursor:pointer;}
+.pp-subtab.on{background:var(--green);border-color:var(--green);color:#fff;}
+/* 薪資規則：預設收起來，展開才看得到條件（看薪資單時才會問「這怎麼算的」） */
+.pp-rules{margin-top:12px;border-top:1px solid var(--bd);padding-top:10px;}
+.pp-rules-sm{list-style:none;cursor:pointer;font-size:12.5px;font-weight:800;color:var(--t2);
+  display:flex;align-items:baseline;gap:8px;}
+.pp-rules-sm::-webkit-details-marker{display:none;}
+.pp-rules-sm::after{content:'▾';margin-left:auto;color:var(--t3);font-size:11px;}
+.pp-rules[open] .pp-rules-sm::after{content:'▴';}
+.pp-rules-sm i{font-style:normal;font-size:11px;font-weight:400;color:var(--t3);}
+.pp-rules-bd{margin-top:10px;}
+/* 薪資分頁最上面那張「這個月領多少」（2026-09-29）——
+   原本一路列到最後才寫應發合計，而看這一頁的人第一個想知道的就是這個數字。 */
+.pp-sal-hero{background:#fff;border:1px solid var(--ok,#3D7039);border-radius:14px;
+  padding:13px 16px;margin-bottom:12px;}
+.pp-sal-l{font-size:11.5px;font-weight:700;letter-spacing:.06em;color:var(--t3);}
+.pp-sal-v{font-family:var(--num),inherit;font-size:29px;font-weight:800;line-height:1.2;color:var(--ok,#3D7039);}
+.pp-sal-s{font-size:11.5px;color:var(--t2);margin-top:3px;}
+/* 員工編輯視窗（2026-09-29）——欄位沿用 PP 的 .pp-card，只是換個外框。 */
+.ppe-who{font-size:13px;font-weight:600;color:var(--t3);}
+.ppe-body{max-height:64vh;overflow-y:auto;overscroll-behavior:contain;margin:0 -2px;padding:0 2px;}
+.ppe-body .pp-card{margin-bottom:10px;}
+.ppe-line{display:flex;align-items:center;justify-content:space-between;gap:12px;flex-wrap:wrap;}
+.ppe-line-s{font-size:11.5px;color:var(--t3);margin-left:8px;}
 /* ⚠ nowrap 但沒有 overflow 處理＝文字直接溢出格子、跟隔壁疊在一起（2026-08-22 使用者回報
    「中間三個按鈕的文字被擠壓了」）。補 overflow/ellipsis，窄機型再降一級字與內距：
    寧可縮字，也不要讓四個字的分頁名互相壓到。 */
@@ -14122,8 +14151,8 @@ function tbl(s){return TABLE_ALIAS[s]||s;}
 let sb=null;
 // ── 版本號（日期+時間格式：年後兩碼+月+日.時分，例 26620.1058 = 26年6/20 10:58）──
 // 每次改版手動更新這一行即可，畫面與 title 會一起更新
-const APP_VERSION = '260929.1701';
-const APP_VERSION_LABEL = 'v260929.1701';
+const APP_VERSION = '260929.1717';
+const APP_VERSION_LABEL = 'v260929.1717';
 const CLOUD = !!(window.YUGYM_CONFIG && window.YUGYM_CONFIG.url && window.YUGYM_CONFIG.anonKey);
 if(CLOUD){ sb = supabase.createClient(window.YUGYM_CONFIG.url, window.YUGYM_CONFIG.anonKey); }
 
@@ -48842,7 +48871,7 @@ function ppHeaderHtml(){
         <div class="ppf-g">
           ${_eEdit('電話', fmtPhone(r.phone),'phone','未填')}
           ${_eEdit('Email', r.email,'email','未填')}
-          ${empLine}
+          ${/* LINE 2026-09-29 移到右上角當標籤（使用者指示）——綁定／解除在編輯視窗裡 */''}
         </div></div>
       <div><div class="ppf-gl">任職</div>
         <div class="ppf-g ppf-g2">
@@ -48870,10 +48899,17 @@ function ppHeaderHtml(){
      包含用 line 申請錯誤的」）—— 只有管理員看得到；名下有資料的會在視窗裡被擋下。 */
   const delBtn = (isM && SESSION && SESSION.role==='admin')
     ? `<button class="btn btn-ghost btn-sm" style="color:var(--danger,#b5372e);" onclick="openDeleteMember('${r.id}')">刪除會員</button>` : '';
+  /* 員工的 LINE 綁定狀態改成右上角一枚標籤（2026-09-29 使用者：「這個改成標籤放在右上角」）——
+     它是「狀態」不是「資料」，佔一整格欄位的份量太重；綁定／解除移到編輯視窗裡。 */
+  const empLineTag = (!isM && r.line_user_id)
+    ? `<span class="tag tag-ok" style="font-size:10.5px;" title="LINE 已綁定，收款與續約提醒會推給他">LINE</span>` : '';
+  /* 員工的〔編輯〕改成開視窗（2026-09-29 使用者：「右上角的編輯 改成視窗」）——
+     原本是把整個下方換成欄位卡（整頁編輯模式），看不出自己在編輯哪裡、也蓋掉了工作紀錄。 */
   const act = PP.editing
     ? `<button class="btn btn-ghost btn-sm" onclick="ppCancel()">取消</button>
        <button class="btn btn-green btn-sm" onclick="ppSave()">儲存</button>`
-    : (isM ? lvBtn+delBtn : pwBtn+`<button class="btn btn-ghost btn-sm" onclick="ppEdit()">編輯</button>`);
+    : (isM ? lvBtn+delBtn
+           : empLineTag+pwBtn+`<button class="btn btn-ghost btn-sm" onclick="openEmpEditModal('${r.id}')">編輯</button>`);
   const _avatar=`<div class="pp-avatar${avatarGenderClass(r.gender)}" style="overflow:hidden;cursor:pointer;" title="點一下上傳／更換照片"
       onclick="avatarPick('${isM?'members':'employees'}','${r.id}')">${av}</div>`;
   const _nameHtml=(isM && canEditMemberData())
@@ -50543,10 +50579,21 @@ function ppRecordHtml(){
      ⚠ 薪資單與薪資規則兩頁不受影響：不開課也照樣有底薪與津貼要看。 */
   const _canTeach = (PP.rec&&PP.rec.can_teach)!==false;
   const _hasDuty  = !!(PP.rec&&(PP.rec.need_duty||PP.rec.need_punch));
+  /* ══ 四頁併成兩頁（2026-09-29 使用者：「分頁可以合併　內容也要修改　好調整　好閱讀」，
+       三個方向裡選了「合成兩頁：出勤／薪資」）══
+     ・出勤 ＝ 本月課堂 ＋ 值班打卡（兩張月曆，上面一排小鈕切換）
+       兩者本來就是「這個月這個人做了什麼」的兩面，分成兩個大分頁等於把同一件事切兩半。
+     ・薪資 ＝ 薪資單 ＋ 薪資規則（規則摺在下面，展開就能按〔編輯〕）
+       看薪資單時最常冒出的問題就是「這數字怎麼算的」，答案本來在隔壁分頁。
+     ⚠ 內層那一排小鈕只在「兩種都有」時才畫：只開課或只值班的人，切一個空月曆沒有意義。
+     ⚠ 舊的 recView 值（classes／duty／salary／rules）**照舊有效** ——
+       員工列表的圖示、補登打卡存完的返回都直接帶那些字串進來（見 ppOpenEmp*）。 */
   const EMP_TABS=[].concat(
-    _canTeach?[['classes','本月課堂']]:[],
-    _hasDuty ?[['duty','值班打卡']]:[],
-    [['salary','薪資單'],['rules','薪資規則']]);
+    (_canTeach||_hasDuty)?[['classes','出勤']]:[],
+    [['salary','薪資']]);
+  /* 舊字串落到新分頁：duty → 出勤、rules → 薪資 */
+  if(PP.recView==='duty') { PP.recView='classes'; PP.empSub='duty'; }
+  if(PP.recView==='rules'){ PP.recView='salary';  PP.empSub='rules'; }
   /* 記住的分頁如果剛好被藏起來（改了開關、或換看另一位員工），落到第一個看得到的分頁 —— 
      不改就會停在一個沒有按鈕可以按的空白面板上。 */
   if(!PP.recView || !EMP_TABS.some(t=>t[0]===PP.recView)) PP.recView=EMP_TABS[0][0];
@@ -50575,9 +50622,24 @@ async function ppEmpSalaryHtml(id){
   if(!r) return `<div class="pp-card-tip">這個月沒有這位員工的薪資資料。</div>`;
   const _m=n=>'$'+Math.round(Number(n)||0).toLocaleString();
   const [Y,M]=ym.split('-');
-  return `<div class="pp-emp-sub">${Y} 年 ${M} 月　·　與薪資彙總同一套計算</div>
+  /* ══ 結論先講（2026-09-29 使用者：「內容也要修改　好調整　好閱讀」）══
+     原本一路列到最後才寫「應發合計」，而看這一頁的人第一個想知道的就是「這個月領多少」。
+     ⚠ 有扣項（勞健保、請假扣薪）的人要寫**實領**，那才是入帳金額；
+       沒有扣項的人（多數合作教練）應發＝實領，就只寫一個數字，不要硬湊兩行。
+     ⚠ 數字全部來自 r.sal，與薪資彙總、完整薪資單同一套計算 —— 這裡不自己算。 */
+  const _g=Math.round(Number(r.sal&&r.sal.grossPay)||0);
+  const _n=Math.round(Number(r.sal&&r.sal.netPay)||0);
+  const _cut=_g-_n;
+  return `<div class="pp-sal-hero">
+      <div class="pp-sal-l">${Number(M)} 月${_cut>0?'實領':'應發'}</div>
+      <div class="pp-sal-v">${_m(_cut>0?_n:_g)}</div>
+      <div class="pp-sal-s">${_cut>0
+        ? `應發 ${_m(_g)}　−　勞健保與扣項 ${_m(_cut)}`
+        : '沒有勞健保與扣項，應發＝實領'}</div>
+    </div>
+    <div class="pp-emp-sub">${Y} 年 ${M} 月　·　與薪資彙總同一套計算</div>
     ${payrollCalcRows(r)}
-    <div class="pp-emp-row pp-emp-sum"><span>應發合計</span><b>${_m(r.sal&&r.sal.grossPay)}</b></div>
+    <div class="pp-emp-row pp-emp-sum"><span>應發合計</span><b>${_m(_g)}</b></div>
     <div style="text-align:right;margin-top:10px;">
       <button class="btn btn-ghost btn-sm" onclick="ppOpenEmpSalary('${id}')">開啟完整薪資單 ›</button></div>`;
 }
@@ -50636,17 +50698,40 @@ function ppShowEmpRecord(k){ PP.recView=k; ppRenderBody(); }
 /* 分頁內容：ppRenderBody() 之後才呼叫（那時候 #pp-emp-pane 已經在 DOM 裡）。
    課堂與值班直接沿用既有的月曆（_ppCal ＋ ppCalDraw），只是畫在頁內而不是彈窗裡；
    薪資單與薪資規則在頁內列出重點，完整的編輯仍走原本那兩張視窗。 */
+/* 出勤分頁裡面切「課堂／值班打卡」（2026-09-29 合併後的內層切換）。
+   ⚠ 存在 PP.empSub 而不是 PP.recView —— recView 是外層分頁，
+     兩層各記各的，換外層分頁時內層不會被洗掉。 */
+function ppEmpSub(k){ PP.empSub=k; ppEmpPaneFill(); }
 async function ppEmpPaneFill(){
   const pane=document.getElementById('pp-emp-pane'); if(!pane) return;
   const id=PP.id, v=PP.recView||'classes';
+  const c=(PP.rec&&PP.rec.id===id)?PP.rec:(PP.rec||{});
+  const _canTeach=(c.can_teach)!==false, _hasDuty=!!(c.need_duty||c.need_punch);
   try{
-    if(v==='classes'||v==='duty'){
-      pane.innerHTML='<div id="ppcal-wrap"></div>';
-      await ppCalOpen(v==='classes'?'class':'duty', id, (_ppCal&&_ppCal.id===id)?_ppCal.month:null, true);
+    if(v==='classes'){
+      /* 內層預設：會開課的人看課堂，只值班的人看值班 */
+      let sub=PP.empSub;
+      if(sub!=='duty'&&sub!=='class') sub=_canTeach?'class':'duty';
+      if(sub==='class'&&!_canTeach) sub='duty';
+      if(sub==='duty'&&!_hasDuty)  sub='class';
+      PP.empSub=sub;
+      /* ⚠ 只有「兩種都有」才畫切換鈕：只開課或只值班的人，多一排只有一顆的鈕是雜訊 */
+      const _sw=(_canTeach&&_hasDuty)?`<div class="pp-subtabs">${[['class','課堂'],['duty','值班打卡']]
+        .map(([k,l])=>`<button class="pp-subtab${sub===k?' on':''}" onclick="ppEmpSub('${k}')">${l}</button>`).join('')}</div>`:'';
+      pane.innerHTML=_sw+'<div id="ppcal-wrap"></div>';
+      await ppCalOpen(sub==='class'?'class':'duty', id, (_ppCal&&_ppCal.id===id)?_ppCal.month:null, true);
       return;
     }
-    if(v==='salary'){ pane.innerHTML=await ppEmpSalaryHtml(id); return; }
-    pane.innerHTML=ppEmpRulesHtml(id);
+    /* 薪資分頁：薪資單在上、薪資規則摺在下（2026-09-29）——
+       看薪資單時最常冒出的問題就是「這數字怎麼算的」，答案本來在隔壁分頁。
+       ⚠ <details> 的開合狀態記在 PP.empRulesOpen：重畫（換月份、存完規則）之後
+         要停在原來的樣子，不然每次都彈回收起來。 */
+    const _open=!!PP.empRulesOpen;
+    pane.innerHTML=(await ppEmpSalaryHtml(id))
+      + `<details class="pp-rules"${_open?' open':''} ontoggle="PP.empRulesOpen=this.open;">
+          <summary class="pp-rules-sm">薪資規則<i>這個月適用的條件</i></summary>
+          <div class="pp-rules-bd">${ppEmpRulesHtml(id)}</div>
+        </details>`;
   }catch(e){ pane.innerHTML=`<div class="pp-card-tip">讀取失敗：${escH((e&&e.message)||String(e))}</div>`; }
 }
 /* ── 員工資料 → 本月課堂／本月值班：月曆版（2026-08-02 使用者指示）──
@@ -51206,6 +51291,55 @@ function ppCollect(){
   }));
 }
 function ppEdit(){ PP.editing=true; PP.draft=JSON.parse(JSON.stringify(PP.rec)); ppRenderBody(); }
+/* ══ 員工編輯改成視窗（2026-09-29 使用者：「右上角的編輯 改成視窗　然後裡面的內容也幫我優化
+     多一列line綁定」）════════════════════════════════════════════════════
+   原本按〔編輯〕是把整個下方換成欄位卡（PP.editing 的整頁編輯模式）——
+   工作紀錄整塊被蓋掉，而且看不出自己在編輯哪一段。
+
+   ⚠⚠ 欄位本身**完全沿用** ppEmpEditSecs()＋ppCardHtml：那是既有的 schema
+     （基本資料＋身份設定），連 input 的 id 都一樣，所以 ppCollect／ppSave 原封不動可用。
+     不要為了換個外框而重寫一套表單 —— 兩套欄位定義遲早會分岔。
+   ⚠ PP.editing 仍然要設成 true：ppCardHtml 靠它決定畫輸入框還是文字。
+     但下方頁面不重畫（不呼叫 ppRenderBody），所以工作紀錄還在原地。
+   ⚠ 關掉視窗要把 editing 收回去，否則下次重畫會畫成整頁編輯模式。 */
+function openEmpEditModal(id){
+  if(!PP || !PP.rec || PP.rec.id!==id){ showToast('讀不到員工資料'); return; }
+  PP.editing=true; PP.draft=JSON.parse(JSON.stringify(PP.rec));
+  const r=PP.rec;
+  const canBind = isDeskLike() || (SESSION && SESSION.id===r.id);
+  /* LINE 綁定一列（使用者指示新增）——卡片上只剩一枚狀態標籤，動作在這裡。
+     ⚠ 綁定會開另一個視窗（QR），所以先把這個關掉，不然兩個視窗疊在一起。 */
+  const lineRow=`<div class="pp-card">
+    <div class="pp-card-t">LINE 綁定</div>
+    <div class="ppe-line">
+      <div>${r.line_user_id
+        ? '<span class="tag tag-ok">已綁定</span><span class="ppe-line-s">收款與續約提醒會推給他</span>'
+        : '<span class="tag">未綁定</span><span class="ppe-line-s">綁定後才收得到提醒</span>'}</div>
+      ${canBind
+        ? (r.line_user_id
+          ? `<button class="btn btn-ghost btn-sm" onclick="closeModal();ppStaffLineUnbind('${r.id}')">解除綁定</button>`
+          : `<button class="btn btn-green btn-sm" onclick="closeModal();ppStaffLineBind('${r.id}')">產生綁定 QR</button>`)
+        : ''}
+    </div></div>`;
+  showModal(`<div class="modal-title">編輯員工資料　<span class="ppe-who">${escH(r.name||'')}</span></div>
+    <div class="ppe-body">${ppEmpEditSecs().map(ppCardHtml).join('')}${lineRow}</div>
+    <div class="modal-foot">
+      <button class="btn btn-ghost" onclick="ppEmpEditCancel()">取消</button>
+      <button class="btn btn-green" onclick="ppEmpEditSave()">儲存</button></div>`);
+  /* 欄位多（基本資料＋身份設定兩段），用寬視窗；內容超長時由 .ppe-body 自己捲 */
+  try{ const m=document.querySelector('#modal-bg .modal'); if(m) m.classList.add('modal-wide'); }catch(_){}
+}
+function ppEmpEditCancel(){ PP.editing=false; PP.draft=null; closeModal(); }
+async function ppEmpEditSave(){
+  /* ⚠ 收集要在關視窗**之前**：ppCollect 是從 DOM 上的 input 讀值的。 */
+  try{ ppCollect(); }catch(_){}
+  try{ await ppSave(); }catch(e){ showToast('儲存失敗：'+((e&&e.message)||e)); return; }
+  /* ⚠ ppSave 失敗時只會跳 toast、不會拋錯（姓名沒填、寫入被擋…），
+     成功與否看它有沒有把 PP.editing 收掉 —— 失敗就留在視窗裡，不要把使用者
+     剛打的東西連同視窗一起關掉。 */
+  if(PP.editing) return;
+  try{ closeModal(); }catch(_){}
+}
 function ppCancel(){
   if(!PP.editing){ ppClose(); return; }
   PP.editing=false; PP.draft=null; ppRenderBody();

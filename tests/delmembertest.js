@@ -52,7 +52,7 @@ console.log('\n② 入口只有管理員看得到');
 ok('★★ 按鈕只在會員資料、且只給管理員',
    /const delBtn = \(isM && SESSION && SESSION\.role==='admin'\)/.test(src)
    && /onclick="openDeleteMember\('\$\{r\.id\}'\)">刪除會員<\/button>/.test(src));
-ok('★ 掛在表頭右上（與核對按鈕並排）', /\(isM \? lvBtn\+delBtn :/.test(src));
+ok('★ 掛在表頭右上（與核對按鈕並排）', /\(isM \? lvBtn\+delBtn\s*\n?\s*:/.test(src));
 {
   const F=grabFn('openDeleteMember');
   ok('★ 函式本身也擋一次（深連結／主控台繞不過去）',

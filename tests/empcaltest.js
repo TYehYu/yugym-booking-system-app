@@ -131,10 +131,11 @@ ok('★ 改用列表（不是卡片格）', /<div class="pp-dlist">/.test(src) &
 /* 2026-09-08 使用者指示：「該員工有課堂才顯示本月課堂　值班也是一樣」——
    四顆固定的分頁改成依身份組出來，所以這裡不再釘死那一行陣列。
    （詳細的條件與退路釘在 tests/emptabstest.js） */
-ok('★ 四顆分頁鈕：本月課堂／值班打卡／薪資單／薪資規則',
-   /_canTeach\?\[\['classes','本月課堂'\]\]:\[\]/.test(src)
-   && /_hasDuty \?\[\['duty','值班打卡'\]\]:\[\]/.test(src)
-   && /\[\['salary','薪資單'\],\['rules','薪資規則'\]\]\);/.test(src)
+/* 2026-09-29：四頁併成兩頁（出勤／薪資），課堂與值班改成出勤裡面的小切換。 */
+ok('★ 兩顆分頁鈕：出勤／薪資，課堂與值班變成內層小鈕',
+   /\(_canTeach\|\|_hasDuty\)\?\[\['classes','出勤'\]\]:\[\]/.test(src)
+   && /\[\['salary','薪資'\]\]\);/.test(src)
+   && /class="pp-subtab\$\{sub===k\?' on':''\}" onclick="ppEmpSub\('\$\{k\}'\)"/.test(src)
    && /class="pp-rectab\$\{PP\.recView===k\?' active':''\}" onclick="ppShowEmpRecord\('\$\{k\}'\)"/.test(src));
 ok('★★ 原本那四支入口沒有被刪（列表圖示、補登打卡返回都還在用）',
    /async function ppOpenEmpClasses\(/.test(src) && /async function ppOpenEmpShifts\(/.test(src)

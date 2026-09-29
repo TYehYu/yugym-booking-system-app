@@ -39,8 +39,13 @@ ok('★★★ 課堂看 can_teach，值班看 need_duty 或 need_punch',
    && /const _hasDuty  = !!\(PP\.rec&&\(PP\.rec\.need_duty\|\|PP\.rec\.need_punch\)\);/.test(src));
 ok('★★★ 值班要吃 need_punch —— 只打卡沒排班的人也要進得去（值班與打卡 0802 併成同一頁）',
    /PP\.rec\.need_duty\|\|PP\.rec\.need_punch/.test(src));
-ok('★★★ 薪資單與薪資規則不受影響（不開課也有底薪與津貼要看）',
-   /\[\['salary','薪資單'\],\['rules','薪資規則'\]\]\);/.test(src));
+/* 2026-09-29：薪資單與薪資規則併成一頁「薪資」（規則摺在薪資單下面）。 */
+ok('★★★ 薪資那一頁不受身分影響（不開課也有底薪與津貼要看）',
+   /\[\['salary','薪資'\]\]\);/.test(src)
+   && /<summary class="pp-rules-sm">薪資規則/.test(src));
+ok('★★★ 舊的 recView 字串還能用（員工列表的圖示、補登打卡返回都直接帶那些字串）',
+   /if\(PP\.recView==='duty'\) \{ PP\.recView='classes'; PP\.empSub='duty'; \}/.test(src)
+   && /if\(PP\.recView==='rules'\)\{ PP\.recView='salary';  PP\.empSub='rules'; \}/.test(src));
 ok('★★★ 記住的分頁被藏起來時要落到第一個看得到的 —— 否則停在沒有按鈕的空白面板',
    /if\(!PP\.recView \|\| !EMP_TABS\.some\(t=>t\[0\]===PP\.recView\)\) PP\.recView=EMP_TABS\[0\]\[0\];/.test(src));
 ok('★★ 上方摘要那一行也跟著藏，不會留下「本月課堂 0/0 堂」',
