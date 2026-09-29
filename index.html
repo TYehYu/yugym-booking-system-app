@@ -14095,8 +14095,8 @@ function tbl(s){return TABLE_ALIAS[s]||s;}
 let sb=null;
 // ── 版本號（日期+時間格式：年後兩碼+月+日.時分，例 26620.1058 = 26年6/20 10:58）──
 // 每次改版手動更新這一行即可，畫面與 title 會一起更新
-const APP_VERSION = '260929.1612';
-const APP_VERSION_LABEL = 'v260929.1612';
+const APP_VERSION = '260929.1623';
+const APP_VERSION_LABEL = 'v260929.1623';
 const CLOUD = !!(window.YUGYM_CONFIG && window.YUGYM_CONFIG.url && window.YUGYM_CONFIG.anonKey);
 if(CLOUD){ sb = supabase.createClient(window.YUGYM_CONFIG.url, window.YUGYM_CONFIG.anonKey); }
 
@@ -45397,7 +45397,10 @@ function calcSalary(emp, ptDone, groupHeads, dutyHours, leave, classOverlap, ext
      只比月份不比日：整個生日月都算，不用管人是月初還月底生日。 */
   const _bd=String((emp&&(emp.birthday||emp.birth_date))||'');
   const _payMM=birthPayMonthOf(extras.month);   // 這張薪資單「發放時」是哪個月
-  const isBday=!!(_payMM && _bd.length>=7 && _bd.slice(5,7)===_payMM);
+  /* ⚠ 每位員工一個開關（2026-09-29 使用者：「生日禮金可以手動調整嗎　我要取消rocky的」）——
+     原本只要生日月對上就一定加，合作教練、特殊約定都關不掉。
+     employees.birthday_bonus_off 預設 false＝照發，要關的才寫 true。 */
+  const isBday=!!(_payMM && _bd.length>=7 && _bd.slice(5,7)===_payMM) && !(emp&&emp.birthday_bonus_off);
   const bdayPay=isBday?(Number(G.birthday_bonus)||0):0;
   const bdayDetail=isBday?`${_bd.slice(5,7)}/${_bd.slice(8,10)} 生日（隨本月薪資於 ${Number(_payMM)}/5 發放）`:'';
   // ⑧ 勞健保員工負擔：依員工投保級距查級距表（insured_grade 為勞健保管理填的欄位）
@@ -47010,8 +47013,10 @@ function stBdayTag(c, ym){
   if(bd.length<10) return '';
   const md=bd.slice(5,7)+'/'+bd.slice(8,10);
   const payMM=birthPayMonthOf(ym);
-  const hit=!!payMM && payMM===bd.slice(5,7);
-  return `<span class="st-l-bday${hit?' on':''}" title="生日 ${bd.slice(0,10).replace(/-/g,'/')}${hit?`　·　生日禮金隨這個月的薪資於 ${Number(payMM)}/5 發放`:''}">🎂 ${md}</span>`;
+  /* 關掉生日禮金的人不要亮金、也不要寫「會發放」（2026-09-29）—— 生日還是照顯示 */
+  const _off=!!(c&&c.birthday_bonus_off);
+  const hit=!!payMM && payMM===bd.slice(5,7) && !_off;
+  return `<span class="st-l-bday${hit?' on':''}" title="生日 ${bd.slice(0,10).replace(/-/g,'/')}${hit?`　·　生日禮金隨這個月的薪資於 ${Number(payMM)}/5 發放`:(_off?'　·　這位不發生日禮金':'')}">🎂 ${md}</span>`;
 }
 function stSwitchRow(c){
   const chip=s=>{
@@ -47744,6 +47749,11 @@ async function openScheduleEdit(id){
       <label style="display:flex;align-items:center;justify-content:space-between;font-size:14px;cursor:pointer;"><span>🏢　需要值班</span><input type="checkbox" id="sch-duty" ${c.need_duty?'checked':''} style="width:18px;height:18px;"></label>
       <label style="display:flex;align-items:center;justify-content:space-between;font-size:14px;cursor:pointer;"><span>🔄　可代課</span><input type="checkbox" id="sch-sub" ${c.can_substitute?'checked':''} style="width:18px;height:18px;"></label>
       <label style="display:flex;align-items:center;justify-content:space-between;font-size:14px;cursor:pointer;"><span>🕒　需要打卡（出勤）</span><input type="checkbox" id="sch-punch" ${c.need_punch?'checked':''} style="width:18px;height:18px;"></label>
+      ${/* 生日禮金（2026-09-29 使用者：「我要取消rocky的」）——
+           勾著＝照發（預設）。合作教練那種不適用的就取消勾選。
+           ⚠ 欄位存的是**關掉**（birthday_bonus_off），所以這裡要反過來讀寫：
+             預設 false 代表照發，既有員工不必回填。 */''}
+      <label style="display:flex;align-items:center;justify-content:space-between;font-size:14px;cursor:pointer;"><span>🎂　發生日禮金</span><input type="checkbox" id="sch-bday" ${c.birthday_bonus_off?'':'checked'} style="width:18px;height:18px;"></label>
     </div>
 
     <div style="font-size:12px;color:var(--gold-d);font-weight:600;letter-spacing:0.04em;margin-bottom:10px;">固定休</div>
@@ -47759,6 +47769,7 @@ async function saveSchedule(id){
   c.need_duty=document.getElementById('sch-duty').checked;
   c.can_substitute=document.getElementById('sch-sub').checked;
   c.need_punch=document.getElementById('sch-punch').checked;
+  c.birthday_bonus_off=!document.getElementById('sch-bday').checked;   /* 勾著＝照發 */
   await dbPut('coaches',c); closeModal(); showToast('工作規則已儲存'); navTo('staff');
  }catch(e){ console.error('saveSchedule 失敗:',e); showToast('儲存失敗：'+(e&&e.message?e.message:e)); }
 }
