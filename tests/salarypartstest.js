@@ -81,14 +81,15 @@ console.log('\n③ 表怎麼畫');
      /\.sal-mx-wrap\{overflow-x:auto;/.test(src)
      && /\.sal-mx th\{[^}]*position:sticky;top:0;/.test(src)
      && /\.sal-mx th:first-child,\.sal-mx td:first-child\{text-align:left;position:sticky;left:0;/.test(src));
+  /* 2026-09-30 文字簡化：這兩句搬進〔為什麼〕的展開區，內容沒變 */
   ok('★★ 表下方說清楚「勞保健保不是公司的額外成本」，並點名負責人的健保是雇主自負額',
-     /<b>勞保／健保<\/b>是本人自付、從應發裡代扣（負責人的健保是雇主自負額，全額自付），<b>不是<\/b>公司的額外成本；/.test(F));
+     /<b>勞保／健保那兩欄不是公司的成本<\/b>：本人自付、從應發裡代扣（負責人的健保是雇主自負額，全額自付）。/.test(F));
   ok('★★ 並明說負責人的「公司負擔」是 0',
-     /<b>負責人為 0<\/b>，公司沒有替雇主本人負擔的部分。/.test(F));
+     /負責人為 0，公司沒有替雇主本人負擔的部分。/.test(F));
   ok('★ 並且算給你看公司實際的人事支出（0812 起應發合計改由各列加總 _grossTot）',
      /* 2026-09-01：公式改成「應發 − 請假扣薪 ＋ 公司負擔」（使用者定案） */
-     /公司這個月實際的人事支出＝應發合計 \$\{m\(_grossTot\)\}\$\{tot\.leave\?` − 請假扣薪 \$\{m\(tot\.leave\)\}`:''\} ＋ 公司負擔 \$\{m\(tot\.co\)\}/.test(F)
-     && /＝ <b>\$\{m\(_grossTot-tot\.leave\+tot\.co\)\}<\/b>/.test(F));
+     /<span class="nk-k">人事總支出<\/span><span class="nk-v nk-eq">應發 \$\{m\(_grossTot\)\}/.test(F)
+     && /＋ 公司負擔 \$\{m\(tot\.co\)\} ＝ <b>\$\{m\(_grossTot-tot\.leave\+tot\.co\)\}<\/b>/.test(F));
   ok('　　月薪制的人標一下（那一欄放的是底薪不是課費）', /月薪制<\/small>/.test(F));
 }
 
