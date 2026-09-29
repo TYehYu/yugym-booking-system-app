@@ -91,6 +91,12 @@ console.log('\n④ 會員課卡：和誰一起上 ＋ 今日訓練分段');
      /\$\{_oth\.length\?'<div class="mtl-who">我的訓練<\/div>':''\}/.test(T)
      && /\$\{escH\(_w\.otherName\|\|'同行會員'\)\} 的訓練/.test(T));
   ok('★★ 動作數只寫自己的', /今日訓練<i>\$\{_mine\.length\} 個動作<\/i>/.test(T));
+  /* ⚠ 2026-09-29 使用者：「客戶那邊課表順序有更正了嗎　要跟教練紀錄相同」——
+     教練 0925 起可以長按拖移調順序（寫 seq），拖完 created_at 不會變，
+     所以只照 created_at 排的話，客戶看到的順序跟教練端不一樣。 */
+  ok('★★★ 順序跟教練端一致（吃 seq，不是只照 created_at）',
+     /const _tlS=tlSeqSort\(_tl\);/.test(T)
+     && !/_tl\.sort\(\(a,c\)=>String\(\(a&&a\.created_at\)/.test(T));
   ok('★★ 分段標題有樣式（金色，與票券那一行分得開）',
      /#mem-task-pop \.mtp-ptn\{color:var\(--gold-d\);\}/.test(src)
      && /\.mtl-who\{font-size:11\.5px;font-weight:800;/.test(src));
