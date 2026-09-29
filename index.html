@@ -14095,8 +14095,8 @@ function tbl(s){return TABLE_ALIAS[s]||s;}
 let sb=null;
 // ── 版本號（日期+時間格式：年後兩碼+月+日.時分，例 26620.1058 = 26年6/20 10:58）──
 // 每次改版手動更新這一行即可，畫面與 title 會一起更新
-const APP_VERSION = '260929.1605';
-const APP_VERSION_LABEL = 'v260929.1605';
+const APP_VERSION = '260929.1612';
+const APP_VERSION_LABEL = 'v260929.1612';
 const CLOUD = !!(window.YUGYM_CONFIG && window.YUGYM_CONFIG.url && window.YUGYM_CONFIG.anonKey);
 if(CLOUD){ sb = supabase.createClient(window.YUGYM_CONFIG.url, window.YUGYM_CONFIG.anonKey); }
 
@@ -50397,7 +50397,9 @@ function ppRecordHtml(){
       /* ↑ 其他消費那一段到這裡結束（作廢流程見 othVoidAsk／_othVoid）。 */
       {
         const _tl=(c.trainLogs||[]).slice().sort((a,b2)=>String((b2&&b2.created_at)||'').localeCompare(String((a&&a.created_at)||'')));
-        const _body=tlSessionsHtml(_tl,40);
+        /* 2026-09-29 使用者：「可以先顯示日期按>跳視窗顯示當天訓練內容」——
+           原本攤平成一長串（這位會員 26 筆就是一整頁動作），改成一天一列。 */
+        const _body=tlSessionsListHtml(_tl,40);
         return `<div class="pp-card">${back}<div class="pp-card-t">訓練紀錄（${_tl.length}）</div>
           ${_body||'<div class="pp-card-tip">尚無訓練紀錄。教練在課堂上記錄後會顯示在這裡。</div>'}</div>`;
       }
@@ -53986,21 +53988,48 @@ function tlSeqSort(logs){
     return String((a&&a.created_at)||'').localeCompare(String((b&&b.created_at)||''));
   });
 }
-function tlSessionsHtml(logs, limit){
+/* ══ 日期列表版（2026-09-29 使用者：「訓練紀錄 可以先顯示日期按>跳視窗顯示當天訓練內容」）══
+   會員檔案頁的訓練紀錄原本把所有動作攤平（一堂八個動作就八行），26 筆要捲很久。
+   改成一天一列，點〔›〕跳視窗看那一堂。
+   ⚠ 會員端 0923 就是這樣改的（那邊是換頁不是視窗），視窗內容也沿用同一張卡
+     （tlLogCardHtml 唯讀版）—— 兩邊看到的東西長一樣，只是入口不同。
+   ⚠ 視窗要的資料在畫列表時就存起來（window._tlSessCache），不要開視窗時再撈一次：
+     0925 出席證明那次就是「兩邊各查各的」才連錯兩次，定版是畫的時候算好。 */
+function tlSessionsListHtml(logs, limit){
   const byBk={};
   (logs||[]).forEach(l=>{ if(l&&l.booking_id) (byBk[l.booking_id]=byBk[l.booking_id]||[]).push(l); });
-  /* ⚠ 一堂之內照 seq（見 tlSeqSort）；t 取**排序後**的第一筆 ——
-     取排序前的 ls[0] 會拿到那堂最後記的那一筆，跨午夜記錄時會標錯天。 */
   const sess=Object.entries(byBk).map(([bid,ls])=>{ const _ls=tlSeqSort(ls);
       return {bid, ls:_ls, t:tlSessKey(bid,_ls)}; })
     .sort((a,b)=>String(b.t).localeCompare(String(a.t)));
   if(!sess.length) return '';
-  return sess.slice(0,limit||30).map(x=>`<div class="tlv-sess">
-    <div class="tlv-date">${String(x.t).slice(0,10).replace(/-/g,'/')||'—'}
-      <i>${x.ls.length} 個動作</i></div>
-    ${tlLogRowsHtml(x.ls)}
-  </div>`).join('');
+  window._tlSessCache=Object.fromEntries(sess.map(x=>[x.bid,x]));
+  return `<div class="tlv-days">`+sess.slice(0,limit||40).map(x=>{
+    const d=String(x.t).slice(0,10);
+    const wd=(()=>{ const y=parseYmd(d); return y?'（'+'日一二三四五六'[y.getDay()]+'）':''; })();
+    /* 副標給「做了什麼」的線索，不然幾列日期長得一模一樣（同會員端那一頁的作法） */
+    const names=[...new Set(x.ls.map(l=>l.exercise_name).filter(Boolean))];
+    const tip=names.slice(0,3).join('、')+(names.length>3?` 等 ${x.ls.length} 個動作`:`　·　${x.ls.length} 個動作`);
+    /* ⚠ 樣式直接沿用會員端那一組（.mtl-day*）—— 同一件事就該長一樣，
+         不要為了「這裡是後台」再刻一套一模一樣的 CSS。 */
+    return `<button type="button" class="mtl-day" onclick="tlSessOpen('${x.bid}')">
+      <span class="mtl-day-b"><span class="mtl-day-d">${d.replace(/-/g,'/')}${wd}</span>
+        <span class="mtl-day-s">${escH(tip)}</span></span>
+      <span class="mtl-day-go">›</span></button>`; }).join('')+`</div>`;
 }
+/* 點某一天 → 視窗列出那一堂的動作（唯讀，與教練端同一張卡） */
+function tlSessOpen(bid){
+  const x=(window._tlSessCache||{})[bid];
+  if(!x){ showToast('讀不到這一堂，請重新整理這一頁再試'); return; }
+  const d=String(x.t).slice(0,10);
+  const wd=(()=>{ const y=parseYmd(d); return y?'（'+'日一二三四五六'[y.getDay()]+'）':''; })();
+  showModal(`<div class="ash-sheetmk"></div><div class="modal-title">${d.replace(/-/g,'/')}${wd}</div>
+    <div style="font-size:12.5px;color:var(--t2);margin:-6px 0 12px;">${x.ls.length} 個動作</div>
+    <div class="tlh-logs">${x.ls.map(l=>tlLogCardHtml(l,false)).join('')}</div>
+    <div class="modal-foot"><button class="btn btn-ghost" onclick="closeModal()">關閉</button></div>`);
+}
+/* 〔已移除〕tlSessionsHtml —— 把一堂課的動作整串攤在列表上的那一版（2026-09-29）。
+   使用者：「訓練紀錄 可以先顯示日期按>跳視窗顯示當天訓練內容」，改用上面的 tlSessionsListHtml。
+   ⚠ tlLogRowsHtml 留著：會員課卡的「今日訓練」還在用它。 */
 
 /* ── 會員端：訓練紀錄頁（歷史）── */
 /* ── 會員端：訓練紀錄（2026-09-23 改版）───────────────────────────────────
