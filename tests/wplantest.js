@@ -217,29 +217,44 @@ ok('★★ 管理員看到的是自己那份（老闆本身也是教練，isCoac
 
 console.log('\n⑩ Phase 3：會員看得到自己的訓練紀錄');
 {
-  const g3=(a,b)=>{const i=src.indexOf(a); return src.slice(i, src.indexOf(b,i)+b.length);};
-  /* ⚠ 2026-09-25 起 tlSessionsHtml 用 tlSeqSort 排一堂之內的順序（見 tlseqtest），
-     所以要把那支一起餵進來。 */
-  /* ⚠ 2026-09-25 起 tlSessionsHtml 還用 tlSessKey 取「這一堂是哪一天」
-     （booking 的上課日，不是 created_at），一起餵進來。 */
-  const SESS=new Function('escH','tlSetLine','tlLogRowsHtml','tlSeqSort','tlSessKey','return '+g3('function tlSessionsHtml(logs, limit){','\n}'))
-    (x=>String(x), l=>'x', ls=>'<rows n="'+ls.length+'">',
+  const g3=(a,b)=>{const i=src.indexOf(a); if(i<0) throw new Error('找不到 '+a); return src.slice(i, src.indexOf(b,i)+b.length);};
+  /* ⚠ 2026-09-29 使用者：「訓練紀錄 可以先顯示日期按>跳視窗顯示當天訓練內容」——
+       攤平所有動作的 tlSessionsHtml 已移除，改成一天一列的 tlSessionsListHtml。
+       （這一段的斷言 0929 沒跟著改，從那天起整支測試 crash 在 SESS is not a function。）
+     ⚠ 一堂之內照 seq 排（tlSeqSort）、「這一堂是哪一天」問 booking（tlSessKey），
+       兩支都要餵進來。 */
+  const W={_tlBkMeta:{B1:{d:'2026-09-01',t:'10:00'}, B2:{d:'2026-09-08',t:'14:00'}}};
+  const LIST=new Function('window','escH','parseYmd','tlSeqSort','tlSessKey',
+    'return '+g3('function tlSessionsListHtml(logs, limit){','\n}'))
+    (W, x=>String(x), d=>{const m=/^(\d{4})-(\d{2})-(\d{2})/.exec(String(d)); return m?new Date(+m[1],+m[2]-1,+m[3]):null;},
      new Function('return '+g3('function tlSeqSort(logs){','\n}'))(),
-     new Function('window','return '+g3('function tlSessKey(bid, ls){','\n}'))({}));
-  const L=[{booking_id:'B1',created_at:'2026-09-01T03:00'},
-           {booking_id:'B1',created_at:'2026-09-01T03:05'},
-           {booking_id:'B2',created_at:'2026-09-08T03:00'},
-           {booking_id:null,created_at:'2026-09-09'}];
-  const h=SESS(L,30);
-  ok('★★★ 依課堂分組、最近的在前', h.indexOf('2026/09/08')<h.indexOf('2026/09/01'));
-  /* 四筆裡有一筆沒有 booking_id → 只該分出兩堂（B1 兩個動作、B2 一個），那一筆整個不進來 */
+     new Function('window','return '+g3('function tlSessKey(bid, ls){','\n}'))(W));
+  const L=[{booking_id:'B1',seq:1,exercise_name:'深蹲',created_at:'2026-09-01T03:00'},
+           {booking_id:'B1',seq:2,exercise_name:'硬舉',created_at:'2026-09-01T03:05'},
+           {booking_id:'B2',seq:1,exercise_name:'臥推',created_at:'2026-09-08T03:00'},
+           {booking_id:null,exercise_name:'沒掛課',created_at:'2026-09-09'}];
+  const h=LIST(L,30);
+  ok('★★★ 一天一列（不是把動作整串攤開）', (h.match(/class="mtl-day"/g)||[]).length===2);
+  ok('★★★ 最近的在前', h.indexOf('2026/09/08')<h.indexOf('2026/09/01'));
+  /* 四筆裡有一筆沒有 booking_id → 只該分出兩堂，那一筆整個不進來 */
   eq('★★★ 沒有 booking_id 的不畫（那筆掛不到任何一堂課）',
-     [(h.match(/tlv-sess/g)||[]).length, /<rows n="2">/.test(h), /<rows n="1">/.test(h), /2026\/09\/09/.test(h)],
-     [2,true,true,false]);
-  eq('★★ 空清單回空字串（呼叫端才好接空狀態）', SESS([],30), '');
-  eq('　　null 不會爆', SESS(null,30), '');
-  ok('★★ limit 收得住', SESS(L,1).match(/tlv-sess/g).length===1);
+     [/2026\/09\/09/.test(h), /沒掛課/.test(h)], [false,false]);
+  /* 2026/09/01 與 09/08 都是星期二 */
+  ok('★★★ 日期帶星期（使用者 0926 指定）', /2026\/09\/08（二）/.test(h) && /2026\/09\/01（二）/.test(h));
+  /* 幾列日期長得一模一樣的話點不下去，副標要給「做了什麼」的線索 */
+  ok('★★ 副標寫動作名稱與數量', /深蹲、硬舉　·　2 個動作/.test(h) && /臥推　·　1 個動作/.test(h));
+  ok('★★★ 點〔›〕開當天的視窗', (h.match(/onclick="tlSessOpen\('B[12]'\)"/g)||[]).length===2);
+  /* ⚠ 視窗要的資料在畫列表時就存好，不要開視窗時再撈一次（0925 連錯兩次的教訓） */
+  eq('★★★ 畫的時候就把每一堂存進 _tlSessCache（視窗直接拿，不再查一次）',
+     [Object.keys(W._tlSessCache).sort(), W._tlSessCache.B1.ls.map(l=>l.exercise_name)],
+     [['B1','B2'], ['深蹲','硬舉']]);
+  eq('★★ 空清單回空字串（呼叫端才好接空狀態）', LIST([],30), '');
+  eq('　　null 不會爆', LIST(null,30), '');
+  ok('★★ limit 收得住', (LIST(L,1).match(/class="mtl-day"/g)||[]).length===1);
+  ok('★★ 沒帶 limit 時預設 40', (LIST(L).match(/class="mtl-day"/g)||[]).length===2);
 }
+ok('★★★ 舊的攤平版已經收乾淨（不留死函式）',
+   !/function tlSessionsHtml\(/.test(src));
 ok('★★★ 會員課卡看得到當天（沒記過就整塊不畫，不要留空盒子）',
    /const _tl=\(await dbGetAll\('training_logs'\)\)\.filter\(l=>l&&l\.booking_id===b\.id\);/.test(src)
    && /if\(_tl\.length\)\{/.test(src)
