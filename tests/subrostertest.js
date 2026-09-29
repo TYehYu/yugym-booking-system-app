@@ -42,24 +42,36 @@ ok('★★★ 時數照樣算進空班檢查 —— 有人補班就是有人顧�
 ok('★★ 「值班員工共 N 位」不把這一列算進去', /值班員工共 \$\{staff\.length\} 位/.test(src));
 
 console.log('\n③ 關掉值班標籤之後，歷史不能跟著消失');
-ok('★★★ 名單＝有值班標籤的人 ∪ 這個月有排過班的人',
-   /let staff=coaches\.filter\(c=>\(c\.need_duty \|\| _monthShifts0\.some\(s=>s\.emp_id===c\.id\)\)/.test(TAB));
+/* 2026-09-30 使用者：「沒值班的人不畫」—— 名單先照舊組出 _pool（值班標籤 ∪ 本月有排班），
+   再濾掉「這個月沒有真正值班」的人（只有支援班或教練請假不算）。
+   ⚠ 濾掉的人收在表格下面那一行，點名字加回來 —— 沒有這條路，還沒排班的人就排不了班。 */
+ok('★★★ 名單先＝有值班標籤的人 ∪ 這個月有排過班的人',
+   /const _pool=coaches\.filter\(c=>\(c\.need_duty \|\| _monthShifts0\.some\(s=>s\.emp_id===c\.id\)\)/.test(TAB));
+ok('★★★ 再濾掉這個月沒有真正值班的人（支援班與教練請假都不算值班）',
+   /const _hasRealDuty=id=>_monthShifts0\.some\(s=>s\.emp_id===id && !shIsSub\(s\) && !shIsClassLeave\(s\)\);/.test(TAB)
+   && /let staff=_pool\.filter\(c=>_hasRealDuty\(c\.id\)/.test(TAB));
 ok('★★ 原因寫在原地（黃沛瀞 9 月 0 小時，但歷史月份有排班）',
    /過去那幾個月的班也跟著消失\*\*就不對了/.test(TAB));
 ok('　　當月排班要先算出來，名單才判斷得出來',
-   TAB.indexOf('const _monthShifts0=shifts.filter') < TAB.indexOf('let staff=coaches.filter'));
+   TAB.indexOf('const _monthShifts0=shifts.filter') < TAB.indexOf('const _pool=coaches.filter'));
 
 console.log('\n④ 編輯視窗');
-ok('★★★ 補班列多「班別」與「補班人員」兩格手填',
-   /<input type="text" id="sh-subcode"/.test(EDIT) && /<input type="text" id="sh-subname"/.test(EDIT));
+/* 2026-09-30 使用者：「點支援班的時候只要顯示[班別][人員姓名]」——
+   班別從手填改成下拉（選了就帶起迄，時數照樣算）；姓名那格只在挑「店外人員」時出現。 */
+ok('★★★ 支援班只剩「班別」下拉與「支援人員」兩格',
+   /<select id="sh-subcode" onchange="shSubCodeSync\(\)">/.test(EDIT)
+   && /<select id="sh-subemp" onchange="shSubEmpSync\(\)">/.test(EDIT)
+   && /<input type="text" id="sh-subname"/.test(EDIT));
+ok('★★★ 起迄退成隱藏欄位 —— 不給填，但一定要存（值班費靠時數算）',
+   /<input type="hidden" id="sh-start" value="/.test(EDIT)
+   && /<input type="hidden" id="sh-end" value="/.test(EDIT));
 ok('★★★ 補班列不畫請假登記（這一列不是員工，沒有假可以請）',
    /\$\{\(cur&&!_isSub\)\?`<div style="border-top:1px solid var\(--bd\);padding-top:12px/.test(EDIT));
 ok('★★★ 補班列不畫「設為每週固定」', /\$\{_isSub\?'':`<div style="margin-bottom:10px;padding-top:10px/.test(EDIT));
 ok('★★ 視窗標題分得出來是哪一種', /\$\{_isSub\?'支援班 · ':'排班 · '\}/.test(EDIT));
-ok('★★ 兩種補班人員各自講清楚計不計薪，而且都算進空班檢查',
+ok('★★ 兩種支援人員各自講清楚計不計薪',
    /挑<b>店裡的員工<\/b>→ 這個班算他的，<b>值班費照算<\/b>/.test(EDIT)
-   && /挑<b>店外人員<\/b>→ 只是記錄誰來顧店，<b>不計薪<\/b>/.test(EDIT)
-   && /兩種都會算進下方的空班檢查/.test(EDIT));
+   && /挑<b>店外人員<\/b>→ 只是記錄誰來顧店，<b>不計薪<\/b>/.test(EDIT));
 
 console.log('\n⑤ 存檔');
 ok('★★★ 那幾格沒畫出來（一般員工的視窗）就別碰那些欄位',

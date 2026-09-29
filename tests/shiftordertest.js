@@ -13,12 +13,13 @@ const eq=(n,a,e)=>ok(n,JSON.stringify(a)===JSON.stringify(e),`得到 ${JSON.stri
 
 console.log('① 排序規則寫在原地');
 ok('★★★ 依「這個月排最多的那一班」分組', /const _shKind=e=>\{/.test(src));
-ok('★★★ 平手時 全 > 早 > 晚（與使用者講的順序一致）',
-   /return cnt\[0\]===max\?0:\(cnt\[1\]===max\?1:2\);\s*\/\/ 平手時 全 > 早 > 晚/.test(src));
+/* 2026-09-30：中班補進來之後是四種，順序也跟著變成 全 > 早 > 中 > 晚 */
+ok('★★★ 平手時 全 > 早 > 中 > 晚（與使用者講的順序一致）',
+   /for\(let i=0;i<4;i\+\+\) if\(cnt\[i\]===max\) return i;\s*\/\/ 平手時 全 > 早 > 中 > 晚/.test(src));
 ok('★★★ 補班不算進某個人的班別（它固定在最後一列）', /if\(s\.emp_id!==e\.id \|\| shIsSub\(s\)\) return;/.test(src));
 ok('★★ 同一班別內照姓名排（不然每次重畫順序會跳）',
    /\(a\.k-b\.k\) \|\| String\(a\.e\.name\|\|''\)\.localeCompare\(String\(b\.e\.name\|\|''\),'zh-Hant'\)/.test(src));
-ok('★★ 這個月沒排班的人排最後', /if\(!n\) return 4;/.test(src));
+ok('★★ 這個月沒排班的人排最後（中班插進來後編號 4→5）', /if\(!n\) return 5;/.test(src));
 
 console.log('\n② 實跑排序');
 {
@@ -31,6 +32,8 @@ console.log('\n② 實跑排序');
     ...Array.from({length:3},(_,i)=>({emp_id:'B',code:'早',date:'2026-09-0'+(i+1)})),
     // 晚晚：2 晚
     {emp_id:'C',code:'晚',date:'2026-09-01'},{emp_id:'C',code:'晚',date:'2026-09-02'},
+    // 中中：3 中（2026-09-30 才算一種班 —— 以前中班不計，黃美蓉因此被標成早班）
+    ...Array.from({length:3},(_,i)=>({emp_id:'M',code:'中',date:'2026-09-0'+(i+1)})),
     // 補班的（不算）
     {emp_id:'D',code:'全',date:'2026-09-01',is_sub:true},
     // 平手：1 全 1 早 1 晚 → 取全
@@ -40,17 +43,21 @@ console.log('\n② 實跑排序');
     F+'\nreturn _shKind({id:'+JSON.stringify(id)+'});')(SH, s=>!!s.is_sub, c=>c, ()=>'');
   eq('★★★ 4 全 1 早 → 全（0）', mk('A'), 0);
   eq('★★★ 3 早 → 早（1）', mk('B'), 1);
-  eq('★★★ 2 晚 → 晚（2）', mk('C'), 2);
-  eq('★★★ 只有補班 → 當作沒排班（4）', mk('D'), 4);
+  eq('★★★ 2 晚 → 晚（3）', mk('C'), 3);
+  eq('★★★ 3 中 → 中（2）', mk('M'), 2);
+  eq('★★★ 只有補班 → 當作沒排班（5）', mk('D'), 5);
   eq('★★★ 各 1 班平手 → 取全（0）', mk('E'), 0);
-  eq('★★ 完全沒資料 → 4', mk('Z'), 4);
+  eq('★★ 完全沒資料 → 5', mk('Z'), 5);
 }
 
 console.log('\n③ 畫面標得出來');
 ok('★★★ 姓名那一格標主要班別（不標的話看不出列是照什麼排的）',
    /\{0:'<b class="shn-kind sh-code-full">全<\/b>',1:'<b class="shn-kind sh-code-am">早<\/b>',/.test(src));
-/* ⚠ 顏色沿用格子裡那一套（全紅／早金／晚綠），不另訂一組 */
-ok('★★ 顏色沿用既有的班別色 class', /\.sh-code\.sh-code-full\{background:var\(--danger/.test(src)
+/* ⚠ 顏色沿用格子裡那一套，不另訂一組。
+   2026-09-30 起那一套換成首頁的值班色，而且規則改成**單一 class** —— 舊的
+   .sh-code.sh-code-* 雙 class 版對小章無效（小章沒有 .sh-code），整個章看不見。 */
+ok('★★ 顏色沿用既有的班別色 class（單一 class，小章才吃得到）',
+   /\.sh-code-full\{background:#8C4A3E;\}/.test(src)
    && /\.shn-kind\{display:inline-block;/.test(src));
 
 /* 使用者：「如果有教練請假　格子改成[假]顯示在支援班的下面　一個教練就一列」 */

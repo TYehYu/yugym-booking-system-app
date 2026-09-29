@@ -24,9 +24,12 @@ eq('空代號不炸', cls('',false), '');
 eq('null 不炸', cls(null,false), '');
 
 console.log('\n顏色定義');
-ok('★ 全班用 danger', /\.sh-code\.sh-code-full\{background:var\(--danger,#b5372e\);\}/.test(src));
-ok('★ 早班用品牌金', /\.sh-code\.sh-code-am\{background:var\(--gold-d,#b48a56\);\}/.test(src));
-ok('★ 晚班用品牌綠', /\.sh-code\.sh-code-pm\{background:var\(--green\);\}/.test(src));
+/* 2026-09-30 使用者：「全班 早班 中班 晚班 可以跟著首頁的值班顏色」——
+   早／中／晚吃首頁那三個 hex，全班首頁沒有、留品牌紅。 */
+ok('★ 全班用品牌紅', /\.sh-code-full\{background:#8C4A3E;\}/.test(src));
+ok('★ 早班用琥珀金（同首頁）', /\.sh-code-am\{background:#D9A441;\}/.test(src));
+ok('★ 中班用品牌綠（同首頁）', /\.sh-code-mid\{background:#1F6F54;\}/.test(src));
+ok('★ 晚班用靛藍（同首頁）', /\.sh-code-pm\{background:#3A5BA0;\}/.test(src));
 ok('　　月曆兩處都改用同一支判定', (src.match(/const _ccls=shiftCodeCls\(_cd,isWk\);/g)||[]).length===2);
 ok('　　排班視窗的快捷鈕同一套配色', /const _qcol=c=>String\(c\)\.indexOf\('全'\)>=0/.test(src));
 
