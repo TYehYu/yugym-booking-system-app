@@ -62,9 +62,16 @@ console.log('\n③ 底部「自主訓練」浮動列（2026-08-31 改成「他�
      /el=document\.createElement\('div'\); el\.id='mem-selfbar'; el\.className='mh2-selfbar';\s*\n\s*document\.body\.appendChild\(el\);/.test(B)
      && /setTimeout\(\(\)=>\{ try\{ memSelfBarSync\(\); \}catch\(_\)\{\} \},0\);/.test(src)
      && !/const selfBar=/.test(HTML));
+  /* 2026-09-29：已約的那一顆多一種樣子 —— 教練請假改記的第二行寫「教練請假」不寫時間
+     （客訴：黃柏瑜「出現一個10/20號」，卡片上看不出那一格是怎麼冒出來的）。 */
   ok('★★ 兩種圓卡：已約的（日期＋時間）與還沒約的（每一點一顆「可約」）',
-     /<b>\$\{d\.getMonth\(\)\+1\}\/\$\{d\.getDate\(\)\}<\/b><span>\$\{String\(b\.start_time\|\|''\)\.slice\(0,5\)\}<\/span>/.test(B)
+     /<b>\$\{d\.getMonth\(\)\+1\}\/\$\{d\.getDate\(\)\}<\/b><span>\$\{_clv\?'教練請假':String\(b\.start_time\|\|''\)\.slice\(0,5\)\}<\/span>/.test(B)
      && /<b>＋<\/b><span>\$\{c\.inf\?'不限':'可約'\}<\/span>/.test(B));
+  ok('★★★ 教練請假改記的那一顆標金框、講清楚為什麼',
+     /const _clv=b\.coach_leave===true;/.test(B)
+     && /\$\{_clv\?' mh2-sbclv':''\}/.test(B)
+     && /教練請假，本堂改為自主訓練 —— 你可以自己來練/.test(B)
+     && /\.mh2-sbc\.mh2-sbclv\{border-color:var\(--gold,#B48A56\);/.test(src));
   /* 2026-09-09 改成一張票一組（客訴「約好之後圓卡跑到第一格」）—— 資料形狀從 pts 換成 groups */
   ok('★★ 無限次卡只畫一顆「不限」（12 顆一模一樣的可約卡沒有資訊量）',
      /if\(tkUnlimited\(t\)\)\{ if\(_n<CAP\)\{ g\.cards\.push\(\{from, ex, inf:true\}\); _n\+\+; \} \}/.test(B));
