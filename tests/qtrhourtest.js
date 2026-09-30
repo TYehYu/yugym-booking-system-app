@@ -19,11 +19,14 @@ console.log('① 一份格線，四個地方共用');
 ok('★★ BK_MINS 是唯一的來源', /const BK_MINS=\['00','15','30','45'\];/.test(src));
 {
   /* 逐一指名，不用次數 —— 註解裡也會提到 BK_MINS，數次數會跟著漂 */
+  /* 2026-09-30：recurTimeOpts 沒有呼叫端（各天時間早就改用 ashTimeField 的滾輪），
+     而且它自己會吐 22:00 —— 已整支移除，剩下三處仍然共用同一份格線。 */
   const sites=[['下拉 bkTimeOptions', /function bkTimeOptions[\s\S]{0,220}for\(const mm of BK_MINS\)/],
-               ['連續預約 recurTimeOpts', /function recurTimeOpts[\s\S]{0,180}for\(const mm of BK_MINS\)/],
                ['九宮格 ashTimeList', /function ashTimeList[\s\S]{0,180}for\(const mm of BK_MINS\)/],
                ['滾輪 ashTimeOpen',   /const mins=BK_MINS\.map\(v=>\(\{v,label:v\}\)\);/]];
-  eq('★★ 四個挑時間的地方都吃它', sites.filter(([,re])=>!re.test(src)).map(([n])=>n), []);
+  eq('★★ 三個挑時間的地方都吃它', sites.filter(([,re])=>!re.test(src)).map(([n])=>n), []);
+  ok('★★ 死掉的 recurTimeOpts 已收乾淨（它會把 22:00 帶回來）',
+     !/function recurTimeOpts\(\)\{/.test(src));
   ok('★★ 沒有人再自己寫一次 00／30',
      !/for\(const mm of \['00','30'\]\)/.test(src) && !/for\(const m of \['00','30'\]\)\{\s*\n\s*const t=/.test(src));
   ok('　 班表與營業時間仍然是 30 分一格（那是排班，不是排課）',
@@ -55,17 +58,19 @@ console.log('\n③ 滾輪（真正在用的那個挑時間視窗）');
   ok('★★ 開啟時滾到現值那一格，用 indexOf 找（原本寫死 cm===\'30\'?1:0）',
      /const ii=BK_MINS\.indexOf\(cm\);/.test(open) && /ashWheelGo\('i', ii<0\?0:ii\);/.test(open));
   ok('★★ 現值不在格線上（13:50）不會滾到 -1 變空白', /ii<0\?0:ii/.test(open));
-  ok('　 小時欄沒被動到（08–22）',
-     /const hours=Array\.from\(\{length:15\},\(_,i\)=>\(\{v:i\+8,label:String\(i\+8\)\.padStart\(2,'0'\)\}\)\);/.test(open));
+  /* 2026-09-30 使用者：「我剛剛有看到可以約22點 這個要移除」——22:00 是平日打烊時間 */
+  ok('★★★ 小時只到 21（22:00 不能當上課開始時間）',
+     /const hours=Array\.from\(\{length:14\},\(_,i\)=>\(\{v:i\+8,label:String\(i\+8\)\.padStart\(2,'0'\)\}\)\);/.test(open));
 }
 
 console.log('\n④ 連續預約每天的時間要跟第一堂同一套格線');
 {
-  const fn=new Function("const BK_MINS=['00','15','30','45'];\n"
-    +g('function recurTimeOpts(){','\n}\n')+'\nreturn recurTimeOpts;')();
-  const vals=[...fn().matchAll(/value="([^"]*)"/g)].map(m=>m[1]);
-  eq('★ 空值（同第一堂）＋ 57 格', [vals[0], vals.length], ['',58]);
-  ok('★ :15／:45 也在', vals.includes('08:15') && vals.includes('21:45'));
+  /* 2026-09-30：不再是自己一份 <option>，改用與第一堂**完全同一支**挑選器
+     （ashTimeField → ashTimeOpen 的滾輪），格線一致這件事因此不必再驗一次。 */
+  ok('★★★ 各天時間直接用 ashTimeField（與第一堂同一支，不另做一份選單）',
+     /\$\{ashTimeField\(`\$\{prefix\}-dowt-\$\{v\}`, '', '', `class="\$\{prefix\}-dowt" data-dow="\$\{v\}"`\)\}/.test(src));
+  ok('★★ 留空＝同第一堂（readRecur 只收填了的那幾天）',
+     /if\(dows\.includes\(d\) && \/\^\\d\{2\}:\\d\{2\}\$\/\.test\(v\)\) times\[d\]=v;/.test(src));
 }
 
 console.log('\n⑤ 為什麼不是只給團體課、以及會影響什麼');

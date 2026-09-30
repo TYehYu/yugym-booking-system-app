@@ -152,16 +152,17 @@ ok('　　停用狀態的樣式一併補上', /\.rc-dow input\[type=time\]:disab
    本來就有明確的「取消」與點格即選）。改查新的排法說明。 */
 ok('　　原因寫在程式裡', /勾了誰、誰的時間才出現在下面那一區/.test(src));
 {
-  const g3=(a,b)=>{const i=src.indexOf(a);return src.slice(i,src.indexOf(b,i)+b.length);};
-  const fn=new Function("const BK_MINS=['00','15','30','45'];\n"
-    +g3('function recurTimeOpts(){','\n}\n')+'\nreturn recurTimeOpts;')();
-  const vals=[...fn().matchAll(/value="([^"]*)"/g)].map(m=>m[1]);
-  eq('★ 第一個是空值（＝同第一堂）', vals[0], '');
-  /* 2026-08-26：與 bkTimeOptions 同一份 BK_MINS（00／15／30／45）→ 57 格＋「同第一堂」 */
-  eq('★ 08:00 起、22:00 止、15 分一格', [vals[1], vals[vals.length-1], vals.length], ['08:00','22:00',58]);
-  ok('★ :15 與 :45 也在（連續預約要跟第一堂用同一套格線）',
-     vals.includes('08:15') && vals.includes('21:45'));
-  ok('　　讀取端的格式檢查吃得下（HH:MM）', vals.slice(1).every(v=>/^\d{2}:\d{2}$/.test(v)));
+  /* 2026-09-30：各天時間早就改用 ashTimeField（與第一堂同一支滾輪），
+     自己那份 recurTimeOpts 沒有呼叫端、而且會吐 22:00，已整支移除。
+     使用者：「我剛剛有看到可以約22點 這個要移除」—— 22:00 是平日打烊時間。 */
+  ok('★★★ 各天時間與第一堂同一支挑選器',
+     /\$\{ashTimeField\(`\$\{prefix\}-dowt-\$\{v\}`, '', '', `class="\$\{prefix\}-dowt" data-dow="\$\{v\}"`\)\}/.test(src));
+  ok('★★★ 舊的那份選單已收乾淨（它會把 22:00 帶回來）',
+     !/function recurTimeOpts\(\)\{/.test(src));
+  ok('★★ 滾輪小時只到 21',
+     /const hours=Array\.from\(\{length:14\},\(_,i\)=>\(\{v:i\+8/.test(src));
+  ok('　　讀取端仍然只收 HH:MM（留空＝同第一堂）',
+     /if\(dows\.includes\(d\) && \/\^\\d\{2\}:\\d\{2\}\$\/\.test\(v\)\) times\[d\]=v;/.test(src));
 }
 
 /* 2026-08-01 使用者回報：「不能只約 4 堂，因為旁邊沒有＋－的按鈕」——
