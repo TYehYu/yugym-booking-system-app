@@ -57,7 +57,21 @@ console.log('\n③ 兩邊的教練課／團課定義沒有第二處分歧');
      /不順便濾 bkIsLeaveSelfTrain：那是員工列表「總堂數」那一欄專有的規則/.test(src));
 }
 
-console.log('\n④ 薪資不受影響');
+console.log('\n④ 員工卡的「本月課堂」也是同一個口徑');
+{
+  /* 2026-09-30 使用者：「這邊的本月102堂跟員工列表的數字不同」——
+     余東曄 9 月：私教 98 ＋ 體驗 1 ＋ 教練請假轉的自主訓練 3 ＝ 102，員工列表是 98。
+     員工卡那一段原本自己寫 status!=='cancelled'，三條規則一條都沒有。 */
+  ok('★★★ 員工卡的本月課堂吃 bkCounts（不是自己寫 status!==cancelled）',
+     /&& \(b\.date\|\|''\)\.slice\(0,7\)===month && bkCounts\(b\)\n\s*&& !bkIsLeaveSelfTrain\(b\) && b\.category!=='體驗'\);/.test(src));
+  ok('★★★ 三條規則與員工列表的「總堂數」一致（教練請假轉的自主訓練、體驗都不算）',
+     /const inTotal=b=>!isTrial\(b\);/.test(src)
+     && /const mine=_mBk\.filter\(b=>\(bkCoachId\(b\)\)===c\.id && !bkIsLeaveSelfTrain\(b\)\);/.test(src));
+  ok('★★ 成因與數字寫在原地（下一個人不要又寫一套）',
+     /別再自己寫一套篩選條件：同一個數字出現在兩個地方，遲早會被問「為什麼不一樣」/.test(src));
+}
+
+console.log('\n⑤ 薪資不受影響');
 {
   /* 薪資走的是自己那一份 ptDoneById，不吃 rangeBk —— 改報表不會動到任何人的錢 */
   ok('★★★ 薪資的堂數自己算（bkCounts 這次的改動碰不到）',
