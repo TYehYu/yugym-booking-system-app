@@ -425,7 +425,8 @@ console.log('\n自主訓練：教練與連續預約整欄關閉');
      /const isSelf = !!t && \(typeof bkIsSelf==='function'\) && bkIsSelf\(\{category:t\.category\}\);/.test(src));
   ok('★★ 兩欄都關，而且各自寫出原因',
      /bkFieldOff\('bk-coach-row', isSelf, '自主訓練是會員自己練，不需要指定教練'\);/.test(src)
-     && /bkFieldOff\('bk-recur-row', isSelf, '自主訓練不做連續預約 —— 會員每次來再自己約時段'\);/.test(src));
+     /* 2026-09-30：後半句「會員每次來再自己約時段」是給設計者看的理由，砍掉 */
+     && /bkFieldOff\('bk-recur-row', isSelf, '自主訓練不做連續預約'\);/.test(src));
   ok('★★ 關掉的同時要把值清掉（不然剛選好的教練會被靜靜帶進送出）',
      /if\(co && co\.value\)\{ co\.value=''; try\{ bkCoachChange\(\); \}catch\(_\)\{\} \}/.test(src)
      && /if\(isGrp \|\| isSelf\)\{\s*\n\s*const sw=document\.getElementById\('bk-recurring'\);/.test(src));

@@ -25,10 +25,17 @@ ok('★ 待簽約卡位沒有票可扣 → 維持 12（bkReadRecurBk 不帶 maxN
 ok('　　團課也不帶（一次排多人、各人餘額不同）', /\$\{recurBoxHtml\('grp'\)\}/.test(src));
 /* 2026-08-23：標籤改成可覆寫（opts.countLabel）——「調整日期／時間」那個入口是替既有的課
    往後排，第一堂已經存在，沿用「含第一堂」會讓人多算一堂。不傳＝維持原字串。 */
-ok('★ 標籤不再寫死「最多 12 堂」（會與下面的說明打架），且預設仍是「含第一堂」',
-   /<label>\$\{\(opts&&opts\.countLabel\)\|\|'預約堂數（含第一堂）'\}<\/label>/.test(src)
+/* 2026-09-30 使用者：「這邊的文字也太多了」——
+   堂數欄下方那三句（方案最多 12 堂／數的是堂數不是週數／衝堂自動跳過…）
+   換成一行「排到 X/XX」（recurWhenHint），上限搬到標籤右邊。
+   recurCountHint 因此整支退場。 */
+ok('★ 標籤不再寫死「最多 12 堂」，也不再寫「（含第一堂）」（下面直接寫排到哪天）',
+   /<label class="rc-clab">\$\{\n\s*\(opts&&opts\.countLabel\)\|\|'預約堂數'\}<i id="\$\{prefix\}-count-cap">最多 \$\{_m\}<\/i><\/label>/.test(src)
    && !/預約堂數（含第一堂，最多 \$\{RECUR_MAX\} 堂）/.test(src));
-ok('★ 說明文字抽成共用（兩處才不會漂移）', /function recurCountHint\(prefix, cap\)\{/.test(src));
+ok('★★★ 上限與「排到哪天」各有一個地方，而且都會跟著重算',
+   /function recurWhenHint\(prefix\)\{/.test(src)
+   && /function recurWhenSync\(prefix\)\{/.test(src)
+   && !/function recurCountHint\(/.test(src));
 ok('★ 手動改過的數字不覆蓋，只夾上限',
    /el\.setAttribute\('data-touched','1'\);   \/\/ 手動改過/.test(src)
    && /if\(!touched \|\| cur>cap \|\| cur<1\) el\.value=cap;/.test(src));
@@ -41,17 +48,20 @@ console.log('\n實跑 recurSetMax');
     const el={_a:{}, value:'12', max:'12',
       getAttribute(k){return this._a[k];}, setAttribute(k,v){this._a[k]=String(v);}};
     el.setAttribute('data-max','12');
-    const hint={innerHTML:''};
-    const doc={getElementById:id=>id==='bk-count'?el:(id==='bk-count-hint'?hint:null)};
-    const fn=new Function('document','RECUR_MAX','recurCountHint',
+    /* 2026-09-30：說明那一格改放「排到哪天」，上限改寫在標籤右邊的 -count-cap */
+    const hint={innerHTML:''}, cap={textContent:''};
+    const doc={getElementById:id=>id==='bk-count'?el
+      :(id==='bk-count-hint'?hint:(id==='bk-count-cap'?cap:null))};
+    const fn=new Function('document','RECUR_MAX','recurWhenSync',
       g('function recurSetMax(prefix, maxN){','\n}\n')+'\nreturn recurSetMax;')(
-      doc, RECUR_MAX, (p,c)=>`cap=${c}`);
-    return {el,hint,fn};
+      doc, RECUR_MAX, p=>{hint.innerHTML='when:'+p;});
+    return {el,hint,cap,fn};
   };
 
-  { const {el,hint,fn}=mk(); fn('bk',10);
+  { const {el,hint,cap,fn}=mk(); fn('bk',10);
     eq('★ 票券只剩 10 堂 → 預設與上限都變 10', [el.value, el.max, el.getAttribute('data-max')], [10,10,'10']);
-    eq('　　說明也跟著換', hint.innerHTML, 'cap=10'); }
+    eq('　　標籤右邊的上限跟著換', cap.textContent, '最多 10');
+    eq('　　「排到哪天」也重算', hint.innerHTML, 'when:bk'); }
 
   { const {el,fn}=mk(); fn('bk',20);
     eq('★ 票券剩 20 堂 → 仍以方案上限 12 為準', [el.value, el.max], [12,12]); }
@@ -82,9 +92,11 @@ console.log('\n實跑 recurClampCount（送出前的最後防線沒被動壞）'
   const mk=(val,dataMax)=>{
     const el={_a:{'data-max':String(dataMax)}, value:String(val),
       getAttribute(k){return this._a[k];}, setAttribute(k,v){this._a[k]=String(v);}};
-    const fn=new Function('document','RECUR_MAX','showToast',
+    /* 2026-09-30：夾完值會順手重算「排到哪天」（recurWhenSync），沙箱要一併餵替身
+       —— 這一段驗的是夾值本身，日期那一格另有 recurtimetest 顧。 */
+    const fn=new Function('document','RECUR_MAX','showToast','recurWhenSync',
       g('function recurClampCount(prefix){','\n}\n')+'\nreturn recurClampCount;')(
-      {getElementById:()=>el}, RECUR_MAX, m=>{toast=m;});
+      {getElementById:()=>el}, RECUR_MAX, m=>{toast=m;}, ()=>{});
     fn('bk'); return el;
   };
   eq('★ 打 20、票剩 10 → 夾成 10', Number(mk(20,10).value), 10);
@@ -187,9 +199,9 @@ ok('　　原因寫在程式裡', /手機上的數字輸入框沒有加減鈕（
   const mk=(val,dataMax)=>{
     const el={_a:{'data-max':String(dataMax)}, value:String(val),
       getAttribute(k){return this._a[k];}, setAttribute(k,v){this._a[k]=String(v);}};
-    const clamp=new Function('document','RECUR_MAX','showToast',
+    const clamp=new Function('document','RECUR_MAX','showToast','recurWhenSync',
       g2('function recurClampCount(prefix){','\n}\n')+'\nreturn recurClampCount;')(
-      {getElementById:()=>el}, 12, ()=>{});
+      {getElementById:()=>el}, 12, ()=>{}, ()=>{});
     const step=new Function('document','recurClampCount','hapticFeedback',
       g2('function recurStep(prefix, d){','\n}\n')+'\nreturn recurStep;')(
       {getElementById:()=>el}, clamp, ()=>{});

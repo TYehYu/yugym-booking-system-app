@@ -24,7 +24,15 @@ ok('★ 引擎裡也夾（呼叫端傳大數字也擋住）',
    /const reqCount=Math\.min\(Math\.max\(1, o\.count\|\|1\), RECUR_MAX\);   \/\/ 方案最多 12 堂/.test(src));
 ok('　　團課與待簽約卡位也套上限',
    (src.match(/Math\.min\(rc\.count,RECUR_MAX\)/g)||[]).length===2);
-ok('　　文案講明數的是堂數不是週數', /數的是<b>堂數<\/b>不是週數 —— 一週勾兩天就是一週消耗 2 堂。/.test(src));
+/* 2026-09-30 使用者：「這邊的文字也太多了」——
+   堂數欄下方那三句（方案最多 12 堂／數的是堂數不是週數／衝堂自動跳過…）
+   換成一行「排到 X/XX」（recurWhenHint），上限搬到標籤右邊。
+   recurCountHint 因此整支退場。 */
+ok('★★★ 改用「排到 X/XX」講同一件事（有了日期就不必解釋堂數怎麼換算）',
+   /<span class="rc-when-l">排到<\/span><b>\$\{last\.getMonth\(\)\+1\}\/\$\{last\.getDate\(\)\}<\/b>/.test(src)
+   && !/數的是<b>堂數<\/b>不是週數/.test(src.replace(/\/\*[\s\S]*?\*\//g,' ')));
+ok('★★★ 日期與真正會建立的那幾堂同一支計算（不另外算一份）',
+   /const list=buildRecurringDates\(start, dows, cnt, null\);/.test(src));
 ok('　　超過上限的提示分兩種（票券上限／方案上限）',
    /最多只能排 \$\{cap\} 堂（可約堂數上限）/.test(src) && /最多只能排 \$\{RECUR_MAX\} 堂（方案上限）/.test(src));
 

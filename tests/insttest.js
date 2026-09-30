@@ -115,7 +115,12 @@ ok('★ 次數上限＝min(可約堂數, 12)，送出時夾住',
    /\$\{bkRecurRecap\(preSum\)\}/.test(src)
    && /window\._bkRecurMax = Number\(maxN\)>0 \? Number\(maxN\) : 0;/.test(src)
    && /const m=Number\(maxN\)>0 \? Math\.min\(Number\(maxN\), RECUR_MAX\) : RECUR_MAX;/.test(src)
-   && /這張票目前可約 <b>\$\{c\}<\/b> 堂，最多就排 \$\{c\} 堂。/.test(src));
+/* 2026-09-30 使用者：「這邊的文字也太多了」——
+   堂數欄下方那三句（方案最多 12 堂／數的是堂數不是週數／衝堂自動跳過…）
+   換成一行「排到 X/XX」（recurWhenHint），上限搬到標籤右邊。
+   recurCountHint 因此整支退場。 */
+   && /const capLb=document\.getElementById\(prefix\+'-count-cap'\);/.test(src)
+   && /capLb\.textContent='最多 '\+cap;/.test(src));
 ok('★ 超過上限會被夾回並提示', /function recurClampCount\(/.test(src)
    && /最多只能排 \$\{cap\} 堂（可約堂數上限）/.test(src)
    && /最多只能排 \$\{RECUR_MAX\} 堂（方案上限）/.test(src));
