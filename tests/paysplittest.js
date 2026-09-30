@@ -76,8 +76,11 @@ ok('★★ 票券當日實收優先用當日收款紀錄（amount_paid 是累計
 ok('★★ 經營報表：本月買票用本月收款合計、外加非本月票的分期收款（instRev）',
    /const instRev=\(purchases\|\|\[\]\)\.filter\(p=>p\.source==='installment'&&\(\(p\.created_at\|\|''\)\.slice\(0,7\)===month\)&&!_mNewTk\.has\(p\.ticket_id\)\)/.test(src)
    && /const revenue=tkRev\+instRev\+purRev;/.test(src));
-ok('★ 名單列分期收款有名目（品名＋「分期收款」）',
-   /p\.source==='installment'\?\(\(p\.plan_name\|\|'票券'\)\+'（分期收款）'\)/.test(src));
+/* 2026-09-30 使用者回報（楊慧淳）：「（分期）」黏在方案名後面，櫃檯讀成**約別**被改。
+   改成方案名乾淨、期數獨立一枚章（ins → revInsChip）。名目還在，只是不再黏在一起。 */
+ok('★ 名單列分期收款標得出來（方案名＋期數章）',
+   /ins:\(p\.source==='installment'\?tkInsOf\(_t,p\):null\),/.test(src)
+   && /<span class="mc-rev-it">\$\{esc\(r\.it\)\}\$\{revInsChip\(r\)\}<\/span>/.test(src));
 
 console.log('\n'+(fail?'✗ ':'✓ ')+pass+' 通過 / '+fail+' 失敗');
 process.exit(fail?1:0);

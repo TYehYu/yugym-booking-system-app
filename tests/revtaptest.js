@@ -54,7 +54,8 @@ ok('★ 每一列：歸屬 tag（上）／姓名／品項／付款方式／金�
 /* 2026-09-15 三修：退回鈕移到姓名那一行（使用者：「退回的按鈕可以改在發票左邊
    這樣就不會多一列了」）。彈窗版沒有發票標記，所以那一行是「姓名＋退回」。 */
    /<div class="rv-r1"><span class="mc-rev-nm">\$\{esc\(r\.nm\)\}<\/span><\/div>/.test(src)
-   && /<div class="rv-r2"><span class="mc-rev-it">\$\{esc\(r\.it\)\}<\/span>/.test(src)
+   /* 2026-09-30：品項後面多一枚分期期數章（revInsChip），其餘不動 */
+   && /<div class="rv-r2"><span class="mc-rev-it">\$\{esc\(r\.it\)\}\$\{revInsChip\(r\)\}<\/span>/.test(src)
    && !/mc-rev-inv">發票/.test(src));
 /* 2026-09-15 使用者：「今天兩筆 魚先森 點選進去的時候應該要直接跳選到
    會員資料的[其他]這一個頁面」——票券列仍跳票券頁，商品／場租／票券重啟跳〔其他〕。
@@ -110,23 +111,33 @@ console.log('\n實跑：彈窗組裝');
        用替身等於把要驗的東西換掉。（在 index.html 幫某支函式加新依賴時，
        記得回頭搜 tests/ 找出所有抽取點，不然會像這次一樣炸在半路。） */
   const _revRowKey=new Function('return '+g('function revRowKey(r){','\n}'))();
-  const fn=new Function('showModal','window','revAttribChip','revPayChip','saleKindChip','revUndoChip','revAmtDup','revKindCell','revRowKey',
-    g('function openTodayRevList(){','\n}\n')+'\nreturn openTodayRevList;')(h=>{shown=h;}, globalThis, ()=>'', r=>r.pay?`<span class="mc-rev-pay">${r.pay}</span>`:'', ()=>'', ()=>'', _revAmtDup, r=>r.kind?`<span class="mc-rev-kv">${r.kind}</span>`:'', _revRowKey);
+  /* 2026-09-30：品項後面多一枚分期期數章。餵**真的那一支** —— 用替身就等於沒驗到，
+     而楊慧淳那一筆（約別=續約、付款=分期）要的就是這枚章不能再跟方案名黏在一起。 */
+  const _revInsChip=new Function('return '+g('function revInsChip(r){','\n}'))();
+  const fn=new Function('showModal','window','revAttribChip','revPayChip','saleKindChip','revUndoChip','revAmtDup','revKindCell','revRowKey','revInsChip',
+    g('function openTodayRevList(){','\n}\n')+'\nreturn openTodayRevList;')(h=>{shown=h;}, globalThis, ()=>'', r=>r.pay?`<span class="mc-rev-pay">${r.pay}</span>`:'', ()=>'', ()=>'', _revAmtDup, r=>r.kind?`<span class="mc-rev-kv">${r.kind}</span>`:'', _revRowKey, _revInsChip);
 
   globalThis._gdRev={date:'2026-08-01',total:12000,inv:9000,noInv:3000,rows:[
     {nm:'王小明',mid:'m1',tk:'TK-a',it:'私人教練課 1V1',amt:9000,inv:true,pay:'現金'},
     {nm:'散客',mid:null,pur:'PUR-b',it:'場地租借',amt:3000,inv:false,pay:'匯款'},
+    /* 楊慧淳那一筆的形狀：約別是續約，付款才是分期（2026-09-30） */
+    {nm:'楊慧淳',mid:'m2',tk:'TK-c',it:'主顧客友善1V2',ins:{n:1,total:3},amt:6400,inv:true,pay:'匯款',kind:'renewal'},
   ]};
   fn();
+  ok('★★★ 分期期數是獨立一枚章，沒有黏在方案名後面（0930 櫃檯讀成約別被改）',
+     /<span class="mc-rev-it">主顧客友善1V2<span class="rv-ins"[^>]*>1\/3 期<\/span><\/span>/.test(shown)
+     && !/主顧客友善1V2（分期）/.test(shown));
+  ok('★★ 不是分期的列不長出章', !/場地租借<span class="rv-ins"/.test(shown));
   ok('★ 兩筆都畫出來', /王小明/.test(shown) && /場地租借/.test(shown));
-  ok('★ 標題帶日期與筆數', /08\/01 營收（2 筆）/.test(shown));
+  ok('★ 標題帶日期與筆數', /08\/01 營收（3 筆）/.test(shown));
   ok('★ 列上沒有發票標籤、有付款方式（0803 兩修）',
      !/mc-rev-inv/.test(shown) && /現金/.test(shown) && /匯款/.test(shown));
   /* 2026-09-21：可點條件從「有綁會員」改成「有鍵值」——
      沒綁會員的收款列（場租、商品）一樣有付款方式與退回要處理，現在也進得去。 */
-  ok('★★ 兩列都點得開，各自帶自己的鍵值',
+  ok('★★ 三列都點得開，各自帶自己的鍵值',
      /revRowPanel\('tk:TK-a',event\)/.test(shown) && /revRowPanel\('pur:PUR-b',event\)/.test(shown)
-     && (shown.match(/mc-rev-go/g)||[]).length===2);
+     && /revRowPanel\('tk:TK-c',event\)/.test(shown)
+     && (shown.match(/mc-rev-go/g)||[]).length===3);
   {
     /* 真的沒有鍵值的列（既不是票券也不是收款）仍然不可點 —— 不能因為改版就變成
        每一列都掛一個點了沒反應的 onclick。 */
