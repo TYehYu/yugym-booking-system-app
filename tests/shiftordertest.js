@@ -60,11 +60,16 @@ ok('★★ 顏色沿用既有的班別色 class（單一 class，小章才吃得
    /\.sh-code-full\{background:#8C4A3E;\}/.test(src)
    && /\.shn-kind\{display:inline-block;/.test(src));
 
-/* 使用者：「如果有教練請假　格子改成[假]顯示在支援班的下面　一個教練就一列」 */
+/* 0929：「如果有教練請假　格子改成[假]顯示在支援班的下面　一個教練就一列」
+   0930 推翻「一位一列」：「統一列出一列是請假 在這一列上顯示請假的員工縮寫
+   減少下方因為某員工請假一天卻要多一整列」—— 五個人五列 175px，大半是空格子。 */
 console.log('\n④ 請假區');
-ok('★★★ 排在補班列之後、一位一列', /<tr class="sh-lvrow">/.test(src)
-   && src.indexOf('sh-subrow')<src.indexOf('sh-lvrow'));
-ok('★★★ 格子畫〔假〕', /<b class="sh-code sh-code-leave"/.test(src) && />假<\/b>/.test(src));
+ok('★★★ 排在補班列之後，而且**只有一列**', /<tr class="sh-lvrow">/.test(src)
+   && src.indexOf('sh-subrow')<src.indexOf('sh-lvrow')
+   && (src.match(/<tr class="sh-lvrow">/g)||[]).length===1);
+ok('★★★ 格子畫〔假別〕＋〔教練縮寫〕的膠囊',
+   /<span class="sh-lvk\$\{shIsClassLeave\(s\)\?' k-cls':''\}">/.test(src)
+   && /<span class="sh-lvnm" style="background:\$\{col\.bg\};color:\$\{col\.fg\};">/.test(src));
 /* ⚠ 兩種請假都收：排班請假（特休／病假／事假）與教練請假（課程請假補登）——
    在班表上都是「這天他不在」，分開列只會讓人要對兩個地方。 */
 ok('★★★ 兩種請假都收（有 leave_type 就算，補班那幾筆除外）',

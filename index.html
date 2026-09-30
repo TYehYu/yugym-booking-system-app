@@ -10313,6 +10313,18 @@ body.wtl-dragging-active *{-webkit-user-select:none!important;user-select:none!i
 .sh-code-pm{background:#3A5BA0;}     /* 晚班：靛藍，同首頁 */
 /* 請假那一區（2026-09-29）：灰底，與班別色分得開 —— 它不是一種班 */
 .sh-code.sh-code-leave{background:var(--t3,#9C9084);}
+/* ══ 請假列（2026-09-30 使用者：「統一列出一列是請假 在這一列上顯示請假的員工縮寫」）══
+   一枚膠囊分兩段：左邊假別（深色，B 案是使用者挑的）、右邊教練縮寫（coachTagColor）。
+   ⚠ 尺寸是量出來的不是算的：格子 52px、內距 2px → 可用 48px，
+     這組數值下最寬的一枚 47px。動字級或內距之前先用 Playwright 量過再改。 */
+.sh-lvwrap{display:flex;flex-direction:column;align-items:center;gap:2px;}
+.sh-lv1{display:inline-flex;align-items:stretch;line-height:1;border-radius:4px;overflow:hidden;}
+.sh-lvk{font-size:9px;font-weight:800;color:#fff;background:rgba(45,36,28,.55);
+  padding:3px 2px;display:inline-flex;align-items:center;}
+/* 教練請假畫淡一階 —— 那天他值班照上，只是某一堂課沒上 */
+.sh-lvk.k-cls{background:rgba(45,36,28,.3);}
+.sh-lvnm{font-size:9.5px;font-weight:800;padding:3px;white-space:nowrap;
+  display:inline-flex;align-items:center;}
 .sh-lvrow .sh-name{opacity:.85;}
 .sh-lvrow .shn-type{color:var(--t3);}
 .sh-code.sh-code-wkd{background:var(--gold);}              /* 自訂代號的假日底色 */
@@ -14262,8 +14274,8 @@ function tbl(s){return TABLE_ALIAS[s]||s;}
 let sb=null;
 // ── 版本號（日期+時間格式：年後兩碼+月+日.時分，例 26620.1058 = 26年6/20 10:58）──
 // 每次改版手動更新這一行即可，畫面與 title 會一起更新
-const APP_VERSION = '260930.0950';
-const APP_VERSION_LABEL = 'v260930.0950';
+const APP_VERSION = '260930.1017';
+const APP_VERSION_LABEL = 'v260930.1017';
 const CLOUD = !!(window.YUGYM_CONFIG && window.YUGYM_CONFIG.url && window.YUGYM_CONFIG.anonKey);
 if(CLOUD){ sb = supabase.createClient(window.YUGYM_CONFIG.url, window.YUGYM_CONFIG.anonKey); }
 
@@ -36785,6 +36797,28 @@ function shLeaveTag(s){
   if(!s || !s.leave_type) return '';
   return (shIsClassLeave(s) ? '假' : String(s.leave_type)[0]) + (s.leave_hours||'');
 }
+/* 請假列的教練縮寫（2026-09-30）：格子只有 52px，量過**中文兩個字會爆**
+   （「小曾」那一枚 51px，格子可用寬只有 48px）。所以：
+     ・name_en 是英文 → 取前兩個字母大寫（Randy→RA）
+     ・name_en 放中文暱稱（小曾／石頭）→ 取最後一個字
+   ⚠ 與課卡的 coachAbbr（中文取兩個字）**刻意不同** —— 那裡的格子寬得多。
+     不要為了「統一」把這支改成呼叫 coachAbbr，改了就會被格子切掉。 */
+function shLvAbbr(c){
+  if(!c) return '—';
+  const en=String(c.name_en||''), zh=String(c.name||'');
+  const m=en.replace(/[^A-Za-z]/g,'');
+  if(m) return m.slice(0,2).toUpperCase();
+  const zhEn=en.replace(/[^\u4e00-\u9fff]/g,'');
+  if(zhEn) return zhEn.slice(-1);
+  if(zh) return zh.slice(-1);
+  return '—';
+}
+/* 假別取一個字（2026-09-30 使用者：「前面可以多一個[事][特][病][喪] 代表假別」）。
+   ⚠ 教練請假取第一個字是「教」，看不懂 —— 與格子裡的小標同一條規則，寫「假」。 */
+function shLvKind(s){
+  if(!s || !s.leave_type) return '';
+  return shIsClassLeave(s) ? '假' : String(s.leave_type)[0];
+}
 /* 姓名旁的時數（2026-09-30）：排班時數／實際計薪時數。
    兩個一樣就只畫一個 —— 大多數人本來就一樣，畫兩次只是把那一格塞滿。 */
 function shHrHtml(sched, paid){
@@ -44419,19 +44453,25 @@ function fmtHours(h){
 // ── 請假彙總：算某員工某月各假別時數 ──
 function leaveSummary(shifts, empId, month){
   const list=(shifts||[]).filter(s=>s.emp_id===empId&&(s.date||'').slice(0,7)===month);
-  let 特休=0, 病假=0, 事假=0, 其他=0, scheduled=0;
+  let 特休=0, 病假=0, 事假=0, 喪假=0, 其他=0, scheduled=0;
   list.forEach(s=>{
     scheduled+=(Number(s.hours)||0);
     const lh=Number(s.leave_hours)||0;
     if(s.leave_type==='特休') 特休+=lh;
     else if(s.leave_type==='病假') 病假+=lh;
     else if(s.leave_type==='事假') 事假+=lh;
+    /* 喪假（2026-09-30 使用者定案：「喪假要加 不扣薪」）——
+       勞基法（勞工請假規則第 3 條）喪假期間工資照給，正職兼職都一樣，
+       所以與特休、其他同一條：不進事假／病假那兩桶，calcSalary 就不會扣。
+       ⚠ 天數依親等（父母配偶 8 日／祖父母子女 6 日／兄弟姊妹 3 日），
+         系統不自動管上限 —— 排班時填幾小時就算幾小時，跟特休帳那種年度額度不同。 */
+    else if(s.leave_type==='喪假') 喪假+=lh;
     /* 「其他」＝颱風假、公假這類天災或公務因素（2026-08-01 使用者指示）。
        不扣薪，與特休同一條規則；原因寫在班表的備註欄。 */
     else if(s.leave_type==='其他') 其他+=lh;
   });
-  const leaveTotal=特休+病假+事假+其他;
-  return { scheduled, 特休, 病假, 事假, 其他, leaveTotal, actual:Math.max(scheduled-leaveTotal,0) };
+  const leaveTotal=特休+病假+事假+喪假+其他;
+  return { scheduled, 特休, 病假, 事假, 喪假, 其他, leaveTotal, actual:Math.max(scheduled-leaveTotal,0) };
 }
 // ── 年度特休帳（設計A）──
 // 基數存員工欄位：al_carry_hours(去年結轉)、al_earned_hours(本年度新增)
@@ -45522,7 +45562,7 @@ function calcSalary(emp, ptDone, groupHeads, dutyHours, leave, classOverlap, ext
   if(et==='contractor' && dutyHours>0 && dhr<200) dhr=200; // 合作教練值班保底 200
   const _dutyHrs = tpl.need_duty ? dutyHours : 0;   // 不需值班 → 不計值班薪資
   const dutyGross=Math.round(_dutyHrs*dhr); // 原應值班費（依排班時數）
-  const L=leave||{特休:0,病假:0,事假:0,其他:0};
+  const L=leave||{特休:0,病假:0,事假:0,喪假:0,其他:0};
   /* 2026-08-01 使用者指示：請假扣薪改成「算完本月總薪資後再扣除」。
      原本先扣底薪（adjBase）、再與課費取高者 —— 課費高於調整後底薪時，扣款會被
      max() 整個吃掉，等於沒扣；而且值班費那邊又扣一次，語意重複。
@@ -46250,44 +46290,51 @@ async function renderShiftsTab(){
         <div class="shn-row2"><span class="shn-type">班別與人員手填・員工照算值班費（主管職除外）</span></div>
       </td>${cells}</tr>`;
   })()
-  /* ══ 請假（2026-09-29 使用者：「如果有教練請假　格子改成[假]顯示在支援班的下面
-       一個教練就一列」）════════════════════════════════════════════════════
-     排在補班列之後，這個月有請過假的人各一列，那一天有假就畫一個〔假〕。
+  /* ══ 請假：全部收成一列（2026-09-30 使用者：「班表更新 統一列出一列是請假
+       在這一列上顯示請假的員工縮寫 減少下方因為某員工請假一天卻要多一整列」）═══
+     0929 是「一個教練就一列」，9 月五個人請過假就多五列 175px，其中大半是空格子。
+     改成一列，格子裡放〔假別〕＋〔教練縮寫〕。
+     ⚠ 使用者選的是膠囊版（B 案）：一枚章分兩段，左邊假別（深色）、右邊縮寫（教練色）。
+       量過：最寬的一枚 47px，格子可用 48px —— 剛好塞得下，中文縮寫因此只能取一個字
+       （見 shLvAbbr）。
+     ⚠ 顏色用現成的 coachTagColor —— 行事曆課卡、值班週曆都是這一組，不另訂。
+     ⚠ 兩種請假都收，只差假別那個字：
+       ・排班請假（特休／病假／事假／喪假／其他）＝ 今天這個人不上班
+       ・教練請假（shIsClassLeave）＝ 值班照上，只是某一堂課沒上 → 假別段畫淡一階
      ⚠ 他自己那一列的格子本來就會標請假（sh-leave 小字），這裡是**刻意重複**的 ——
-       上面那一列回答「他那天排什麼班」，這一區回答「這個月誰請了假、哪幾天」。
-     ⚠ 兩種請假都收：
-       ・排班請假（特休／病假／事假…）＝ 今天這個人不上班
-       ・教練請假（shIsClassLeave）＝ 課程請假補登進來的那一筆
-       兩種在班表上都是「這天他不在」，分開列只會讓人要對兩個地方。
-       假別與時數寫進 title，不佔格子寬度。
-     ⚠ 沒有人請假就整區不畫（不要留一排空格子）。 */
+       上面回答「他那天排什麼班」，這一列回答「這個月誰請了假、哪幾天」。
+     ⚠ 沒有人請假就整列不畫（不要留一排空格子）。
+     ⚠ 同一天多人就直向堆，格子跟著長高（量過：三位 55px）。 */
   + (()=>{
     const _lv=monthShifts.filter(s=>s&&s.leave_type&&!shIsSub(s));
     if(!_lv.length) return '';
-    const _ids=[...new Set(_lv.map(s=>String(s.emp_id||'')))].filter(Boolean);
-    const _nameOf=id=>{ const c=coaches.find(x=>x&&x.id===id);
+    const _cOf=id=>coaches.find(x=>x&&x.id===String(id||''))||null;
+    const _nameOf=id=>{ const c=_cOf(id);
       return c?((typeof coachDisp==='function'?coachDisp(c):c.name)||c.name||id):id; };
-    const _rows=_ids.map(id=>({id,name:String(_nameOf(id)||'')}))
-      .sort((a,b)=>a.name.localeCompare(b.name,'zh-Hant'));
-    return _rows.map(o=>{
-      const cells=Array.from({length:daysInMonth},(_,i)=>{
-        const dateStr=`${my}-${mm}-${String(i+1).padStart(2,'0')}`;
-        const dow=new Date(Number(my),Number(mm)-1,i+1).getDay();
-        const isWk=dow===0||dow===6;
-        const list=_lv.filter(s=>String(s.emp_id||'')===o.id && s.date===dateStr);
-        const inner=list.length
-          ? `<span class="sh-chip sh-chip-code"><b class="sh-code sh-code-leave" title="${escH(
-              list.map(s=>`${s.leave_type||'請假'}${s.leave_hours?` ${s.leave_hours} 小時`:''}`).join('、'))}">假</b></span>`
-          : '';
-        return `<td class="sh-cell${list.length?' has':''}${isWk?' sh-cell-wk':''} sh-cell-ro">${inner}</td>`;
-      }).join('');
-      const _d=_lv.filter(s=>String(s.emp_id||'')===o.id).length;
-      return `<tr class="sh-lvrow">
-        <td class="sh-name">
-          <div class="shn-row1"><span class="shn-name">${escH(o.name)}</span><span class="shn-hr">${_d} 天</span></div>
-          <div class="shn-row2"><span class="shn-type">請假</span></div>
-        </td>${cells}</tr>`;
+    const cells=Array.from({length:daysInMonth},(_,i)=>{
+      const dateStr=`${my}-${mm}-${String(i+1).padStart(2,'0')}`;
+      const dow=new Date(Number(my),Number(mm)-1,i+1).getDay();
+      const isWk=dow===0||dow===6;
+      /* 同一個人同一天可能有兩筆（例：上午特休、晚上那一堂又標教練請假）——
+         各畫一枚，不要合併：假別不一樣，合併就看不出是哪一種。 */
+      const list=_lv.filter(s=>s.date===dateStr)
+        .sort((a,b)=>String(_nameOf(a.emp_id)).localeCompare(String(_nameOf(b.emp_id)),'zh-Hant'));
+      const inner=list.length?`<span class="sh-lvwrap">${list.map(s=>{
+        const c=_cOf(s.emp_id);
+        const col=(typeof coachTagColor==='function')?coachTagColor(s.emp_id):{bg:'#EAE6DE',fg:'#6a655c'};
+        const _t=`${_nameOf(s.emp_id)}　${s.leave_type||'請假'}${s.leave_hours?` ${s.leave_hours} 小時`:''}`;
+        return `<span class="sh-lv1" title="${escH(_t)}"><span class="sh-lvk${shIsClassLeave(s)?' k-cls':''}">${
+          escH(shLvKind(s))}</span><span class="sh-lvnm" style="background:${col.bg};color:${col.fg};">${
+          escH(shLvAbbr(c))}</span></span>`;
+      }).join('')}</span>`:'';
+      return `<td class="sh-cell${list.length?' has':''}${isWk?' sh-cell-wk':''} sh-cell-ro">${inner}</td>`;
     }).join('');
+    const _n=[...new Set(_lv.map(s=>String(s.emp_id||'')))].filter(Boolean).length;
+    return `<tr class="sh-lvrow">
+      <td class="sh-name">
+        <div class="shn-row1"><span class="shn-name">請假</span><span class="shn-hr"><b>${_lv.length} 天</b></span></div>
+        <div class="shn-row2"><span class="shn-type">${_n} 位・滑過去看全名</span></div>
+      </td>${cells}</tr>`;
   })();
 
   // 空班檢查：掃描當月營業時段內沒人排班的時段
@@ -46443,6 +46490,9 @@ function openShiftEdit(empId,dateStr){
             <option value="特休"${cur.leave_type==='特休'?' selected':''}>特休（不扣薪）</option>
             <option value="病假"${cur.leave_type==='病假'?' selected':''}>病假（半薪）</option>
             <option value="事假"${cur.leave_type==='事假'?' selected':''}>事假（不給薪）</option>
+            ${/* 喪假（2026-09-30 使用者：「喪假要加 不扣薪」）——勞基法工資照給，
+                 與特休同一條規則。天數依親等，系統不管上限。 */''}
+            <option value="喪假"${cur.leave_type==='喪假'?' selected':''}>喪假（不扣薪）</option>
             ${/* 2026-08-01 使用者指示：新增「其他」，這個月有兩天颱風假。
                  天災停班不扣薪，與特休同一條規則；原因寫在備註欄。 */''}
             <option value="其他"${cur.leave_type==='其他'?' selected':''}>其他（不扣薪，如颱風假）</option>
@@ -46938,7 +46988,7 @@ async function computeMonthlyPayroll(month){
     isSupervisor:false, supPay:0, isLeader:false, leaderPay:0, leaderDetail:'', leaderTotal:0, leaderUnits:0, mgmtPay:0,
     leaderList:[], leaderT1:0, leaderT2:0, leaderB1:0, leaderB2:0,
     insGrade:null, insLaborEmp:0, insHealthEmp:0, insEmpDeduct:0, insLaborCo:0, insHealthCo:0, insCoCost:0,
-    insGradeMissing:'', leave:{特休:0,病假:0,事假:0,其他:0}, leaveDeduct:0,
+    insGradeMissing:'', leave:{特休:0,病假:0,事假:0,喪假:0,其他:0}, leaveDeduct:0,
     grossPay:n, netPay:n, total:n });
   const rows=staff.map(emp=>{
     if(_legacy){
@@ -47025,6 +47075,7 @@ const rowL=(label,val,sub,opt)=>`<div class="sal-line${opt&&opt.dim?' sal-line-d
               if(s.baseHourly>0 && s.leaveDeduct>0) h+=`<div style="padding:2px 0 6px 16px;font-size:11px;color:var(--t3);">請假時薪 $${s.baseHourly.toLocaleString()}（底薪 $${s.base.toLocaleString()} ÷ ${s.divisor}h）</div>`;
               /* 2026-08-01：請假扣薪移到最後統一扣，底薪這裡只列不扣薪的假別 */
               if(r.leave.特休>0) h+=`<div style="display:flex;justify-content:space-between;padding:5px 0 5px 16px;border-bottom:1px solid var(--bd);font-size:12.5px;"><span style="color:var(--t3);">特休 ${r.leave.特休} 小時</span><span style="color:var(--t3);">不扣薪</span></div>`;
+              if(r.leave.喪假>0) h+=`<div style="display:flex;justify-content:space-between;padding:5px 0 5px 16px;border-bottom:1px solid var(--bd);font-size:12.5px;"><span style="color:var(--t3);">喪假 ${r.leave.喪假} 小時</span><span style="color:var(--t3);">不扣薪</span></div>`;
               if(r.leave.其他>0) h+=`<div style="display:flex;justify-content:space-between;padding:5px 0 5px 16px;border-bottom:1px solid var(--bd);font-size:12.5px;"><span style="color:var(--t3);">其他假 ${r.leave.其他} 小時</span><span style="color:var(--t3);">不扣薪</span></div>`;
               h+=rowL('教練課費',`$${s.ptPay.toLocaleString()}`, `${r.ptDone} 堂`,
                 {dim:_floor, pick:!_floor, tag:_floor?'未採用':'採用'});
@@ -73280,6 +73331,7 @@ async function renderSalaryContent(TARGET, withHead){
           if(myLeave.事假>0) h+=ded(`事假 ${myLeave.事假} 小時`, sal.baseLeavePersonalDed);
           if(myLeave.病假>0) h+=ded(`病假 ${myLeave.病假} 小時（半薪）`, sal.baseLeaveSickDed);
           if(myLeave.特休>0) h+=`<div class="sal-row sal-row-ded"><span class="sal-rl">特休 ${myLeave.特休} 小時</span><span class="sal-rv" style="color:var(--t3);">不扣薪</span></div>`;
+          if(myLeave.喪假>0) h+=`<div class="sal-row sal-row-ded"><span class="sal-rl">喪假 ${myLeave.喪假} 小時</span><span class="sal-rv" style="color:var(--t3);">不扣薪</span></div>`;
           if(myLeave.其他>0) h+=`<div class="sal-row sal-row-ded"><span class="sal-rl">其他假 ${myLeave.其他} 小時</span><span class="sal-rv" style="color:var(--t3);">不扣薪</span></div>`;
           if(sal.baseLeaveDeduct>0) h+=row('調整後底薪',`$${sal.adjBase.toLocaleString()}`);
           h+=row('教練課費',`$${sal.ptPay.toLocaleString()}`,`${ptDone} 堂`);
