@@ -93,9 +93,14 @@ console.log('\n⑤ 設定畫面：一次編一個月');
 ok('★ 視窗上方可以挑月份', /<select onchange="openHrSalary\('\$\{id\}',this\.value\)">\$\{monthOptions\(window\._hrSalYm,''\)\}<\/select>/.test(src));
 ok('　　未來月份也挑得到（先排下個月的條件）', /monthOptions\(window\._hrSalYm,''\)/.test(src));
 ok('★ 畫面帶出「那個月適用的條件」', /const c=empAtMonth\(c0, window\._hrSalYm\);/.test(src));
-ok('★ 講清楚現在看的是自己的版本還是沿用來的',
-   /這個月還沒有自己的條件，畫面上是\$\{_hit\?`沿用 <b>\$\{_hit\.ym\.replace\('-','\/'\)\}<\/b> 的設定`:'目前的設定'\}/.test(src)
-   && /這個月有自己的條件（\$\{window\._hrSalYm\.replace\('-','\/'\)\} 版本）/.test(src));
+/* 2026-09-30：那一行灰色小字改成一枚狀態章 —— 它講的是這一頁最關鍵的事
+   「你現在改的是哪個月」，薪資規則是按月存的。三種狀態：
+     沿用 X 月（金）／X 月專屬（綠）／歷史月份（紅，在編過去的月份） */
+ok('★★★ 用一枚章講清楚現在看的是自己的版本、沿用來的、還是歷史月份',
+   /const _own=!!\(_hit && _hit\.ym===window\._hrSalYm\);/.test(src)
+   && /const _past=String\(window\._hrSalYm\) < ymd\(TODAY\)\.slice\(0,7\);/.test(src)
+   && /hr-vtag-inherit">\$\{_hit\?`沿用 \$\{String\(Number\(_hit\.ym\.slice\(5,7\)\)\)\} 月`:'尚未設定'\}/.test(src)
+   && /這是<b>歷史月份<\/b>，改了不影響現在的設定/.test(src));
 ok('★ 儲存寫成那個月的快照', /_map\[_ym\]=payRuleSnapshot\(c\);/.test(src) && /c\.pay_rules=_map;/.test(src));
 ok('★ 第一次建版本時，把編輯前的樣子凍結到前一個月',
    /if\(!Object\.keys\(_map\)\.some\(k=>k<_ym\)\) _map\[prevYm\(_ym\)\]=payRuleSnapshot\(window\._hrSalRaw\|\|\{\}\);/.test(src));

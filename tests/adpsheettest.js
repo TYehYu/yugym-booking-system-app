@@ -115,8 +115,9 @@ ok('★★ 上列小一階（它是附註，不是主角）', /\.gt-c2-seq-f\{fo
 ok('★★ 卡片右緣不會被撐破（overflow:hidden）',
    /\.gt-card\.gt-card2\{position:relative;overflow:hidden;\}/.test(src));
 ok('★★ 讀螢幕不重複念（名稱那一行已經講過）', /<span class="gt-c2-seq" aria-hidden="true">/.test(src));
-ok('★  單堂也有自己的標籤，不會落到看不出是什麼的「其他」',
-   /friendly_promo:'友善優惠',single:'單堂'/.test(src));
+/* 2026-10-01 新增員工培訓方案（教練培訓 1V1／1V2），標籤一併補上 */
+ok('★  單堂與員工培訓都有自己的標籤，不會落到看不出是什麼的「其他」',
+   /friendly_promo:'友善優惠',\n\s*single:'單堂',staff:'員工培訓'/.test(src));
 
 console.log('\n'+pass+' 過 / '+fail+' 敗');
 process.exit(fail?1:0);

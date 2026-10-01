@@ -40,9 +40,14 @@ ok('★★★ 課堂看 can_teach，值班看 need_duty 或 need_punch',
 ok('★★★ 值班要吃 need_punch —— 只打卡沒排班的人也要進得去（值班與打卡 0802 併成同一頁）',
    /PP\.rec\.need_duty\|\|PP\.rec\.need_punch/.test(src));
 /* 2026-09-29：薪資單與薪資規則併成一頁「薪資」（規則摺在薪資單下面）。 */
-ok('★★★ 薪資那一頁不受身分影響（不開課也有底薪與津貼要看）',
-   /\[\['salary','薪資'\]\]\);/.test(src)
-   && /<summary class="pp-rules-sm">薪資規則/.test(src));
+/* 2026-09-30：薪資排第一（使用者：「把薪資分頁跟出勤交換位子」）；
+   薪資規則從底下的摺疊改成卡片右上角的按鈕 → 開既有的編輯視窗。 */
+ok('★★★ 薪資那一頁不受身分影響，而且排第一（不開課也有底薪與津貼要看）',
+   /const EMP_TABS=\[\]\.concat\(\n\s*\[\['salary','薪資'\]\],/.test(src));
+ok('★★★ 薪資規則改成卡片右上角的按鈕（只在薪資分頁畫）',
+   /const _ruleBtn = \(PP\.recView==='salary'\)/.test(src)
+   && /onclick="openHrSalary\('\$\{PP\.id\}'\)">薪資規則<\/button>/.test(src)
+   && !/pp-rules-sm/.test(src));
 ok('★★★ 舊的 recView 字串還能用（員工列表的圖示、補登打卡返回都直接帶那些字串）',
    /if\(PP\.recView==='duty'\) \{ PP\.recView='classes'; PP\.empSub='duty'; \}/.test(src)
    && /if\(PP\.recView==='rules'\)\{ PP\.recView='salary';  PP\.empSub='rules'; \}/.test(src));
