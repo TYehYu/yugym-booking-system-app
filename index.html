@@ -14312,8 +14312,8 @@ function tbl(s){return TABLE_ALIAS[s]||s;}
 let sb=null;
 // ── 版本號（日期+時間格式：年後兩碼+月+日.時分，例 26620.1058 = 26年6/20 10:58）──
 // 每次改版手動更新這一行即可，畫面與 title 會一起更新
-const APP_VERSION = '261002.2242';
-const APP_VERSION_LABEL = 'v261002.2242';
+const APP_VERSION = '261002.2249';
+const APP_VERSION_LABEL = 'v261002.2249';
 const CLOUD = !!(window.YUGYM_CONFIG && window.YUGYM_CONFIG.url && window.YUGYM_CONFIG.anonKey);
 if(CLOUD){ sb = supabase.createClient(window.YUGYM_CONFIG.url, window.YUGYM_CONFIG.anonKey); }
 
@@ -66487,17 +66487,44 @@ async function tlApplyHist(srcBid, auto){
       ? `這堂課還沒有任何紀錄。上次（<b>${dt}</b>）練了 ${srcLogs.length} 個動作：`
       : `將 <b>${dt}</b> 的 ${srcLogs.length} 個動作複製到本堂課：`}</div>
     <div style="font-size:12.5px;color:var(--t2);margin:6px 0 14px;line-height:1.7;">${exNames}</div>
-    <div style="font-size:11.5px;color:var(--t3);margin-bottom:14px;">複製後可逐項調整重量／次數。已存在的今日紀錄不會被覆蓋。</div>
+    <div style="font-size:11.5px;color:var(--t3);margin-bottom:14px;">複製後可逐項調整重量／次數。<b>這一堂已經記過的動作會自動略過</b>，按兩次也不會變成兩份。</div>
     <div class="modal-foot"><button class="btn btn-ghost" onclick="closeModal()">${auto?'這次自己記':'取消'}</button><button class="btn btn-green" onclick="tlDoApplyHist('${srcBid}')">${auto?'套用上次':'確認套用'}</button></div>`);
 }
-async function tlDoApplyHist(srcBid){
+/* 防連點（2026-10-02 使用者回報：「按了套用畫面沒反應就再按一次　結果被套用相同課表兩次
+   同一個動作出現兩筆」）——
+   ⚠ 套用方案那支（tlPlanApply）0925 就包了 onceAct，**這一支漏了**。
+   ⚠ 真正讓人按第二次的是「沒有反應」：一次寫 7 筆要跑一兩秒，期間畫面完全不動。
+     所以除了擋重複，按鈕也要立刻變成「套用中…」—— 有回饋就不會有人按第二次。 */
+async function tlDoApplyHist(srcBid){ return onceAct('tlhist:'+srcBid, ()=>_tlDoApplyHist(srcBid)); }
+async function _tlDoApplyHist(srcBid){
   const srcLogs=(window._tlHistCache||{})[srcBid];
   if(!srcLogs||!srcLogs.length){ closeModal(); return; }
   const b=window._tlBooking;
   let n=0;
+  /* 按下去立刻鎖住並改字（要在第一個 await 之前做，不然那一兩秒還是沒有反應） */
+  const _btn=document.querySelector('.modal-foot .btn-green');
+  const _txt=_btn?_btn.textContent:'';
+  if(_btn){ _btn.disabled=true; _btn.style.opacity='.6'; _btn.textContent='套用中…'; }
+  const _unlock=()=>{ if(_btn){ _btn.disabled=false; _btn.style.opacity=''; _btn.textContent=_txt; } };
+  /* ⚠⚠ 已經記過的動作要**跳過**（2026-10-02）——
+     防連點（onceAct）只擋得住「執行中又按一次」；蘇月華 9/21 那次相隔 17 秒、
+     9/29 那次相隔 1 秒，兩次都是第一輪已經寫完才按的，擋不到。
+     真正的修法是把「這一堂已經有哪些動作」先撈起來，同名的就不寫第二次 ——
+     這樣連按十次也只會有一份。
+     ⚠ 原本畫面上寫著「已存在的今日紀錄不會被覆蓋」，那句話只說對一半：
+       確實沒有覆蓋，但會**多新增一筆**，於是同一個動作出現兩次。
+     ⚠ 比對用動作名稱（去空白）＋ 同一位（slot）—— 1V2 的兩份課表各自獨立。 */
+  const _sl=(Number(window._tlSlot)===2)?2:1;
+  const _have=new Set((window._tlAllLogs||[])
+    .filter(x=>x && x.booking_id===b.id && ((Number(x&&x.slot)===2?2:1)===_sl))
+    .map(x=>String((x&&x.exercise_name)||'').trim()).filter(Boolean));
+  let skip=0;
   try{
     let _sq=tlNextSeq(b.id);       /* 一次寫多筆：自己往上加（2026-09-25） */
     for(const s of srcLogs){
+      const _nm=String((s&&s.exercise_name)||'').trim();
+      if(_nm && _have.has(_nm)){ skip++; continue; }
+      if(_nm) _have.add(_nm);
       const log={
         id:uid('TLOG'), booking_id:b.id, member_id:b.member_id, coach_id:SESSION.id,
         exercise_name:s.exercise_name, body_part:s.body_part, posture:s.posture, tool:s.tool,
@@ -66528,9 +66555,10 @@ async function tlDoApplyHist(srcBid){
       n++;
     }
     closeModal();
-    showToast(`已套用 ${n} 個動作`);
+    showToast(n ? `已套用 ${n} 個動作${skip?`（${skip} 個已經記過，略過）`:''}`
+                : `這 ${skip} 個動作都已經記過了`, skip?4000:3000);
     renderTrainingLogSheet();
-  }catch(e){ closeModal(); showToast('套用失敗：'+(e&&e.message?e.message:e)); }
+  }catch(e){ _unlock(); closeModal(); showToast('套用失敗：'+(e&&e.message?e.message:e)); }
 }
 /* 〔已移除〕動作歷史紀錄查詢 tlOpenExerciseHistory／tlExHistShow（2026-09-26）——
    使用者：「下面歷史課表右邊的動作查詢可以移除」。入口（歷史課表標題列那顆〔動作查詢 ›〕）
@@ -67241,9 +67269,19 @@ async function _tlPlanApply(pid,useLast){
   const last=window._tlLastByEx||{};
   const items=(Array.isArray(p.items)?p.items:[]).filter(it=>it&&String(it.name||'').trim());
   let n=0;
+  /* 已經記過的動作跳過（2026-10-02）——與套用上次那一支同一條規則。
+     這支本來就有 onceAct，但那只擋得住「執行中又按一次」，擋不到隔幾秒再按。 */
+  const _sl=(Number(window._tlSlot)===2)?2:1;
+  const _have=new Set((window._tlAllLogs||[])
+    .filter(x=>x && x.booking_id===b.id && ((Number(x&&x.slot)===2?2:1)===_sl))
+    .map(x=>String((x&&x.exercise_name)||'').trim()).filter(Boolean));
+  let skip=0;
   try{
     let _sq=tlNextSeq(b.id);       /* 一次寫多筆：自己往上加（2026-09-25） */
     for(const it of items){
+      const _nm=String(it.name).trim();
+      if(_have.has(_nm)){ skip++; continue; }
+      _have.add(_nm);
       const L=useLast?tlLogNums(last[it.name]):null;
       const reps  =L&&L.reps!==''   ? Number(L.reps)   : (it.reps==null?null:Number(it.reps));
       const sets  =L&&L.sets!==''   ? Number(L.sets)   : (it.sets==null?null:Number(it.sets));
@@ -67267,7 +67305,8 @@ async function _tlPlanApply(pid,useLast){
       n++;
     }
     closeModal();
-    showToast(`已套用 ${n} 個動作${useLast?'（沿用上次的數字）':''}`);
+    showToast(n ? `已套用 ${n} 個動作${useLast?'（沿用上次的數字）':''}${skip?`，${skip} 個已經記過略過`:''}`
+                : `這 ${skip} 個動作都已經記過了`, skip?4000:3000);
     renderTrainingLogSheet();
   }catch(e){ closeModal(); showToast('套用失敗：'+((e&&e.message)||e)); }
 }

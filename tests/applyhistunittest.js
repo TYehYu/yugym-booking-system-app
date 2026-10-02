@@ -23,7 +23,9 @@ const grab=n=>{let i=src.indexOf('async function '+n+'(');if(i<0)i=src.indexOf('
 
 console.log('① 套用上次課表：單位與重量都要複製');
 {
-  const F=grab('tlDoApplyHist');
+  /* 2026-10-02：tlDoApplyHist 包了一層 onceAct（防連點），實作搬到 _tlDoApplyHist。
+     grabFn 抓函式名要跟著改，不然抓到的是那一行包裝、裡面什麼欄位都沒有。 */
+  const F=grab('_tlDoApplyHist');
   ok('★★★ 帶 weight_unit（這就是使用者回報的那一個）', /weight_unit:s\.weight_unit,/.test(F));
   ok('★★★ 也帶 weight（不帶的話，下次「沿用上次的數字」就讀不到，會滾下去）',
      /weight:s\.weight, weight_unit:s\.weight_unit,/.test(F));

@@ -55,9 +55,10 @@ console.log('\n② 新記的動作排在最後');
 console.log('\n③ 三個寫入點都帶 seq');
 {
   ok('★★★ 單筆記錄（tlSaveExercise）', /seq:tlNextSeq\(b\.id\),/.test(grab('tlSaveExercise')));
+  /* 2026-10-02：tlDoApplyHist 包了一層 onceAct（防連點），實作搬到 _tlDoApplyHist */
   ok('★★★ 套用歷史課表（多筆遞增）',
-     /let _sq=tlNextSeq\(b\.id\);/.test(grab('tlDoApplyHist'))
-     && /seq:\(_sq!=null\?_sq\+\+:null\),/.test(grab('tlDoApplyHist')));
+     /let _sq=tlNextSeq\(b\.id\);/.test(grab('_tlDoApplyHist'))
+     && /seq:\(_sq!=null\?_sq\+\+:null\),/.test(grab('_tlDoApplyHist')));
   ok('★★★ 套用訓練方案（多筆遞增）',
      (src.match(/let _sq=tlNextSeq\(b\.id\);/g)||[]).length===2
      && (src.match(/seq:\(_sq!=null\?_sq\+\+:null\),/g)||[]).length===2);
