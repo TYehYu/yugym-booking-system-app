@@ -120,7 +120,9 @@ console.log('\n⑥ 實跑資料層（假 sb）：學欄位 → 精簡讀 → 回
     select(sel){ selUsed.push(sel);
       const pick=r=>sel==='*'?Object.assign({},r):Object.fromEntries(sel.split(',').map(c=>[c,r[c]]));
       const rows=Object.values(DB).map(pick);
+      /* 2026-10-02：分頁加了 .order('id') 防漏列，替身要跟著能串接 */
       const api={ range:()=>Promise.resolve({data:rows,error:null}),
+        order:()=>api,
         eq:()=>({ maybeSingle:()=>Promise.resolve({data:rows[0]?Object.assign({},DB['BK-1']):null,error:null}) }),
         maybeSingle:()=>Promise.resolve({data:lastUpsert,error:null}) };
       return api; },
