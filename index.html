@@ -14312,8 +14312,8 @@ function tbl(s){return TABLE_ALIAS[s]||s;}
 let sb=null;
 // ── 版本號（日期+時間格式：年後兩碼+月+日.時分，例 26620.1058 = 26年6/20 10:58）──
 // 每次改版手動更新這一行即可，畫面與 title 會一起更新
-const APP_VERSION = '261002.2249';
-const APP_VERSION_LABEL = 'v261002.2249';
+const APP_VERSION = '261002.2301';
+const APP_VERSION_LABEL = 'v261002.2301';
 const CLOUD = !!(window.YUGYM_CONFIG && window.YUGYM_CONFIG.url && window.YUGYM_CONFIG.anonKey);
 if(CLOUD){ sb = supabase.createClient(window.YUGYM_CONFIG.url, window.YUGYM_CONFIG.anonKey); }
 
@@ -14376,6 +14376,27 @@ const DB_SWR_MAX=600000;   // 走過「增量補資料」之後，多久要整�
    保留一個很長的保險（6 小時）：雜湊和理論上可能碰撞，久久重新對一次基準仍有意義，
    但不該是 10 分鐘一次。 */
 const DB_FULL_MAX=21600000;
+/* 簽章的筆數（2026-10-02 事故的第二層）——
+   簽章長這樣：「筆數:整列雜湊和」（見 fn_table_sigs）。
+   ⚠⚠ 為什麼要單獨拿筆數出來比：10/02 修掉「分頁沒有 ORDER BY 會漏列」之後，
+     教練更新到新版仍然看不到自己的紀錄。原因是**本機還存著漏列時期的快取**，
+     而那份快取記著的是「當時從資料庫拿到的**正確**簽章」—— 簽章與資料是分開查的，
+     資料漏了、簽章卻是對的。於是：
+       ・簽章相符 → 直接沿用那份漏列的快取，永遠不重抓
+       ・簽章不符 → 走增量補，但 change_log 只記「最近變動的那幾列」，
+         當初漏掉的舊列沒有變動紀錄，**永遠補不回來**
+     兩條路都回不去，壞快取會一直留在那台裝置上。
+   所以多一道「筆數對不對」的自我檢查：對不上就當成這份快取不可信，整表重抓。
+   這一道很便宜（簽章本來就拿到了），而且能自動修好所有人手上的壞快取。 */
+function sigRows(sig){
+  const m=/^(\d+):/.exec(String(sig||''));
+  return m?Number(m[1]):null;
+}
+/* 這份快取可不可信：筆數要與簽章說的一樣。拿不到筆數就不做判斷（維持原本行為）。 */
+function cacheRowsOk(sig, data){
+  const n=sigRows(sig);
+  return (n==null) ? true : (Array.isArray(data) && data.length===n);
+}
 let _sigPromise=null, _sigAt=0;   // 共用的表簽章請求（3 秒內同一次往返）
 const _dbInflight=new Map();   // 實體表名 → Promise（同時發出的請求共用一次往返）
 const DB_CACHE_TTL=20000;   // 2026-07-26：8s→20s（讀取畫面出現太頻繁）；本機寫入仍即時失效
@@ -14857,7 +14878,14 @@ async function dbGetAll(store,opts){
     if(hit && hit.sig){
       const _age = Date.now()-(hit.fullAt||hit.t);
       const sigs=await tableSigs();
-      if(sigs && sigs[key] && sigs[key]===hit.sig){
+      /* ⚠ 簽章相符也要驗筆數（2026-10-02）：漏列時期存下來的快取，
+         資料是短的、簽章卻是對的 —— 不驗就會一直沿用那份短的。 */
+      if(sigs && sigs[key] && sigs[key]===hit.sig && !cacheRowsOk(sigs[key], hit.data)){
+        dbWhy(key,'簽章相符但筆數不符→整表重抓',
+              (hit.data?hit.data.length:0)+'≠'+sigRows(sigs[key]));
+        dbCacheClear(store);
+      }
+      else if(sigs && sigs[key] && sigs[key]===hit.sig){
         const cur=_dbCache.get(key);
         if(cur===hit){
           dbWhy(key,'簽章相符');
@@ -14874,7 +14902,17 @@ async function dbGetAll(store,opts){
       if(sigs && sigs[key] && _dbCache.get(key)===hit){
         const patched=await dbDeltaPatch(key, hit, sigs);
         if(!patched) dbWhy(key,'增量補失敗→整表重抓', _dbDeltaWhy||'');
-        if(patched && _dbCache.get(key)===hit){
+        /* ⚠⚠ 補完也要驗筆數（2026-10-02）——**這一道才是真正救回壞快取的那一道**。
+           漏列時期存下來的快取每次都走這條路：簽章一直不符（表還在變），
+           於是一直增量補；但 change_log 只記「最近變動的那幾列」，
+           當初漏掉的舊列沒有變動紀錄，補一百次也補不回來，
+           而補完卻把新簽章蓋上去 —— 那份短的快取就這樣一直被當成最新的。
+           補完筆數仍然不符＝這份基準不可信，整表重抓一次把它換掉。 */
+        if(patched && !cacheRowsOk(sigs[key], patched.data)){
+          dbWhy(key,'增量補完筆數仍不符→整表重抓',
+                (patched.data?patched.data.length:0)+'≠'+sigRows(sigs[key]));
+        }
+        else if(patched && _dbCache.get(key)===hit){
           dbWhy(key,'增量補 '+(patched.data?patched.data.length:0)+' 列');
           _dbCache.set(key,{t:Date.now(),fullAt:hit.fullAt||hit.t,data:patched.data,sig:sigs[key],logAt:patched.logAt});
           cacheMarkDirty(key);
