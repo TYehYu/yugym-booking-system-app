@@ -73,7 +73,6 @@ function makeEnv(db,o){
     /* 2026-08-05：10 分鐘整表校正改背景做（_dbRebaseBg），一起帶進沙箱 */
     /* 2026-10-02：dbGetAll 多了「快取筆數要與簽章相符」的自我檢查（見 cacherowstest），
        兩支小工具要一起帶進沙箱，否則 dbGetAll 一跑就 ReferenceError。 */
-    grabFn('sigRows'), grabFn('cacheRowsOk'),
     'const _dbRebasing=new Set();\nasync '+grabFn('_dbRebaseBg'),
     'async '+grabFn('dbGetAll')].join('\n');
   return new Function(...Object.keys(env), code+'\nreturn {dbGetAll,dbCacheClear,dbDeltaPatch,_cache:_dbCache};')(...Object.values(env));

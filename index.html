@@ -14312,8 +14312,8 @@ function tbl(s){return TABLE_ALIAS[s]||s;}
 let sb=null;
 // ── 版本號（日期+時間格式：年後兩碼+月+日.時分，例 26620.1058 = 26年6/20 10:58）──
 // 每次改版手動更新這一行即可，畫面與 title 會一起更新
-const APP_VERSION = '261002.2301';
-const APP_VERSION_LABEL = 'v261002.2301';
+const APP_VERSION = '261002.2344';
+const APP_VERSION_LABEL = 'v261002.2344';
 const CLOUD = !!(window.YUGYM_CONFIG && window.YUGYM_CONFIG.url && window.YUGYM_CONFIG.anonKey);
 if(CLOUD){ sb = supabase.createClient(window.YUGYM_CONFIG.url, window.YUGYM_CONFIG.anonKey); }
 
@@ -14376,27 +14376,24 @@ const DB_SWR_MAX=600000;   // 走過「增量補資料」之後，多久要整�
    保留一個很長的保險（6 小時）：雜湊和理論上可能碰撞，久久重新對一次基準仍有意義，
    但不該是 10 分鐘一次。 */
 const DB_FULL_MAX=21600000;
-/* 簽章的筆數（2026-10-02 事故的第二層）——
-   簽章長這樣：「筆數:整列雜湊和」（見 fn_table_sigs）。
-   ⚠⚠ 為什麼要單獨拿筆數出來比：10/02 修掉「分頁沒有 ORDER BY 會漏列」之後，
-     教練更新到新版仍然看不到自己的紀錄。原因是**本機還存著漏列時期的快取**，
-     而那份快取記著的是「當時從資料庫拿到的**正確**簽章」—— 簽章與資料是分開查的，
-     資料漏了、簽章卻是對的。於是：
-       ・簽章相符 → 直接沿用那份漏列的快取，永遠不重抓
-       ・簽章不符 → 走增量補，但 change_log 只記「最近變動的那幾列」，
-         當初漏掉的舊列沒有變動紀錄，**永遠補不回來**
-     兩條路都回不去，壞快取會一直留在那台裝置上。
-   所以多一道「筆數對不對」的自我檢查：對不上就當成這份快取不可信，整表重抓。
-   這一道很便宜（簽章本來就拿到了），而且能自動修好所有人手上的壞快取。 */
-function sigRows(sig){
-  const m=/^(\d+):/.exec(String(sig||''));
-  return m?Number(m[1]):null;
-}
-/* 這份快取可不可信：筆數要與簽章說的一樣。拿不到筆數就不做判斷（維持原本行為）。 */
-function cacheRowsOk(sig, data){
-  const n=sigRows(sig);
-  return (n==null) ? true : (Array.isArray(data) && data.length===n);
-}
+/* ══ 〔已移除〕用簽章的筆數檢查快取（v261002.2301 推出、v261003 當天回退）═══════
+   當時的想法：簽章長這樣「筆數:整列雜湊和」，拿筆數跟快取長度比一下，
+   對不上就當成快取壞掉、整表重抓。
+
+   ⚠⚠ 這個想法是**錯的**，而且當天就害教練的課表變得很難開：
+     fn_table_sigs() 是 SECURITY DEFINER，它數的是**整張表**；
+     但同一張表透過 Data API 讀回來會先經過 RLS，每個人看到的是**自己那一份**。
+     實測：training_logs 全表 1,096 筆，教練鄭百益讀得到 660 筆 —— 這是正常的，
+     不是壞掉。於是那道檢查對他**永遠不符**，每一次讀取都整表重抓、快取形同廢掉。
+
+   ⚠ 留下的教訓（比程式碼重要）：
+     **簽章是用管理員的眼睛數的，資料是用你自己的眼睛讀的，兩個數字本來就不會一樣。**
+     任何「拿 fn_table_sigs 的數字跟本機資料比大小」的點子，都會再踩一次這個洞。
+     簽章只能拿來比「有沒有變」（字串相等），不能拿來比「有幾筆」。
+
+   當初要解決的「漏列時期的壞快取」其實不存在：那是誤判（真正的成因見
+   docs/migrations/20261003_tlog_rls_speedup.sql —— 查詢逾時被 catch 吞掉）。
+   而 0930 分頁漏列留下的快取，靠的是下面 cacheHydrate 的版本戳記清一次就好。 */
 let _sigPromise=null, _sigAt=0;   // 共用的表簽章請求（3 秒內同一次往返）
 const _dbInflight=new Map();   // 實體表名 → Promise（同時發出的請求共用一次往返）
 const DB_CACHE_TTL=20000;   // 2026-07-26：8s→20s（讀取畫面出現太頻繁）；本機寫入仍即時失效
@@ -14770,6 +14767,26 @@ async function cacheHydrate(uid){
   try{
     const st=await idbTx('readonly'); if(!st) return 0;
     const rows=await new Promise(res=>{ try{ const rq=st.getAll(); rq.onsuccess=()=>res(rq.result||[]); rq.onerror=()=>res([]); }catch(_){ res([]); } });
+    /* ══ 換版就把舊快取丟掉一次（2026-10-03）═══════════════════════════════
+       9/30 的「分頁沒有 ORDER BY」會讓超過 1,000 筆的表隨機漏列（見
+       tests/pageordertest.js），而那份漏列的資料會原封不動存進 IndexedDB、
+       跟著裝置一直活下去 —— 簽章是對的，所以簽章校驗救不回來。
+
+       與其每次讀取都想辦法驗（2301 那個筆數檢查就是這樣踩進 RLS 的坑），
+       不如在**升級的那一刻**清一次：換版本號就等於「程式改過了，
+       舊快取是用舊規則抓的，不要了」。代價是升級後第一次開場多抓一次表，
+       一個版本只發生一次。
+       ⚠ 版本戳記存在 IndexedDB 裡（跟快取同生共死），不是 localStorage ——
+         使用者清掉快取時兩者要一起消失，否則會變成「清了卻還記得清過」。 */
+    const _verRow=rows.find(r=>r && r.uid===uid && r.table==='__ver');
+    if(!_verRow || _verRow.ver!==APP_VERSION){
+      dbWhy('（開場）','換版清快取', ((_verRow&&_verRow.ver)||'(無)')+' → '+APP_VERSION);
+      try{ await cacheWipe(); }catch(_){}
+      _idbUid=uid;
+      try{ const w=await idbTx('readwrite'); if(w) w.put({uid:uid,table:'__ver',ver:APP_VERSION,savedAt:Date.now()}, uid+'|__ver'); }catch(_){}
+      try{ window._dbHydrated=[]; }catch(_){}
+      return 0;
+    }
     let n=0;
     rows.forEach(r=>{
       if(!r || r.uid!==uid || !Array.isArray(r.data) || !r.sig) return;
@@ -14878,14 +14895,10 @@ async function dbGetAll(store,opts){
     if(hit && hit.sig){
       const _age = Date.now()-(hit.fullAt||hit.t);
       const sigs=await tableSigs();
-      /* ⚠ 簽章相符也要驗筆數（2026-10-02）：漏列時期存下來的快取，
-         資料是短的、簽章卻是對的 —— 不驗就會一直沿用那份短的。 */
-      if(sigs && sigs[key] && sigs[key]===hit.sig && !cacheRowsOk(sigs[key], hit.data)){
-        dbWhy(key,'簽章相符但筆數不符→整表重抓',
-              (hit.data?hit.data.length:0)+'≠'+sigRows(sigs[key]));
-        dbCacheClear(store);
-      }
-      else if(sigs && sigs[key] && sigs[key]===hit.sig){
+      /* ⚠ 這裡**只能**比字串相等（有沒有變），不可以比筆數 ——
+         簽章數的是整張表，你讀回來的是 RLS 過濾後的那一份，兩個數字本來就不同。
+         2301 犯過這個錯，說明寫在上面 sigRows 原處。 */
+      if(sigs && sigs[key] && sigs[key]===hit.sig){
         const cur=_dbCache.get(key);
         if(cur===hit){
           dbWhy(key,'簽章相符');
@@ -14902,17 +14915,7 @@ async function dbGetAll(store,opts){
       if(sigs && sigs[key] && _dbCache.get(key)===hit){
         const patched=await dbDeltaPatch(key, hit, sigs);
         if(!patched) dbWhy(key,'增量補失敗→整表重抓', _dbDeltaWhy||'');
-        /* ⚠⚠ 補完也要驗筆數（2026-10-02）——**這一道才是真正救回壞快取的那一道**。
-           漏列時期存下來的快取每次都走這條路：簽章一直不符（表還在變），
-           於是一直增量補；但 change_log 只記「最近變動的那幾列」，
-           當初漏掉的舊列沒有變動紀錄，補一百次也補不回來，
-           而補完卻把新簽章蓋上去 —— 那份短的快取就這樣一直被當成最新的。
-           補完筆數仍然不符＝這份基準不可信，整表重抓一次把它換掉。 */
-        if(patched && !cacheRowsOk(sigs[key], patched.data)){
-          dbWhy(key,'增量補完筆數仍不符→整表重抓',
-                (patched.data?patched.data.length:0)+'≠'+sigRows(sigs[key]));
-        }
-        else if(patched && _dbCache.get(key)===hit){
+        if(patched && _dbCache.get(key)===hit){
           dbWhy(key,'增量補 '+(patched.data?patched.data.length:0)+' 列');
           _dbCache.set(key,{t:Date.now(),fullAt:hit.fullAt||hit.t,data:patched.data,sig:sigs[key],logAt:patched.logAt});
           cacheMarkDirty(key);
@@ -54764,6 +54767,10 @@ function tlLogRowsHtml(ls){
      只能自己往上加。 */
 function tlNextSeq(bid, add){
   try{
+    /* ⚠ 讀取失敗時 _tlAllLogs 是空的，照算會得到 1，把新紀錄排到整堂課的最前面
+       （0925 之後的畫面依 seq 排序）。寧可留 null —— tlSeqSort 會把它放到最後，
+       順序只是不準，不會蓋掉既有的 1。成因見 renderTrainingLogSheet 的說明。 */
+    if(window._tlLogsErr) return null;
     const _sl=(Number(window._tlSlot)===2)?2:1;
     const _mine=(window._tlAllLogs||[]).filter(x=>x && x.booking_id===bid
       && ((Number(x&&x.slot)===2?2:1)===_sl));
@@ -66269,8 +66276,21 @@ async function renderTrainingLogSheet(){
   tlSheetTop(host);   /* 手機讓出頂欄（見 tlSheetTop） */
   document.querySelectorAll('.qb-fab').forEach(x=>x.style.display='none');
 
-  let allLogs=[];
-  try{ allLogs=await dbGetAll('training_logs'); }catch(_){}
+  /* ══ 讀不到就要講（2026-10-02 事故）═════════════════════════════════════
+     這一行原本是 `try{ ... }catch(_){}` —— 讀取失敗被整個吞掉、allLogs 變成空陣列。
+     10/02 training_logs 的讀取因為權限規則太慢而逾時（成因見
+     docs/migrations/20261003_tlog_rls_speedup.sql），症狀就變成：
+       ・今日紀錄一筆都不畫 → 教練以為「剛剛那筆沒存進去」，又打一次
+       ・tlNextSeq 從空陣列算，每次都回 1
+     同一位教練同一堂課因此連打了 7 次同一個動作，而 7 筆全都好好地在資料庫裡。
+     ⚠⚠ **「讀失敗」與「沒有資料」長得一模一樣，是這個洞查了兩天的唯一原因。**
+       抓到錯就要講出來，而且要攔在這裡 —— 讓教練知道「不是你沒存成功」。 */
+  let allLogs=[], _logsErr=null;
+  try{ allLogs=await dbGetAll('training_logs'); }
+  catch(e){ _logsErr=e; allLogs=[];
+    try{ showToast('課表讀取失敗，畫面上的紀錄可能不完整：'+((e&&e.message)||e), 6000); }catch(_){}
+  }
+  window._tlLogsErr=_logsErr;   /* 新增動作那支要看它，讀失敗時不准算 seq（見 tlNextSeq） */
   /* 掛到 window：算下一個 seq 的那幾支是從別的面板呼叫的，拿不到這裡的區域變數。 */
   window._tlAllLogs=allLogs;
   /* 工具／姿勢清單（2026-09-25）——挑選視窗是同步的，要在這裡先備好。
@@ -66552,6 +66572,10 @@ async function _tlDoApplyHist(srcBid){
      ⚠ 原本畫面上寫著「已存在的今日紀錄不會被覆蓋」，那句話只說對一半：
        確實沒有覆蓋，但會**多新增一筆**，於是同一個動作出現兩次。
      ⚠ 比對用動作名稱（去空白）＋ 同一位（slot）—— 1V2 的兩份課表各自獨立。 */
+  /* 讀不到就不要套（2026-10-02）：_tlAllLogs 空的時候「已經記過哪些」也是空的，
+     跳過同名那道防線等於沒有，按兩次又會變成兩份 —— 正是當初那三組重複的由來。 */
+  /* ⚠ 這裡已經把按鈕鎖起來了，提前離開一定要解鎖，否則會卡在「套用中…」。 */
+  if(window._tlLogsErr){ _unlock(); showToast('課表還沒讀回來，先別套用（避免重複）。請重新開一次課表。', 5000); return; }
   const _sl=(Number(window._tlSlot)===2)?2:1;
   const _have=new Set((window._tlAllLogs||[])
     .filter(x=>x && x.booking_id===b.id && ((Number(x&&x.slot)===2?2:1)===_sl))
@@ -67309,6 +67333,9 @@ async function _tlPlanApply(pid,useLast){
   let n=0;
   /* 已經記過的動作跳過（2026-10-02）——與套用上次那一支同一條規則。
      這支本來就有 onceAct，但那只擋得住「執行中又按一次」，擋不到隔幾秒再按。 */
+  /* 讀不到就不要套（2026-10-02）：_tlAllLogs 空的時候「已經記過哪些」也是空的，
+     跳過同名那道防線等於沒有，按兩次又會變成兩份 —— 正是當初那三組重複的由來。 */
+  if(window._tlLogsErr){ showToast('課表還沒讀回來，先別套用（避免重複）。請重新開一次課表。', 5000); return; }
   const _sl=(Number(window._tlSlot)===2)?2:1;
   const _have=new Set((window._tlAllLogs||[])
     .filter(x=>x && x.booking_id===b.id && ((Number(x&&x.slot)===2?2:1)===_sl))

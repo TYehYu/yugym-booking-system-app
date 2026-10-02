@@ -9,7 +9,14 @@
    ② 別人的存檔（不同 auth uid）不會被載進來
    ③ 超過 1 天的存檔丟掉（水位可能已過日誌保留期）
    ④ 壞掉／殘缺的存檔不載
-   ⑤ 登出清空；⑥ 存檔是排程寫入（不擋操作）；⑦ IndexedDB 出錯一律安靜略過 */
+   ⑤ 登出清空；⑥ 存檔是排程寫入（不擋操作）；⑦ IndexedDB 出錯一律安靜略過
+
+   ⑧ 2026-10-03 新增：**換版本就把舊快取清掉一次**。
+     9/30 的「分頁沒有 ORDER BY」會讓大表隨機漏列，而那份漏列的資料會原封不動
+     存進 IndexedDB 跟著裝置活下去 —— 簽章是對的，所以簽章校驗救不回來。
+     ⚠ 10/02 曾經想用「筆數對不對」來擋，結果踩進 RLS 的坑（簽章數的是整張表、
+       讀回來的是自己那一份，兩個數字本來就不同），當天回退。
+       改成在升級那一刻清一次：代價是升級後第一次開場多抓一次，一個版本只發生一次。 */
 const fs=require('fs');
 const src=fs.readFileSync(process.env.HOME+'/Projects/yugym-booking-system-app/index.html','utf8');
 
@@ -28,7 +35,7 @@ function makeStore(rows){
 function load(store, o){
   o=o||{};
   /* 0823：cacheHydrate 會呼叫 dbWhy() 並寫 window._dbHydrated（純量測）——沙箱補上。 */
-  const env={ _dbCache:new Map(), IDB_MAX_AGE:86400000,
+  const env={ _dbCache:new Map(), IDB_MAX_AGE:86400000, APP_VERSION:(o.ver||'TEST.1'),
     idbTx:async()=>(o.broken?null:store), dbWhy:()=>{}, window:{} };
   const code=['let _idbUid=null,_idbSaveT=null; const _idbDirty=new Set();',
     'async '+grabFn('cacheHydrate'), 'async '+grabFn('cacheWipe'),
@@ -37,11 +44,14 @@ function load(store, o){
   return {api, cache:env._dbCache};
 }
 const row=(uid,table,o)=>Object.assign({uid,table,data:[{id:'BK-1'}],sig:'1:1',logAt:'2026-08-04T00:00:00Z',savedAt:Date.now()},o||{});
+/* 版本戳記那一列 —— 沒有它（或對不上）就是「剛升級」，整份快取丟掉。
+   所以①～⑤每一組都要先放一張對得上的，否則驗的會變成⑧。 */
+const vrow=(uid,ver)=>({uid,table:'__ver',ver:(ver||'TEST.1'),savedAt:Date.now()});
 
 (async()=>{
 console.log('① 載回來的快取一定先校驗簽章');
 {
-  const {api,cache}=load(makeStore([row('U1','bookings')]));
+  const {api,cache}=load(makeStore([vrow('U1'),row('U1','bookings')]));
   const n=await api.cacheHydrate('U1');
   ok('★ 有載到', n===1 && !!cache.get('bookings'));
   ok('★★ t=0 → 下一次讀取一定先問簽章（不會直接拿舊的畫）', cache.get('bookings').t===0);
@@ -52,7 +62,7 @@ console.log('① 載回來的快取一定先校驗簽章');
 
 console.log('\n② 別人的存檔不會被載進來');
 {
-  const {api,cache}=load(makeStore([row('U1','bookings'),row('U2','members')]));
+  const {api,cache}=load(makeStore([vrow('U1'),vrow('U2'),row('U1','bookings'),row('U2','members')]));
   const n=await api.cacheHydrate('U2');
   ok('★★ 只載自己那份', n===1 && !cache.get('bookings') && !!cache.get('members'));
 }
@@ -60,6 +70,7 @@ console.log('\n② 別人的存檔不會被載進來');
 console.log('\n③④ 過期與殘缺的存檔不載');
 {
   const {api,cache}=load(makeStore([
+    vrow('U1'),
     row('U1','bookings',{savedAt:Date.now()-2*86400000}),   // 兩天前
     row('U1','members',{data:null}),                         // 殘缺
     row('U1','shifts',{sig:null}),                           // 沒有簽章＝無法校驗
@@ -74,14 +85,54 @@ console.log('\n③④ 過期與殘缺的存檔不載');
 
 console.log('\n⑤⑦ 登出清空／IndexedDB 出錯安靜略過');
 {
-  const st=makeStore([row('U1','bookings')]);
+  const st=makeStore([vrow('U1'),row('U1','bookings')]);
   const {api}=load(st);
   await api.cacheHydrate('U1');
   await api.cacheWipe();
   ok('★★ 登出後本機不留這個人的資料', st.map.size===0);
-  const {api:api2,cache:c2}=load(makeStore([row('U1','bookings')]),{broken:true});
+  const {api:api2,cache:c2}=load(makeStore([vrow('U1'),row('U1','bookings')]),{broken:true});
   const n=await api2.cacheHydrate('U1');
   ok('★ 開不了 IndexedDB（無痕/容量不足）→ 回 0，不炸也不留下半套', n===0 && c2.size===0);
+}
+
+console.log('\n⑧ 換版本就清掉一次舊快取（2026-10-03）');
+{
+  /* 升級：存檔還是舊版本號 → 一張都不載，而且本機那份直接清掉 */
+  const st=makeStore([vrow('U1','OLD.0'),row('U1','bookings'),row('U1','members')]);
+  const {api,cache}=load(st,{ver:'NEW.9'});
+  const n=await api.cacheHydrate('U1');
+  ok('★★★ 版本對不上 → 一張都不載（漏列時期的快取不會被沿用）', n===0 && cache.size===0);
+  ok('★★★ 而且本機那份被清掉（不是只是這次不用）',
+     ![...st.map.values()].some(r=>r&&r.table==='bookings'));
+  ok('★★★ 新版本號留下來（下一次開場就正常載了，不會每次都清）',
+     [...st.map.values()].some(r=>r&&r.table==='__ver'&&r.ver==='NEW.9'));
+}
+{
+  /* 全新裝置：一張存檔都沒有 → 不要爆，也要把版本號記下來 */
+  const st=makeStore([]);
+  const {api}=load(st,{ver:'NEW.9'});
+  const n=await api.cacheHydrate('U1');
+  ok('★★ 全新裝置（沒有任何存檔）→ 回 0，不爆', n===0);
+  ok('★★ 並記下版本號', [...st.map.values()].some(r=>r&&r.table==='__ver'&&r.ver==='NEW.9'));
+}
+{
+  /* 同版本重開：照常載回來（⑧不可以把每次開場都變成整表重抓） */
+  const {api,cache}=load(makeStore([vrow('U1','SAME.1'),row('U1','bookings')]),{ver:'SAME.1'});
+  const n=await api.cacheHydrate('U1');
+  ok('★★★ 版本相同 → 照常載回來（這道只在升級那一刻作用）', n===1 && !!cache.get('bookings'));
+}
+{
+  /* 換人登入：別人的版本戳記不算數 */
+  const {api,cache}=load(makeStore([vrow('U2','SAME.1'),row('U2','bookings')]),{ver:'SAME.1'});
+  const n=await api.cacheHydrate('U1');
+  ok('★★ 別人的版本戳記不算（只看自己那一張）', n===0 && cache.size===0);
+}
+
+console.log('\n⑨ 2301 的筆數檢查已經拆掉（它會跟 RLS 打架）');
+{
+  ok('★★★ dbGetAll 不再比筆數', !/cacheRowsOk\(/.test(src));
+  ok('★★★ 成因留在原地（避免有人再想一次同樣的點子）',
+     /簽章是用管理員的眼睛數的，資料是用你自己的眼睛讀的/.test(src));
 }
 
 console.log('\n⑥ 接線與把關（原始碼）');
