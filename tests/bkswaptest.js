@@ -40,11 +40,14 @@ console.log('\n②-b 步驟 2 無票畫面的調課入口（2026-08-14 使用者
   const G=grabFn('bkStep2Swap');
   /* 2026-08-25 使用者定案（A 案）：這一頁就是「觸發」，不再是說明文字＋兩顆鈕。
      兩條路改成白底列直接問，調課排在上面 —— 那條不會多花錢。 */
-  ok('★★ 有可讓的課就跳出「把後面那一堂的票調過來」那一列，說明講堂數',
-     /onclick="bkStep2Swap\(\)">\s*\n\s*<span class="ash-eilb">把後面那一堂的票調過來<\/span>/.test(src)
-     && /從他之後已排的 \$\{_swapN\} 堂挑一堂讓出來/.test(src));
-  ok('★★ 調課排在「先建立這一堂」上面（不會多花錢的那條先給）',
-     src.indexOf('把後面那一堂的票調過來') < src.indexOf('<span class="ash-eilb">先建立這一堂'));
+  /* 2026-10-03 使用者：「按鈕標題放大簡單一點［調課］［待簽約］　副標說明靠右」——
+     標題砍成兩個字，「幾堂可挑」改放在標題旁邊的小字。 */
+  ok('★★ 有可讓的課就跳出「調課」那一列，旁邊講幾堂可挑',
+     /onclick="bkStep2Swap\(\)">\s*\n\s*<span class="bk-opt-l"><b class="bk-opt-t">調課<\/b><em class="bk-opt-why">\$\{_swapN\} 堂可挑<\/em>/.test(src)
+     /* 右欄只留結論（原本是「從他之後已排的 N 堂挑一堂讓出來…」整整兩行） */
+     && /<span class="bk-opt-r">不用多扣票<br>原時段留成空堂<\/span>/.test(src));
+  ok('★★ 調課排在「待簽約／空堂」上面（不會多花錢的那條先給）',
+     src.indexOf('<b class="bk-opt-t">調課</b>') < src.indexOf("<b class=\"bk-opt-t\">${preMid?'待簽約':'空堂'}</b>"));
   ok('★★ 入口組單堂參數、開同一個調課視窗', /const opened=await bkOfferSwap\(\{member_id:C\.member_id, type_id:C\.type_id, date:C\.date, time:C\.time, opts\}\);/.test(G));
 }
 

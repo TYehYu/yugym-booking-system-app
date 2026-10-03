@@ -61,12 +61,21 @@ ok('★ 只在管理員手機端接手，桌機走原本的步驟 2',
    && /if\(_ashSlotMode\(\) && !preMid\)\{\s*\n\s*return ashSlotSheet\(withTicket\);/.test(src));
 ok('★ 標題卡沿用既有的 bkSummaryCard（不另做一張）',
    /showModal\(`<div class="ash-sheetmk"><\/div><div class="modal-title">安排這一堂<\/div>\s*\n\s*\$\{bkSummaryCard\(t,date,time,cn\)\}/.test(src));
-ok('★ 三條路都在：選會員／待簽約／先卡位',
+/* 2026-10-03：兩條路的名字改成與桌機步驟 2 逐字相同（姓名卡位／空堂）——
+   按的是同一件事，手機與桌機叫不同名字只會以為是兩個功能。 */
+ok('★ 三條路都在：選會員／姓名卡位／空堂',
    /<select id="ash-slot-mem" onchange="ashSlotPickMember\(this\.value\)">/.test(src)
-   && /ashSlotPending\(\)`,'待簽約卡位'/.test(src)
-   && /ashSlotHoldOpen\(\)`,'先卡位，之後再安排會員'/.test(src));
-ok('★ 樣式沿用 調整課程 那張卡（ash-eirow／ash-eilb／ash-eisub）',
-   /const row=\(onclick,label,sub,cls\)=>`<button class="ash-eirow\$\{cls\?' '\+cls:''\}"/.test(src));
+   && /ashSlotPending\(\)`,'姓名卡位','還沒建檔的新客人'/.test(src)
+   && /ashSlotHoldOpen\(\)`,'空堂','還沒決定誰來上'/.test(src));
+ok('★★ 與桌機步驟 2 那兩列用一樣的名字（兩邊同時改，不要只改一邊）',
+   /<b class="bk-opt-t">姓名卡位<\/b>/.test(src)
+   && /<b class="bk-opt-t">\$\{preMid\?'待簽約':'空堂'\}<\/b>/.test(src));
+/* 2026-10-03 改成與票券卡同一套左右兩欄（.bk-opt）：名字放大在左、機制靠右。
+   ⚠ 不用 @media 斷點，靠 flex-wrap 真的塞不下才換行（0914 定案：尺寸跟容器不跟螢幕）。 */
+ok('★ 樣式與桌機那條沒票的路同一套（bk-opt／bk-opt-t／bk-opt-r）',
+   /const row=\(onclick,label,why,right\)=>`<button type="button" class="bk-opt"/.test(src)
+   && /\.bk-opt\{[^}]*flex-wrap:wrap;\}/.test(src)
+   && !/@media\(max-width:420px\)\{ \.bk-opt\{/.test(src));
 ok('★ 沒有任何會員有票時講清楚，不是給一個空下拉',
    /目前沒有任何會員持有這個課程的可用票券——請改用「待簽約」或先把時段空著。/.test(src));
 ok('★ 挑人走統一挑選視窗（0801 定案：行內浮動下拉退場）',
@@ -252,7 +261,7 @@ ok('　　成因寫在程式裡（2026-08-14 只補了寫回文字框，值早�
 console.log('\nLINE 通知已收回');
 ok('★ 空堂不再承諾「開課前 24 小時會提醒教練」（使用者：line通知先不要好了）',
    !/開課前 24 小時會提醒教練/.test(srcNC)
-   && /'先卡位，之後再安排會員','時段與場地先留著，名單稍後補'/.test(src));
+   && /'空堂','還沒決定誰來上','只佔時段與場地<br>之後在課卡按［＋新增］補人'/.test(src));
 
 /* 2026-08-20 使用者定案：桌機的詳細預約視窗「取代」成簡易課卡。
    先把缺的兩個功能補進來，再切換適用範圍——順序反過來的話，

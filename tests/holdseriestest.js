@@ -64,8 +64,9 @@ console.log('\n③ 追問視窗要講清楚取消掉的是什麼');
      && /取消只會釋出時段與場地，不會動到任何堂數/.test(f));
   ok('★ 沒有會員的那串要顯示客戶名（不然分不出是誰的卡位）',
      /const whoLine=b\.member_id\?'':\(b\.trial_name\?`客戶：<b>\$\{b\.trial_name\}<\/b>/.test(f));
-  ok('　　仍是「只取消這堂／連同後面 N 堂」兩顆（不另做按鈕）',
-     /只取消這堂/.test(f) && /連同後面 \$\{later\.length\} 堂/.test(f));
+  /* 2026-10-03：右邊那顆改寫總數（含本堂），走共用的 scAllBtn */
+  ok('　　仍是「只取消這堂／取消 N+1 堂」兩顆（不另做按鈕）',
+     /只取消這堂/.test(f) && /scAllBtn\('取消', later\.length\)/.test(f));
   /* 2026-08-06：綠／紅專指票券退回／扣除，不動票券的確定鍵改中性色（btn-dark） */
   ok('　　待簽約卡位的取消確認也走 askSeriesCancel',
      /<button class="btn btn-dark" onclick="askSeriesCancel\('\$\{id\}','plain'\)">確定取消<\/button>/.test(src));   // 0911 none→plain（有扣過就退，不再是扣課不退）

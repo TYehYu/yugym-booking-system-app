@@ -71,7 +71,7 @@ ok('★ 不做獨立的「連續取消」按鈕（2026-07-29 二修）',
    !/openSeriesCancel/.test(src) && !/連續取消…/.test(src));
 ok('★ 改成取消時追問：只取消這堂／連同後面',
    /async function askSeriesCancel\(id, mode\)/.test(src)
-   && /只取消這堂/.test(src) && /連同後面 \$\{later\.length\} 堂/.test(src));
+   && /只取消這堂/.test(src) && /scAllBtn\('取消', later\.length\)/.test(src));
 ok('　　單堂課不會多這一步（沒有後續就直接取消）',
    /if\(!later\.length\) return cancelBooking\(id, mode\);/.test(src));
 ok('　　只算「這堂之後」的課，不會回頭取消已上過的',

@@ -28,8 +28,10 @@ const DA=g('async function grpDelAsk(id){','\n}');
 ok('★★ 沒有後續就走原本的單堂流程', /return confirmCancelBooking\(id\);/.test(DA));
 ok('★★ 有後續就列出來，並算出總名額數（刪掉會逐一退票）',
    /_heads=sp\.series\.reduce/.test(DA) && /個名額，刪掉會逐一退回票券/.test(DA));
-ok('★★ 三顆按鈕：返回／只刪這一堂／連同後面 N 堂',
-   /只刪這一堂<\/button>/.test(DA) && /連同後面 '\+sp\.series\.length\+' 堂<\/button>/.test(DA));
+/* 2026-10-03：主要那顆改寫「總數（含本堂）」—— 原本寫「連同後面 11 堂」，
+   按下去實際動到 12 堂。四張問句視窗統一走 scAllBtn（見那支的說明）。 */
+ok('★★ 三顆按鈕：返回／只刪這一堂／刪除 N+1 堂',
+   /只刪這一堂<\/button>/.test(DA) && /scAllBtn\('刪除', sp\.series\.length\)/.test(DA));
 const DR=g('async function _grpDelRun(){','\n}');
 ok('★★★ 逐堂走既有的 cancelBooking(force)，名額票券照原本的規則退',
    /await cancelBooking\(bid,'force',\{silent:true\}\)/.test(DR));

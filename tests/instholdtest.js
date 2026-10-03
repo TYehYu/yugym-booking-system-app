@@ -64,7 +64,8 @@ ok('★★ 步驟 2 不再有那兩顆（同一件事只留一個入口）',
    && !/🕒 待簽約卡位<\/button>/.test(src)
 /* 2026-08-24 二修：按鈕的字跟著「有沒有選會員」變 ——
    選了人就是「（待簽約）」（整串掛他名下），沒選才是「（空堂）」。 */
-   && /onclick="bkOpenHoldCreate\(\)">\s*\n\s*<span class="ash-eilb">先建立這一堂\$\{preMid\?'（待簽約）':'（空堂）'\}<\/span>/.test(src));
+   /* 2026-10-03：這一列改成「名字放大在左」，名字本身就跟著有沒有選會員變 */
+   && /<b class="bk-opt-t">\$\{preMid\?'待簽約':'空堂'\}<\/b>/.test(src));
 ok('★★ 空堂不可以寫 note —— bkIsInstHold 靠 note 認人，寫了會被當成分期保留自動綁票',
    /note:\(!openHold&&holdOnly\)\?'分期待繳費保留（收款後自動補扣）':null,/.test(src)
    && /不可以寫 note —— bkIsInstHold 靠 note 裡的「分期待繳費保留」認人/.test(src));
