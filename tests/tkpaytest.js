@@ -76,8 +76,9 @@ console.log('\n③ 票券卡顯示發票號碼');
      /\.tkc-money \.tk-paylist\{display:flex;flex-direction:column;align-items:flex-end;gap:4px;\}/.test(src));
   /* 2026-09-23：多期改用四欄 grid，讓期數／金額／發票跨列切齊。
      量過（390px）：單純直向 flex 時期數左緣是 142／144／205，改 grid 之後全部 142。 */
-  ok('★★★ 多期用三欄 grid 讓欄位跨列切齊（單純的直向 flex 做不到）',
-     /\.tkc-money \.tk-paylist-multi\{display:inline-grid;grid-template-columns:auto auto auto;/.test(src)
+  /* 2026-10-03 加了收款日期那一欄（使用者：「票券右下角收費資訊補個日期」），三欄變四欄 */
+  ok('★★★ 多期用四欄 grid 讓欄位跨列切齊（單純的直向 flex 做不到）',
+     /\.tkc-money \.tk-paylist-multi\{display:inline-grid;grid-template-columns:auto auto auto auto;/.test(src)
      && /\.tk-paylist-multi \.tk-payrow\{display:contents;\}/.test(src));
   ok('★★★ 只有多期才套 grid（單期一列沒有對齊問題）',
      /tk-paylist\$\{_multi\?' tk-paylist-multi':''\}/.test(src)
@@ -172,7 +173,7 @@ console.log('\n④ 對照表逐期累積發票號碼');
 ok('★ 發票號碼、金額與該期付款方式逐期 push 進 invs（不覆寫）',
    /const _prev=window\._tkPayMap\[p\.ticket_id\];/.test(src)
    && /const _invs=\(_prev&&Array\.isArray\(_prev\.invs\)\)\?_prev\.invs\.slice\(\):\[\];/.test(src)
-   && /_invs\.push\(\{no:p\.invoice_number\|\|null, amt:Number\(p\.deal_amount\)\|\|0, pm:p\.payment_method\|\|'',\n\s*vn:_vm\?Number\(_vm\[1\]\):0, va:_vm\?Number\(String\(_vm\[2\]\)\.replace\(\/,\/g,''\)\):0,\n\s*cu:Number\(p\.credit_used\)\|\|0, lp:Number\(p\.list_price\)\|\|0\}\);/.test(src)
+   && /_invs\.push\(\{no:p\.invoice_number\|\|null, amt:Number\(p\.deal_amount\)\|\|0, pm:p\.payment_method\|\|'',\n\s*at:p\.created_at\|\|'',\n\s*vn:_vm\?Number\(_vm\[1\]\):0, va:_vm\?Number\(String\(_vm\[2\]\)\.replace\(\/,\/g,''\)\):0,\n\s*cu:Number\(p\.credit_used\)\|\|0, lp:Number\(p\.list_price\)\|\|0\}\);/.test(src)
    && /invs:_invs\}/.test(src));
 
 console.log(`\n${pass} 通過 / ${fail} 失敗`);

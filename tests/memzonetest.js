@@ -89,8 +89,20 @@ ok('★ 主教練接在姓名旁（＝員工英文名的位置）',
 /* 2026-09-17：這一行尾巴接了「待補發票」的列尾標記，所以不再比對到收尾的反引號。
    ⚠ 這一條守的本意沒變：等級與電話在姓名下面那一行、而且是同一行。
      後面還會不會再接東西是另一回事，不該釘死在行尾。 */
-ok('★ 會員等級移到姓名下面那行（＝員工「正職・職稱」的位置），與電話同一行',
-   /\$\{tierLabel\(effTier\(m\)\)\}\$\{m\.phone\?'　'\+fmtPhone\(m\.phone\):''\}/.test(src));
+/* ⚠ 2026-10-03 再搬一次（使用者：「會員列表　會員等級可以做成浮水印擺在姓名欄右上角」）——
+   等級從副標那一行移到姓名欄右上角的浮水印。副標只剩電話與提醒章。
+   ⚠ tierLabel 本身留著不動：會員資料視窗、員工列表那幾處還在用。 */
+ok('★ 會員等級改成姓名欄右上角的浮水印',
+   /<span class="lp-tierwm" aria-hidden="true">\$\{wm\}<\/span>/.test(src)
+   && /const _d=TIER_DEFS\[effTier\(m\)\]; return _d\?`<i style="color:\$\{_d\.color\};">\$\{_d\.label\}<\/i>`:'';/.test(src)
+   && /\.lp-tierwm\{position:absolute;right:2px;top:-2px;/.test(src));
+ok('　　副標只剩電話（等級不再佔那一行）',
+   /\}\$\{m\.phone\?fmtPhone\(m\.phone\):''\}\$\{_invMiss\(m\)/.test(src));
+ok('★★ 浮水印不吃點擊、內容疊在它之上（整列是可以點的）',
+   /\.lp-tierwm\{[^}]*pointer-events:none;/.test(src)
+   && /\.lp-person>\.lp-avatar,\.lp-person>\.lp-primary\{position:relative;z-index:1;\}/.test(src));
+ok('★★ 顏色與左緣色條同一份 TIER_DEFS（兩者不會各說各話）',
+   /lc:\(TIER_DEFS\[effTier\(m\)\]\|\|\{\}\)\.color\|\|'#8a8478',/.test(src));
 ok('　　那一行放不下色塊 tag → 另做純文字＋顏色的 tierLabel',
    /function tierLabel\(tier\)\{/.test(src)
    && /那裡是小字副標，塞不下色塊 tag/.test(src));

@@ -205,10 +205,22 @@ ok('　　根因寫在註解裡：標記未到課的收尾是 completed＋no_sho
    /標記未到課的收尾是「結課蓋未章」：status 會變 completed、no_show=true/.test(src));
 
 console.log('會員卡的備註（2026-08-20）');
+/* ⚠ 2026-10-03 改口徑（使用者：「右上角的備註　這邊要顯示的應該是該堂課的備註」）——
+   右上角那顆改成**本堂備註**（bookings.note 的使用者段）；
+   會員永久備註（members.note）縮成名字後面的 .ash-mmemo 小章，沒有消失。 */
 ok('★ 右上角一顆備註鈕，有內容就直接顯示、靠右截斷',
-   /<button type="button" class="ash-mnote\$\{_noteTxt\?' on':''\}"/.test(src)
+   /<button type="button" class="ash-mnote\$\{_bkNote\?' on':''\}"/.test(src)
    && /\.ash-mnote\{margin-left:auto;[^}]*text-align:right;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;\}/.test(src));
-ok('　　沒有備註顯示「＋ 備註」', /\$\{_noteTxt\?escH\(_noteTxt\):'＋ 備註'\}/.test(src));
+ok('　　沒有備註顯示「＋ 備註」', /\$\{_bkNote\?escH\(_bkNote\):'＋ 備註'\}/.test(src));
+ok('★★★ 右上角讀的是這一堂的備註，不是跟著人走的會員備註',
+   /const _bkNote=String\(\(typeof bkNoteSplit==='function'\?bkNoteSplit\(b\.note\)\.user:''\)\|\|''\)\.trim\(\);/.test(src)
+   && /onclick="event\.stopPropagation\(\);ashBkNoteAsk\('\$\{b\.id\}'\)"/.test(src));
+ok('★★★ 與「預約明細」那個備註框同一個欄位、同一組 split／join（系統註記不會被洗掉）',
+   /const next=bkNoteJoin\(bkNoteSplit\(b\.note\)\.sys, el\.value\);[\s\S]{0,400}?ashBackArm\(bid\); openBookingDetail\(bid\);/.test(src));
+ok('★★ 會員備註沒有消失：縮成名字後面的小章，有寫才畫',
+   /const _memNoteTag=\(r\.mid&&_memNote\)/.test(src)
+   && /class="ash-mmemo"/.test(src)
+   && /ashMemNoteAsk\('\$\{b\.id\}','\$\{r\.mid\}'\)/.test(src));
 ok('★ 用的是會員列表同一個欄位（members.note），不另建資料',
    /note:Object\.fromEntries\(\(ms\|\|\[\]\)\.map\(m=>\[m\.id,m\.note\|\|''\]\)\)/.test(src)
    && /m\.note=String\(el\.value\|\|''\)\.trim\(\);/.test(src));

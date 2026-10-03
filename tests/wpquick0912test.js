@@ -129,7 +129,18 @@ ok('★★ 捲軸要藏起來（桌機會冒出橫軸，和圓角膠囊鈕放在
    && /\.tkfilter\.tkf-scroll::-webkit-scrollbar\{display:none;\}/.test(src));
 ok('★★ 頁籤沿用票券卡那組 .tkfilter／.tkf-btn／.tkf-n（不另做一套）',
    /<div class="tkfilter tkf-scroll" style="margin:2px 0 12px;">/.test(src)
-   && /class="tkf-btn\$\{c===cur\?' active':''\}" onclick="cxeSetCat\('\$\{c\}'\)">\$\{c\}<i class="tkf-n">\$\{cnt\[c\]\}<\/i>/.test(src));
+   && /class="tkf-btn\$\{c===cur\?' active':''\}" onclick="cxeSetCat\('\$\{c\}'\)">\$\{c\|\|'全部'\}<i class="tkf-n">\$\{cnt\[c\]\}<\/i>/.test(src));
+/* 2026-10-03 使用者：「這邊新增［全部］並且可以自定義順序　這樣教練在使用的時候
+   可以快速的使用常用的幾個」——「全部」排第一，而且是預設。
+   ⚠ 它不只是「少點一下」：分類頁籤之下 cxeSaveOrder 只在那一類佔據的全域位置裡重排，
+     所以「把最常用的三個搬到最前面」在分類頁裡做不到（它們分屬不同類）。 */
+ok('★★★ 多一個「全部」頁籤，排第一且是預設',
+   /const cats=\[''\]\.concat\(CXE_CATS\.filter\(c=>cnt\[c\]\)\);/.test(src)
+   && /cnt\[''\]=all\.length;/.test(src));
+ok('★★★ 「全部」就是不過濾（沿用既有的 cur ? 過濾 : all，不另加分支）',
+   /const mine=cur \? all\.filter\(e=>cxeCatOf\(e\)===cur\) : all;/.test(src));
+ok('★★ 只在「全部」那一頁說明拖移排的是整份清單',
+   /\$\{cur\?'':`<div class="wp-sub"[^`]*長按卡片可以拖移/.test(src));
 /* 2026-09-16 使用者選的三項手機優化（都在「我的常用動作」這張卡）：
    ⚠⚠ 上面那張卡的「＋ 新方案」要維持 btn-green —— 它才是這一頁的主要動作。
      兩顆都降級或都不降，就回到「分不出主次」的原點。 */

@@ -50,14 +50,29 @@ console.log('① 展延：常駐，不能按時寫原因');
 console.log('\n② 三顆按鈕的順序與權限');
 {
   ok('★★★ 校正只有管理員（不是 isDeskLike —— 那是改帳的入口）',
-     /\$\{\(SESSION&&SESSION\.role==='admin'\)\?`<button[^`]*onclick="tkTidyOpen\('\$\{t\.id\}'\)">校正<\/button>`:''\}/.test(src));
+     /\$\{\s*\n\s*\(SESSION&&SESSION\.role==='admin'\)\?`<button[^`]*onclick="event\.stopPropagation\(\);tkTidyOpen\('\$\{t\.id\}'\)">校正<\/button>`:''\}/.test(src));
+/* ⚠ 2026-10-03 搬家（使用者：「是因為左下角的按鈕過多　才導致左下角空白嗎
+   這些按鈕有什麼建議嗎　例如把校正跟作廢改到右上角 n/n 左邊」，並選了這個版本）——
+   〔校正〕〔作廢〕從底列移到卡頭右上角（n/n 左邊）。
+   實測底列 6 顆要 573px 才排得下金額，搬走兩顆降到 434px。
+   ⚠ 權限一格沒變：校正仍只有管理員、作廢仍是櫃檯以上且 status==='usable'。 */
+  ok('★★★ 校正與作廢改在卡頭右上角、n/n 左邊',
+     /<span class="tkc-admacts">[\s\S]{0,600}?<\/span>\s*\n\s*<span class="bkd-tkcard-prog">/.test(src)
+     && /\.tkc-admacts\{display:flex;gap:6px;flex:none;white-space:nowrap;margin-left:auto;\}/.test(src));
+  /* ⚠ 2026-10-03 搬家（使用者：「［展延］使用這個按鈕本來就是有條件的
+     可以改成圓形卡在票券的最後嗎」）——從按鈕列移到圓點列最後的一顆圓形卡。
+     ⚠ 規則一個字都沒改：仍然由 tkExtWhyNot 決定能不能按，不能按就淡化＋原因寫 title。
+     ⚠〔主管展延〕留在按鈕列（另一回事：店家通融、主管以上）。 */
   ok('★★★ 展延常駐、不能按時淡化並把原因寫進 title',
      /const _w=tkExtWhyNot\(t,ymd\(TODAY\),usedOf\(t\)\);/.test(src)
-     && /opacity:\.45;cursor:not-allowed;" disabled title="\$\{escH\(_w\)\}">展延<\/button>/.test(src)
-     && /onclick="openTicketExtend\('\$\{t\.id\}'\)">展延<\/button>/.test(src));
-  ok('★★ 順序是 校正 → 展延 → 作廢',
-     src.indexOf(`onclick="tkTidyOpen('\${t.id}')">校正`) < src.indexOf(`onclick="openTicketExtend('\${t.id}')">展延`)
-     && src.indexOf(`onclick="openTicketExtend('\${t.id}')">展延`) < src.indexOf(`onclick="voidTicketAsk('\${t.id}')">作廢`));
+     && /<span class="mtk mtk-ext mtk-ext-off" title="\$\{escH\(_w\)\}">展延<\/span>/.test(src)
+     && /onclick="event\.stopPropagation\(\);openTicketExtend\('\$\{t\.id\}'\)">展延<\/button>/.test(src));
+  ok('★★★ 展延在圓點列最後，不再佔按鈕列的位置',
+     /\$\{ticketTokens\(t,bks,typeMap,used,null,PP\.id,WAL\.selfBk\)\}\$\{\s*\n\s*isDeskLike\(\)\?\(\(\)=>\{ const _w=tkExtWhyNot/.test(src)
+     && !/btn btn-gold btn-sm"[^>]*onclick="openTicketExtend/.test(src));
+  ok('★★ 底列只剩日常操作（出席證明／使用人／分期繳費／主管展延／收款）',
+     /const _tkActs = `/.test(src)
+     && !/_tkActs[\s\S]{0,4000}?onclick="event\.stopPropagation\(\);tkTidyOpen/.test(src.slice(src.indexOf('const _tkActs = `'), src.indexOf('const _tkActs = `')+4000)));
   ok('　 原因寫在原地（下一個人不要又把它藏回「已過期」那一區）',
      /展延鈕原本只在票券「已經過期」之後才長出來|按鈕只在票券「已經過期」之後才長出來/.test(src));
 }

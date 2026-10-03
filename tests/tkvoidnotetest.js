@@ -44,8 +44,10 @@ console.log('\n② 畫在票券卡上');
    使用者看過實機後決定「先維持現況」，整段收回，這裡也回到原本的位置。 */
 ok('★★★ 歷史紀錄那張卡有（使用者截圖就是這一張）',
    /<div class="mck-dots2" style="margin:8px 0 2px;">\$\{ticketTokens\(t,bks,typeMap,used,null,PP\.id,WAL\.selfBk\)\}<\/div>\s*\n\s*\$\{tkVoidNoteHtml\(t, c\.myLogs\)\}/.test(src));
+/* 2026-10-03：圓點列尾端多了一顆「展延」圓形卡（見 tkcardactionstest），
+   所以不再是 ...selfBk)}</div> 緊接著作廢說明。守的重點沒變：作廢說明接在圓點列後面。 */
 ok('★★★ 持有中那張卡也有（共享票等情況可能停在上面）',
-   /<div class="mck-dots2" style="margin:10px 0 2px;">\$\{ticketTokens\(t,bks,typeMap,used,null,PP\.id,WAL\.selfBk\)\}<\/div>\s*\n\s*\$\{tkVoidNoteHtml\(t, c\.myLogs\)\}/.test(src));
+   /<div class="mck-dots2" style="margin:10px 0 2px;">\$\{ticketTokens\(t,bks,typeMap,used,null,PP\.id,WAL\.selfBk\)\}[\s\S]{0,600}?<\/div>\s*\n\s*\$\{tkVoidNoteHtml\(t, c\.myLogs\)\}/.test(src));
 ok('★★ .tkc-body 那一套確實收乾淨了（下次要再做，理由寫在 CSS 原地）',
    !/tkc-body/.test(src) && /使用者看過實機後決定「先維持現況」/.test(src));
 ok('★★ 帳本本來就在這個渲染器的手上（c.myLogs），不必為了這件事多撈一次',

@@ -336,8 +336,13 @@ ok('★ 補登的格子看得出來（細虛線＋title 寫明沒有課卡）',
    && /\.mtk\.mtk-manual\{outline:1px dashed/.test(src));
 
 console.log('\n入口');
-ok('★★ 持有中的票卡有「校正」（管理員限定）',
-   /\$\{\(SESSION&&SESSION\.role==='admin'\)\?`<button class="btn btn-ghost btn-sm" style="padding:2px 10px;font-size:11px;" title="這張票蓋了哪幾堂[^"]*" onclick="tkTidyOpen\('\$\{t\.id\}'\)">校正<\/button>`:''\}/.test(src));
+/* ⚠ 2026-10-03 搬家（使用者：「是因為左下角的按鈕過多　才導致左下角空白嗎
+   這些按鈕有什麼建議嗎　例如把校正跟作廢改到右上角 n/n 左邊」，並選了這個版本）——
+   〔校正〕〔作廢〕從底列移到卡頭右上角（n/n 左邊）。
+   實測底列 6 顆要 573px 才排得下金額，搬走兩顆降到 434px。
+   ⚠ 權限一格沒變：校正仍只有管理員、作廢仍是櫃檯以上且 status==='usable'。 */
+ok('★★ 持有中的票卡有「校正」（管理員限定，2026-10-03 起在卡頭右上角）',
+   /\(SESSION&&SESSION\.role==='admin'\)\?`<button class="btn btn-ghost btn-sm tkc-admb" title="這張票蓋了哪幾堂[^"]*" onclick="event\.stopPropagation\(\);tkTidyOpen\('\$\{t\.id\}'\)">校正<\/button>`:''/.test(src));
 ok('★★ 已過期／歷史紀錄的票也要有（黃喬莉那三張全在這一區）',
    /pp-hist-btn" onclick="event\.stopPropagation\(\);tkTidyOpen\('\$\{t\.id\}'\)/.test(src));
 ok('★ 案例寫在原地', /黃喬莉/.test(src) && /就不用每次都要找你修改/.test(src));
