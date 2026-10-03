@@ -5445,6 +5445,28 @@ body.wp-dragging-on .wp-item{cursor:grabbing;}
 .hr-vtag-past{background:var(--danger,#8C4A3E);}
 .hr-vtxt{font-size:11px;color:var(--t3);line-height:1.6;}
 .hr-vtxt b{color:var(--t2);font-weight:700;}
+/* ══ 範本來源章（2026-10-03）══════════════════════════════════════════
+   這張視窗上的數字有兩種來源：這個人自己設定的，與「薪資模板」給的預設值
+   （見 empPayConfig：欄位空白就退回 SALARY_TPL[聘僱類型]）。
+   兩種在畫面上長得一模一樣，所以會有人以為「這個底薪是他的」，
+   改了薪資模板才發現連他一起動到了。用一枚章把來源講清楚。
+     ・金章＝有欄位跟著範本走（後面列出是哪幾項）
+     ・綠章＝完全自訂（改範本不會動到他） */
+.hr-vtag-tpl{background:var(--gold-d,#8A6E42);}
+.hr-vtag-own2{background:var(--ok,#1F6F54);}
+/* ══ 全店共用框（2026-10-03）═════════════════════════════════════════
+   ⚠ 這一塊畫在「某一位員工」的薪資規則裡，改的卻是**全店**設定
+     （團隊獎金門檻、名單、主管津貼都存在 SALARY_GLOBAL）。
+     原本只靠一行文字說明，與旁邊的個人欄位長得一樣 ——
+     框成金色才看得出「這裡跨出這個人的範圍了」。
+   ⚠ 金色＝次要警示（品牌色強度：紅 > 金 > 綠）。 */
+.hr-shared{border:1.5px solid var(--gold,#B48A56);border-radius:12px;
+  background:rgba(180,138,86,.07);padding:11px 12px 12px;}
+.hr-shared-h{display:flex;align-items:center;gap:7px;margin-bottom:9px;flex-wrap:wrap;}
+.hr-shared-b{font-size:10px;font-weight:800;letter-spacing:.06em;color:#fff;
+  background:var(--gold-d,#9a7344);border-radius:5px;padding:3px 8px;white-space:nowrap;}
+.hr-shared-t{font-size:11.5px;color:var(--t2);line-height:1.5;}
+.hr-shared .hr-note,.hr-shared input{background:#fff;}
 .hr-tt-row{display:grid;grid-template-columns:1fr 1.1fr 34px;gap:6px;align-items:center;margin-bottom:6px;}
 .hr-tt-row>*{min-width:0;}
 .hr-tt-row input{width:100%;box-sizing:border-box;}
@@ -14312,8 +14334,8 @@ function tbl(s){return TABLE_ALIAS[s]||s;}
 let sb=null;
 // ── 版本號（日期+時間格式：年後兩碼+月+日.時分，例 26620.1058 = 26年6/20 10:58）──
 // 每次改版手動更新這一行即可，畫面與 title 會一起更新
-const APP_VERSION = '261002.2344';
-const APP_VERSION_LABEL = 'v261002.2344';
+const APP_VERSION = '261003.0958';
+const APP_VERSION_LABEL = 'v261003.0958';
 const CLOUD = !!(window.YUGYM_CONFIG && window.YUGYM_CONFIG.url && window.YUGYM_CONFIG.anonKey);
 if(CLOUD){ sb = supabase.createClient(window.YUGYM_CONFIG.url, window.YUGYM_CONFIG.anonKey); }
 
@@ -52340,6 +52362,45 @@ function openEmployeeProfilePage(id){ return openPersonProfile('employee', id); 
 function openHrEdit(id){ return openPersonProfile('employee', id); }
 function openHrJob(id){ return openPersonProfile('employee', id); }   // 併入「身份設定」分頁
 
+/* ══ 這個人的數字是哪裡來的（2026-10-03）═══════════════════════════════
+   視窗上的每個金額有兩種出身：**他自己設定的**，與**薪資模板的預設值**
+   （欄位留空時 empPayConfig 會退回 SALARY_TPL[聘僱類型]）。
+   兩種在畫面上長得一模一樣，於是：
+     ・以為是他的 → 改了薪資模板，才發現連他一起被改掉
+     ・以為跟著範本 → 改了範本卻沒動到他，數字對不起來
+
+   ⚠ 判斷條件必須與 empPayConfig **逐欄對齊**，不可以另寫一套 ——
+     這裡說「跟著範本」、那裡實際上用自己的值，比沒有標示還糟。
+   ⚠ 只看「有沒有自己的值」，不比大小：自己設成跟範本一樣的數字仍然是自訂
+     （日後改範本不會動到他，這正是使用者要分辨的事）。 */
+function hrTplFallbacks(c, et){
+  const tpl=(window.SALARY_TPL||{})[normEmp(et)]||{};
+  const has=v=> v!==undefined && v!==null && v!=='';
+  const out=[];
+  /* 底薪只有正職在用（兼職／合作／工讀那幾欄畫都沒畫出來，不要列） */
+  if(normEmp(et)==='full_time' && !has(c&&c.base_salary) && (Number(tpl.base_salary)||0)>0) out.push('底薪');
+  const _ownClass = has(c&&c.pt_mode) || has(c&&c.pt_rate)
+    || (Array.isArray(c&&c.pt_tiers) && c.pt_tiers.length);
+  if(!_ownClass && ((Number(tpl.pt_rate)||0)>0 || (tpl.pt_tiers||[]).length)) out.push('課堂薪資');
+  if(!Array.isArray(c&&c.pt_bonus) && (tpl.pt_bonus||[]).length) out.push('達標獎金');
+  if(!has(c&&c.group_rate) && (Number(tpl.group_per_head)||0)>0) out.push('團課費');
+  if(!has(c&&c.duty_hourly) && (Number(tpl.duty_hourly)||0)>0) out.push('值班時薪');
+  return out;
+}
+function hrTplSrcHtml(c, et){
+  const lb=(HR_ET_LIST.find(x=>x[0]===normEmp(et))||[,normEmp(et)])[1];
+  const miss=hrTplFallbacks(c, et);
+  if(!miss.length){
+    return `<div class="hr-ver">`
+      +`<span class="hr-vtag hr-vtag-own2">全部自訂</span>`
+      +`<span class="hr-vtxt">金額都是這個人自己的，改<b>${lb}</b>薪資模板不會動到他</span></div>`;
+  }
+  return `<div class="hr-ver">`
+    +`<span class="hr-vtag hr-vtag-tpl">沿用 ${lb} 範本</span>`
+    +`<span class="hr-vtxt"><b>${miss.join('、')}</b>這${miss.length>1?'幾項':'一項'}沒有自己的值，`
+    +`跟著<b>${lb}</b>薪資模板走（改範本會一起變）</span></div>`;
+}
+
 // ══════════════ 薪資規則視窗（獨立） ══════════════
 // 第一列：四個值班模式按鈕；按下後第二列開始顯示該模式的薪資條件
 let HR_SAL_ET='full_time';
@@ -52399,6 +52460,9 @@ async function openHrSalary(id, ym){
           </select></div>
         </div>
         ${_inherit}
+        ${/* 範本來源（2026-10-03）：月份版本章講「改的是哪個月」，
+             這一枚講「數字是誰的」—— 兩件不同的事，所以是兩行章。 */''}
+        <div id="hr-tplsrc">${hrTplSrcHtml(c, HR_SAL_ET)}</div>
       </div>
       <div id="hr-sal-body">${hrSalaryBodyHtml(c,HR_SAL_ET)}</div>
     </div>
@@ -52419,15 +52483,36 @@ function hrPickEt(et){
   HR_SAL_ET=et;
   const c=window._hrSalEmp||{};
   // 換模式時，若原本就是這個模式，帶原值；否則帶類型預設
-  const src = (normEmp(c.employment_type||c.pay_type)===et) ? c : {employment_type:et};
+  /* ⚠ 換聘僱類型時薪資條件改帶該類型的預設值，但「跟這個人有關、與聘僱類型無關」
+       的欄位要留著（2026-10-03）——否則切一下下拉，生日禮金那張卡就變成
+       「這位還沒有填生日」、勾選狀態也被洗掉。 */
+  const src = (normEmp(c.employment_type||c.pay_type)===et) ? c
+    : {employment_type:et, birthday:c.birthday, birth_date:c.birth_date,
+       birthday_bonus_off:c.birthday_bonus_off, is_manager:c.is_manager, can_teach:c.can_teach};
   const box=document.getElementById('hr-sal-body');
   if(box) box.innerHTML=hrSalaryBodyHtml(src,et);
+  /* 範本來源章要跟著換（2026-10-03）：換聘僱類型＝換一份範本，
+     原本「沿用正職範本」那句話當場就不對了。 */
+  const sb=document.getElementById('hr-tplsrc');
+  if(sb) sb.innerHTML=hrTplSrcHtml(src, et);
 }
 // 依值班模式產生「第二列開始」的薪資條件
 function hrSalaryBodyHtml(c,et){
   const cfg=empPayConfig(Object.assign({},c,{employment_type:et}));
   const n=(v,d)=> (v==null||v==='')?d:v;
   const needDuty = (c.need_duty!=null) ? !!c.need_duty : (et!=='contractor');
+  /* 生日禮金那張卡的第二行（2026-10-03）——把「什麼時候會拿到」講出來。
+     ⚠ 禮金掛在**生日月的前一個月**那張薪資單上（薪水 5 號發），
+       所以 10 月生日的人，看的是 9 月的薪資單。這件事光看開關看不出來。
+     ⚠ 沒填生日就一定不會發（算薪那支要 birthday 長度 ≥7），要講，不要讓人
+       以為勾著就會發。 */
+  const _bd=String((c&&(c.birthday||c.birth_date))||'');
+  const _bdM=(_bd.length>=7)?Number(_bd.slice(5,7)):0;
+  const _bdLine = !_bdM
+    ? '這位<b>還沒有填生日</b>，勾著也不會發 —— 生日在「員工資料 → 基本資料」填。'
+    : (c.birthday_bonus_off
+        ? `這位生日 <b>${_bd.slice(5,7)}/${_bd.slice(8,10)}</b>，目前<b>不發</b>（取消勾選的狀態）。`
+        : `這位生日 <b>${_bd.slice(5,7)}/${_bd.slice(8,10)}</b>，禮金隨 <b>${_bdM===1?12:_bdM-1} 月</b>的薪資於 <b>${_bdM}/5</b> 發放。`);
   const mode=cfg.pt_mode==='tier'?'tier':'flat';
   const tiers=(cfg.pt_tiers||[]).length?cfg.pt_tiers:[{min:1,max:59,rate:625}];
   const bonus=(cfg.pt_bonus||[]);
@@ -52529,7 +52614,38 @@ function hrSalaryBodyHtml(c,et){
       ${/* 2026-09-08：這一塊改成**全域**的團隊獎金設定（門檻可增可刪、名單全主管共用）。
            舊的 hrLeaderBoxHtml（逐位店長自己的名單＋兩個固定門檻）只服務 8 月以前的薪資，
            不再畫出來 —— 函式與欄位都留著，那幾個月還要靠它算。 */''}
-      <div id="hr-mgr-box" style="display:${c.is_manager?'block':'none'};">${hrTeamBoxHtml()}</div>
+      ${/* 2026-10-03：這一塊框成金色「全店共用」—— 它畫在某一位員工的視窗裡，
+           改的卻是全店設定（門檻、名單、主管津貼都存 SALARY_GLOBAL）。
+           原本只有一行文字說明，與旁邊的個人欄位長得一樣。 */''}
+      <div id="hr-mgr-box" style="display:${c.is_manager?'block':'none'};">
+        <div class="hr-shared">
+          <div class="hr-shared-h"><span class="hr-shared-b">全店共用</span>
+            <span class="hr-shared-t">以下三項改的是<b>全店設定</b>，不是只改這一位</span></div>
+          ${hrTeamBoxHtml()}
+        </div>
+      </div>
+    </div>
+
+    ${/* ══ 生日禮金（2026-10-03 使用者：「生日禮金這個開關可以做在薪資設定這邊嗎」）═══
+         開關本來只在「人事 → 工作規則 → 編輯」裡，使用者找不到 —— 那一頁講的是
+         值班、代課、打卡、固定休，生日禮金是**錢**，本來就該在薪資規則這裡看得到。
+         ⚠ 兩個入口改的是**同一個欄位**（employees.birthday_bonus_off），不是兩份設定。
+         ⚠⚠ 刻意**不**放進 PAY_RULE_KEYS（不做成按月快照）：
+           ・按月的那些是「這個月怎麼算錢」，生日禮金是「這個人發不發」，
+             不會每個月改一次；
+           ・真要做成按月，既有的「工作規則」那個入口就會與快照打架
+             （那邊存的是員工現值），同一個開關兩種語意必定出事。
+           所以這裡與工作規則一樣，直接寫在員工身上。 */''}
+    <div class="hr-card">
+      <div class="hr-ct">生日禮金</div>
+      <label class="hr-check" style="margin:0 0 8px;">
+        <input type="checkbox" id="hr-bday" ${c.birthday_bonus_off?'':'checked'}>發生日禮金
+      </label>
+      <div class="hr-note">
+        生日當月自動加 <b>$${Number((window.SALARY_GLOBAL||{}).birthday_bonus||1000).toLocaleString()}</b>，
+        金額是全店共用的（在<b>薪資模板 → 全域設定</b>調整）。<br>
+        ${_bdLine}
+      </div>
     </div>
 
     ${/* 值班排最後：它是附加項，金額通常最小（2026-08-24 使用者定案的排序） */''}
@@ -52708,6 +52824,13 @@ async function saveHrSalary(id){
      ⚠ 欄位本身不刪 —— 八月以前的薪資單還在用它們算（見 LEADER_TEAM_FROM）。 */
   /* 需要上課（2026-09-08）：關掉就不排課、也不算課堂薪資 */
   { const el=document.getElementById('hr-canteach'); if(el) c.can_teach=!!el.checked; }
+  /* 生日禮金（2026-10-03）——與「工作規則」那個入口改的是同一個欄位。
+     ⚠ 欄位存的是**關掉**（birthday_bonus_off），所以反過來讀：勾著＝照發。
+     ⚠ 一定要先確認畫面上畫得出來才寫：抓不到元素就不要動它，
+       否則某天這張卡被條件藏起來時，會把所有人的設定悄悄改成「照發」。
+     ⚠ 這一欄不進 PAY_RULE_KEYS（不做按月快照，理由寫在那張卡的註解）——
+       所以它寫在員工現值上，回頭編輯歷史月份也不會被下面那段還原覆蓋。 */
+  { const el=document.getElementById('hr-bday'); if(el) c.birthday_bonus_off=!el.checked; }
   /* 團隊獎金的門檻與名單是**全域**設定（全主管共用），跟著這張視窗一起存。
      ⚠ 只有主管的視窗才畫得出那一塊；沒畫出來時 hrReadTeamMembers 回 undefined，
        這裡整段跳過，不會被非主管的視窗清空。 */

@@ -56,8 +56,10 @@ console.log('\n④ 新風格：每一區收進白底卡（2026-08-24 使用者�
   const R=F.slice(F.lastIndexOf('return `'));
 /* 2026-09-08：達標獎金那張卡多了 id 與初始 display（不用上課就整張收起來），
    所以它的開頭不再是純 <div class="hr-card">。 */
-  ok('★★ 五區各一張白卡（固定薪資／課堂／達標獎金／管理職／值班）',
-     (R.match(/<div class="hr-card"[ >]/g)||[]).length===5);
+  /* 2026-10-03：多了「生日禮金」一張（使用者：「生日禮金這個開關可以做在薪資設定這邊嗎」）
+     —— 原本只在「人事 → 工作規則 → 編輯」裡，使用者找不到。 */
+  ok('★★ 六區各一張白卡（固定薪資／課堂／達標獎金／管理職／生日禮金／值班）',
+     (R.match(/<div class="hr-card"[ >]/g)||[]).length===6);
   ok('★★★ 不用上課就整段不出現（課堂薪資與達標獎金一起收）',
      /<input type="checkbox" id="hr-canteach"/.test(R)
      && /<div id="hr-teach-box"/.test(R)
