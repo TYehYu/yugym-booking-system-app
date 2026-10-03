@@ -1490,6 +1490,28 @@ body.mc-mode .layout{padding-top:8px;}
 .lp-zb{position:relative;padding-left:12px;margin-left:-6px;}
 .lp-thead .lp-zb::before{content:'';position:absolute;left:0;top:-12px;bottom:-12px;width:1px;background:var(--border-normal);}
 .lp-row .lp-zb::before{content:'';position:absolute;left:0;top:-15px;bottom:-15px;width:1px;background:var(--bd);}
+/* ══ 分隔線一直顯示（2026-10-03 使用者：「會員資料的分隔線　可以一直顯示嗎」）══
+   線是畫在**格子**上的（::before 貼著格子的左緣），而列是 align-items:center、
+   格子的高度等於它自己的內容 —— 所以：
+     ・沒有票券的欄（自主訓練、運動按摩、折價券）高度 0 → 線只剩上下各 15px 的小段
+     ・有圓點的欄 → 線就長一點；兩排圓點的 → 更長
+   整排掃過去就變成「有東西才有線」，看不出欄位的分界。
+
+   作法：帶線的格子撐滿整列高度（align-self:stretch），線就跟著一樣長。
+   ⚠⚠ 撐高之後**不可以用 grid／block 置中**（第一版踩過，實測列高 69px→183px）：
+     格子一變成 grid，裡面那幾顆圓點就各自成為一個項目、排成直的。
+     要用 flex＋wrap —— 圓點本來是 inline-flex，排成一列、塞不下才換行，
+     flex-wrap 的行為與原本的行內排版一致（實測列高、圓點行數都沒變）。
+   ⚠ 線**不要拉到滿高**（2026-10-03 二修，使用者：「可以不用滿高　上下留一點空白
+     保留呼吸感」）——列的上下內距是 15px，線只往外延 7px，兩端各留 8px 的空白。
+   ⚠ 只套 .lp-cell／.lp-th 這兩種「自己長出來的格子」：
+     有些頁面傳進來的是已經帶 lp- 前綴的自訂格子（例如 .lp-primary），
+     那種是把 lp-zb 併進它自己的 class，改它的 display 會把原本的排版拆掉。
+   ⚠ 可排序的表頭是 inline-flex（裡面有排序箭頭），本來就垂直置中，只要撐高就好。 */
+.lp-row .lp-cell.lp-zb{align-self:stretch;display:flex;align-items:center;flex-wrap:wrap;align-content:center;}
+.lp-row .lp-zb::before{top:-7px;bottom:-7px;}
+.lp-thead .lp-th.lp-zb{align-self:stretch;}
+.lp-thead .lp-th.lp-zb:not(.sortable){display:flex;align-items:center;}
 @media(max-width:900px){ .lp-zb{padding-left:0;margin-left:0;} .lp-zb::before{display:none;} }
 .lp-th.sortable{cursor:pointer;display:inline-flex;align-items:center;gap:4px;transition:color var(--dur-fast) var(--ease-out);}
 .lp-th.sortable:hover{color:var(--brand);}
@@ -3390,8 +3412,19 @@ body.mc-mode #tl-sheet,body.mc-mode #tl-add-sheet{top:60px;}
    顏色語彙不同是因為後果不同：教練展延不影響退費（綠＝一般提示），
    櫃檯展延之後這張票不能退（金＝可以做但要知道）。 */
 /* 共享標與「設為共享」移到右上角、剩餘堂數左邊（2026-08-30 使用者指示） */
-.bkd-tkcard-share{display:inline-flex;align-items:center;gap:6px;margin-left:auto;margin-right:10px;flex:none;}
+/* 共享那一格（2026-10-03 起住在右欄、n/n 底下，所以不再自己推 margin） */
+.bkd-tkcard-share{display:inline-flex;align-items:center;gap:6px;flex:none;}
 .bkd-tkcard-share:empty{display:none;}
+/* 卡頭右欄：n/n 在上、共享在下（2026-10-03 使用者指定的位置）。
+   ⚠ align-items:flex-end —— 兩者右緣要切齊，不然數字與按鈕會各自歪一點。
+   ⚠ flex:none：課程名那一格會被壓縮，這一欄不可以跟著縮。 */
+.tkc-right{display:flex;flex-direction:column;align-items:flex-end;gap:4px;flex:none;}
+.tkc-shb{padding:2px 10px;font-size:11px;}
+/* 排版流內的浮水印（2026-10-03）：規格沿用 .tkwm 的語彙（淡色大字、不可點、不選取），
+   差別只在它**不是絕對定位** —— 它要排在 n/n 底下，而不是浮在卡片右側。 */
+.tkwm2{pointer-events:none;user-select:none;white-space:nowrap;
+  font-size:20px;font-weight:800;line-height:1;letter-spacing:-.02em;
+  opacity:.28;color:var(--gold-d,#9a7344);}
 .tkx{font-size:10.5px;font-weight:800;border-radius:999px;padding:2px 8px;white-space:nowrap;}
 .tkx-clv{color:var(--green,#1F6F54);background:var(--sage-bg,#E4EAD9);}
 .tkx-man{color:var(--gold-d,#9a7344);background:#f7f1e4;}
@@ -14400,8 +14433,8 @@ function tbl(s){return TABLE_ALIAS[s]||s;}
 let sb=null;
 // ── 版本號（日期+時間格式：年後兩碼+月+日.時分，例 26620.1058 = 26年6/20 10:58）──
 // 每次改版手動更新這一行即可，畫面與 title 會一起更新
-const APP_VERSION = '261003.1352';
-const APP_VERSION_LABEL = 'v261003.1352';
+const APP_VERSION = '261003.2244';
+const APP_VERSION_LABEL = 'v261003.2244';
 const CLOUD = !!(window.YUGYM_CONFIG && window.YUGYM_CONFIG.url && window.YUGYM_CONFIG.anonKey);
 if(CLOUD){ sb = supabase.createClient(window.YUGYM_CONFIG.url, window.YUGYM_CONFIG.anonKey); }
 
@@ -50877,8 +50910,13 @@ function ppRecordHtml(){
              ⚠ 持有人的名字改放在浮水印的 title 上，要查還是查得到。 */
           const _sharedFromMe=(t.member_id!==PP.id);
           const _shOwner=(c.memMap||{})[t.member_id]||'持有人';
+          /* 2026-10-03 使用者：「設為共享的按鈕　可以改到右邊 n/n 的下面　共享的浮水印也在這」——
+             浮水印從「卡片右側垂直置中的絕對定位」改成畫在右欄（n/n 底下），
+             與那顆按鈕同一個位置，兩種狀態（我分享出去／別人分享給我）就在同一格看。
+             ⚠ 改用 .tkwm2（排版流內的淡字），不再用 .tkwm（絕對定位）——
+               .tkwm 還有兩處在用（會員端的「同行」浮水印），不要動到它。 */
           const shrWm=_sharedFromMe
-            ? `<span class="tkwm" title="共享自 ${escH(_shOwner)}：共用同一個堂數池，堂數從持有人那張票扣">共享</span>` : '';
+            ? `<span class="tkwm2" title="共享自 ${escH(_shOwner)}：共用同一個堂數池，堂數從持有人那張票扣">共享</span>` : '';
           const shrTag=_sharedFromMe?''
             :(_shN?`<button type="button" style="font-size:11px;color:#2f6f4f;border:1px solid #2f6b4f;border-radius:6px;padding:1px 8px;margin-left:6px;background:transparent;${_canShare?'cursor:pointer;':''}font-family:inherit;" ${_canShare?`onclick="ppShareTk('${t.id}')"`:''} title="共用同一個堂數池，任一人上課都從這張票扣${_canShare?'。點擊查看／調整共享名單':''}">共享：${_shLabel}${_canShare?' ›':''}</button>`:'');
           /* 合約鈕移到票券編號左邊（2026-08-04 使用者指示：減少底列被太多物件擠壓變形） */
@@ -50963,7 +51001,7 @@ function ppRecordHtml(){
                      ⚠ 只給櫃檯以上：這一步會寫進營收。 */''}
                 ${(isDeskLike()&&t.payment_status==='unpaid')?`<button class="btn btn-green btn-sm" style="padding:2px 10px;font-size:11px;" title="補上實際收到的金額與付款方式" onclick="tkPayOpen('${t.id}')">收款</button>`:''}
 `;
-          return `<div class="bkd-tkcard${_sharedFromMe?' bkd-tkcard-shared':''}" style="margin-bottom:10px;">${shrWm}
+          return `<div class="bkd-tkcard${_sharedFromMe?' bkd-tkcard-shared':''}" style="margin-bottom:10px;">
             <div class="bkd-tkcard-head"><span class="bkd-tkcard-name" style="display:flex;align-items:center;gap:6px;flex-wrap:wrap;">${(c.ctByTicket&&c.ctByTicket[t.id])?`<button class="btn btn-ghost btn-sm" style="padding:2px 9px;font-size:11px;flex:none;" onclick="openContractView('${c.ctByTicket[t.id]}')" title="查看合約">合約</button>`:''}${tkNoTag(sl.no)}${t.plan_name||'票券'}${_m2?stTag:''}${(()=>{
                 const f=tkAuditFlags(t,{net:_netTk[t.id], used});
                 /* 2026-08-26 使用者：「對帳是什麼意思　我要做什麼」——
@@ -50979,15 +51017,22 @@ function ppRecordHtml(){
                 (_ptOk&&!_ptId)?`<button class="btn btn-ghost btn-sm" style="padding:2px 9px;font-size:11px;flex:none;" title="這位會員用這張票上 1V2 時，一起上課的第二位。課表會顯示兩個人的名字；不扣他的堂數、他也不能拿這張票約課" onclick="event.stopPropagation();openTicketPartner('${t.id}','${PP.id}')">設定同行</button>`:''}</span>
               ${/* 共享移到這裡（2026-08-30 使用者指示：「把[共享]·共享人改到右上角　剩餘課堂左邊」）——
                    共享是「這張票是誰在用」，屬於票券的身分，跟右下角那排動作不是同一件事。 */''}
-              <span class="bkd-tkcard-share">${shrTag||''}${
-                (_canShare&&!_shN)?`<button class="btn btn-ghost btn-sm" style="padding:2px 10px;font-size:11px;" onclick="event.stopPropagation();ppShareTk('${t.id}')">設為共享</button>`:''}</span>
+              ${/* 〔已搬家〕共享那一格移到右欄、n/n 底下（2026-10-03，見 .tkc-right）。
+                   它原本靠 margin-left:auto 卡在卡頭中間，跟課程名與右上角的數字各佔一塊，
+                   三段之間空出一大片。 */''}
               ${/* 校正／作廢移到這裡（2026-10-03 使用者選的版本）——在 n/n 左邊。
                    ⚠ 一樣要擋冒泡：票券卡外層有點擊行為。
                    ⚠ 權限一格沒變：校正仍只有管理員、作廢仍是櫃檯以上且票券還可用。 */''}
               <span class="tkc-admacts">${
                 (SESSION&&SESSION.role==='admin')?`<button class="btn btn-ghost btn-sm tkc-admb" title="這張票蓋了哪幾堂（含已上過的）；改完票面餘額自動重算" onclick="event.stopPropagation();tkTidyOpen('${t.id}')">校正</button>`:''}${
                 (isDeskLike()&&t.status==='usable')?`<button class="btn btn-ghost btn-sm tkc-admb tkc-admb-dan" title="結束這張票：可選轉儲值金（營收保留）、全額退款、或扣 20％ 手續費退款" onclick="event.stopPropagation();voidTicketAsk('${t.id}')">作廢</button>`:''}</span>
-              <span class="bkd-tkcard-prog"><b class="num">${used}</b> / ${total}</span></div>
+              <span class="tkc-right">
+                <span class="bkd-tkcard-prog"><b class="num">${used}</b> / ${total}</span>
+                ${/* 下面這一格三選一：別人分享給我（浮水印）／我分享給別人（共享：名單）／還沒分享（設為共享）。
+                     ⚠ 三者互斥：_sharedFromMe 時 shrTag 一定是空的（見上面），不會兩個一起出現。 */''}
+                <span class="bkd-tkcard-share">${shrWm||''}${shrTag||''}${
+                  (_canShare&&!_shN)?`<button class="btn btn-ghost btn-sm tkc-shb" onclick="event.stopPropagation();ppShareTk('${t.id}')">設為共享</button>`:''}</span>
+              </span></div>
             ${/* 管理員手機（2026-08-20 使用者指示）：購買・效期提到第二列（緊接編號那一列），
                  金額改放右下角、就在「作廢」按鈕上方；其他角色與桌機維持原本的單行底列。 */''}
             ${/* 狀態章（已完成／已過期／已退費）2026-08-20 使用者指示移到課程方案名稱右邊 */''}

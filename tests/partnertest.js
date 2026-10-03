@@ -127,8 +127,11 @@ console.log('②-2 會員檔案頁那張卡也要有（同一件事有好幾張�
   ok('★★★ 同行的章與按鈕都在課程名稱那一列（不是右上角）',
      /⚠ 對帳<\/button>`:''; \}\)\(\)\}\$\{[\s\S]{0,1400}?\*\/''\}\$\{ptTag\|\|''\}/.test(src)
      && /\$\{\s*\n?\s*\(_ptOk&&!_ptId\)\?`<button class="btn btn-ghost btn-sm" style="padding:2px 9px;font-size:11px;flex:none;"/.test(src));
-  ok('★★★ 共享那一組沒被動到（右上角那一列只剩共享）',
-     /<span class="bkd-tkcard-share">\$\{shrTag\|\|''\}\$\{\s*\n\s*\(_canShare&&!_shN\)\?`<button/.test(src)
+/* ⚠ 2026-10-03 搬家（使用者：「設為共享的按鈕　可以改到右邊 n/n 的下面
+   共享的浮水印也在這」）——共享那一格移進右欄 .tkc-right，排在 n/n 底下。
+   同一格三選一：浮水印（別人分享給我）／共享：名單（我分享出去）／設為共享（還沒分享）。 */
+  ok('★★★ 共享那一組沒被動到（只有位置換了，內容不變）',
+     /<span class="bkd-tkcard-share">\$\{shrWm\|\|''\}\$\{shrTag\|\|''\}\$\{\s*\n\s*\(_canShare&&!_shN\)\?`<button/.test(src)
      && !/<span class="bkd-tkcard-share">[\s\S]{0,120}ptTag/.test(src));
   ok('★★ 章與按鈕放在同一處（設定前後位置不會跳）',
      src.indexOf('${ptTag||\'\'}${') < src.indexOf('openTicketPartner(\'${t.id}\',\'${PP.id}\')">設定同行'));

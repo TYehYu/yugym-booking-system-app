@@ -57,7 +57,7 @@ console.log('\n② 三顆按鈕的順序與權限');
    實測底列 6 顆要 573px 才排得下金額，搬走兩顆降到 434px。
    ⚠ 權限一格沒變：校正仍只有管理員、作廢仍是櫃檯以上且 status==='usable'。 */
   ok('★★★ 校正與作廢改在卡頭右上角、n/n 左邊',
-     /<span class="tkc-admacts">[\s\S]{0,600}?<\/span>\s*\n\s*<span class="bkd-tkcard-prog">/.test(src)
+     /<span class="tkc-admacts">[\s\S]{0,600}?<\/span>\s*\n\s*<span class="tkc-right">/.test(src)
      && /\.tkc-admacts\{display:flex;gap:6px;flex:none;white-space:nowrap;margin-left:auto;\}/.test(src));
   /* ⚠ 2026-10-03 搬家（使用者：「［展延］使用這個按鈕本來就是有條件的
      可以改成圓形卡在票券的最後嗎」）——從按鈕列移到圓點列最後的一顆圓形卡。
@@ -80,9 +80,17 @@ console.log('\n② 三顆按鈕的順序與權限');
 console.log('\n③ 共享搬到右上角、剩餘堂數左邊');
 {
   /* 比對的是「同一張卡裡」的先後，不是全檔第一個 prog（別張卡也有 prog）。 */
-  ok('★★★ 共享標與「設為共享」都在 head 那一列、剩餘堂數之前',
-     /* 2026-09-23：同一列多了 1V2 的「同行」章與〔設定同行〕，所以放寬長度上限。 */
-     /<span class="bkd-tkcard-share">\$\{shrTag\|\|''\}[\s\S]{0,900}?<span class="bkd-tkcard-prog"><b class="num">\$\{used\}<\/b> \/ \$\{total\}<\/span><\/div>/.test(src));
+/* ⚠ 2026-10-03 搬家（使用者：「設為共享的按鈕　可以改到右邊 n/n 的下面
+   共享的浮水印也在這」）——共享那一格移進右欄 .tkc-right，排在 n/n 底下。
+   同一格三選一：浮水印（別人分享給我）／共享：名單（我分享出去）／設為共享（還沒分享）。 */
+  ok('★★★ 共享那一格在 n/n **底下**（右欄：n/n 在上、共享在下）',
+     /<span class="tkc-right">\s*\n\s*<span class="bkd-tkcard-prog"><b class="num">\$\{used\}<\/b> \/ \$\{total\}<\/span>[\s\S]{0,700}?<span class="bkd-tkcard-share">\$\{shrWm\|\|''\}\$\{shrTag\|\|''\}/.test(src)
+     && /\.tkc-right\{display:flex;flex-direction:column;align-items:flex-end;/.test(src));
+  ok('★★★ 共享浮水印改成排版流內的 .tkwm2（不再絕對定位在卡片右側垂直置中）',
+     /<span class="tkwm2" title="共享自 /.test(src)
+     && /\.tkwm2\{pointer-events:none;user-select:none;/.test(src)
+     /* .tkwm 還有兩處在用（會員端的「同行」），不可以一起改掉 */
+     && /\.tkwm\{position:absolute;right:12px;top:50%;/.test(src));
   ok('★★ 名稱列不再重複掛共享標（同一件事不講兩次）',
      !/\$\{_m2\?stTag:''\}\$\{shrTag\}/.test(src));
   ok('★★ 動作列裡的「設為共享」已移走',
