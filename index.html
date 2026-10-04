@@ -14439,8 +14439,8 @@ function tbl(s){return TABLE_ALIAS[s]||s;}
 let sb=null;
 // ── 版本號（日期+時間格式：年後兩碼+月+日.時分，例 26620.1058 = 26年6/20 10:58）──
 // 每次改版手動更新這一行即可，畫面與 title 會一起更新
-const APP_VERSION = '261004.0917';
-const APP_VERSION_LABEL = 'v261004.0917';
+const APP_VERSION = '261004.0926';
+const APP_VERSION_LABEL = 'v261004.0926';
 const CLOUD = !!(window.YUGYM_CONFIG && window.YUGYM_CONFIG.url && window.YUGYM_CONFIG.anonKey);
 if(CLOUD){ sb = supabase.createClient(window.YUGYM_CONFIG.url, window.YUGYM_CONFIG.anonKey); }
 
@@ -73992,7 +73992,14 @@ async function renderSalaryContent(TARGET, withHead){
   // 完整薪資計算（v2.0：含續約、店長階梯、主管津貼、勞健保）
   const sal=calcSalary(empAtMonth(me,month), ptDone, groupHeads, dutyHours, myLeave, myClassOverlap, {renewCount, leaderRows, leaderMgrs, month, dutyOverlapRows:_dutyOvRows});
   const countSalary=empCountSalary(me, month);
-  const estimate=countSalary?sal.grossPay:0;
+  /* 應領 ＝ 應發合計 − 請假扣薪（2026-10-04 使用者：「美蓉這邊病假681看起來沒有扣進去
+     應領合計」）—— 原本直接拿 sal.grossPay，而 grossPay 是**還沒扣請假**的應發：
+     明細上「病假 6 小時 −$681」列得出來，底下的應領合計卻照樣寫 $30,300。
+     ⚠ 0801 定的順序是「算完本月總薪資後才扣請假」（才不會被保障底薪的 max() 吃掉），
+       所以扣在這裡、不是扣在底薪上 —— 管理員那張表（應發合計 → 請假扣薪 → 實領薪資）
+       本來就是這樣算的，這一頁只是漏了中間那一步。
+     ⚠ 實領（sal.netPay，上面的大字）一直是對的：它是 grossPay − 請假 − 勞健保。 */
+  const estimate=countSalary?Math.max(sal.grossPay-sal.leaveDeduct,0):0;
   const mgrLine=me.is_manager?'主管':'';   /* 2026-09-08 正名；is_supervisor 已退場 */
   const[my,mm]=month.split('-');
   const isCurMonth = month===ymd(TODAY).slice(0,7);
@@ -74080,13 +74087,9 @@ async function renderSalaryContent(TARGET, withHead){
         let h='';
         if(sal.base>0){
           h+=row('底薪',`$${sal.base.toLocaleString()}`);
-          if(sal.baseHourly>0) h+=`<div class="sal-note">請假時薪 $${sal.baseHourly.toLocaleString()}（底薪 ÷ ${sal.divisor}h）</div>`;
-          if(myLeave.事假>0) h+=ded(`事假 ${myLeave.事假} 小時`, sal.baseLeavePersonalDed);
-          if(myLeave.病假>0) h+=ded(`病假 ${myLeave.病假} 小時（半薪）`, sal.baseLeaveSickDed);
-          if(myLeave.特休>0) h+=`<div class="sal-row sal-row-ded"><span class="sal-rl">特休 ${myLeave.特休} 小時</span><span class="sal-rv" style="color:var(--t3);">不扣薪</span></div>`;
-          if(myLeave.喪假>0) h+=`<div class="sal-row sal-row-ded"><span class="sal-rl">喪假 ${myLeave.喪假} 小時</span><span class="sal-rv" style="color:var(--t3);">不扣薪</span></div>`;
-          if(myLeave.其他>0) h+=`<div class="sal-row sal-row-ded"><span class="sal-rl">其他假 ${myLeave.其他} 小時</span><span class="sal-rv" style="color:var(--t3);">不扣薪</span></div>`;
-          if(sal.baseLeaveDeduct>0) h+=row('調整後底薪',`$${sal.adjBase.toLocaleString()}`);
+          /* 請假那幾列已經移到「應發合計」底下（2026-10-04）——
+             0801 起請假是算完總薪資才扣的，列在底薪旁邊會讓人以為底薪被扣過了，
+             底下又冒出一列數字沒變的「調整後底薪」（adjBase 自 0801 就＝base，整列已移除）。 */
           h+=row('教練課費',`$${sal.ptPay.toLocaleString()}`,`${ptDone} 堂`);
           h+=row('教練課收入',`<b>$${sal.ptIncome.toLocaleString()}</b>`, sal.ptIsFloor?'取底薪':'取課費');
         }else{
@@ -74110,6 +74113,18 @@ async function renderSalaryContent(TARGET, withHead){
         if(sal.isLeader){ h+=row('主管獎金',`$${sal.leaderPay.toLocaleString()}`, sal.leaderDetail);
           h+=leaderListHTML(sal); }
         if(sal.supPay>0) h+=row('主管津貼',`$${sal.supPay.toLocaleString()}`);
+        /* 應發合計 → 請假扣薪 → 應領合計（2026-10-04，順序與管理員那張表一致）。
+           ⚠ 沒請假的人不畫「應發合計」：那時應發＝應領，同一個數字不講兩遍（0823 定的）。 */
+        if(sal.leaveDeduct>0){
+          h+=row('應發合計',`$${sal.grossPay.toLocaleString()}`);
+          if(sal.baseHourly>0) h+=`<div class="sal-note">請假時薪 $${sal.baseHourly.toLocaleString()}（底薪 ÷ ${sal.divisor}h）</div>`;
+          if(myLeave.事假>0) h+=ded(`事假 ${myLeave.事假} 小時`, sal.baseLeavePersonalDed);
+          if(myLeave.病假>0) h+=ded(`病假 ${myLeave.病假} 小時（半薪）`, sal.baseLeaveSickDed);
+        }
+        /* 不扣薪的假別照列（特休／喪假／其他）—— 它們不影響金額，是給員工看「請了沒被扣」。 */
+        if(myLeave.特休>0) h+=`<div class="sal-row sal-row-ded"><span class="sal-rl">特休 ${myLeave.特休} 小時</span><span class="sal-rv" style="color:var(--t3);">不扣薪</span></div>`;
+        if(myLeave.喪假>0) h+=`<div class="sal-row sal-row-ded"><span class="sal-rl">喪假 ${myLeave.喪假} 小時</span><span class="sal-rv" style="color:var(--t3);">不扣薪</span></div>`;
+        if(myLeave.其他>0) h+=`<div class="sal-row sal-row-ded"><span class="sal-rl">其他假 ${myLeave.其他} 小時</span><span class="sal-rv" style="color:var(--t3);">不扣薪</span></div>`;
         h+=row('應領合計',`$${estimate.toLocaleString()}`,'',{strong:true,top:true,color:'gold'});
         if(countSalary && sal.insEmpDeduct>0){
           if(sal.insGrade) h+=`<div class="sal-note" style="padding-left:0;">投保級距 $${Number(sal.insGrade).toLocaleString()}</div>`;
