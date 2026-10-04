@@ -43,7 +43,7 @@ console.log('\n② 假別取一個字');
 
 console.log('\n③ 收成一列');
 {
-  const R=g('  + (()=>{\n    const _lv=monthShifts.filter(s=>s&&s.leave_type&&!shIsSub(s));','  })();');
+  const R=g('  + (()=>{\n    const _lv=shDropDupLeave(monthShifts.filter(s=>s&&s.leave_type&&!shIsSub(s)));','  })();');
   ok('★★★ 整個請假區只畫一個 <tr>', (src.match(/<tr class="sh-lvrow">/g)||[]).length===1);
   ok('★★★ 左欄固定寫「請假」，不再是某個人的名字',
      /<span class="shn-name">請假<\/span>/.test(R) && /\$\{_n\} 位・滑過去看全名/.test(R));
@@ -62,7 +62,7 @@ console.log('\n③ 收成一列');
 
 console.log('\n④ 膠囊：假別在左、縮寫在右（使用者挑的 B 案）');
 {
-  const R=g('  + (()=>{\n    const _lv=monthShifts.filter(s=>s&&s.leave_type&&!shIsSub(s));','  })();');
+  const R=g('  + (()=>{\n    const _lv=shDropDupLeave(monthShifts.filter(s=>s&&s.leave_type&&!shIsSub(s)));','  })();');
   ok('★★★ 一枚章分兩段，假別段在前', /<span class="sh-lvk\$\{shIsClassLeave\(s\)\?' k-cls':''\}">/.test(R)
      && R.indexOf('sh-lvk')<R.indexOf('sh-lvnm'));
   ok('★★★ 縮寫用教練自己的代表色（行事曆課卡同一組 coachTagColor）',

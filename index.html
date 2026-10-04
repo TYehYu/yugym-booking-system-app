@@ -14433,8 +14433,8 @@ function tbl(s){return TABLE_ALIAS[s]||s;}
 let sb=null;
 // ── 版本號（日期+時間格式：年後兩碼+月+日.時分，例 26620.1058 = 26年6/20 10:58）──
 // 每次改版手動更新這一行即可，畫面與 title 會一起更新
-const APP_VERSION = '261003.2244';
-const APP_VERSION_LABEL = 'v261003.2244';
+const APP_VERSION = '261004.0859';
+const APP_VERSION_LABEL = 'v261004.0859';
 const CLOUD = !!(window.YUGYM_CONFIG && window.YUGYM_CONFIG.url && window.YUGYM_CONFIG.anonKey);
 if(CLOUD){ sb = supabase.createClient(window.YUGYM_CONFIG.url, window.YUGYM_CONFIG.anonKey); }
 
@@ -37133,6 +37133,20 @@ function bkCoachLeaveBtn(b, editable){
 function shIsClassLeave(s){ return !!(s && s.leave_type==='教練請假'); }
 /* 真正的排班請假（特休／病假／事假／其他）＝今天這個人不上班 */
 function shIsRosterLeave(s){ return !!(s && s.leave_type) && !shIsClassLeave(s); }
+/* 整天請假的人，那天的「教練請假」補登列不再畫（2026-10-04 使用者：「美蓉今天請病假
+   這邊有重複資訊」）—— 她 10/04 排 09:00-15:00 標病假 6 小時，10:00 那一堂又被
+   coachLeaveToRoster 補了一列 0 小時的教練請假；結果她自己的格子畫兩枚
+   （病6 ＋ 10:00/11:00 假），下面的請假列也出現兩枚（病MA ＋ 假MA）。
+   病假六小時已經說完「今天不上班」，那一堂沒上是結果不是另一件事。
+   ⚠ 只是不畫：那一列是人事查教練請假唯一的紀錄（見 coachLeaveToRoster），不能刪資料。
+   ⚠ 只擋「同一人同一天已經有真請假」那一種；沒請假、只有某一堂標教練請假的照畫
+     —— 美蓉 9/07 正常值班 12:00-18:00、晚上那一堂請假，那才是這一列存在的理由。 */
+function shDropDupLeave(list){
+  if(!Array.isArray(list)||list.length<2) return list||[];
+  const day=new Set(list.filter(shIsRosterLeave).map(s=>`${s.emp_id}|${s.date}`));
+  if(!day.size) return list;
+  return list.filter(s=>!(shIsClassLeave(s)&&day.has(`${s.emp_id}|${s.date}`)));
+}
 /* 班表格子裡的假別小標：取假別第一個字，但「教練請假」取出來是「教」，看不懂
    （2026-09-30 使用者：「美蓉7號這天[教]改成[假]」）—— 這一種統一寫「假」。 */
 function shLeaveTag(s){
@@ -46465,7 +46479,7 @@ async function openMonthScheduleModal(mon){
     const cells=Array.from({length:daysInMonth},(_,i)=>{
       const dateStr=`${my}-${mm}-${String(i+1).padStart(2,'0')}`;
       const dow=new Date(Number(my),Number(mm)-1,i+1).getDay(); const isWk=dow===0||dow===6;
-      const list=monthShifts.filter(s=>s.emp_id===e.id&&s.date===dateStr);
+      const list=shDropDupLeave(monthShifts.filter(s=>s.emp_id===e.id&&s.date===dateStr));
       const inner=list.map(s=>{ const code=s.code||shiftCode(s.start_time,s.end_time,s.date);
         const leaveTag=s.leave_type?`<span class="sh-leave">${shLeaveTag(s)}</span>`:'';
         const _cd=shiftCodeDisp(code);
@@ -46611,7 +46625,7 @@ async function renderShiftsTab(){
       const dateStr=`${my}-${mm}-${String(i+1).padStart(2,'0')}`;
       const dow=new Date(Number(my),Number(mm)-1,i+1).getDay();
       const isWk=dow===0||dow===6;
-      const list=monthShifts.filter(s=>s.emp_id===e.id&&s.date===dateStr);
+      const list=shDropDupLeave(monthShifts.filter(s=>s.emp_id===e.id&&s.date===dateStr));
       const inner=list.map(s=>{
         const code=s.code||shiftCode(s.start_time,s.end_time,s.date);
         const leaveTag=s.leave_type?`<span class="sh-leave">${shLeaveTag(s)}</span>`:'';
@@ -46689,7 +46703,7 @@ async function renderShiftsTab(){
      ⚠ 沒有人請假就整列不畫（不要留一排空格子）。
      ⚠ 同一天多人就直向堆，格子跟著長高（量過：三位 55px）。 */
   + (()=>{
-    const _lv=monthShifts.filter(s=>s&&s.leave_type&&!shIsSub(s));
+    const _lv=shDropDupLeave(monthShifts.filter(s=>s&&s.leave_type&&!shIsSub(s)));
     if(!_lv.length) return '';
     const _cOf=id=>coaches.find(x=>x&&x.id===String(id||''))||null;
     const _nameOf=id=>{ const c=_cOf(id);

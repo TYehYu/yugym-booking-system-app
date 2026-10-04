@@ -73,7 +73,11 @@ ok('★★★ 格子畫〔假別〕＋〔教練縮寫〕的膠囊',
 /* ⚠ 兩種請假都收：排班請假（特休／病假／事假）與教練請假（課程請假補登）——
    在班表上都是「這天他不在」，分開列只會讓人要對兩個地方。 */
 ok('★★★ 兩種請假都收（有 leave_type 就算，補班那幾筆除外）',
-   /const _lv=monthShifts\.filter\(s=>s&&s\.leave_type&&!shIsSub\(s\)\);/.test(src));
+   /const _lv=shDropDupLeave\(monthShifts\.filter\(s=>s&&s\.leave_type&&!shIsSub\(s\)\)\);/.test(src));
+/* 2026-10-04：唯一的例外是「整天已經請假的人，那天的教練請假補登列」—— 重複，見 shDropDupLeave */
+ok('★★★ 整天請假者當天的教練請假補登列不重複畫',
+   /function shDropDupLeave\(list\)\{/.test(src)
+   && /list\.filter\(s=>!\(shIsClassLeave\(s\)&&day\.has\(`\$\{s\.emp_id\}\|\$\{s\.date\}`\)\)\)/.test(src));
 ok('★★ 沒有人請假就整區不畫（不要留一排空格子）',
    /if\(!_lv\.length\) return '';/.test(src));
 ok('★★ 假別與時數寫進 title（不佔格子寬度）',
