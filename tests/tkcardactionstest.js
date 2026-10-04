@@ -83,9 +83,13 @@ console.log('\n③ 共享搬到右上角、剩餘堂數左邊');
 /* ⚠ 2026-10-03 搬家（使用者：「設為共享的按鈕　可以改到右邊 n/n 的下面
    共享的浮水印也在這」）——共享那一格移進右欄 .tkc-right，排在 n/n 底下。
    同一格三選一：浮水印（別人分享給我）／共享：名單（我分享出去）／設為共享（還沒分享）。 */
-  ok('★★★ 共享那一格在 n/n **底下**（右欄：n/n 在上、共享在下）',
+  /* ⚠ 2026-10-04 再動一次（使用者：「上面的資訊應該兩列就可以排進去　現在這樣是不是
+     做了好幾列？又有空白列」）——右欄從上下兩層改成同一列（row-reverse：DOM 還是
+     n/n 先、共享後，畫出來共享在 n/n 左邊，＝ 0830 定的位置）。卡頭 49→24px。
+     markup 的先後沒變，所以下面那條順序斷言照舊有效。 */
+  ok('★★★ 共享那一格與 n/n 同一列（共享在左、n/n 在右）',
      /<span class="tkc-right">\s*\n\s*<span class="bkd-tkcard-prog"><b class="num">\$\{used\}<\/b> \/ \$\{total\}<\/span>[\s\S]{0,700}?<span class="bkd-tkcard-share">\$\{shrWm\|\|''\}\$\{shrTag\|\|''\}/.test(src)
-     && /\.tkc-right\{display:flex;flex-direction:column;align-items:flex-end;/.test(src));
+     && /\.tkc-right\{display:flex;flex-direction:row-reverse;align-items:center;/.test(src));
   ok('★★★ 共享浮水印改成排版流內的 .tkwm2（不再絕對定位在卡片右側垂直置中）',
      /<span class="tkwm2" title="共享自 /.test(src)
      && /\.tkwm2\{pointer-events:none;user-select:none;/.test(src)
