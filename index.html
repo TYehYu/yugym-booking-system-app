@@ -4369,7 +4369,12 @@ tr.pe-row:hover td{background:var(--sage-bg,#eef4ee);}
    虛線佔位已經畫出落點了，但多欄清單要數到第幾個並不直覺，直接把數字寫在手上那張卡上。
    ⚠ 貼在卡片右上角外側：蓋在卡片裡會壓到動作名（最長的有 43 字）。 */
 .cxe-row.cxe-ghost{position:fixed;}
-.cxe-slot{position:absolute;right:-6px;top:-10px;font-size:11px;font-weight:800;line-height:1;
+/* ⚠ 2026-10-05 二修（使用者：「第n位的標籤會被遮住」）——原本是塞進幽靈卡片裡的
+   absolute 小標，但 .wp-item 與 .cxe-row 都有 overflow:hidden，貼在角上就被切掉。
+   改成**獨立掛在 body 上**的 fixed 元素，由 moveTo 定位到卡片右上角，誰都切不到它；
+   層級再高過幽靈卡（10200）一階。 */
+.cxe-slot{position:fixed;z-index:10300;pointer-events:none;transform:translate(-45%,-55%);
+  font-size:11px;font-weight:800;line-height:1;
   color:#fff;background:var(--brand,#1f6f54);border-radius:999px;padding:4px 8px;white-space:nowrap;
   box-shadow:0 2px 6px rgba(30,25,15,.25);}
 /* 拖移進行中整頁不要跟著捲（touchmove 已經 preventDefault，這一條是保險） */
@@ -14447,8 +14452,8 @@ function tbl(s){return TABLE_ALIAS[s]||s;}
 let sb=null;
 // ── 版本號（日期+時間格式：年後兩碼+月+日.時分，例 26620.1058 = 26年6/20 10:58）──
 // 每次改版手動更新這一行即可，畫面與 title 會一起更新
-const APP_VERSION = '261005.1353';
-const APP_VERSION_LABEL = 'v261005.1353';
+const APP_VERSION = '261005.1403';
+const APP_VERSION_LABEL = 'v261005.1403';
 const CLOUD = !!(window.YUGYM_CONFIG && window.YUGYM_CONFIG.url && window.YUGYM_CONFIG.anonKey);
 if(CLOUD){ sb = supabase.createClient(window.YUGYM_CONFIG.url, window.YUGYM_CONFIG.anonKey); }
 
@@ -73206,6 +73211,11 @@ function wpLpStart(e,i){
     ghost.className='wp-item wp-ghost';
     ghost.style.cssText='position:fixed;left:'+r.left+'px;top:'+r.top+'px;width:'+r.width+'px;'
       +'height:'+r.height+'px;margin:0;pointer-events:none;z-index:10200;box-sizing:border-box;';
+    /* 「會放到第幾位」寫在手上那張卡上（2026-10-05，與常用動作同一套語彙）——
+       虛線佔位已經畫出落點了，但一長串動作要數到第幾個並不直覺。 */
+    const tag=document.createElement('span');
+    tag.className='cxe-slot'; document.body.appendChild(tag);   /* ⚠ 掛 body —— 卡片有 overflow:hidden，掛進去會被切掉 */
+    ghost._slot=tag;
     document.body.appendChild(ghost);
   };
   const timer=setTimeout(()=>{
@@ -73217,17 +73227,28 @@ function wpLpStart(e,i){
   /* ② 擋捲動：長按成立後每一次 touchmove 都 preventDefault（一定要 passive:false） */
   const tmove=(ev)=>{ if(armed) ev.preventDefault(); };
   const moveTo=(y)=>{
-    if(ghost) ghost.style.top=(y-offY)+'px';
-    const rows=rowsNow();
-    let before=null;
-    for(const r of rows){
-      if(r===el) continue;
-      const b2=r.getBoundingClientRect();
-      if(y < b2.top + b2.height/2){ before=r; break; }
-    }
+    /* ⚠⚠ 基準點是**拖著那張卡片的上緣**，不是游標（2026-10-05 使用者：先在常用動作
+       那邊定了「以卡片的左上角為基準點」，這一支是同一個毛病，一起改）——
+       游標在卡片上的高度取決於你按在哪裡：按卡片下緣時，整張卡其實已經蓋過下一列了，
+       畫面上看起來該換位置卻還沒換。
+       ⚠ 這一頁是**單欄**、而且每一列高度不一樣（有沒有數字列／備註都會差），
+         所以不能照常用動作那支去算等距格線；改用「上緣越過幾列的中線，就排在第幾個」。
+         ⚠ 中線不是上緣：用中線才有遲滯 —— 換過去之後那一列會整個讓開一張卡的高度，
+           不會在邊界上來回彈。 */
+    const gy=y-offY;
+    if(ghost) ghost.style.top=gy+'px';
     const box=document.getElementById('wp-items'); if(!box) return;
-    if(before){ if(before!==el.nextSibling) box.insertBefore(el, before); }
-    else if(el!==box.lastElementChild) box.appendChild(el);
+    const seq=rowsNow().filter(r=>r!==el);
+    let idx=0;
+    for(const r of seq){
+      const b2=r.getBoundingClientRect();
+      if(gy > b2.top + b2.height/2) idx++; else break;
+    }
+    if(ghost&&ghost._slot){ ghost._slot.textContent='第 '+(idx+1)+' 位';
+      const gb=ghost.getBoundingClientRect();
+      ghost._slot.style.left=gb.right+'px'; ghost._slot.style.top=gb.top+'px'; }
+    const ref=seq[idx]||null;
+    if(ref!==el && ref!==el.nextSibling) box.insertBefore(el, ref);
   };
   const move=(ev)=>{
     if(!armed){
@@ -73243,7 +73264,8 @@ function wpLpStart(e,i){
     clearTimeout(timer);
     cleanup();
     try{ el.style.touchAction=''; }catch(_){}
-    if(ghost){ try{ ghost.remove(); }catch(_){} ghost=null; }
+    if(ghost){ try{ if(ghost._slot) ghost._slot.remove(); }catch(_){}
+      try{ ghost.remove(); }catch(_){} ghost=null; }
     document.body.classList.remove('wp-dragging-on');
     if(!apply || !armed){ el.classList.remove('wp-dragging'); return; }
     window._wpDragged=1;                       /* 放開後那一次 click 不要開編輯 */
@@ -73647,7 +73669,7 @@ function cxeLpStart(e,id){
     /* 「會放到第幾位」直接寫在卡片上（2026-10-05 使用者：「拖移的時候都不知道卡片
        會換到哪邊去」）—— 虛線佔位已經畫出位置了，但多欄清單裡數到第幾個並不好認。 */
     const tag=document.createElement('span');
-    tag.className='cxe-slot'; ghost.appendChild(tag);
+    tag.className='cxe-slot'; document.body.appendChild(tag);   /* ⚠ 掛 body —— 卡片有 overflow:hidden，掛進去會被切掉 */
     ghost._slot=tag;
     grid=measureGrid();
     document.body.appendChild(ghost);
@@ -73687,7 +73709,9 @@ function cxeLpStart(e,id){
       const col=Math.max(0, Math.min(grid.cols-1, Math.round((gx-grid.x0)/grid.pitchX)));
       const row=Math.max(0, Math.round((gy-grid.y0)/grid.pitchY));
       const idx=Math.max(0, Math.min(seq.length, row*grid.cols+col));
-      if(ghost&&ghost._slot) ghost._slot.textContent='第 '+(idx+1)+' 位';
+      if(ghost&&ghost._slot){ ghost._slot.textContent='第 '+(idx+1)+' 位';
+        const gb=ghost.getBoundingClientRect();
+        ghost._slot.style.left=gb.right+'px'; ghost._slot.style.top=gb.top+'px'; }
       const ref=seq[idx]||null;
       if(ref!==el && ref!==el.nextSibling) box.insertBefore(el, ref);
       return;
@@ -73720,7 +73744,8 @@ function cxeLpStart(e,id){
     clearTimeout(timer);
     cleanup();
     try{ el.style.touchAction=''; }catch(_){}
-    if(ghost){ try{ ghost.remove(); }catch(_){} ghost=null; }
+    if(ghost){ try{ if(ghost._slot) ghost._slot.remove(); }catch(_){}
+      try{ ghost.remove(); }catch(_){} ghost=null; }
     document.body.classList.remove('cxe-dragging-on');
     if(!apply || !armed){ el.classList.remove('cxe-dragging'); return; }
     window._cxeDragged=1;                      /* 放開後那一次 click 不要開編輯 */

@@ -343,9 +343,12 @@ console.log('\n⑬ 動作用「長按拖移」調順序（2026-09-09 四修）')
      /不要 transform、不要改內距 —— 使用者明確要求卡片大小不要變/.test(src)
      && !/\.wp-item\.wp-item-ord\{padding-left:40px/.test(src));
   /* 2026-09-09 五修（使用者：「我剛剛拖移動作小卡　卡片沒有浮起來黏在手上的感覺」） */
+  /* ⚠ 2026-10-05：基準點從游標改成「拖著那張卡片的上緣」（gy=y-offY），
+     分身仍然照 gy 定位 —— 畫出來的位置就是算進去的位置。 */
   ok('★★★ 做一個原尺寸的分身跟著手指跑，原本那一列留在原位當佔位',
      /ghost=el\.cloneNode\(true\);/.test(LP)
-     && /if\(ghost\) ghost\.style\.top=\(y-offY\)\+'px';/.test(LP)
+     && /const gy=y-offY;/.test(LP)
+     && /if\(ghost\) ghost\.style\.top=gy\+'px';/.test(LP)
      && /\.wp-item\.wp-dragging\{opacity:\.35;border-style:dashed;background:transparent;\}/.test(src));
   ok('★★★ 分身不縮放，只加陰影（先前明確要求過卡片大小不要變）',
      /\.wp-item\.wp-ghost\{background:#fff;border-color:var\(--brand,#1f6f54\);opacity:1;\s*\n\s*box-shadow:/.test(src)
@@ -354,8 +357,10 @@ console.log('\n⑬ 動作用「長按拖移」調順序（2026-09-09 四修）')
      /掛在 body 上、脫離清單，所以清單裡怎麼搬都不影響它/.test(src));
   ok('★★★ z-index 要高過彈窗（這一頁本來就開在彈窗裡）',
      /z-index:10200;/.test(LP) && /\.modal-bg 是 9750/.test(src));
-  ok('★★ 放開要把分身收掉，不然會留一張浮在畫面上',
-     /if\(ghost\)\{ try\{ ghost\.remove\(\); \}catch\(_\)\{\} ghost=null; \}/.test(LP));
+  /* ⚠ 2026-10-05：「第 n 位」那顆標掛在 body 上（卡片有 overflow:hidden，塞進去會被切掉），
+     所以收分身時要連它一起收，不然放開會留一顆浮在畫面上。 */
+  ok('★★ 放開要把分身收掉（連「第 n 位」那顆標一起），不然會留東西浮在畫面上',
+     /if\(ghost\)\{ try\{ if\(ghost\._slot\) ghost\._slot\.remove\(\); \}catch\(_\)\{\}\s*\n\s*try\{ ghost\.remove\(\); \}catch\(_\)\{\} ghost=null; \}/.test(LP));
   ok('★★★ 長按不能選到文字 —— body 那條要 armed 之後才加，那 400ms 正好是選字的時間',
      /user-select:none;-webkit-user-select:none;-webkit-touch-callout:none;\}/.test(src)
      && /那 400ms 正好就是\s*\n\s*瀏覽器開始選字的時間/.test(src));
@@ -365,8 +370,11 @@ console.log('\n⑬ 動作用「長按拖移」調順序（2026-09-09 四修）')
   ok('★★★ 拖移全程不重畫清單（重畫＝節點被銷毀＝pointercancel＝拖移中斷）',
      /拖移全程只搬 DOM，絕對不重畫清單 —— 重畫會把收到 pointerdown 的節點/.test(src)
      && /那也會觸發 pointercancel（v1805 就是這樣「浮起來一下子」）/.test(src));
+  /* ⚠ 2026-10-05：落點改成「上緣越過幾張卡的中線＝第幾個」，插入點統一成
+     insertBefore(el, seq[idx]||null) —— ref 是 null 時 insertBefore 等同 appendChild，
+     所以不再需要單獨的 appendChild 分支。 */
   ok('★★★ 拖移中用 insertBefore 搬節點（那是「移動」，節點物件還活著）',
-     /box\.insertBefore\(el, before\)/.test(LP) && /box\.appendChild\(el\)/.test(LP));
+     /box\.insertBefore\(el, ref\)/.test(LP) && /const ref=seq\[idx\]\|\|null;/.test(LP));
   ok('★★★ 放開之後才依 DOM 順序重排陣列（data-i 是原本的位置）',
      /const order=rowsNow\(\)\.map\(r=>Number\(r\.dataset\.i\)\)\.filter\(n=>!isNaN\(n\)\);/.test(LP)
      && /if\(order\.length===orig\.length\) S\.items=order\.map\(k=>orig\[k\]\);/.test(LP));

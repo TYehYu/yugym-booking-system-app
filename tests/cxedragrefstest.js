@@ -38,11 +38,20 @@ ok('★★ 量不到格線才退回舊的「找最近的一張」（不要整個
    && /let target=null, best=Infinity, after=false;/.test(FN));
 
 console.log('\n②b 放開前就知道會放到第幾個');
-ok('★★★ 幽靈卡上有「第 n 位」的標，且跟著落點更新',
-   /tag\.className='cxe-slot'; ghost\.appendChild\(tag\);/.test(FN)
-   && /ghost\._slot\.textContent='第 '\+\(idx\+1\)\+' 位';/.test(FN));
-ok('★★ 標的樣式有定義（貼在卡片右上角外側，不壓到動作名）',
-   /\.cxe-slot\{position:absolute;right:-6px;top:-10px;/.test(src));
+ok('★★★ 有「第 n 位」的標，且跟著落點更新',
+   /ghost\._slot\.textContent='第 '\+\(idx\+1\)\+' 位';/.test(FN));
+/* ⚠ 2026-10-05 二修（使用者：「第n位的標籤會被遮住」）——卡片有 overflow:hidden，
+   標塞在卡片裡會被切掉，所以改成掛在 body 上、每次 moveTo 定位到卡片右上角。 */
+ok('★★★ 標掛在 body（不是塞進卡片，會被 overflow:hidden 切掉）',
+   /tag\.className='cxe-slot'; document\.body\.appendChild\(tag\);/.test(FN)
+   && !/ghost\.appendChild\(tag\)/.test(src));
+ok('★★★ 標是 fixed、層級高過幽靈卡（10200）',
+   /\.cxe-slot\{position:fixed;z-index:10300;/.test(src));
+ok('★★★ 每次移動都把標定位到卡片右上角',
+   /const gb=ghost\.getBoundingClientRect\(\);/.test(FN)
+   && /ghost\._slot\.style\.left=gb\.right\+'px'; ghost\._slot\.style\.top=gb\.top\+'px';/.test(FN));
+ok('★★ 放開時標要跟著收掉（不然會留一顆浮在畫面上）',
+   /if\(ghost\)\{ try\{ if\(ghost\._slot\) ghost\._slot\.remove\(\); \}catch\(_\)\{\}/.test(FN));
 
 console.log('\n③ 0916 在手機上試出來的三道防線沒被動到');
 ok('★★★ pointerdown 當下就關掉 touch-action', /el\.style\.touchAction='none'/.test(FN));
@@ -53,8 +62,28 @@ ok('★★★ 長按成立後 pointercancel 不當結束', /const onCancel=\(\)=
 ok('★★ 拖移全程只搬 DOM（放開才寫回資料庫）',
    /box\.insertBefore\(el, ref\);/.test(FN) && /cxeSaveOrder\(rowsNow\(\)\.map\(r=>r\.dataset\.id\)/.test(FN));
 
-console.log('\n④ 方案編輯器那一支是另一份，這次沒動');
-ok('★★ wpLpStart 還在（它有自己的 moveTo）', /function wpLpStart\(/.test(src));
+console.log('\n④ 訓練方案編輯器那一支（wpLpStart）同一天也改了');
+/* ⚠ 不能照抄常用動作那套算格線：這一頁是**單欄**，而且每一張卡的高度不一樣
+   （有沒有數字列／備註都會差）。改成「上緣越過幾張卡的中線就排第幾個」。
+   實測（第 1 張拖到第 6 張的位置）：抓上緣／中間／下緣三種都落在第 5 位；
+   舊版分別是第 5、第 6、第 6 位。 */
+const WP=g('function wpLpStart(e,i){','\nfunction ');
+ok('★★★ 基準點是卡片上緣，不是游標',
+   /const gy=y-offY;/.test(WP) && /if\(ghost\) ghost\.style\.top=gy\+'px';/.test(WP));
+ok('★★★ 落點＝上緣越過幾張卡的中線（中線才有遲滯，不會在邊界彈）',
+   /if\(gy > b2\.top \+ b2\.height\/2\) idx\+\+; else break;/.test(WP));
+ok('★★★ 手上那張卡也寫「第 n 位」（與常用動作同一套語彙、共用 .cxe-slot）',
+   /tag\.className='cxe-slot'; document\.body\.appendChild\(tag\);/.test(WP)
+   && /ghost\._slot\.textContent='第 '\+\(idx\+1\)\+' 位';/.test(WP)
+   && /ghost\._slot\.style\.left=gb\.right\+'px';/.test(WP));
+ok('★★ 單欄專用：沒有去算等距格線（每張卡高度不一樣，算了會錯）',
+   !/measureGrid/.test(WP) && !/grid\.pitchY/.test(WP));
+ok('★★★ 0909 那三道防線沒被動到',
+   /el\.style\.touchAction='none'/.test(WP)
+   && /const tmove=\(ev\)=>\{ if\(armed\) ev\.preventDefault\(\); \};/.test(WP)
+   && /const onCancel=\(\)=>\{ if\(!armed\) finish\(false\); \};/.test(WP));
+ok('★★ 仍然只改記憶體裡的 S.items（要按「儲存方案」才寫回資料庫）',
+   /const order=rowsNow\(\)\.map\(r=>Number\(r\.dataset\.i\)\)/.test(WP));
 
 console.log(`\n${fail?'✗':'✓'} ${pass} 通過 / ${fail} 失敗`);
 process.exit(fail?1:0);
