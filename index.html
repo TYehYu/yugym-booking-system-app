@@ -14439,8 +14439,8 @@ function tbl(s){return TABLE_ALIAS[s]||s;}
 let sb=null;
 // ── 版本號（日期+時間格式：年後兩碼+月+日.時分，例 26620.1058 = 26年6/20 10:58）──
 // 每次改版手動更新這一行即可，畫面與 title 會一起更新
-const APP_VERSION = '261004.0926';
-const APP_VERSION_LABEL = 'v261004.0926';
+const APP_VERSION = '261005.1336';
+const APP_VERSION_LABEL = 'v261005.1336';
 const CLOUD = !!(window.YUGYM_CONFIG && window.YUGYM_CONFIG.url && window.YUGYM_CONFIG.anonKey);
 if(CLOUD){ sb = supabase.createClient(window.YUGYM_CONFIG.url, window.YUGYM_CONFIG.anonKey); }
 
@@ -67530,7 +67530,7 @@ async function renderAddExerciseSheet(){
           <div class="form-row" style="margin-top:6px;"><label>備註（可留空）</label>
             <input type="text" id="ae-note" value="${escH(st.note||'')}" autocomplete="off"></div>
         </div>
-        <div class="ae-foot"><button class="btn btn-green" style="width:100%;" onclick="tlSaveExercise()">儲存（共 ${sets.length} 組）</button></div>
+        <div class="ae-foot"><button id="ae-save" class="btn btn-green" style="width:100%;" onclick="tlSaveExercise()">儲存（共 ${sets.length} 組）</button></div>
       </div>`;
     setTimeout(()=>{const r=document.getElementById('ae-r-0');if(r&&!sets[0].reps)r.focus();},60);
   }
@@ -67600,7 +67600,14 @@ function tlUnit(u){
 /* 〔已移除〕tlOpenNote —— 備註改成常駐輸入框（2026-09-24 與「修改紀錄」統一），
    不再需要「＋ 新增備註」那一步。 */
 
-async function tlSaveExercise(){
+/* 防連點（2026-10-05 使用者：「新增動作的頁面〔儲存〕按了兩次就會出現兩筆該動作
+   會按兩次是以為沒按出去」）—— 每按一次就 uid('TLOG') 生一筆新紀錄，連點就是兩筆。
+   ⚠ 這一頁是這組抽屜裡唯一漏掉 onceAct 的：套用方案（tlPlanApply）、套用歷史
+     （tlDoApplyHist）、修改紀錄（tleSave）0909–0924 陸續都包了，只有它沒有。
+   ⚠ 光擋住還不夠 —— 會按第二次是因為**按了沒反應**（雲端寫入要一兩秒，按鈕長得
+     一模一樣）。所以下面同時把按鈕變成停用的「儲存中…」，讓人看得出按到了。 */
+async function tlSaveExercise(){ return onceAct('tlsave', _tlSaveExercise); }
+async function _tlSaveExercise(){
   tlReadCur();
   const st=window._tlState, b=window._tlBooking;
   // 整理有效組（至少填了次數或重量的組）
@@ -67632,13 +67639,19 @@ async function tlSaveExercise(){
     note:(st.note||'') + (setsText?(st.note?'　':'')+'['+setsText+']':''),
     created_at:new Date().toISOString()
   };
+  /* 按下去就看得出按到了（2026-10-05）——存成功會關掉整張抽屜，所以只有失敗時要還原。 */
+  const _btn=document.getElementById('ae-save'), _btnTx=_btn?_btn.textContent:'';
+  if(_btn){ _btn.disabled=true; _btn.textContent='儲存中…'; }
   try{
     await dbPut('training_logs',log);
     window._tlogBids&&window._tlogBids.add(log.booking_id); // 即時更新課卡狀態
     closeAddExercise();
     showToast('已加入紀錄');
     renderTrainingLogSheet();
-  }catch(e){ showToast('儲存失敗：'+(e&&e.message?e.message:e)); }
+  }catch(e){
+    if(_btn){ _btn.disabled=false; _btn.textContent=_btnTx; }
+    showToast('儲存失敗：'+(e&&e.message?e.message:e));
+  }
 }
 
 
