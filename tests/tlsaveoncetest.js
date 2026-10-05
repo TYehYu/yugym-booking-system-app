@@ -30,6 +30,16 @@ ok('★★★ 儲存鈕有 id，按下去變成停用的「儲存中…」',
 ok('★★★ 失敗才還原按鈕（成功會關掉整張抽屜）',
    /_btn\.disabled=false; _btn\.textContent=_btnTx;[\s\S]{0,120}?showToast\('儲存失敗：'/.test(src));
 
+console.log('\n②b 修改紀錄（tleSave）也有同樣的回饋');
+/* ⚠ 這一支本身不會寫出兩筆（拿 E.id 去 dbPut ＝ 覆蓋同一列），但使用者一樣會
+   因為「按了沒反應」而點第二次（2026-10-05 回報）。按鈕要立刻變成停用的「儲存中…」。 */
+ok('★★★ 修改紀錄的儲存鈕有 id，按下去變成停用的「儲存中…」',
+   /<button id="tle-save" class="btn btn-green" onclick="tleSave\(\)">儲存<\/button>/.test(src)
+   && /_btn\.disabled=true; _btn\.textContent='儲存中…';[\s\S]{0,200}?await dbPut\('training_logs',l\);/.test(src));
+ok('★★★ 修改紀錄是更新同一筆（id 不變），不會長出第二筆',
+   /let l=null; try\{ l=await dbGet\('training_logs',E\.id\); \}catch\(_\)\{\}/.test(src)
+   && /Object\.assign\(l,\{/.test(src));
+
 console.log('\n③ 其他三條寫入路徑本來就有擋，不要為了這次改動它們');
 ok('★★ 套用方案 tlPlanApply', /async function tlPlanApply\(pid,useLast\)\{ return onceAct\('tlplan:'\+pid,/.test(src));
 ok('★★ 套用歷史 tlDoApplyHist', /async function tlDoApplyHist\(srcBid\)\{ return onceAct\('tlhist:'\+srcBid,/.test(src));

@@ -14452,8 +14452,8 @@ function tbl(s){return TABLE_ALIAS[s]||s;}
 let sb=null;
 // ── 版本號（日期+時間格式：年後兩碼+月+日.時分，例 26620.1058 = 26年6/20 10:58）──
 // 每次改版手動更新這一行即可，畫面與 title 會一起更新
-const APP_VERSION = '261005.1403';
-const APP_VERSION_LABEL = 'v261005.1403';
+const APP_VERSION = '261005.2015';
+const APP_VERSION_LABEL = 'v261005.2015';
 const CLOUD = !!(window.YUGYM_CONFIG && window.YUGYM_CONFIG.url && window.YUGYM_CONFIG.anonKey);
 if(CLOUD){ sb = supabase.createClient(window.YUGYM_CONFIG.url, window.YUGYM_CONFIG.anonKey); }
 
@@ -67149,7 +67149,7 @@ function tleRender(){
     <div class="form-row" style="margin-top:6px;"><label>備註（可留空）</label>
       <input type="text" id="tle-note" value="${escH(E.note)}" autocomplete="off" oninput="tleSet('note',this.value)"></div>
     <div class="modal-foot"><button class="btn btn-ghost" onclick="closeModal()">取消</button>
-      <button class="btn btn-green" onclick="tleSave()">儲存</button></div>`);
+      <button id="tle-save" class="btn btn-green" onclick="tleSave()">儲存</button></div>`);
 }
 /* ══ 逐組的 ± 快速調整（2026-09-21 使用者：「修改紀錄次數跟重量可以有+-符號　快速調整嗎」）══
    「修改紀錄」與「記錄訓練」兩支共用這三支小工具 —— 逐組列本來就是同一組 .ae-set-*，
@@ -67294,8 +67294,21 @@ async function _tleSave(){
     weight_unit:ws.length?_su:null,
     sets_detail:JSON.stringify(valid.map(s=>({reps:String(s.reps==null?'':s.reps), weight:String(s.weight==null?'':s.weight)}))),
     note:String(E.note||'').trim()||null });
+  /* 按了要看得出按到了（2026-10-05 使用者：「點〔儲存〕兩次會有兩次的動作被寫在課表上
+     有辦法做個防呆嗎」）——
+     ⚠ 這一支本身**不會寫出兩筆**：它是拿 E.id 去 dbPut（同一個 id ＝ 覆蓋同一列），
+       按幾次結果都一樣。真正會長出兩筆的是「新增動作」那一條（每按一次就 uid('TLOG')
+       生一個新 id），那條 1005 已經修掉。
+     ⚠ 但會按第二次的原因兩邊一樣：**按了沒反應**（雲端寫入要一兩秒）。
+       所以這裡也把按鈕變成停用的「儲存中…」，手不要再去點第二次。
+     ⚠ 存成功會關掉視窗，所以只有失敗時要還原按鈕。 */
+  const _btn=document.getElementById('tle-save'), _btnTx=_btn?_btn.textContent:'';
+  if(_btn){ _btn.disabled=true; _btn.textContent='儲存中…'; }
   try{ await dbPut('training_logs',l); closeModal(); showToast('已修改'); renderTrainingLogSheet(); }
-  catch(e){ showToast('儲存失敗：'+((e&&e.message)||e)); }
+  catch(e){
+    if(_btn){ _btn.disabled=false; _btn.textContent=_btnTx; }
+    showToast('儲存失敗：'+((e&&e.message)||e));
+  }
 }
 
 // ── 新增動作（兩頁式）──
