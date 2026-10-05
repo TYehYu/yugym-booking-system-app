@@ -4340,7 +4340,8 @@ tr.pe-row:hover td{background:var(--sage-bg,#eef4ee);}
    ⚠ 280px 是容得下「動作名＋姿勢/工具＋✕」的最小寬度；窄畫面自動落回單欄，
      手機不必另外寫斷點（auto-fill 本來就會收）。
    ⚠⚠ 改成多欄之後，拖移的落點判斷**不能再只比垂直中線** —— 同一列有好幾個項目時，
-     只看 y 會把卡片丟到錯的位置。見 cxeLpStart 的 moveTo（已改成比中心點距離）。 */
+     只看 y 會把卡片丟到錯的位置。見 cxeLpStart 的 moveTo：比的是距離，
+     而基準點是**拖著那張卡片的左上角**（2026-10-05 使用者指定），不是游標。 */
 .cxe-list{display:grid;grid-template-columns:repeat(auto-fill,minmax(280px,1fr));gap:8px;align-items:start;}
 /* ⚠ 整列不可選字（2026-09-16 使用者回報：「我用手機拖拉常用動作卡片　卡片雖然也可以
      正確移動　但是會有選字的拖曳」）——
@@ -4364,6 +4365,13 @@ tr.pe-row:hover td{background:var(--sage-bg,#eef4ee);}
 .cxe-row.cxe-ghost{background:#fff;border-color:var(--brand,#1f6f54);opacity:1;
   box-shadow:0 12px 28px rgba(30,25,15,.28);}
 .cxe-row.cxe-ghost .cxe-b{display:none;}
+/* 幽靈卡片上的「第 n 位」（2026-10-05 使用者：「拖移的時候都不知道卡片會換到哪邊去」）——
+   虛線佔位已經畫出落點了，但多欄清單要數到第幾個並不直覺，直接把數字寫在手上那張卡上。
+   ⚠ 貼在卡片右上角外側：蓋在卡片裡會壓到動作名（最長的有 43 字）。 */
+.cxe-row.cxe-ghost{position:fixed;}
+.cxe-slot{position:absolute;right:-6px;top:-10px;font-size:11px;font-weight:800;line-height:1;
+  color:#fff;background:var(--brand,#1f6f54);border-radius:999px;padding:4px 8px;white-space:nowrap;
+  box-shadow:0 2px 6px rgba(30,25,15,.25);}
 /* 拖移進行中整頁不要跟著捲（touchmove 已經 preventDefault，這一條是保險） */
 body.cxe-dragging-on{touch-action:none;user-select:none;}
 body.cxe-dragging-on .cxe-row{cursor:grabbing;}
@@ -14439,8 +14447,8 @@ function tbl(s){return TABLE_ALIAS[s]||s;}
 let sb=null;
 // ── 版本號（日期+時間格式：年後兩碼+月+日.時分，例 26620.1058 = 26年6/20 10:58）──
 // 每次改版手動更新這一行即可，畫面與 title 會一起更新
-const APP_VERSION = '261005.1336';
-const APP_VERSION_LABEL = 'v261005.1336';
+const APP_VERSION = '261005.1353';
+const APP_VERSION_LABEL = 'v261005.1353';
 const CLOUD = !!(window.YUGYM_CONFIG && window.YUGYM_CONFIG.url && window.YUGYM_CONFIG.anonKey);
 if(CLOUD){ sb = supabase.createClient(window.YUGYM_CONFIG.url, window.YUGYM_CONFIG.anonKey); }
 
@@ -73609,6 +73617,25 @@ function cxeLpStart(e,id){
      至少拖移當下仍然不會選到字。 */
   try{ el.style.touchAction='none'; el.style.webkitUserSelect='none'; el.style.userSelect='none'; }catch(_){}
   const rowsNow=()=>[...box.querySelectorAll('.cxe-row')];
+  /* 格線（抬起來的當下量一次）——落點是用算格子決定的，不是找「最近的那張卡」。
+     ⚠⚠ 一定要**量**不要算（2026-10-05）：欄數是 grid auto-fill 決定的，
+       中間還有 gap，用 280px 之類的設定值回推一定會差。
+       量法：第一列每一張的 left ＝ 每一欄的起點；各列的 top ＝ 每一列的起點。
+     ⚠ 拖移過程中格線不會變 —— 被拖的那一列仍然留在清單裡當佔位（.cxe-dragging），
+       總格數不變，所以量一次就夠，也不會因為重排而跟著跳。 */
+  let grid=null;
+  const measureGrid=()=>{
+    const rs=rowsNow().map(r=>r.getBoundingClientRect());
+    if(!rs.length) return null;
+    const tops=[...new Set(rs.map(b=>Math.round(b.top)))].sort((a,b)=>a-b);
+    const firstRow=rs.filter(b=>Math.round(b.top)===tops[0]).sort((a,b)=>a.left-b.left);
+    const lefts=firstRow.map(b=>b.left);
+    return {
+      x0:lefts[0], y0:tops[0], cols:lefts.length,
+      pitchX:(lefts.length>1?lefts[1]-lefts[0]:rs[0].width),
+      pitchY:(tops.length>1?tops[1]-tops[0]:rs[0].height)
+    };
+  };
   const lift=()=>{
     const r=el.getBoundingClientRect();
     offX=startX-r.left; offY=startY-r.top;
@@ -73617,6 +73644,12 @@ function cxeLpStart(e,id){
     ghost.className='cxe-row cxe-ghost';
     ghost.style.cssText='position:fixed;left:'+r.left+'px;top:'+r.top+'px;width:'+r.width+'px;'
       +'height:'+r.height+'px;margin:0;pointer-events:none;z-index:10200;box-sizing:border-box;';
+    /* 「會放到第幾位」直接寫在卡片上（2026-10-05 使用者：「拖移的時候都不知道卡片
+       會換到哪邊去」）—— 虛線佔位已經畫出位置了，但多欄清單裡數到第幾個並不好認。 */
+    const tag=document.createElement('span');
+    tag.className='cxe-slot'; ghost.appendChild(tag);
+    ghost._slot=tag;
+    grid=measureGrid();
     document.body.appendChild(ghost);
   };
   const timer=setTimeout(()=>{
@@ -73632,16 +73665,41 @@ function cxeLpStart(e,id){
      改成：找中心點離游標最近的那一張，再用游標相對它的位置決定插前面還是後面。
      ⚠ 同一列（y 差在半個高度內）時改用 x 判斷左右，跨列才用 y 判斷上下。 */
   const moveTo=(x,y)=>{
-    if(ghost){ ghost.style.left=(x-offX)+'px'; ghost.style.top=(y-offY)+'px'; }
+    const gx=x-offX, gy=y-offY;            /* 拖著的那張卡片的左上角 */
+    if(ghost){ ghost.style.left=gx+'px'; ghost.style.top=gy+'px'; }
+    /* ⚠⚠ 落點＝「左上角離哪一格的起點最近」（2026-10-05 二修，使用者試過第一版之後：
+       「好像還是拖的沒那麼準」）。
+       第一版是「找左上角離得最近的那一張卡，再用那張卡的中線決定插前面還是後面」——
+       兩段的基準不一樣，所以在格子邊界附近會一次跳兩格；而且每換一次位置整個清單就
+       重排，下一次 pointermove 量到的是新版面，手只動一點點落點卻會來回彈。
+       改成直接換算成格子座標：
+         欄 = round((左上角 x − 第一欄起點) ÷ 欄距)
+         列 = round((左上角 y − 第一列起點) ÷ 列距)
+         第幾格 = 列 × 欄數 + 欄
+       ⚠ round 不是 floor：卡片**吸到最近的一格**，不必把角推過格子的邊界。
+       ⚠ 格線在抬起來時量一次（見 measureGrid），拖移全程不變 —— 被拖的那一列仍然
+         留在清單裡當虛線佔位，總格數不變，所以不會自己跟自己打架。
+       實測（桌機四欄、把第 1 張拖到第 7 格）：抓左緣、抓右緣、左右各晃 20px，
+       四種都落在同一格；舊版分別落在第 6、第 4、第 7 位。
+     ⚠ 量不到格線時（理論上不會）退回原本那套「找最近的一張」，不要整個拖移失效。 */
+    const seq=rowsNow().filter(r=>r!==el);
+    if(grid && grid.cols>0 && grid.pitchX>0 && grid.pitchY>0){
+      const col=Math.max(0, Math.min(grid.cols-1, Math.round((gx-grid.x0)/grid.pitchX)));
+      const row=Math.max(0, Math.round((gy-grid.y0)/grid.pitchY));
+      const idx=Math.max(0, Math.min(seq.length, row*grid.cols+col));
+      if(ghost&&ghost._slot) ghost._slot.textContent='第 '+(idx+1)+' 位';
+      const ref=seq[idx]||null;
+      if(ref!==el && ref!==el.nextSibling) box.insertBefore(el, ref);
+      return;
+    }
     let target=null, best=Infinity, after=false;
-    for(const r of rowsNow()){
-      if(r===el) continue;
+    for(const r of seq){
       const b2=r.getBoundingClientRect();
-      const cx=b2.left+b2.width/2, cy=b2.top+b2.height/2;
-      const d=(x-cx)*(x-cx)+(y-cy)*(y-cy);
+      const d=(gx-b2.left)*(gx-b2.left)+(gy-b2.top)*(gy-b2.top);
       if(d<best){
         best=d; target=r;
-        after=(Math.abs(y-cy) > b2.height/2) ? (y>cy) : (x>cx);
+        const cx=b2.left+b2.width/2, cy=b2.top+b2.height/2;
+        after=(Math.abs(gy-b2.top) > b2.height/2) ? (gy>cy) : (gx>cx);
       }
     }
     if(!target) return;

@@ -54,13 +54,16 @@ ok('★★ ✕ 不進拖移（否則按刪除會先浮起一張卡）',
    /if\(e\.target && e\.target\.closest && e\.target\.closest\('\.cxe-b'\)\) return;/.test(src));
 /* 2026-09-16 桌機優化：清單從單欄改成自動多欄（auto-fill minmax(280px,1fr)）。
    ⚠⚠ 多欄之後拖移的落點判斷**不能再只比垂直中線** —— 同一列有好幾個項目時，
-     光比 y 會把卡片丟到同列最左邊。改成「找中心點離游標最近的那張，
-     再依游標相對它的位置決定插前面或後面」；同列比 x、跨列比 y。 */
+     光比 y 會把卡片丟到同列最左邊。
+   ⚠ 2026-10-05 又改了一次（使用者：「以卡片的左上角為基準點」＋「好像還是拖的沒那麼準」）：
+     基準點從游標換成**拖著那張卡片的左上角**，落點從「找最近的那張卡」換成**算格子**。
+     細節與實測數字在 tests/cxedragrefstest.js，這裡只守住「清單是多欄」與
+     「落點同時看 x 與 y」這兩件 0912/0916 的事。 */
 ok('★★★ 清單自動多欄，且落點判斷同時看 x 與 y',
    /\.cxe-list\{display:grid;grid-template-columns:repeat\(auto-fill,minmax\(280px,1fr\)\);/.test(src)
    && /const moveTo=\(x,y\)=>\{/.test(src)
-   && /const d=\(x-cx\)\*\(x-cx\)\+\(y-cy\)\*\(y-cy\);/.test(src)
-   && /after=\(Math\.abs\(y-cy\) > b2\.height\/2\) \? \(y>cy\) : \(x>cx\);/.test(src));
+   && /const col=Math\.max\(0, Math\.min\(grid\.cols-1, Math\.round\(\(gx-grid\.x0\)\/grid\.pitchX\)\)\);/.test(src)
+   && /const row=Math\.max\(0, Math\.round\(\(gy-grid\.y0\)\/grid\.pitchY\)\);/.test(src));
 ok('★★★ 多欄用到的 startX／offX 有宣告（漏掉會 ReferenceError，拖移一啟動就炸）',
    /const startX=e\.clientX, startY=e\.clientY;/.test(src)
    && /let armed=false, ghost=null, offX=0, offY=0, ended=false;/.test(src)
