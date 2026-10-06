@@ -14452,8 +14452,8 @@ function tbl(s){return TABLE_ALIAS[s]||s;}
 let sb=null;
 // ── 版本號（日期+時間格式：年後兩碼+月+日.時分，例 26620.1058 = 26年6/20 10:58）──
 // 每次改版手動更新這一行即可，畫面與 title 會一起更新
-const APP_VERSION = '261005.2015';
-const APP_VERSION_LABEL = 'v261005.2015';
+const APP_VERSION = '261006.1314';
+const APP_VERSION_LABEL = 'v261006.1314';
 const CLOUD = !!(window.YUGYM_CONFIG && window.YUGYM_CONFIG.url && window.YUGYM_CONFIG.anonKey);
 if(CLOUD){ sb = supabase.createClient(window.YUGYM_CONFIG.url, window.YUGYM_CONFIG.anonKey); }
 
@@ -15535,7 +15535,14 @@ async function invSync(opt){
      櫃檯連 Email／載具都沒地方填。現在脫鉤：欄位只看「已付款」，
      cfg.on 只決定能不能真的開立。 */
   w.style.display=paid?'':'none';
-  if(!paid) return;
+  /* ⚠⚠ 收起發票區的時候一定要把送出鈕放回去（2026-10-06 使用者回報場租：
+     「如果沒有選不開發票　下面的確認租借就無法點選」）——
+     invGateSync 本來就寫著「發票區沒顯示 → 這條把關不介入、還原按鈕」，
+     但它只在這支函式的**最後一行**被呼叫，而這裡直接 return 了：
+     開窗時是「現在收款」→ 發票區出現 → 沒選載具／信箱 → 送出鈕被鎖；
+     接著切到「先卡位」→ 發票區藏起來 → 鈕卻永遠解不開。
+     ⚠ 六個入口（場租、商品、分期、發放…）共用這一支，所以是六個畫面一起修。 */
+  if(!paid){ invGateSync(); return; }
   const cfg=await invCfg();
   const m=document.getElementById('inv-mode');
   if(m) m.innerHTML = !cfg.on ? '<b class="inv-test">發票暫停中・資料先存起來</b>'
@@ -15578,7 +15585,10 @@ async function invSync(opt){
            讀到 null 就走原本的「預設開立」。 */
       const _pv=window._grantPlanCache;
       const _isVipPlan=!!(_pv && (_pv.plan_type==='vip' || /vip/i.test(_pv.name||'')));
-      if(!w.dataset.on) invSetOn(_isVipPlan?0:1);   /* 預設開立；VIP 方案預設不開 */
+      /* O.defaultOff：這條路本來就不開發票，預設就切到「不開發票」
+         （2026-10-06 使用者：「我們場租本來就不開發票」）——
+         ⚠ 只是**預設**，與 VIP 方案同一條：欄位與開關都還在，櫃檯當場要開照樣開得了。 */
+      if(!w.dataset.on) invSetOn((_isVipPlan||O.defaultOff)?0:1);   /* 預設開立；VIP 方案與場租預設不開 */
     } }
   /* 2026-09-14：這位客人有統編就自動切到統編那一格並帶入（使用者：開統編的客人存進會員資料自動帶入）。
      ⚠ 只在櫃檯還沒自己選過模式時才切 —— 否則每次重繪都會蓋掉櫃檯當下的選擇。
@@ -32995,7 +33005,10 @@ function frTicketPick(){
 function frInvSync(){
   const fee=Math.max(0,Number((document.getElementById('fr-fee')||{}).value)||0);
   /* 先卡位＝這次不收錢 → 發票區一起收起來（invIssueForPurchase 對 amt<=0 本來就不開） */
-  try{ invSync({paid:!window._frHold && fee>0}); }catch(_){}
+  /* defaultOff（2026-10-06 使用者：「我們場租本來就不開發票」）——場租預設切到
+     「不開發票」，櫃檯不必每一筆都手動選一次才按得下送出鈕。
+     ⚠ 只是預設：真的有客人要發票，當場把開關打開、欄位照樣在。 */
+  try{ invSync({paid:!window._frHold && fee>0, defaultOff:true}); }catch(_){}
 }
 /* 切換「現在收款／先卡位」（2026-09-22）。
    ⚠ 用票券折抵時不給切 —— 票已經是付過的錢，沒有待收款可言。 */

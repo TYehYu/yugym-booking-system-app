@@ -25,8 +25,10 @@ ok('★★★ 是共用一份，不是各自做一套下拉（舊 id 沒有復�
    否則 invIssueForPurchase 的 `amt<=0 return null` 會讓櫃檯白問一次載具／信箱）。 */
 ok('　　商品銷售（散客買蛋白粉也要能開）', /function msInvSync\(paid\)\{/.test(src));
 ok('　　自主訓練票券', /function fvInvSync\(\)\{/.test(src));
-ok('　　場地租借（散客，不傳 memberId；先卡位時也不開）', /function frInvSync\(\)\{/.test(src)
-   && /try\{ invSync\(\{paid:!window\._frHold && fee>0\}\); \}catch\(_\)\{\}/.test(src));
+/* ⚠ 2026-10-06：場租加 defaultOff（使用者：「我們場租本來就不開發票」）——
+   只是預設切到「不開發票」，欄位與開關都還在，要開照樣開得了。 */
+ok('　　場地租借（散客，不傳 memberId；先卡位時也不開；預設不開發票）', /function frInvSync\(\)\{/.test(src)
+   && /try\{ invSync\(\{paid:!window\._frHold && fee>0, defaultOff:true\}\); \}catch\(_\)\{\}/.test(src));
 ok('　　分期的每一期', /function inxInvSync\(\)\{/.test(src)
    && /try\{ invSync\(\{paid:amt>0, memberId:window\._inxMemberId/.test(src));
 
