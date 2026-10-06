@@ -43,5 +43,15 @@ ok('★★★ 不再是「有折抵才寫」', /coach_id:emp,ticket_id:frTkId,ti
 ok('★★ 沒有為了這件事去改既有資料（helper 看 category，不是改表）',
    /b\.ticket_type_id \|\| \(b\.category==='場租' \? 'tt-venue-rental' : null\)/.test(src));
 
+console.log('\n④ 營收明細的〔租〕章不能只認 source');
+/* 使用者回報（同日）：「這筆款還在　只是前面的圓章［租］不見」——
+   場租票有兩條賣法，從課卡〔儲值〕走一般銷售窗的那張 source 不是 facility_rental，
+   於是同樣是場租、營收明細上一個有章一個沒有，看起來就像「退了卻還在」。 */
+ok('★★★ source 或品項名認得出場租就給章',
+   /else if\(r\.src==='facility_rental' \|\| \/場地租借\|場租\/\.test\(r\.it\|\|''\)\) _chip=/.test(src));
+/* 章只在「沒有約別可標」時才補，不會蓋掉真正的約別（0921 定的） */
+ok('★★ 仍然只在沒有約別章時才補',
+   /let _chip=r\.kind \? saleKindChip\(r\.tk,r\.kind\) : '';\s*\n\s*if\(!_chip\)\{/.test(src));
+
 console.log(`\n${fail?'✗':'✓'} ${pass} 通過 / ${fail} 失敗`);
 process.exit(fail?1:0);
