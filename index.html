@@ -14458,8 +14458,8 @@ function tbl(s){return TABLE_ALIAS[s]||s;}
 let sb=null;
 // ── 版本號（日期+時間格式：年後兩碼+月+日.時分，例 26620.1058 = 26年6/20 10:58）──
 // 每次改版手動更新這一行即可，畫面與 title 會一起更新
-const APP_VERSION = '261006.1608';
-const APP_VERSION_LABEL = 'v261006.1608';
+const APP_VERSION = '261006.1754';
+const APP_VERSION_LABEL = 'v261006.1754';
 const CLOUD = !!(window.YUGYM_CONFIG && window.YUGYM_CONFIG.url && window.YUGYM_CONFIG.anonKey);
 if(CLOUD){ sb = supabase.createClient(window.YUGYM_CONFIG.url, window.YUGYM_CONFIG.anonKey); }
 
@@ -20868,6 +20868,17 @@ function bkIsPtVoucherType(tt){
   return !!tt && (String(tt.id||'').indexOf('tt-discount-')===0 || /折抵/.test(tt.name||''));
 }
 // 把一個 ticket_type_id 解析成它代表的課程類別（給呼叫端用 id 時轉換）
+/* 這筆預約要比對的票種（2026-10-06 使用者：「曹子安剛剛有儲值場租　這邊為什麼不能轉正
+   害我儲了兩次」）——
+   場租建立時只有「當下就用票折抵」才會寫 ticket_type_id，現場收費／先卡位那兩條寫 null。
+   null 比不到任何票（bkTicketTypeOk 要 t.ticket_type_id===type_id），所以課卡永遠判定
+   「沒有票」→ 永遠只給〔儲值〕、不給〔轉正〕；櫃檯買了票還是只看得到儲值，就又買一張。
+   ⚠ 用 category 補回來，不是去改既有資料：線上已經有一批 ticket_type_id 是 null 的場租。
+   ⚠ 只處理場租 —— 其他課種本來就一定有票種（建立時就選了）。 */
+function bkTypeIdOf(b){
+  if(!b) return null;
+  return b.ticket_type_id || (b.category==='場租' ? 'tt-venue-rental' : null);
+}
 function categoryOfTypeId(type_id){
   const tt=(window._ttCache||[]).find(x=>x.id===type_id);
   if(tt && tt.category) return tt.category;
@@ -33103,7 +33114,9 @@ async function _submitFacilityBooking(){
   const inv=(_inv && _inv.mode!=='none') ? 'ecpay' : 'none';
   const frMid=frTkId?((frTkSel.selectedOptions[0]||{}).dataset||{}).mid||null:null;
   const bk={id:uid('BK'),member_id:frMid,member_ids:[],trial_name:name,trial_phone:null,
-    coach_id:emp,ticket_id:frTkId,ticket_type_id:frTkId?'tt-venue-rental':null,category:'場租',format:null,
+    /* 票種一律寫上（2026-10-06）：原本只有「當下就用票折抵」才寫，現場收費與先卡位寫 null，
+       之後就比不到票、課卡給不出〔轉正〕（見 bkTypeIdOf）。 */
+    coach_id:emp,ticket_id:frTkId,ticket_type_id:'tt-venue-rental',category:'場租',format:null,
     pending_contract:hold,   /* 先卡位＝待收款，會自動出現在「今日收款提醒」（顯示「待收款・場租」） */
     /* ⚠ 場地：從課程卡進來的話步驟一已經選好了，要帶過來（2026-09-22）——
        原本一律寫 null，那是「入口只在銷售視窗」時代的寫法（那條路沒有場地欄位）。
@@ -35390,7 +35403,7 @@ async function _doConvertPending(memberId, tkId, mode){
   /* 2026-08-14 吳宜玲 8/21 案例：已教練請假（或已取消）的卡位不能轉正 ——
      照轉會把請假堂綁票扣課、吃掉分期開通額度，後面的堂全部錯位。 */
   if(b.status!=='booked'){ _clr(); showToast('這筆卡位已'+(b.status==='coach_leave'?'教練請假':'非可轉正狀態')+'，不能轉正 —— 請從其他堂操作'); return; }
-  let cand=await listUsableTickets(memberId,b.ticket_type_id,b.date,b.start_time);
+  let cand=await listUsableTickets(memberId,bkTypeIdOf(b),b.date,b.start_time);
   /* 分期票已開通的堂數用完時（2026-08-04 使用者提問：教練們早就用待簽約卡了位，
      這些卡位轉正會怎樣？）—— listUsableTickets 會把「未開通堂數不可預約」的分期票
      整張濾掉，於是連「轉成分期待繳費保留」都做不到，只會跳「沒有可用票券」。
@@ -35402,7 +35415,7 @@ async function _doConvertPending(memberId, tkId, mode){
       const _tks=await dbGetAll('member_tickets');
       const hold=_tks.filter(t=>tkUsableBy(t,memberId) && t.status==='usable'
         && t.installment && typeof t.installment==='object'
-        && bkTicketTypeOk(t, b.ticket_type_id)
+        && bkTicketTypeOk(t, bkTypeIdOf(b))
         && ((Number(t.sessions_total)||0)-(Number(t.unlocked_sessions)||0))>0);
       if(hold.length){ cand=hold; _instOnly=true; }
     }catch(_){}
@@ -35412,7 +35425,7 @@ async function _doConvertPending(memberId, tkId, mode){
        原本一律說「沒有可用票券，請先完成銷售」，櫃檯會去找一張其實已經在手上的票。 */
     let _why='該會員沒有此課程的可用票券，請先完成銷售';
     try{
-      const _tt=((await dbGetAll('ticket_types').catch(()=>[]))||[]).find(x=>x.id===b.ticket_type_id);
+      const _tt=((await dbGetAll('ticket_types').catch(()=>[]))||[]).find(x=>x.id===bkTypeIdOf(b));
       if(_tt && _tt.time_restricted){
         const _dow=parseYmd(b.date).getDay();
         const _bad=!(_dow>=1&&_dow<=5) || (timeToMin(b.start_time)+(Number(b.duration)||60))>1080;
@@ -36180,7 +36193,7 @@ async function expandBkCard(el, id){
     if(staff && !closed && b.status==='booked' && b.member_id){
       {
         let _hasTk=false;
-        try{ _hasTk=((await listUsableTickets(b.member_id, b.ticket_type_id, b.date, b.start_time))||[]).length>0; }catch(_){}
+        try{ _hasTk=((await listUsableTickets(b.member_id, bkTypeIdOf(b), b.date, b.start_time))||[]).length>0; }catch(_){}
         /* 分期保留要走「開通下一期」而不是「儲值」（2026-08-21 使用者回報 8/22 施佩怡）——
            那位客人已經買了方案、錢也收過第一期，再叫櫃檯去開銷售視窗是錯的路。
            bkIsInstHold 靠 note 的「分期待繳費保留」標記分辨（建立保留時寫的）。 */

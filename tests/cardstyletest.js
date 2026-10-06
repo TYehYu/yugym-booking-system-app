@@ -490,8 +490,10 @@ ok('★ 有人沒票 → 儲值（開銷售視窗，會員已預選）',
    && /function ppTopUp\(mid\)\{\s*\n\s*if\(!isDeskLike\(\)\)[\s\S]{0,90}window\._salesPreMember=mid;/.test(src));
 ok('★ 有票沒綁 → 轉正',
    /_hasTk\s*\n?\s*\? evoBtn\('evo-r2','evo-primary',`ashBackArm\('\$\{id\}'\);collapseBkCard\(\);openConvertPending/.test(src));
+/* ⚠ 2026-10-06：票種改走 bkTypeIdOf(b) —— 場租建立時多半沒寫 ticket_type_id，
+   直接讀 b.ticket_type_id 會永遠判定「沒有票」，課卡就只給〔儲值〕（見 frconverttest）。 */
 ok('★ 有無票券用既有的 listUsableTickets 判（與步驟 2 挑票同一支）',
-   /_hasTk=\(\(await listUsableTickets\(b\.member_id, b\.ticket_type_id, b\.date, b\.start_time\)\)\|\|\[\]\)\.length>0;/.test(src));
+   /_hasTk=\(\(await listUsableTickets\(b\.member_id, bkTypeIdOf\(b\), b\.date, b\.start_time\)\)\|\|\[\]\)\.length>0;/.test(src));
 ok('　　綁完就走一般卡，簽到本來就在會員卡上，第三段不必重畫',
    /綁完之後這張卡就走一般路徑，簽到鈕本來就在會員卡上，所以第三段不必在這裡畫/.test(src));
 
