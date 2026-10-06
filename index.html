@@ -14452,8 +14452,8 @@ function tbl(s){return TABLE_ALIAS[s]||s;}
 let sb=null;
 // ── 版本號（日期+時間格式：年後兩碼+月+日.時分，例 26620.1058 = 26年6/20 10:58）──
 // 每次改版手動更新這一行即可，畫面與 title 會一起更新
-const APP_VERSION = '261006.1314';
-const APP_VERSION_LABEL = 'v261006.1314';
+const APP_VERSION = '261006.1321';
+const APP_VERSION_LABEL = 'v261006.1321';
 const CLOUD = !!(window.YUGYM_CONFIG && window.YUGYM_CONFIG.url && window.YUGYM_CONFIG.anonKey);
 if(CLOUD){ sb = supabase.createClient(window.YUGYM_CONFIG.url, window.YUGYM_CONFIG.anonKey); }
 
@@ -15507,6 +15507,15 @@ function revInvChip(r){
    不傳就完全沿用原本的 gt- 行為，既有呼叫（gt-pay 的 onchange、grantGoStep）一行不用改。
    ⚠ 散客（memberId 空）撈不到會員 → 四個 _invMem* 都是空字串 → 不預填，
      櫃檯手動輸入。這正是散客該有的行為，不是錯誤。 */
+/* 預設勾「開立」的類別（2026-10-06 使用者定案：「發票只有教練課程跟團體課程會開立
+   其他都預設不開」，並選了體驗課也要開）——
+     開　：私人教練（教練課／友善教練課）、小班肌力（團體課）、體驗
+     不開：自主訓練、運動按摩、場地租借、商品銷售
+   ⚠ 只是**預設**：欄位與開關都還在，櫃檯當場要開照樣開得了（與 VIP 方案同一條規則）。
+   ⚠ 類別要從**票種**查（course_plans 沒有 category 欄，只有 ticket_type_id）。
+   ⚠ 查不到類別時預設「開立」—— 自訂方案多半是教練課，而漏開比多問一次嚴重
+     （0915 定的：預設不開會變成常態性漏開）。 */
+const INV_DEFAULT_ON_CATS=['私人教練','小班肌力','體驗'];
 async function invSync(opt){
   const w=document.getElementById('inv-wrap'); if(!w) return;
   const O=opt||{};
@@ -15585,10 +15594,18 @@ async function invSync(opt){
            讀到 null 就走原本的「預設開立」。 */
       const _pv=window._grantPlanCache;
       const _isVipPlan=!!(_pv && (_pv.plan_type==='vip' || /vip/i.test(_pv.name||'')));
-      /* O.defaultOff：這條路本來就不開發票，預設就切到「不開發票」
-         （2026-10-06 使用者：「我們場租本來就不開發票」）——
-         ⚠ 只是**預設**，與 VIP 方案同一條：欄位與開關都還在，櫃檯當場要開照樣開得了。 */
-      if(!w.dataset.on) invSetOn((_isVipPlan||O.defaultOff)?0:1);   /* 預設開立；VIP 方案與場租預設不開 */
+      /* 預設開不開（2026-10-06）：
+         ・O.defaultOn 有給就聽呼叫端的（商品／場租票／場租＝false，分期＝true）——
+           ⚠ 這幾條路沒有「方案」概念，而 _grantPlanCache 可能是上一個視窗留下的舊方案，
+             拿它來判斷會看上一筆的臉色，所以一律由呼叫端明講。
+         ・沒給就看方案所屬票種的 category（見 INV_DEFAULT_ON_CATS）。 */
+      const _cat=(()=>{ if(!_pv) return '';
+        const _tid=String(_pv.ticket_type_id||'');
+        const _t=(window._grantTypes||[]).find(x=>x&&x.id===_tid);
+        return String((_t&&_t.category)||''); })();
+      const _defOn=(O.defaultOn!=null) ? !!O.defaultOn
+                 : (!_cat || INV_DEFAULT_ON_CATS.includes(_cat));
+      if(!w.dataset.on) invSetOn((_isVipPlan||!_defOn)?0:1);   /* VIP 方案與非課程類預設不開 */
     } }
   /* 2026-09-14：這位客人有統編就自動切到統編那一格並帶入（使用者：開統編的客人存進會員資料自動帶入）。
      ⚠ 只在櫃檯還沒自己選過模式時才切 —— 否則每次重繪都會蓋掉櫃檯當下的選擇。
@@ -33008,7 +33025,7 @@ function frInvSync(){
   /* defaultOff（2026-10-06 使用者：「我們場租本來就不開發票」）——場租預設切到
      「不開發票」，櫃檯不必每一筆都手動選一次才按得下送出鈕。
      ⚠ 只是預設：真的有客人要發票，當場把開關打開、欄位照樣在。 */
-  try{ invSync({paid:!window._frHold && fee>0, defaultOff:true}); }catch(_){}
+  try{ invSync({paid:!window._frHold && fee>0, defaultOn:false}); }catch(_){}
 }
 /* 切換「現在收款／先卡位」（2026-09-22）。
    ⚠ 用票券折抵時不給切 —— 票已經是付過的錢，沒有待收款可言。 */
@@ -54256,7 +54273,8 @@ function fvSyncTerm(){
 /* 場地租借票券銷售的發票區同步（ms-member 是這張視窗的會員選單）。 */
 function fvInvSync(){
   const mid=(document.getElementById('ms-member')||{}).value||'';
-  try{ invSync({paid:true, memberId:mid, members:(window._msMembers||[])}); }catch(_){}
+  /* 場租票券：預設不開發票（2026-10-06 使用者：只有教練課與團體課會開） */
+  try{ invSync({paid:true, memberId:mid, members:(window._msMembers||[]), defaultOn:false}); }catch(_){}
 }
 async function submitFacilityTicketSale(){
   const mid=(document.getElementById('ms-member')||{}).value;
@@ -54360,7 +54378,8 @@ function msInvSync(paid){
   const _p=(paid==null)
     ? _msCart.reduce((a,r)=>a+(Math.max(1,Number(r.qty)||1))*(Number(r.price)||0),0)>0
     : !!paid;
-  try{ invSync({paid:_p, memberId:mid, members:(window._msMembers||[])}); }catch(_){}
+  /* 商品銷售：預設不開發票（2026-10-06 使用者：只有教練課與團體課會開） */
+  try{ invSync({paid:_p, memberId:mid, members:(window._msMembers||[]), defaultOn:false}); }catch(_){}
 }
 function msCartRender(){
   const host=document.getElementById('ms-cart'); if(!host) return;
@@ -59372,7 +59391,9 @@ function inxFill(n,amt){ const a=document.getElementById('inx-n'), b=document.ge
    ⚠ 會員固定（票券的持有人），所以每次都帶同一個人進去預填。 */
 function inxInvSync(){
   const amt=Math.round(Number((document.getElementById('inx-amt')||{}).value)||0);
-  try{ invSync({paid:amt>0, memberId:window._inxMemberId||'', members:(window._inxMembers||[])}); }catch(_){}
+  /* 分期收的是教練課方案的後續期數 → 預設開立。
+     ⚠ 明講不靠 _grantPlanCache：那是上一個發放視窗留下的，可能是別張票的方案。 */
+  try{ invSync({paid:amt>0, memberId:window._inxMemberId||'', members:(window._inxMembers||[]), defaultOn:true}); }catch(_){}
 }
 /* 防連點（2026-08-01）：同一筆還在跑就跟著等同一個結果，不會扣兩次／建兩筆。 */
 async function confirmInstallNext(ticket_id){ return onceAct('instnext:'+ticket_id, ()=>_confirmInstallNext(ticket_id)); }

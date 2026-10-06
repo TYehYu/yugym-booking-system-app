@@ -236,10 +236,23 @@ console.log('\n④ 開不成不能擋住銷售（票券已經發出去了）');
   /* 2026-09-15：VIP 方案是唯一例外（使用者：超優惠課程不開立），所以這裡從
      invSetOn(1) 變成 invSetOn(_isVipPlan?0:1)。**非 VIP 仍一律預設開立**，
      這條的本意（避免常態性漏開）沒變，只是多了一個具名的例外分支。 */
-  /* ⚠ 2026-10-06 加上 O.defaultOff（場租本來就不開發票，使用者指定）——
-     仍然只有「VIP 方案」與「有傳 defaultOff 的入口」例外，其餘一律預設開立。 */
-  ok('★★ 預設是「開立」，只有 VIP 方案與 defaultOff 的入口例外（預設不開會變成常態性漏開）',
-     /if\(!w\.dataset\.on\) invSetOn\(\(_isVipPlan\|\|O\.defaultOff\)\?0:1\);/.test(src));
+  /* ⚠ 2026-10-06 定案（使用者：「發票只有教練課程跟團體課程會開立　其他都預設不開」，
+     並選了體驗課也要開）——預設開立的類別收斂成白名單，其餘預設不開。
+     ⚠ 查不到類別仍預設開立：自訂方案多半是教練課，漏開比多問一次嚴重（0915 那條）。 */
+  ok('★★ 預設開立限白名單：教練課／團體課／體驗；VIP 方案與非課程類預設不開',
+     /const INV_DEFAULT_ON_CATS=\['私人教練','小班肌力','體驗'\];/.test(src)
+     && /const _defOn=\(O\.defaultOn!=null\) \? !!O\.defaultOn\s*\n\s*: \(!_cat \|\| INV_DEFAULT_ON_CATS\.includes\(_cat\)\);/.test(src)
+     && /if\(!w\.dataset\.on\) invSetOn\(\(_isVipPlan\|\|!_defOn\)\?0:1\);/.test(src));
+  /* 類別要從票種查：course_plans 沒有 category 欄，只有 ticket_type_id */
+  ok('★★★ 類別從票種（_grantTypes）查，不是直接讀方案',
+     /const _tid=String\(_pv\.ticket_type_id\|\|''\);/.test(src)
+     && /\(window\._grantTypes\|\|\[\]\)\.find\(x=>x&&x\.id===_tid\)/.test(src));
+  /* ⚠ 沒有「方案」概念的四條路一律自己明講，不能靠 _grantPlanCache（那是上一個視窗留下的） */
+  ok('★★★ 商品／場租票／場租預設不開、分期預設開（呼叫端明講）',
+     /invSync\(\{paid:_p, memberId:mid, members:\(window\._msMembers\|\|\[\]\), defaultOn:false\}\)/.test(src)
+     && /invSync\(\{paid:true, memberId:mid, members:\(window\._msMembers\|\|\[\]\), defaultOn:false\}\)/.test(src)
+     && /invSync\(\{paid:!window\._frHold && fee>0, defaultOn:false\}\)/.test(src)
+     && /members:\(window\._inxMembers\|\|\[\]\), defaultOn:true\}\)/.test(src));
 }
 
 console.log('\n④-2 每一個收款入口都要能開發票（2026-09-15）');
@@ -268,7 +281,7 @@ console.log('\n④-2 每一個收款入口都要能開發票（2026-09-15）');
   /* 2026-09-22：場租多了「先卡位、之後再收」，所以 paid 還要看 _frHold
      （先卡位＝這次不收錢 → 發票區一起收起來）。不傳 memberId 這件事沒變。 */
   ok('★★★ 場租是散客：invSync 不傳 memberId、開立時 mem 傳 null',
-     /try\{ invSync\(\{paid:!window\._frHold && fee>0, defaultOff:true\}\); \}catch\(_\)\{\}/.test(src)
+     /try\{ invSync\(\{paid:!window\._frHold && fee>0, defaultOn:false\}\); \}catch\(_\)\{\}/.test(src)
      && !/invSync\(\{paid:[^}]*memberId[^}]*\}\);[\s\S]{0,40}場租/.test(src)
      && /await invIssueForPurchase\(_fRow, null, _inv,/.test(src));
   ok('★★ 分期：每一期各開各的', /await invIssueForPurchase\(_pRow, _pm, _inv,/.test(src)
@@ -321,7 +334,7 @@ console.log('\n④-3 流程自我檢查抓到的三個洞（2026-09-15）');
      /if\(document\.getElementById\('inv-wrap'\)\) msInvSync\(sum>0\);/.test(src));
   ok('★★★ 金額 0 就把發票區收起來 —— 場租（含切換票券折抵、先卡位）',
      /function frInvSync\(\)\{/.test(src)
-     && /try\{ invSync\(\{paid:!window\._frHold && fee>0, defaultOff:true\}\); \}catch\(_\)\{\}/.test(src)
+     && /try\{ invSync\(\{paid:!window\._frHold && fee>0, defaultOn:false\}\); \}catch\(_\)\{\}/.test(src)
      && /id="fr-fee" value="200" min="0" oninput="frInvSync\(\)"/.test(src)
      && /else if\(fee\)\{ fee\.value=200; \}\s*\n\s*frSyncMode\(\);/.test(src));
   ok('★★★ 金額 0 就把發票區收起來 —— 分期（含「下一期／剩餘全繳」快捷）',
@@ -603,8 +616,8 @@ console.log('\n⑤-2 VIP 方案預設不開發票（2026-09-15）');
   ok('★★★ 看方案（plan_type==="vip"）不是看會員等級',
      /const _isVipPlan=!!\(_pv && \(_pv\.plan_type==='vip'/.test(F)
      && !/_isVipPlan=[^;]*\blevel\b/.test(F));
-  ok('★★★ VIP 方案預設不勾開立，其餘維持預設開立（場租另外用 defaultOff）',
-     /invSetOn\(\(_isVipPlan\|\|O\.defaultOff\)\?0:1\)/.test(F));
+  ok('★★★ VIP 方案預設不勾開立（與非課程類同一條出口）',
+     /invSetOn\(\(_isVipPlan\|\|!_defOn\)\?0:1\)/.test(F));
   ok('★★ 讀不到方案時走原本的「預設開立」（商品／場租／分期沒有方案概念）',
      /const _pv=window\._grantPlanCache;/.test(F)
      && /!!\(_pv && \(_pv\.plan_type==='vip'/.test(F));
