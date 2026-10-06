@@ -14452,8 +14452,8 @@ function tbl(s){return TABLE_ALIAS[s]||s;}
 let sb=null;
 // ── 版本號（日期+時間格式：年後兩碼+月+日.時分，例 26620.1058 = 26年6/20 10:58）──
 // 每次改版手動更新這一行即可，畫面與 title 會一起更新
-const APP_VERSION = '261006.1321';
-const APP_VERSION_LABEL = 'v261006.1321';
+const APP_VERSION = '261006.1522';
+const APP_VERSION_LABEL = 'v261006.1522';
 const CLOUD = !!(window.YUGYM_CONFIG && window.YUGYM_CONFIG.url && window.YUGYM_CONFIG.anonKey);
 if(CLOUD){ sb = supabase.createClient(window.YUGYM_CONFIG.url, window.YUGYM_CONFIG.anonKey); }
 
@@ -32943,12 +32943,20 @@ async function bkStep2Facility(pDate,pTime){
   const date=pDate||document.getElementById('bk-date').value;
   const time=(pTime||document.getElementById('bk-time').value).slice(0,5);
   if(!date||!time){showToast('請選擇日期與時間');return;}
+  /* 經手員工要沿用步驟 1 挑的那位（2026-10-06 使用者：「為什麼選了ANN 結果變RANDY」）——
+     原本下面的 opts 一律把 SESSION.id 標成 selected，步驟 1 選的教練就被悄悄換成操作的人。
+     這一欄不是備註：場租的 coach_id ＝ 誰的時段被佔用，換人等於排到別人的班表上。
+     （正式庫 10/09 13:00「子安阿嬤」那筆就是：櫃檯選了 Ann，存進去是 Randy。）
+     ⚠ 一定要在 showModal 之前讀 —— 那一行會把步驟 1 的 DOM 整個換掉。
+     ⚠ 從銷售視窗進來（有 pDate）沒有步驟 1，維持預設自己。
+     ⚠ 只改**預設值**，這一欄照樣可以當場再選別人。 */
+  const _defEmp=(pDate ? '' : (((document.getElementById('bk-coach')||{}).value)||'')) || SESSION.id;
   Object.assign(_bkWizard,{type_id:'__facility',t:BK_FACILITY_TYPE,coach_id:null,date,time});
   if(!pDate) window._facilityFromSales=false;   // 從預約視窗來的，返回鍵回步驟 1
   const _backFn=window._facilityFromSales?'slBackToStep1()':'openBookingModalBack()';
   let emps=(window._bkCoaches||[]);
   if(!emps.length){ try{ emps=(await dbGetAll('coaches')).filter(c=>c.status!=='inactive'); }catch(_){ } }
-  const opts=emps.map(c=>`<option value="${c.id}" ${c.id===SESSION.id?'selected':''}>${coachDisp(c)}</option>`).join('');
+  const opts=emps.map(c=>`<option value="${c.id}" ${c.id===_defEmp?'selected':''}>${coachDisp(c)}</option>`).join('');
   showModal(`<div class="modal-title">場地租借${window._facilityFromSales?`（${String(date).replace(/-/g,'/')} ${time}）`:' · 步驟 2 / 2'}</div>
     ${bkSummaryCard(BK_FACILITY_TYPE,date,time,'')}
     ${/* ⚠ 效期天數不要寫死（2026-09-22）—— 原本寫「票券效期 7 天」，那是當初唯一一種
