@@ -8253,6 +8253,12 @@ body.memh2-shell .bottom-nav .bn-lb{color:inherit;}
   padding:11px 6px;font-family:inherit;font-size:14px;font-weight:700;cursor:pointer;white-space:nowrap;}
 .qs-type.on{background:var(--green);border-color:var(--green);color:#fff;}
 .qs-tnote{margin:-4px 0 10px;font-size:12px;color:var(--gold-d,#8a5e28);line-height:1.6;}
+/* 唯讀的一行（2026-10-06）：長得像輸入框、但不是輸入框 —— 用在「上一步已經選過、
+   這裡只是讓你看到」的欄位（目前是場租步驟 2 的教練）。
+   ⚠ 底色用 --card2 與可輸入的白底分開，才不會有人去點它。 */
+.form-ro{padding:10px 12px;border:1px solid var(--bd);border-radius:9px;background:var(--card2);
+  font-size:13.5px;color:var(--text);display:flex;align-items:center;justify-content:space-between;gap:10px;}
+.form-ro i{font-style:normal;font-size:11.5px;color:var(--t3);text-align:right;}
 .qs-head{margin-bottom:12px;}
 .qs-head-t{font-size:13px;color:var(--t2);line-height:1.6;}
 .qs-head-t b{color:var(--text);font-family:var(--num);font-size:14px;}
@@ -14452,8 +14458,8 @@ function tbl(s){return TABLE_ALIAS[s]||s;}
 let sb=null;
 // ── 版本號（日期+時間格式：年後兩碼+月+日.時分，例 26620.1058 = 26年6/20 10:58）──
 // 每次改版手動更新這一行即可，畫面與 title 會一起更新
-const APP_VERSION = '261006.1522';
-const APP_VERSION_LABEL = 'v261006.1522';
+const APP_VERSION = '261006.1608';
+const APP_VERSION_LABEL = 'v261006.1608';
 const CLOUD = !!(window.YUGYM_CONFIG && window.YUGYM_CONFIG.url && window.YUGYM_CONFIG.anonKey);
 if(CLOUD){ sb = supabase.createClient(window.YUGYM_CONFIG.url, window.YUGYM_CONFIG.anonKey); }
 
@@ -32950,13 +32956,25 @@ async function bkStep2Facility(pDate,pTime){
      ⚠ 一定要在 showModal 之前讀 —— 那一行會把步驟 1 的 DOM 整個換掉。
      ⚠ 從銷售視窗進來（有 pDate）沒有步驟 1，維持預設自己。
      ⚠ 只改**預設值**，這一欄照樣可以當場再選別人。 */
-  const _defEmp=(pDate ? '' : (((document.getElementById('bk-coach')||{}).value)||'')) || SESSION.id;
+  const _defEmp=(pDate ? '' : (((document.getElementById('bk-coach')||{}).value)||'')) || SESSION.id;   /* 下面的 _step1Emp 同源 */
   Object.assign(_bkWizard,{type_id:'__facility',t:BK_FACILITY_TYPE,coach_id:null,date,time});
   if(!pDate) window._facilityFromSales=false;   // 從預約視窗來的，返回鍵回步驟 1
   const _backFn=window._facilityFromSales?'slBackToStep1()':'openBookingModalBack()';
   let emps=(window._bkCoaches||[]);
   if(!emps.length){ try{ emps=(await dbGetAll('coaches')).filter(c=>c.status!=='inactive'); }catch(_){ } }
   const opts=emps.map(c=>`<option value="${c.id}" ${c.id===_defEmp?'selected':''}>${coachDisp(c)}</option>`).join('');
+  /* 步驟 1 已經選過教練就不要再問一次（2026-10-06 使用者：「但前一個步驟已經選了教練不是嗎」）——
+     同一件事問兩次，第二次還預設成別人，就是上面那個「選了 Ann 變成 Randy」的由來。
+     ⚠ 不是整欄拿掉：還是要讓人看到**這筆掛在誰名下**（它決定佔用誰的時段），
+       所以畫成唯讀的一行，要換人就回上一步（0823「不能用就寫原因，別藏起來」）。
+     ⚠ 欄位名改叫「教練」—— 叫「經手員工」會被當成「誰辦的手續」（使用者問了才發現）。
+     ⚠ 從銷售視窗進來（有 pDate）沒有步驟 1，照舊給下拉選。 */
+  const _step1Emp=(pDate ? '' : (((document.getElementById('bk-coach')||{}).value)||''));
+  const _empRow = _step1Emp
+    ? `<div class="form-row"><label>教練</label>
+        <div class="form-ro">${escH(coachDisp((emps.find(c=>c&&c.id===_step1Emp))||{name:_step1Emp}))}<i>上一步選的，要換人請按「← 上一步」</i></div>
+        <input type="hidden" id="fr-emp" value="${escH(_step1Emp)}"></div>`
+    : `<div class="form-row"><label>教練</label><select id="fr-emp">${opts||`<option value="${SESSION.id}">${SESSION.name||'我'}</option>`}</select></div>`;
   showModal(`<div class="modal-title">場地租借${window._facilityFromSales?`（${String(date).replace(/-/g,'/')} ${time}）`:' · 步驟 2 / 2'}</div>
     ${bkSummaryCard(BK_FACILITY_TYPE,date,time,'')}
     ${/* ⚠ 效期天數不要寫死（2026-09-22）—— 原本寫「票券效期 7 天」，那是當初唯一一種
@@ -32966,7 +32984,7 @@ async function bkStep2Facility(pDate,pTime){
     <div style="font-size:11.5px;color:var(--t2);margin-bottom:12px;background:var(--card2);padding:10px 12px;border-radius:9px;">現場收費、先卡位之後再收，或用會員的場租票券折抵（效期以票券上標示為準）。</div>
     <div class="form-row"><label>場租票折抵（選填）</label><select id="fr-ticket" onchange="frTicketPick()"><option value="">不使用票券（現場收費）</option>${await frVenueTicketOpts()}</select></div>
     <div class="form-row"><label>使用人姓名（必填）</label><input id="fr-name" placeholder="例：王媽媽"></div>
-    <div class="form-row"><label>經手員工</label><select id="fr-emp">${opts||`<option value="${SESSION.id}">${SESSION.name||'我'}</option>`}</select></div>
+    ${_empRow}
     ${/* ══ 先卡位、之後再收（2026-09-22 使用者指示）══
          場租原本一律「建立當下就收錢」，但教練幫自己的會員身分卡位時常常是
          「先把時段佔住、錢之後再收」（使用者：「就做先卡位之後再收的選項」）。

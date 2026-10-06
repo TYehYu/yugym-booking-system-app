@@ -25,6 +25,25 @@ ok('★★★ 在 showModal 之前就讀好（之後步驟 1 的 DOM 已經不�
 /* 從銷售視窗進來沒有步驟 1（pDate 有值），維持預設自己 */
 ok('★★ 銷售視窗那條路（有 pDate）維持預設自己', /pDate \? '' :/.test(FN));
 
+console.log('\n①b 步驟 1 選過就不再問第二次');
+/* 使用者：「但前一個步驟已經選了教練不是嗎」—— 同一件事問兩次、第二次還預設成別人，
+   就是「選了 Ann 變成 Randy」的由來。選過就畫成唯讀的一行，要換人回上一步。 */
+ok('★★★ 選過 → 唯讀一行＋hidden input（值照樣叫 fr-emp）',
+   /const _empRow = _step1Emp/.test(FN)
+   && /<div class="form-ro">\$\{escH\(coachDisp\(/.test(FN)
+   && /<input type="hidden" id="fr-emp" value="\$\{escH\(_step1Emp\)\}">/.test(FN));
+ok('★★★ 沒選過（銷售視窗那條路）→ 照舊給下拉',
+   /: `<div class="form-row"><label>教練<\/label><select id="fr-emp">\$\{opts/.test(FN));
+/* 0823「不能用就寫原因，別藏起來」：不是整欄拿掉，要看得到掛在誰名下 */
+ok('★★ 唯讀那一行有寫怎麼改（回上一步）', /上一步選的，要換人請按「← 上一步」/.test(FN));
+/* ⚠ 反面斷言要盯**畫面上的那個 label**，不能整段比對 ——
+   函式註解裡本來就寫著「經手員工」四個字（說明這次為什麼改名）。 */
+ok('★★★ 欄位名改叫「教練」，不再叫「經手員工」',
+   (FN.match(/<label>教練<\/label>/g)||[]).length===2
+   && !/<label>經手員工<\/label>/.test(src));
+ok('★★ 唯讀那一行的樣式有定義（底色與可輸入的白底分開）',
+   /\.form-ro\{padding:10px 12px;border:1px solid var\(--bd\);border-radius:9px;background:var\(--card2\);/.test(src));
+
 console.log('\n② 送出時仍以畫面上選的為準');
 ok('★★★ 送出讀 fr-emp 的當下值（可以當場改別人）',
    /const emp=document\.getElementById\('fr-emp'\)\.value\|\|SESSION\.id;/.test(src));
