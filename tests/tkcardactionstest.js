@@ -88,13 +88,21 @@ console.log('\n③ 共享搬到右上角、剩餘堂數左邊');
      n/n 先、共享後，畫出來共享在 n/n 左邊，＝ 0830 定的位置）。卡頭 49→24px。
      markup 的先後沒變，所以下面那條順序斷言照舊有效。 */
   ok('★★★ 共享那一格與 n/n 同一列（共享在左、n/n 在右）',
-     /<span class="tkc-right">\s*\n\s*<span class="bkd-tkcard-prog"><b class="num">\$\{used\}<\/b> \/ \$\{total\}<\/span>[\s\S]{0,700}?<span class="bkd-tkcard-share">\$\{shrWm\|\|''\}\$\{shrTag\|\|''\}/.test(src)
+     /<span class="tkc-right">\s*\n\s*<span class="bkd-tkcard-prog"><b class="num">\$\{used\}<\/b> \/ \$\{total\}<\/span>[\s\S]{0,700}?<span class="bkd-tkcard-share">\$\{shrTag\|\|''\}/.test(src)
      && /\.tkc-right\{display:flex;flex-direction:row-reverse;align-items:center;/.test(src));
-  ok('★★★ 共享浮水印改成排版流內的 .tkwm2（不再絕對定位在卡片右側垂直置中）',
-     /<span class="tkwm2" title="共享自 /.test(src)
-     && /\.tkwm2\{pointer-events:none;user-select:none;/.test(src)
-     /* .tkwm 還有兩處在用（會員端的「同行」），不可以一起改掉 */
-     && /\.tkwm\{position:absolute;right:12px;top:50%;/.test(src));
+  /* ⚠ 2026-10-07 使用者：「共享的浮水印改到靠右置中」——浮水印搬回絕對定位的 .tkwm，
+     而且要當**卡片的直接子層**才會對整張卡垂直置中（在卡頭裡只會對那一行置中）。
+     1003→1004 它曾經住在右欄（.tkwm2），1004 右欄收成一列之後就擠在 4/4 左邊。
+     實測（桌機與 375 手機）：垂直偏離 0、右緣距卡片 13px、與 4/4 不重疊，
+     手機上「購買・效期」那行的文字右緣離它還有 42px。 */
+  ok('★★★ 共享浮水印是絕對定位的 .tkwm，掛在卡片第一層（不在卡頭裡）',
+     /<span class="tkwm" title="共享自 /.test(src)
+     && !/<span class="tkwm2" title="共享自 /.test(src)
+     && /\.tkwm\{position:absolute;right:12px;top:50%;transform:translateY\(-50%\);/.test(src)
+     && /bkd-tkcard-shared':''\}" style="margin-bottom:10px;">\s*\n\s*\$\{shrWm\|\|''\}/.test(src));
+  ok('★★ 卡片本身備好了底層（relative ＋ 其他元素墊到 z-index:1）',
+     /\.bkd-tkcard-shared\{position:relative;overflow:hidden;\}/.test(src)
+     && /\.bkd-tkcard-shared>\*:not\(\.tkwm\)\{position:relative;z-index:1;\}/.test(src));
   ok('★★ 名稱列不再重複掛共享標（同一件事不講兩次）',
      !/\$\{_m2\?stTag:''\}\$\{shrTag\}/.test(src));
   ok('★★ 動作列裡的「設為共享」已移走',

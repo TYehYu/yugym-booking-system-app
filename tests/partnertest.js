@@ -130,8 +130,10 @@ console.log('②-2 會員檔案頁那張卡也要有（同一件事有好幾張�
 /* ⚠ 2026-10-03 搬家（使用者：「設為共享的按鈕　可以改到右邊 n/n 的下面
    共享的浮水印也在這」）——共享那一格移進右欄 .tkc-right，排在 n/n 底下。
    同一格三選一：浮水印（別人分享給我）／共享：名單（我分享出去）／設為共享（還沒分享）。 */
+  /* ⚠ 2026-10-07：浮水印（shrWm）搬去卡片第一層做「靠右置中」（使用者指定），
+     所以這一格只剩「共享：名單」與〔設為共享〕。同行那一組仍然不在這裡。 */
   ok('★★★ 共享那一組沒被動到（只有位置換了，內容不變）',
-     /<span class="bkd-tkcard-share">\$\{shrWm\|\|''\}\$\{shrTag\|\|''\}\$\{\s*\n\s*\(_canShare&&!_shN\)\?`<button/.test(src)
+     /<span class="bkd-tkcard-share">\$\{shrTag\|\|''\}\$\{\s*\n\s*\(_canShare&&!_shN\)\?`<button/.test(src)
      && !/<span class="bkd-tkcard-share">[\s\S]{0,120}ptTag/.test(src));
   ok('★★ 章與按鈕放在同一處（設定前後位置不會跳）',
      src.indexOf('${ptTag||\'\'}${') < src.indexOf('openTicketPartner(\'${t.id}\',\'${PP.id}\')">設定同行'));
