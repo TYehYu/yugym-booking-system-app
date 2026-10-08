@@ -35,7 +35,9 @@ function makeStore(rows){
 function load(store, o){
   o=o||{};
   /* 0823：cacheHydrate 會呼叫 dbWhy() 並寫 window._dbHydrated（純量測）——沙箱補上。 */
-  const env={ _dbCache:new Map(), IDB_MAX_AGE:86400000, APP_VERSION:(o.ver||'TEST.1'),
+  /* ⚠ 2026-10-08：清不清快取改看 CACHE_EPOCH，不再看 APP_VERSION
+     （綁 APP_VERSION 等於每推一次版全店冷啟動，1008 使用者回報開場 4.2 秒）。 */
+  const env={ _dbCache:new Map(), IDB_MAX_AGE:86400000, CACHE_EPOCH:(o.ver||'TEST.1'),
     idbTx:async()=>(o.broken?null:store), dbWhy:()=>{}, window:{} };
   const code=['let _idbUid=null,_idbSaveT=null; const _idbDirty=new Set();',
     'async '+grabFn('cacheHydrate'), 'async '+grabFn('cacheWipe'),
@@ -95,16 +97,30 @@ console.log('\n⑤⑦ 登出清空／IndexedDB 出錯安靜略過');
   ok('★ 開不了 IndexedDB（無痕/容量不足）→ 回 0，不炸也不留下半套', n===0 && c2.size===0);
 }
 
-console.log('\n⑧ 換版本就清掉一次舊快取（2026-10-03）');
+console.log('\n⑧-0 紀元不綁版本號（1008 使用者回報：開場 4.2 秒、還原 0 張）');
+{
+  /* 綁 APP_VERSION 的話，改個版面推上去也會把全店的快取清掉。
+     紀元只在「讀取／快取規則」改變時才手動跳號。 */
+  ok('★★★ cacheHydrate 比對 CACHE_EPOCH，不是 APP_VERSION',
+     /if\(!_verRow \|\| _verRow\.ver!==CACHE_EPOCH\)\{/.test(src)
+     && !/_verRow\.ver!==APP_VERSION/.test(src));
+  ok('★★★ 寫回去的戳記也是紀元',
+     /table:'__ver',ver:CACHE_EPOCH,savedAt:Date\.now\(\)/.test(src));
+  ok('★★ 紀元是獨立常數，而且註解寫明什麼時候才可以跳號',
+     /const CACHE_EPOCH='[^']+';/.test(src)
+     && /只有改到\*\*讀取／快取規則\*\*/.test(src));
+}
+
+console.log('\n⑧ 快取紀元不同就清掉一次舊快取（2026-10-03；1008 改看 CACHE_EPOCH）');
 {
   /* 升級：存檔還是舊版本號 → 一張都不載，而且本機那份直接清掉 */
   const st=makeStore([vrow('U1','OLD.0'),row('U1','bookings'),row('U1','members')]);
   const {api,cache}=load(st,{ver:'NEW.9'});
   const n=await api.cacheHydrate('U1');
-  ok('★★★ 版本對不上 → 一張都不載（漏列時期的快取不會被沿用）', n===0 && cache.size===0);
+  ok('★★★ 紀元對不上 → 一張都不載（漏列時期的快取不會被沿用）', n===0 && cache.size===0);
   ok('★★★ 而且本機那份被清掉（不是只是這次不用）',
      ![...st.map.values()].some(r=>r&&r.table==='bookings'));
-  ok('★★★ 新版本號留下來（下一次開場就正常載了，不會每次都清）',
+  ok('★★★ 新紀元留下來（下一次開場就正常載了，不會每次都清）',
      [...st.map.values()].some(r=>r&&r.table==='__ver'&&r.ver==='NEW.9'));
 }
 {
@@ -113,7 +129,7 @@ console.log('\n⑧ 換版本就清掉一次舊快取（2026-10-03）');
   const {api}=load(st,{ver:'NEW.9'});
   const n=await api.cacheHydrate('U1');
   ok('★★ 全新裝置（沒有任何存檔）→ 回 0，不爆', n===0);
-  ok('★★ 並記下版本號', [...st.map.values()].some(r=>r&&r.table==='__ver'&&r.ver==='NEW.9'));
+  ok('★★ 並記下紀元', [...st.map.values()].some(r=>r&&r.table==='__ver'&&r.ver==='NEW.9'));
 }
 {
   /* 同版本重開：照常載回來（⑧不可以把每次開場都變成整表重抓） */

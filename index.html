@@ -14458,8 +14458,8 @@ function tbl(s){return TABLE_ALIAS[s]||s;}
 let sb=null;
 // ── 版本號（日期+時間格式：年後兩碼+月+日.時分，例 26620.1058 = 26年6/20 10:58）──
 // 每次改版手動更新這一行即可，畫面與 title 會一起更新
-const APP_VERSION = '261008.2144';
-const APP_VERSION_LABEL = 'v261008.2144';
+const APP_VERSION = '261008.2156';
+const APP_VERSION_LABEL = 'v261008.2156';
 const CLOUD = !!(window.YUGYM_CONFIG && window.YUGYM_CONFIG.url && window.YUGYM_CONFIG.anonKey);
 if(CLOUD){ sb = supabase.createClient(window.YUGYM_CONFIG.url, window.YUGYM_CONFIG.anonKey); }
 
@@ -14855,6 +14855,10 @@ function tableSigs(){
    ・超過 1 天的存檔直接丟掉（水位可能已過日誌保留期，補不回來）。
    ・IndexedDB 出任何錯（無痕模式、容量不足）一律安靜略過，退回原本的行為。 */
 const IDB_NAME='yugym-cache', IDB_STORE='tables', IDB_MAX_AGE=86400000;
+/* 快取紀元（2026-10-08）：跨工作階段快取「要不要整份丟掉」看這個字串，不看 APP_VERSION。
+   ⚠ 只有改到**讀取／快取規則**（分頁、LEAN_DROP、簽章、增量補資料）時才往上跳一號；
+     平常改版面或業務邏輯一律不要動 —— 動一次全店就冷啟動一次（1008 的 4.2 秒就是這樣來的）。 */
+const CACHE_EPOCH='2026-10-02.pageorder';
 let _idbP=null, _idbUid=null, _idbSaveT=null;
 const _idbDirty=new Set();
 function idbOpen(){
@@ -14923,13 +14927,23 @@ async function cacheHydrate(uid){
        舊快取是用舊規則抓的，不要了」。代價是升級後第一次開場多抓一次表，
        一個版本只發生一次。
        ⚠ 版本戳記存在 IndexedDB 裡（跟快取同生共死），不是 localStorage ——
-         使用者清掉快取時兩者要一起消失，否則會變成「清了卻還記得清過」。 */
+         使用者清掉快取時兩者要一起消失，否則會變成「清了卻還記得清過」。
+
+       ⚠⚠ 2026-10-08 改成比對 CACHE_EPOCH，不再比 APP_VERSION ——
+         原本綁 APP_VERSION 等於「**每推一次版，所有人的快取全部清空**」：
+         使用者 1008 回報開場 4.2 秒、「開場還原 0 張」，purchases 277KB／
+         ticket_grant_requests 107KB／contracts 47KB 全部冷抓，而那天推了五個版本。
+         0930 那批漏列快取早就被清掉了（這條 1002 上線，之後每個人都開過很多次），
+         而真正的根因（分頁沒有 ORDER BY）也修好了、有 tests/pageordertest.js 守著。
+         ⚠ 之後**只有改到「讀取／快取規則」時才手動把 CACHE_EPOCH 往上跳**
+           （例如又動到分頁、LEAN_DROP、簽章或增量補資料的邏輯）。
+           改版面、改業務邏輯都不要動它 —— 動了就是讓全店再冷啟動一次。 */
     const _verRow=rows.find(r=>r && r.uid===uid && r.table==='__ver');
-    if(!_verRow || _verRow.ver!==APP_VERSION){
-      dbWhy('（開場）','換版清快取', ((_verRow&&_verRow.ver)||'(無)')+' → '+APP_VERSION);
+    if(!_verRow || _verRow.ver!==CACHE_EPOCH){
+      dbWhy('（開場）','快取紀元不同，清一次', ((_verRow&&_verRow.ver)||'(無)')+' → '+CACHE_EPOCH);
       try{ await cacheWipe(); }catch(_){}
       _idbUid=uid;
-      try{ const w=await idbTx('readwrite'); if(w) w.put({uid:uid,table:'__ver',ver:APP_VERSION,savedAt:Date.now()}, uid+'|__ver'); }catch(_){}
+      try{ const w=await idbTx('readwrite'); if(w) w.put({uid:uid,table:'__ver',ver:CACHE_EPOCH,savedAt:Date.now()}, uid+'|__ver'); }catch(_){}
       try{ window._dbHydrated=[]; }catch(_){}
       return 0;
     }
