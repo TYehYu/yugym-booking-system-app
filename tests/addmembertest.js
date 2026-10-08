@@ -32,7 +32,10 @@ const lib=new Function('window','bkTicketTypeOk','ticketCategoryOf','categoryOfT
    g('function tkUnlockedLeft(','\n}'),
    g('function tkOverBooked(','\n}'), g('function tkTimeOk(','\n}'),
    g('function ticketMatchesCategory(','\n}'),
-   g('function bkMemTicketInfo(','\n}'), g('function tkFitsBooking(','\n}')].join('\n')
+   g('function bkMemTicketInfo(','\n}'),
+   /* ⚠ 2026-10-08：tkFitsBooking 的種類判斷抽成 tkTypeOkFor（調課那支也要用同一份），
+        所以這裡要連它一起抽，不然 tkFitsBooking 會 ReferenceError。 */
+   g('function tkFitsBooking(','\n}'), g('function tkTypeOkFor(','\n}')].join('\n')
   +'\nreturn {bkMemTicketInfo,tkFitsBooking,tkUnlockedLeft};')(
     {_ttCache:[{id:'TT-PT',time_restricted:false},{id:'TT-FR',time_restricted:true}]},
     (t,typeId)=>!typeId || t.ticket_type_id===typeId,

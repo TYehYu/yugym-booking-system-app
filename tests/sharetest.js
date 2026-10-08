@@ -22,6 +22,8 @@ const mkUsable=new Function('all','member_id','type_id','bookDate','bookTime','w
   'ticketCategoryOf','bkTicketTypeOk','tkUsableBy','tkTimeOk',
   grabFn('tkUnlockedLeft')+'\nconst categoryOfTypeId=()=>wantCat;\n'
   +grabFn('tkOverBooked')+'\n'+grabFn('tkFitsBooking')   // 2026-07-30：多了超約防線
+  /* ⚠ 2026-10-08：種類判斷抽成 tkTypeOkFor（與調課共用），要一起帶進來 */
+  +'\n'+grabFn('tkTypeOkFor')
   +'\nreturn all.filter(t=>tkFitsBooking(t,member_id,type_id,bookDate,bookTime));');
 
 let pass=0,fail=0;

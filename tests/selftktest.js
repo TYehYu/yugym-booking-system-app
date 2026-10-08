@@ -98,8 +98,10 @@ ok('　　步驟 2 先確保票種快取（tkFitsBooking 要靠它判類別）',
   ];
   const grab=m=>{const i=src.indexOf(m);return src.slice(i,src.indexOf('\n}',i)+2);};
   // 2026-07-30：tkFitsBooking 多了超約防線 tkOverBooked（不傳計數時不生效）
+  /* ⚠ 2026-10-08：tkFitsBooking 的種類判斷抽成 tkTypeOkFor（調課那支共用同一份），
+     要一起抽進來，否則 tkFitsBooking 會 ReferenceError。 */
   const body=['function tkUsableBy','function ticketCategoryOf','function tkTimeOk','function tkUnlockedLeft',
-              'function tkOverBooked','function tkFitsBooking']
+              'function tkOverBooked','function tkFitsBooking','function tkTypeOkFor']
     .map(grab).join('\n');
   const fits=new Function('window','timeToMin','parseYmd','categoryOfTypeId','tkSharedIds','bkTicketTypeOk','TK_TIME_END_MIN',
     body+'\nreturn tkFitsBooking;')(

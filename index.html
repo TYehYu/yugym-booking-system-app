@@ -14458,8 +14458,8 @@ function tbl(s){return TABLE_ALIAS[s]||s;}
 let sb=null;
 // ── 版本號（日期+時間格式：年後兩碼+月+日.時分，例 26620.1058 = 26年6/20 10:58）──
 // 每次改版手動更新這一行即可，畫面與 title 會一起更新
-const APP_VERSION = '261008.1937';
-const APP_VERSION_LABEL = 'v261008.1937';
+const APP_VERSION = '261008.2144';
+const APP_VERSION_LABEL = 'v261008.2144';
 const CLOUD = !!(window.YUGYM_CONFIG && window.YUGYM_CONFIG.url && window.YUGYM_CONFIG.anonKey);
 if(CLOUD){ sb = supabase.createClient(window.YUGYM_CONFIG.url, window.YUGYM_CONFIG.anonKey); }
 
@@ -21092,6 +21092,14 @@ function tkFitsBooking(t, member_id, type_id, bookDate, bookTime, bkCntByTicket)
      錨點會由 activateTicketIfNeeded 往前挪，不該整張被擋成「可用 0 堂」。 */
   if(bookDate && t.start_date && String(t.start_date).slice(0,10)>bookDate && !t.activated_at) return false;
   if(!tkTimeOk(t,bookDate,bookTime)) return false;   // 限時段票券：星期／18:00 前
+  return tkTypeOkFor(t,type_id);
+}
+/* 「這張票的種類，配不配得上這個課程類型」——從 tkFitsBooking 抽出來（2026-10-08）。
+   ⚠ 抽出來是因為「調課」那支（tkOkForSlot）也要同一套判斷：抄第二份就會漂移，
+     而這個系統已經在「同一條規則抄成兩份」上栽過好幾次。
+   ⚠ 這裡**只管種類**，效期／時段／剩餘堂數由呼叫端各自負責（兩邊要的不一樣：
+     調課是把已經扣過的那一次搬過來，本來就不該再看 sessions_remaining）。 */
+function tkTypeOkFor(t,type_id){
   const wantCat=categoryOfTypeId(type_id);
   if(wantCat==='小班肌力') return ticketCategoryOf(t)==='小班肌力'; // 團課：同類別即可（不分方案）
   /* 自主訓練（2026-07-30 使用者指示）：一般自主訓練與友善自主訓練視為同一池 ——
@@ -35369,6 +35377,122 @@ async function _bpGo(memberId){
   navTo(CUR_PAGE);
  }catch(e){ done(); showToast('綁定失敗：'+((e&&e.message)||e)); }
 }
+/* ══ 調課：把後面那一堂的票搬到這一堂（2026-10-08 使用者指示）═══════════════
+   使用者：「我發現10/10 14:00這堂是待簽約　可是育筑明明還有可以使用的票券
+     只是預先預約在未來的日期了　這時候我點10/10要出現［調課］的圓形按鈕
+     把後面的課程調整過來使用」
+
+   情境（蕭育筑）：手上 16 堂全部對上了 —— 已上 7 堂、未來又排了 9 堂，
+   所以新排的週六那一串全是待簽約。她不是沒票，是票被未來的課先佔走了。
+   原本唯一的做法是「把後面那堂改時間搬過來」：要先刪掉這一張、再去行事曆翻出那一堂，
+   使用者說不夠直覺。
+
+   ⚠ 這顆只換「哪幾堂有票」，總堂數一點都沒變 —— 搬過來之後，後面那一堂要嘛變待簽約、
+     要嘛取消（每次問，使用者指定「每次讓我選」）。
+   ⚠ 候選一定要拿**這一堂的日期時間**去驗票，不是看票還剩幾堂：
+     友善票限平日 18:00 前，蕭育筑週六那一串根本用不了友善票（tkOkForSlot）。
+   ⚠ 不走扣課／退課：票早就扣過那一次了，這裡只是把同一次扣課掛到別堂課上，
+     所以只搬 ticket_id，不動 sessions_remaining。帳本寫一筆 adjust 留痕。 */
+function tkOkForSlot(t, b){
+  if(!t || !b) return false;
+  if(t.status!=='usable') return false;
+  const d=b.date, tm=b.start_time;
+  if(d && t.expire_date && String(t.expire_date).slice(0,10)<d) return false;
+  if(d && t.start_date && String(t.start_date).slice(0,10)>d && !t.activated_at) return false;
+  if(!tkTimeOk(t,d,tm,b.duration)) return false;
+  return tkTypeOkFor(t, bkTypeIdOf(b));   /* 種類判斷與 tkFitsBooking 同一支，不另抄一份 */
+}
+const _mvKey=x=>String((x&&x.date)||'')+' '+String((x&&x.start_time)||'');
+/* 可以把票調過來的課：同一位會員、在這一堂之後、有綁票、而且那張票用得到這個時段 */
+async function bkMoveCandidates(b){
+  if(!b || !b.member_id) return [];
+  const [bks,tks]=await Promise.all([dbGetAll('bookings').catch(()=>[]),dbGetAll('member_tickets').catch(()=>[])]);
+  if(!window._ttCache){ try{ window._ttCache=await dbGetAll('ticket_types'); }catch(_){ window._ttCache=[]; } }
+  const tkById={}; (tks||[]).forEach(t=>{ if(t&&t.id) tkById[t.id]=t; });
+  const me=_mvKey(b);
+  return (bks||[]).filter(x=>x && x.id!==b.id && x.status==='booked' && x.ticket_id
+      && !x.pending_contract && String(x.member_id||'')===String(b.member_id||'')
+      && _mvKey(x)>me && tkOkForSlot(tkById[x.ticket_id], b))
+    .map(x=>({bk:x, tk:tkById[x.ticket_id]}))
+    .sort((a,c)=>_mvKey(c.bk).localeCompare(_mvKey(a.bk)));   /* 最晚的排最前面，預設就挑它 */
+}
+async function openBkMoveTicket(id){
+  const b=await dbGet('bookings',id); if(!b){ showToast('找不到這堂課'); return; }
+  const list=await bkMoveCandidates(b);
+  if(!list.length){ showToast('後面沒有可以調過來的課'); return; }
+  window._mvList=list; window._mvBid=id; window._mvTo=b;
+  window._mvPick=list[0].bk.id; window._mvMode='hold';
+  mvRender();
+}
+function mvPick(bid){ window._mvPick=String(bid); mvRender(); }
+function mvMode(m){ window._mvMode=(m==='cancel')?'cancel':'hold'; mvRender(); }
+function mvRender(){
+  const to=window._mvTo||{}, list=window._mvList||[];
+  const _d=x=>String(x||'').slice(5).replace('-','/');
+  const _cn=id=>{ const c=(window._bkCoaches||[]).find(x=>x&&x.id===id);
+    return c?((typeof coachDisp==='function'?coachDisp(c):c.name)||''):''; };
+  const rows=list.map(o=>{
+    const on=String(o.bk.id)===String(window._mvPick);
+    return `<button type="button" class="ash-eirow ash-ei-2c lot-row${on?' lot-row-cur':''}" onclick="mvPick('${o.bk.id}')">
+      <span class="ash-eilb">${_d(o.bk.date)}（${'日一二三四五六'[parseYmd(o.bk.date).getDay()]}）${String(o.bk.start_time||'').slice(0,5)}　<span style="color:var(--t3);font-weight:400;">${escH(_cn(bkCoachId(o.bk)))}</span></span>
+      <span class="ash-eisub">${escH((o.tk&&o.tk.plan_name)||'票券')}${on?'　✓':''}</span></button>`;
+  }).join('');
+  const hold=(window._mvMode!=='cancel');
+  showModal(`<div class="modal-title">調課 · ${_d(to.date)} ${String(to.start_time||'').slice(0,5)}</div>
+    <div class="mk-key">這一堂會變成有票，被挑中的那一堂就沒票了<small>總堂數不變，只是換哪幾堂有票</small></div>
+    <ul class="mk-pts">
+      <li>票不會重扣，只是把同一次扣課掛到這一堂</li>
+      <li>只列得出「票用得到這個時段」的課（友善票不能用在週末與 18:00 之後）</li>
+    </ul>
+    <div class="form-row" style="margin-top:12px;"><label>要把哪一堂的票調過來</label>
+      <div class="tle-picklist" style="max-height:240px;overflow:auto;">${rows}</div></div>
+    <div class="form-row"><label>被挑中的那一堂</label>
+      <div class="qs-types" style="margin:0;">
+        <button type="button" class="qs-type${hold?' on':''}" onclick="mvMode('hold')">留著（變待簽約）</button>
+        <button type="button" class="qs-type${hold?'':' on'}" onclick="mvMode('cancel')">取消那一堂</button>
+      </div>
+      <div class="qs-tnote" style="margin:6px 0 0;">${hold?'課還在行事曆上，只是沒票 —— 之後續約了再轉正。':'那個時段會空出來，等於把課提前上。'}</div></div>
+    <div class="modal-foot"><button class="btn btn-ghost" onclick="closeModal()">取消</button>
+      <button id="mv-go" class="btn btn-green" onclick="doBkMoveTicket()">確定調課</button></div>`);
+}
+async function doBkMoveTicket(){ return onceAct('bkmove:'+(window._mvBid||''), _doBkMoveTicket); }
+async function _doBkMoveTicket(){
+  const toId=window._mvBid, fromId=window._mvPick, mode=(window._mvMode==='cancel')?'cancel':'hold';
+  if(!toId||!fromId){ showToast('請先選一堂'); return; }
+  const _btn=document.getElementById('mv-go'), _tx=_btn?_btn.textContent:'';
+  if(_btn){ _btn.disabled=true; _btn.textContent='處理中…'; }
+  try{
+    const to=await dbGet('bookings',toId), from=await dbGet('bookings',fromId);
+    if(!to||!from){ showToast('找不到預約'); return; }
+    /* 畫面可能是舊的（別人剛改過）—— 送出前把條件再驗一次，不能只信畫面 */
+    if(to.status!=='booked'||!to.pending_contract){ showToast('這一堂已經不是待簽約了，請重新整理'); return; }
+    if(from.status!=='booked'||!from.ticket_id){ showToast('被挑中的那一堂已經變了，請重新選'); return; }
+    const tk=await dbGet('member_tickets',from.ticket_id);
+    if(!tk){ showToast('找不到那張票券'); return; }
+    if(!tkOkForSlot(tk,to)){ showToast('這張票不能用在這個時段（效期或限平日 18:00 前）'); return; }
+    to.ticket_id=from.ticket_id;
+    to.ticket_type_id=to.ticket_type_id||from.ticket_type_id||tk.ticket_type_id||null;
+    to.pending_contract=false;
+    from.ticket_id=null;
+    if(mode==='cancel'){
+      from.status='cancelled'; from.cancelled_at=new Date().toISOString(); from.cancelled_by=SESSION.id;
+    }else{
+      from.pending_contract=true;
+    }
+    await dbPut('bookings',to);
+    await dbPut('bookings',from);
+    await logTicket(tk.id,'adjust',0,to.id,SESSION.id,
+      `調課：${from.date} ${String(from.start_time||'').slice(0,5)} → ${to.date} ${String(to.start_time||'').slice(0,5)}`
+      + (mode==='cancel'?'（原課取消）':'（原課改為待簽約）'));
+    dbCacheClear(['bookings','ticket_logs']);
+    closeModal();
+    showToast('已調課');
+    navTo(CUR_PAGE);
+  }catch(e){
+    if(_btn){ _btn.disabled=false; _btn.textContent=_tx; }
+    showToast('調課失敗：'+((e&&e.message)||e));
+  }
+}
 async function openConvertPending(id){
   const b=await dbGet('bookings',id);
   if(!b||!b.pending_contract){ showToast('這筆不是待簽約卡位'); return; }
@@ -36227,6 +36351,18 @@ async function expandBkCard(el, id){
           : (_isInst
              ? evoBtn('evo-r2','evo-gold',`collapseBkCard();ashInstNext('${id}')`,'plus','分期')
              : evoBtn('evo-r2','evo-gold',`collapseBkCard();ppTopUp('${b.member_id}')`,'plus','儲值'));
+        /* 〔調課〕（2026-10-08 使用者指示）：沒有可用票、但**後面有綁了票的課**時才出現 ——
+           那種情況不是「沒買」，是票被未來的課先佔走了，叫櫃檯去儲值是錯的方向。
+           ⚠ 擺左下（evo-l2）—— 右邊那兩格已經是取消與儲值，這一顆是第三條路。
+           ⚠ 要連 ashBackArm：調課視窗按返回要回得到課卡（與轉正同一套）。 */
+        if(!_hasTk && !_isInst){
+          let _mv=0; try{ _mv=(await bkMoveCandidates(b)).length; }catch(_){}
+          /* ⚠ 位置字樣在這裡其實不生效：待簽約一律走 bkCardPop（見下面的 return 之前那一段），
+             而它的 .mtp-orbs 是「置中一列、照 DOM 順序排」，不是卡緣方位。
+             所以這一顆會接在〔取消〕〔儲值〕後面那一格 —— 使用者指定要出現在那一列。
+             仍然給 evo-l2：萬一哪天待簽約改走卡緣那套排版，它才有自己的位置、不會疊在儲值上。 */
+          if(_mv) btns += evoBtn('evo-l2','evo-primary',`ashBackArm('${id}');collapseBkCard();openBkMoveTicket('${id}')`,'swap','調課');
+        }
       }
     }
     if(el){ el.style.marginLeft=''; el.style.marginTop=''; el.classList.add('cal-ev-active'); }
