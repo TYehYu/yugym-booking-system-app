@@ -14458,8 +14458,8 @@ function tbl(s){return TABLE_ALIAS[s]||s;}
 let sb=null;
 // ── 版本號（日期+時間格式：年後兩碼+月+日.時分，例 26620.1058 = 26年6/20 10:58）──
 // 每次改版手動更新這一行即可，畫面與 title 會一起更新
-const APP_VERSION = '261007.1637';
-const APP_VERSION_LABEL = 'v261007.1637';
+const APP_VERSION = '261008.1931';
+const APP_VERSION_LABEL = 'v261008.1931';
 const CLOUD = !!(window.YUGYM_CONFIG && window.YUGYM_CONFIG.url && window.YUGYM_CONFIG.anonKey);
 if(CLOUD){ sb = supabase.createClient(window.YUGYM_CONFIG.url, window.YUGYM_CONFIG.anonKey); }
 
@@ -20680,6 +20680,13 @@ function drawFortuneInline(boxId){
 // 依 booking 判斷正確的色類（會分辨友善課/友善自主訓練）
 function bkCC(b){
   if(!b) return 'pt';
+  /* ⚠⚠ 場租先判掉（2026-10-06，與 evColorClass 同一個原因）——
+     底下第 3.5 段本來就有「場租 → self」，但它排在「票種 color」之後；
+     而正式庫 tt-venue-rental 的 color 是 'massage'，1006 起場租預約又一律帶票種，
+     所以會先命中 massage。
+     ⚠ 這一支不只決定顏色，還決定 KPI 要把這堂算進哪一類（0824 那次 12 變 14 就是它），
+       所以場租被算成運動按摩不是只有卡片標籤不對，數字也會跟著錯。 */
+  if(b.category==='場租') return 'self';
   // 1) ticket_type_id 直接含 friendly
   if(b.ticket_type_id==='pt_friendly') return 'friendly';
   if(b.ticket_type_id==='self_friendly') return 'self';
@@ -20751,6 +20758,15 @@ function catShortName(cls){
 // 友善課只能從票券快照 plan_name 判定（2026-07-18 修：友善教練課曾因此被當一般教練課）。
 function evColorClass(b,typeMap,mt){
   // 1) 先看該票券種類自己設定的顏色（友善、團體、自主、體驗…）
+  /* ⚠⚠ 場租先判掉，不看票種的顏色設定（2026-10-06 使用者：「今天這一筆場租
+     為什麼歸類在運動按摩」）——
+     正式庫 tt-venue-rental 的 color 欄位被設成 'massage'。1006 之前場租預約不帶
+     ticket_type_id，所以一路落到下面 `cat==='場租' → ev-self`，看起來沒事；
+     1006 為了讓它比對得到場租票而一律寫上票種，這個設定就浮出來，卡片變成「運動按摩」。
+     「場租不佔課程色、一律中性灰」是 0721 就定的規則，規則不該被一個後台欄位推翻，
+     所以把它擺在顏色設定之前。
+     ⚠ 這樣改也順便擋住「有人在後台把場租的顏色改成別的」那條路。 */
+  if(b && b.category==='場租') return 'ev-self';
   const ty = typeMap && b.ticket_type_id ? typeMap[b.ticket_type_id] : null;
   const color = ty ? ty.color : (b.ticket_type_id==='pt_friendly'?'friendly':null);
   if(color){
