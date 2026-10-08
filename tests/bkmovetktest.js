@@ -92,10 +92,31 @@ ok('★★ 防連點＋按鈕變「處理中…」',
    /async function doBkMoveTicket\(\)\{ return onceAct\('bkmove:'\+\(window\._mvBid\|\|''\), _doBkMoveTicket\); \}/.test(src)
    && /_btn\.disabled=true; _btn\.textContent='處理中…';/.test(DO));
 
-console.log('\n④ 按鈕只在該出現的時候出現');
-ok('★★★ 沒有可用票、也不是分期保留，而且後面真的有候選才畫',
-   /if\(!_hasTk && !_isInst\)\{[\s\S]{0,320}?if\(_mv\) btns \+= evoBtn\('evo-l2','evo-primary'/.test(src));
-ok('★★ 擺左下，不佔用取消與儲值那兩格', /evoBtn\('evo-l2','evo-primary',[\s\S]{0,120}?openBkMoveTicket/.test(src));
+console.log('\n④ 按鈕背景補入，不擋住課卡展開');
+/* ⚠ 2026-10-08 二修（使用者：「今天點行事曆的課卡跳出都有點慢」）——
+   初版在展開前 await bkMoveCandidates（整表 bookings＋member_tickets），
+   整組按鈕就慢一拍。這是 0726 抽獎鈕踩過的同一個坑，改成同一套：
+   卡片先畫出來，候選在背景算，有才把這一顆補進去。 */
+ok('★★★ 展開前不 await 候選（只立一個旗標）',
+   /window\._mvProbe=\{id:String\(id\), need:true\};/.test(src)
+   && !/let _mv=0; try\{ _mv=\(await bkMoveCandidates\(b\)\)\.length; \}catch\(_\)\{\}/.test(src));
+ok('★★★ bkCardPop 之後才在背景算，算完才補按鈕',
+   /window\._expandedBkEl = el;[\s\S]{0,400}?const _n=\(await bkMoveCandidates\(b\)\)\.length;/.test(src));
+ok('★★★ 補之前確認還是同一張卡（可能已收起或點到別張）',
+   /if\(!_n \|\| !orbit \|\| window\._expandedBkEl!==el\) return;/.test(src)
+   && /if\(orbit\.querySelector\('\.evo-swap'\)\) return;/.test(src));
+ok('★★ 補完要重排圓鈕（與抽獎鈕同一套收尾）',
+   /evoFanLayout\(orbit\);\s*\n\s*_bkOrbitNudge\(el\);[\s\S]{0,80}?\}catch\(_\)\{\}\s*\n\s*\}\)\(\);\s*\n\s*\}\s*\n\s*return;/.test(src));
+
+console.log('\n⑤ 按鈕不會卡在「處理中…」');
+/* 使用者附截圖「這邊也卡住」：驗證失敗是 early return，按鈕永遠停在處理中。 */
+ok('★★★ 用 try/finally 還原，不是只在 catch 還原',
+   /\}finally\{\s*\n\s*if\(!_ok && _btn\)\{ _btn\.disabled=false; _btn\.textContent=_tx; \}\s*\n\s*\}/.test(src));
+ok('★★★ 成功那條不還原（視窗已關，_ok 擋著）', /let _ok=false;/.test(src) && /_ok=true;\s*\n\s*closeModal\(\);/.test(src));
+/* 連續調課時，候選清單是開視窗那一刻算的，第二次很容易挑到剛被搬走的那一堂 */
+ok('★★★ 挑到已被搬走的課 → 重算候選並重畫，不是丟一個 toast 就結束',
+   /const _re=await bkMoveCandidates\(to\);/.test(src)
+   && /window\._mvList=_re; window\._mvTo=to; window\._mvPick=_re\[0\]\.bk\.id; mvRender\(\);/.test(src));
 
 console.log(`\n${fail?'✗':'✓'} ${pass} 通過 / ${fail} 失敗`);
 process.exit(fail?1:0);

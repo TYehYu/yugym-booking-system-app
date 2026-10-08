@@ -14458,8 +14458,8 @@ function tbl(s){return TABLE_ALIAS[s]||s;}
 let sb=null;
 // ── 版本號（日期+時間格式：年後兩碼+月+日.時分，例 26620.1058 = 26年6/20 10:58）──
 // 每次改版手動更新這一行即可，畫面與 title 會一起更新
-const APP_VERSION = '261008.2156';
-const APP_VERSION_LABEL = 'v261008.2156';
+const APP_VERSION = '261008.2205';
+const APP_VERSION_LABEL = 'v261008.2205';
 const CLOUD = !!(window.YUGYM_CONFIG && window.YUGYM_CONFIG.url && window.YUGYM_CONFIG.anonKey);
 if(CLOUD){ sb = supabase.createClient(window.YUGYM_CONFIG.url, window.YUGYM_CONFIG.anonKey); }
 
@@ -35475,12 +35475,29 @@ async function _doBkMoveTicket(){
   if(!toId||!fromId){ showToast('請先選一堂'); return; }
   const _btn=document.getElementById('mv-go'), _tx=_btn?_btn.textContent:'';
   if(_btn){ _btn.disabled=true; _btn.textContent='處理中…'; }
+  /* ⚠⚠ 一定要 try/finally 還原按鈕（2026-10-08 二修，使用者附截圖「這邊也卡住」）——
+     初版的驗證失敗是 early return，按鈕就永遠停在「處理中…」，看起來像當掉，
+     其實只是跳了一個 toast 就結束了。凡是中途 return 的流程都要用 finally 收尾。
+     ⚠ 成功那條會 closeModal，按鈕早就不在了，還原也不會怎樣。 */
+  let _ok=false;
   try{
     const to=await dbGet('bookings',toId), from=await dbGet('bookings',fromId);
     if(!to||!from){ showToast('找不到預約'); return; }
-    /* 畫面可能是舊的（別人剛改過）—— 送出前把條件再驗一次，不能只信畫面 */
+    /* 畫面可能是舊的（別人剛改過、或你自己上一次調課剛把這一堂的票搬走）——
+       送出前把條件再驗一次，不能只信畫面。 */
     if(to.status!=='booked'||!to.pending_contract){ showToast('這一堂已經不是待簽約了，請重新整理'); return; }
-    if(from.status!=='booked'||!from.ticket_id){ showToast('被挑中的那一堂已經變了，請重新選'); return; }
+    if(from.status!=='booked'||!from.ticket_id){
+      /* ⚠ 不要只丟一個 toast 就結束（2026-10-08）：候選清單是開視窗那一刻算的，
+         連續調課第二次很容易挑到「剛剛已經被搬走」的那一堂。
+         重算一次候選、把視窗重畫出來，讓人直接改挑，不必從頭點一次課卡。 */
+      showToast('那一堂的票剛剛被搬走了，已重新整理可選的課');
+      try{
+        const _re=await bkMoveCandidates(to);
+        if(!_re.length){ closeModal(); showToast('後面沒有可以調過來的課了'); return; }
+        window._mvList=_re; window._mvTo=to; window._mvPick=_re[0].bk.id; mvRender();
+      }catch(_){}
+      return;
+    }
     const tk=await dbGet('member_tickets',from.ticket_id);
     if(!tk){ showToast('找不到那張票券'); return; }
     if(!tkOkForSlot(tk,to)){ showToast('這張票不能用在這個時段（效期或限平日 18:00 前）'); return; }
@@ -35499,12 +35516,14 @@ async function _doBkMoveTicket(){
       `調課：${from.date} ${String(from.start_time||'').slice(0,5)} → ${to.date} ${String(to.start_time||'').slice(0,5)}`
       + (mode==='cancel'?'（原課取消）':'（原課改為待簽約）'));
     dbCacheClear(['bookings','ticket_logs']);
+    _ok=true;
     closeModal();
     showToast('已調課');
     navTo(CUR_PAGE);
   }catch(e){
-    if(_btn){ _btn.disabled=false; _btn.textContent=_tx; }
     showToast('調課失敗：'+((e&&e.message)||e));
+  }finally{
+    if(!_ok && _btn){ _btn.disabled=false; _btn.textContent=_tx; }
   }
 }
 async function openConvertPending(id){
@@ -36367,16 +36386,11 @@ async function expandBkCard(el, id){
              : evoBtn('evo-r2','evo-gold',`collapseBkCard();ppTopUp('${b.member_id}')`,'plus','儲值'));
         /* 〔調課〕（2026-10-08 使用者指示）：沒有可用票、但**後面有綁了票的課**時才出現 ——
            那種情況不是「沒買」，是票被未來的課先佔走了，叫櫃檯去儲值是錯的方向。
-           ⚠ 擺左下（evo-l2）—— 右邊那兩格已經是取消與儲值，這一顆是第三條路。
-           ⚠ 要連 ashBackArm：調課視窗按返回要回得到課卡（與轉正同一套）。 */
-        if(!_hasTk && !_isInst){
-          let _mv=0; try{ _mv=(await bkMoveCandidates(b)).length; }catch(_){}
-          /* ⚠ 位置字樣在這裡其實不生效：待簽約一律走 bkCardPop（見下面的 return 之前那一段），
-             而它的 .mtp-orbs 是「置中一列、照 DOM 順序排」，不是卡緣方位。
-             所以這一顆會接在〔取消〕〔儲值〕後面那一格 —— 使用者指定要出現在那一列。
-             仍然給 evo-l2：萬一哪天待簽約改走卡緣那套排版，它才有自己的位置、不會疊在儲值上。 */
-          if(_mv) btns += evoBtn('evo-l2','evo-primary',`ashBackArm('${id}');collapseBkCard();openBkMoveTicket('${id}')`,'swap','調課');
-        }
+           ⚠⚠ **不要在這裡 await**（2026-10-08 二修，使用者：「今天點行事曆的課卡跳出都有點慢」）——
+             bkMoveCandidates 要整表 bookings＋member_tickets，展開前等它＝整組按鈕慢一拍。
+             這就是 0726 抽獎鈕踩過的同一個坑（那段教訓寫在下面 bkCardPop 之後）。
+             改成跟抽獎鈕同一套：卡片先畫出來，候選在背景算，有才把這一顆補進去。 */
+        window._mvProbe={id:String(id), need:true};
       }
     }
     if(el){ el.style.marginLeft=''; el.style.marginTop=''; el.classList.add('cal-ev-active'); }
@@ -36395,6 +36409,22 @@ async function expandBkCard(el, id){
     await bkCardPop(el, b, btns, {pending:true, staff, own, canCancel, closed, isGroup, editable:false,
       venue:_pendVenue});
     window._expandedBkEl = el;
+    /* 〔調課〕背景補入（2026-10-08，作法照抄下面抽獎鈕那一段）——
+       ⚠ 補之前要確認「還是同一張卡」：使用者可能已經收起來或點到別張了。 */
+    if(window._mvProbe && window._mvProbe.id===String(id) && window._mvProbe.need){
+      (async()=>{
+        try{
+          const _n=(await bkMoveCandidates(b)).length;
+          const orbit=document.querySelector('#bk-card-pop .mtp-orbs');
+          if(!_n || !orbit || window._expandedBkEl!==el) return;
+          if(orbit.querySelector('.evo-swap')) return;
+          orbit.insertAdjacentHTML('beforeend',
+            evoBtn('evo-l2','evo-primary evo-swap',`ashBackArm('${id}');collapseBkCard();openBkMoveTicket('${id}')`,'swap','調課'));
+          evoFanLayout(orbit);
+          _bkOrbitNudge(el);
+        }catch(_){}
+      })();
+    }
     return;
   }
   /* 方位定案（2026-07-23 使用者指示，取代 07-22 卡緣方位）：「簽到」在卡片正中央，
