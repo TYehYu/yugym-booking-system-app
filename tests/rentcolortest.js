@@ -43,5 +43,21 @@ ok('★★★ 場租（舊資料沒帶票種）→ self 不變',
 ok('★★★ 真的運動按摩照舊 → massage',
    bkCC({category:'運動按摩', ticket_type_id:'tt-mrghed5b6ke2'})==='massage');
 
+console.log('\n③ 場租不進任何一個課堂數字');
+/* 使用者同日補問：「這個應該不會被歸類在當日課堂裡面　也不會記錄在教練課堂數內」 */
+ok('★★★ 當日課堂（totalClasses）只收 pt/friendly/group/massage —— 場租是 self，不在內',
+   /const totalClasses=dayBk\.filter\(b=>\{const c=bkCC\(b\);return c==='pt'\|\|c==='friendly'\|\|c==='group'\|\|c==='massage';\}\)\.length;/.test(src));
+/* bkCC 把場租歸成 'self'（中性灰），所以「自主訓練」那個數字不能用 bkCC 判 */
+ok('★★★ 自主訓練筆數改用 bkIsSelf（只認 category==='+"'自主訓練'"+'），場租不算在內',
+   /const selfCount=dayBk\.filter\(b=>bkIsSelf\(b\)\)\.length;/.test(src)
+   && !/const selfCount=dayBk\.filter\(b=>bkCC\(b\)==='self'\)\.length;/.test(src));
+ok('★★★ 教練課費只算 category==='+"'私人教練'"+'（場租不在內）',
+   /function isPtPayClass\(b\)\{ return !!b && b\.category==='私人教練'; \}/.test(src));
+ok('★★★ 店長獎金的堂數只收教練課與團體課',
+   /const LEADER_CATS=\['私人教練','小班肌力'\];/.test(src));
+/* 場租也不吃票口袋 —— 口袋分類器直接回 null */
+ok('★★ 場租沒有票券口袋（bkPocket 直接 return null）',
+   /if\(c==='體驗'\|\|c==='場租'\) return null;/.test(src));
+
 console.log(`\n${fail?'✗':'✓'} ${pass} 通過 / ${fail} 失敗`);
 process.exit(fail?1:0);
