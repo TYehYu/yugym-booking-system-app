@@ -77,9 +77,11 @@ console.log('\n③ 票券卡顯示發票號碼');
   /* 2026-09-23：多期改用四欄 grid，讓期數／金額／發票跨列切齊。
      量過（390px）：單純直向 flex 時期數左緣是 142／144／205，改 grid 之後全部 142。 */
   /* 2026-10-03 加了收款日期那一欄（使用者：「票券右下角收費資訊補個日期」），三欄變四欄 */
-  ok('★★★ 多期用四欄 grid 讓欄位跨列切齊（單純的直向 flex 做不到）',
-     /\.tkc-money \.tk-paylist-multi\{display:inline-grid;grid-template-columns:auto auto auto auto;/.test(src)
-     && /\.tk-paylist-multi \.tk-payrow\{display:contents;\}/.test(src));
+  /* ⚠ 2026-10-09 使用者：「有辦法用一列呈現嗎」——多期改成橫排一列，
+     四欄 grid 與 display:contents 一起退場（跨列對齊的需求消失了）。 */
+  ok('★★★ 多期橫排一列，每一期是一個 inline-flex 盒子',
+     /\.tkc-money \.tk-paylist-multi\{display:flex;flex-direction:row;flex-wrap:wrap;/.test(src)
+     && /\.tk-paylist-multi \.tk-payrow\{display:inline-flex;align-items:center;gap:6px;\}/.test(src));
   ok('★★★ 只有多期才套 grid（單期一列沒有對齊問題）',
      /tk-paylist\$\{_multi\?' tk-paylist-multi':''\}/.test(src)
      && !/tk-paylist-multi/.test(one));
@@ -100,10 +102,11 @@ console.log('\n③ 票券卡顯示發票號碼');
      ⑦ 把按鈕整組搬去效期那一列，死結就不存在了：底列只剩金額。
      ⚠ 這一輪拆掉的東西：nowrap／align-items 覆寫／order 翻轉／@media 斷點，
        以及中途試過的 wrap-reverse。下面幾條就是防它們回來的。 */
-  ok('★★★ 底列＝按鈕在左下、金額在右下（2026-09-23 使用者：「先維持現況」）',
+  /* ⚠ 2026-10-09 使用者翻掉 0915／0923 的左右對調：金額回左下、按鈕回右下。 */
+  ok('★★★ 底列＝金額在左下、按鈕在右下（2026-10-09 使用者）',
      /\.tkc-foot\{align-items:center !important;\}/.test(src)
-     && /\.tkc-foot>span:last-child\{order:-1;margin-left:0 !important;\}/.test(src)
-     && /\.tkc-foot>span:first-child\{margin-left:auto;\}/.test(src));
+     && /\.tkc-foot>span:first-child\{text-align:left;\}/.test(src)
+     && !/\.tkc-foot>span:last-child\{order:-1/.test(src));
   ok('★★★ 分期多列時按鈕置底（使用者：「把左下角的按鈕置底」）',
      /\.tkc-foot:has\(\.tk-paylist-multi\)\{align-items:flex-end !important;\}/.test(src));
   /* ⚠⚠ 不准再出現寫死的折行斷點：兩版都錯過（440 → 405）——

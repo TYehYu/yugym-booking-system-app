@@ -391,10 +391,13 @@ ok('★ 票券卡：狀態章（已完成／已過期／已退費）移到課程
    還是可以把按鈕改到左下呢」—— 按鈕左下、金額右下（order:-1）。
    ⚠ 2026-09-23 一度把按鈕整組搬去效期那一列（底列只剩金額），
      使用者看過實機後：「先維持現況　把左下角的按鈕置底」，整段收回。 */
-ok('★★★ 票券卡：按鈕在左下、金額與發票在右邊',
+/* ⚠ 2026-10-09 使用者翻掉 0915 的左右對調：金額回到左下、按鈕回到右下；
+   同日把多期從「四欄 grid 直排」改成「橫排一列」（見 tests/tkfoot1009test.js）。 */
+ok('★★★ 票券卡：金額在左下、按鈕在右下',
    /<span class="tkc-money">\$\{tkMoneyHtml\(t\)\.replace\(\/\^　·　\/,''\)\}<\/span>/.test(src)
    && /\.tkc-foot\{align-items:center !important;\}/.test(src)
-   && /\.tkc-foot>span:last-child\{order:-1;margin-left:0 !important;\}/.test(src));
+   && /\.tkc-foot>span:first-child\{text-align:left;\}/.test(src)
+   && !/\.tkc-foot>span:last-child\{order:-1/.test(src));
 ok('★★★ 分期多列時按鈕置底（使用者：「把左下角的按鈕置底」）',
    /\.tkc-foot:has\(\.tk-paylist-multi\)\{align-items:flex-end !important;\}/.test(src));
 ok('　　桌機與其他角色維持原本的單行底列',

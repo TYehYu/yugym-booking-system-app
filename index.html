@@ -4860,13 +4860,21 @@ button.pp-name-edit:hover{border-bottom-color:var(--gold);}
    櫃檯以上的底列現在只剩金額一格，first-child 與 last-child 會是同一個元素，
    不加 :not(:first-child) 的話 margin-left:0 !important 會蓋掉下面那條 auto，
    金額就從右下角跑回左下角。非櫃檯角色的底列仍是兩格（文字＋按鈕），照舊。 */
-.tkc-foot>span:last-child{order:-1;margin-left:0 !important;}
-.tkc-foot>span:first-child{margin-left:auto;}
+/* ⚠⚠ 2026-10-09 使用者翻掉 0915 的左右對調：「右邊分期金額改到靠左靠下…
+   然後左下的按鈕改到右下」——金額回到左下、按鈕回到右下（也就是 DOM 的自然順序）。
+   0915 當初對調是因為「右下角太擠」：那時分期是直排三列，擠的是直的那一疊。
+   這次順手把多期改成橫排一列（見下面 .tk-paylist-multi），右下就不擠了。
+   實測（卡片寬 1200／900）：底列 70px → 21px，整張卡 201px → 152px。
+   ⚠ 兩條 !important 是用來蓋掉按鈕那個 span 的 inline margin-left:auto，
+     現在反過來要**留著**那個 auto（它正好把按鈕推到右邊），所以只剩文字對齊要處理。 */
+.tkc-foot>span:first-child{text-align:left;}
 /* 分期多列的底列：按鈕與最後一期那一列切齊（2026-09-23 使用者：「把左下角的按鈕置底」）。
    ⚠ 左欄一排按鈕 21px、右欄多列金額 50–70px，中間或上方一定會空掉一段；
      空白消不掉，只能選它出現在哪一邊，使用者選了「按鈕跟最後一期切齊」。
    ⚠ 要 !important：上面 .tkc-foot{align-items:center !important} 也是 !important。
-   ⚠ 只有多期才套：單期一行本來就切齊。 */
+   ⚠ 只有多期才套：單期一行本來就切齊。
+   ⚠ 2026-10-09 之後多期已經是橫排一列，桌機寬度下這條等於沒作用；
+     留著是為了窄視窗（折成兩三列時）按鈕仍與最後一列切齊。 */
 .tkc-foot:has(.tk-paylist-multi){align-items:flex-end !important;}
 /* 分期多列的底列：現在整列只剩金額那一格，什麼都不用喬（2026-09-23 定版）。
    ⚠⚠ 這裡曾經有一整套規則（nowrap／align-items／order 翻轉／@media 斷點），
@@ -4915,9 +4923,36 @@ button.pp-name-edit:hover{border-bottom-color:var(--gold);}
      套了反而多一組空欄位。
    ⚠ 每一列一定要輸出四格（沒有付款方式時給空的 .tk-pay-na），少一格整列就會位移。 */
 /* 2026-10-03：多一欄收款日期（日期／付款方式／金額／發票）。 */
-.tkc-money .tk-paylist-multi{display:inline-grid;grid-template-columns:auto auto auto auto;
-  gap:4px 6px;align-items:center;justify-items:end;}
-.tk-paylist-multi .tk-payrow{display:contents;}
+/* ⚠ 2026-10-09 使用者：「右邊分期金額改到靠左靠下　有辦法用一列呈現嗎」——
+   多期從「直排三列的 grid」改成**橫排一列**。欄位對齊的問題隨之消失（本來就是
+   為了三列之間對齊才用 grid），所以 grid-template-columns 一併拿掉。
+   ⚠ flex-direction 一定要寫：上面 .tk-paylist 帶 column，只改 display 不會生效
+     （預覽時踩過一次，畫出來還是三列）。
+   ⚠ 塞不下就自己折行：實測卡片寬 900 以上排得進一列，360（手機）仍是三列 —— 那本來就擺不下。 */
+.tkc-money .tk-paylist-multi{display:flex;flex-direction:row;flex-wrap:wrap;
+  align-items:center;gap:4px 18px;}
+.tk-paylist-multi .tk-payrow{display:inline-flex;align-items:center;gap:6px;}
+/* 〔出席證明〕手機不出現（2026-10-09 使用者：「手機版不用出現出席證明　這個是桌機要列印使用的」）——
+   它開的是一張要列印的到場紀錄（公司補助用），手機上按了也印不了，只是佔走底列的寬度。
+   ⚠ 用 CSS 藏、不是在產生按鈕時判斷：斷點跟著視窗走，轉向或拉寬視窗立刻正確，
+     不必重畫卡片。
+   ⚠ 斷點沿用票券卡自己那一組 820px（下面那個 @media 區塊），不另外訂一個數字。 */
+@media (max-width:820px){
+  .tkc-attcert{display:none !important;}
+  /* 手機折行時不要在左下留一塊空白（2026-10-09 使用者附截圖：「左下空了一列
+     是因為右下的按鈕嗎　有辦法不要有空白嗎」）——
+     原本底列是「金額一格 ╳ 按鈕一格」兩個盒子：分期折成三列之後，按鈕那一格
+     只能整塊掉到第四列，左邊就空出一片。
+     改成讓**每一期自己當底列的項目**（display:contents 把中間兩層盒子拆掉），
+     按鈕就接在最後一期後面、同一行靠右。
+     ⚠ 只對多期套（:has(.tk-paylist-multi)）：單期那條路金額是一堆散的
+       inline 片段（$金額、現金章、折抵券…），拆掉盒子會讓它們各自換行。
+     ⚠ 實測 360px 卡片：底列 97→75px、整張卡 267→245px，按鈕與最後一期同一行，沒有溢位。 */
+  .tkc-foot:has(.tk-paylist-multi)>span:first-child{display:contents;}
+  .tkc-foot:has(.tk-paylist-multi) .tkc-money{display:contents;}
+  .tkc-foot:has(.tk-paylist-multi) .tk-paylist-multi{display:contents;}
+}
+
 /* 金額格（2026-09-23）：金額與折抵券在同一個格子裡，折抵接在金額右邊。
    ⚠ 多期是四欄 grid，不包成一格的話折抵會自己佔一欄、把發票擠到下一列。 */
 /* ⚠ 量到 360px 的機身上，含折抵券的金額組要 326px、卡內寬只有 304px，會溢出 2px。
@@ -14458,8 +14493,8 @@ function tbl(s){return TABLE_ALIAS[s]||s;}
 let sb=null;
 // ── 版本號（日期+時間格式：年後兩碼+月+日.時分，例 26620.1058 = 26年6/20 10:58）──
 // 每次改版手動更新這一行即可，畫面與 title 會一起更新
-const APP_VERSION = '261008.2215';
-const APP_VERSION_LABEL = 'v261008.2215';
+const APP_VERSION = '261009.1407';
+const APP_VERSION_LABEL = 'v261009.1407';
 const CLOUD = !!(window.YUGYM_CONFIG && window.YUGYM_CONFIG.url && window.YUGYM_CONFIG.anonKey);
 if(CLOUD){ sb = supabase.createClient(window.YUGYM_CONFIG.url, window.YUGYM_CONFIG.anonKey); }
 
@@ -51273,7 +51308,7 @@ function ppRecordHtml(){
                   const _at=tkAttendedList(t, bks, PP.id);
                   if(!_at.length) return '';
                   (window._tkAttCache=window._tkAttCache||{})[t.id]=_at;
-                  return `<button class="btn btn-ghost btn-sm" style="padding:2px 10px;font-size:11px;" title="列印這張票的到場紀錄（公司補助用）；不含金額" onclick="event.stopPropagation();tkAttendCert('${t.id}')">出席證明</button>`;
+                  return `<button class="btn btn-ghost btn-sm tkc-attcert" style="padding:2px 10px;font-size:11px;" title="列印這張票的到場紀錄（公司補助用）；不含金額" onclick="event.stopPropagation();tkAttendCert('${t.id}')">出席證明</button>`;
                 }catch(_){ return ''; } })()}
                 ${/* 合約鈕已移到表頭（票券編號左邊）；
                      票券預設使用人（2026-08-04 使用者指示：票券指定家庭成員，預約自動帶使用人） */''}
@@ -51506,7 +51541,7 @@ function ppRecordHtml(){
                   const _at=tkAttendedList(t, bks, PP.id);
                   if(!_at.length) return '';
                   (window._tkAttCache=window._tkAttCache||{})[t.id]=_at;
-                  return `<button class="btn btn-ghost btn-sm" style="padding:2px 10px;font-size:11px;" title="列印這張票的到場紀錄（公司補助用）；不含金額" onclick="event.stopPropagation();tkAttendCert('${t.id}')">出席證明</button>`;
+                  return `<button class="btn btn-ghost btn-sm tkc-attcert" style="padding:2px 10px;font-size:11px;" title="列印這張票的到場紀錄（公司補助用）；不含金額" onclick="event.stopPropagation();tkAttendCert('${t.id}')">出席證明</button>`;
                 }catch(_){ return ''; } })()}
                 ${(c.ctByTicket&&c.ctByTicket[t.id])?`<button class="btn btn-ghost btn-sm" style="padding:2px 10px;font-size:11px;" onclick="openContractView('${c.ctByTicket[t.id]}')">合約</button>`:''}
                 ${/* 用完／過期的票也要能校正（2026-08-25）——黃喬莉那三張 1V2 全在這一區，

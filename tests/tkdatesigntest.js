@@ -25,8 +25,11 @@ console.log('① 收費資訊帶日期');
   ok('★★★ 沒有日期的那一期也要佔一格',
      /: \(_multi\?'<span class="tk-when-na"><\/span>':''\)/.test(src)
      && /\.tk-when-na\{display:block;\}/.test(src));
-  ok('★★★ grid 跟著多一欄（三欄 → 四欄）',
-     /\.tkc-money \.tk-paylist-multi\{display:inline-grid;grid-template-columns:auto auto auto auto;/.test(src));
+  /* ⚠ 2026-10-09：多期改成橫排一列，grid 整套退場（欄位跨列對齊的需求隨之消失）。
+     日期那一格仍然每一期都要輸出 —— 它現在是 inline-flex 盒子裡的第一個元素。 */
+  ok('★★★ 多期改成橫排一列（grid 已退場）',
+     /\.tkc-money \.tk-paylist-multi\{display:flex;flex-direction:row;flex-wrap:wrap;/.test(src)
+     && !/grid-template-columns:auto auto auto auto/.test(src));
   ok('★★ 只寫到「日」，完整時間進 title（這一格越窄，底列越慢折行）',
      /\$\{_wd\.slice\(5\)\.replace\('-','\/'\)\}<\/span>/.test(src)
      && /title="第 \$\{i\+1\} 期收款日　\$\{_wd\.replace\(\/-\/g,'\/'\)\}"/.test(src));
