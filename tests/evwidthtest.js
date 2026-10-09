@@ -138,8 +138,9 @@ ok('★★★ 最後手段才藏 NEW（44／28）',
    && /@container \(max-width:28px\)\{\s*\n\s*\.cal-ev\.cal-ev-std \.evc-new\{display:none;\}/.test(src));
 /* 41px 以下章（x7..21）與流排版最左邊的 ❗（x=w-16）一定會撞；
    照紅>金>綠，讓最輕的章退。 */
-ok('★★★ 41px 以下有 ❗ 時讓章退（紅>金>綠）',
-   /@container \(max-width:40px\)\{\s*\n\s*\.cal-ev\.cal-ev-std:has\(\.ev-payalert\) \.evc-check\{display:none;\}/.test(src));
+/* ⚠ 2026-10-09：未簽到的空心圈（.evc-todo）跟著章一起退 —— 它比章更輕。 */
+ok('★★★ 41px 以下有 ❗ 時讓章與空心圈都退（紅>金>綠）',
+   /@container \(max-width:40px\)\{[\s\S]{0,220}?\.cal-ev\.cal-ev-std:has\(\.ev-payalert\) \.evc-check,\s*\n\s*\.cal-ev\.cal-ev-std:has\(\.ev-payalert\) \.evc-todo\{display:none;\}/.test(src));
 /* ⚠ 這兩段 @container 必須寫在 .evc-check 的基本規則**之後** —— 兩者都是 (0,3,0)。
    第一版寫在前面，結果章完全沒縮，而同一個 @container 裡的驚嘆號卻縮了，
    看起來像「規則只生效一半」。 */
