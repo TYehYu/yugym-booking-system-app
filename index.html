@@ -14500,8 +14500,8 @@ function tbl(s){return TABLE_ALIAS[s]||s;}
 let sb=null;
 // ── 版本號（日期+時間格式：年後兩碼+月+日.時分，例 26620.1058 = 26年6/20 10:58）──
 // 每次改版手動更新這一行即可，畫面與 title 會一起更新
-const APP_VERSION = '261009.1519';
-const APP_VERSION_LABEL = 'v261009.1519';
+const APP_VERSION = '261009.1558';
+const APP_VERSION_LABEL = 'v261009.1558';
 const CLOUD = !!(window.YUGYM_CONFIG && window.YUGYM_CONFIG.url && window.YUGYM_CONFIG.anonKey);
 if(CLOUD){ sb = supabase.createClient(window.YUGYM_CONFIG.url, window.YUGYM_CONFIG.anonKey); }
 
@@ -34974,6 +34974,17 @@ function grpBookLastDay(){
 }
 function grpBookLastDayTxt(){ return grpBookLastDay().slice(5).replace('-','/'); }
 function grpTooFar(dateStr){ return String(dateStr||'')>grpBookLastDay(); }
+/* 「當天、而且一個人都還沒有」的團課，會員不能自己報名（2026-10-09 使用者）——
+   使用者原話：「完全沒有人報名的要阻擋」「因為教練可能會有其他安排　不能臨時安插上課」，
+   同日收斂成「這一句只限當天的課程　如果會員要加隔天沒人報名的課程是可以的」。
+   ⚠ 櫃檯不受限（「可以跟教練溝通過後　臨時加開」）—— 他們改名單不走會員那支 RPC。
+   ⚠ 有效名額用「名單 − 請假」：名單上只剩請假的人等於沒有人（與 grpLiveHeads 同一套）。
+   ⚠ 這支只是畫面上的把關；真正的防線在資料庫 fn_member_join_group 的 BOOKING.NO_SEED。 */
+function grpNoSeedToday(b){
+  if(!b) return false;
+  if(String(b.date||'')!==ymd(TODAY)) return false;
+  return (typeof grpLiveHeads==='function' ? grpLiveHeads(b) : (mids(b)||[]).length) <= 0;
+}
 /* 請假釋出名額（2026-08-12 使用者定案：「請假要釋出名額」）——
    請假的票照扣、補課券照發（規則不變），但位子開放別人補：
    所有「滿了沒」的計算改用有效名額＝總名額−請假名額。 */
@@ -63923,6 +63934,9 @@ function memh2HTML(o){
     /* 超過一週的那幾天（2026-09-08）：不藏起來 —— 藏了會員只會覺得「那天怎麼沒開課」。
        比照「已結束」那一套：照樣列、暗化、不可報名，並在卡上寫出還沒開放。 */
     const far=!past && grpTooFar(b.date);
+    /* 當天還沒有人報名的那幾堂（2026-10-09）：不藏，照樣列、暗化、寫出原因
+       —— 藏起來會員只會覺得「今天怎麼沒有團課」。 */
+    const noSeed=!past && !far && grpNoSeedToday(b);
     const _cid=b.substitute_coach_id||b.coach_id||null;
     const _cnm=(_cid&&coachMap[_cid])?coachMap[_cid]:'';
     const _vn=(typeof venueDisplay==='function')?(venueDisplay(b)||''):'';
@@ -63931,11 +63945,11 @@ function memh2HTML(o){
        改成一律點得開：先看到卡，能不能加入由圓鈕自己說。
        ⚠ 這裡是 .map 的函式本體，不是 template literal —— 註解要用純 /* *\/，
          寫成 ${...} 會把整段 JS 打斷（0823 已經在別處踩過一次）。 */
-    return `<div class="admh2-card mh2-grpopen${full?' mh2-full':''}${(past||far)?' mh2-past':''}" style="--admh-c:${MEMH2_COL.group};" onclick="memh2GrpTap('${b.id}')">
-      <div class="a2-stampcol"><span class="mh2-joinic">${(past||far)?'—':(full?'滿':'＋')}</span></div>
+    return `<div class="admh2-card mh2-grpopen${full?' mh2-full':''}${(past||far||noSeed)?' mh2-past':''}" style="--admh-c:${MEMH2_COL.group};" onclick="memh2GrpTap('${b.id}')">
+      <div class="a2-stampcol"><span class="mh2-joinic">${(past||far||noSeed)?'—':(full?'滿':'＋')}</span></div>
       <div class="a2-main">
         <div class="a2-l1">團體課${_vn?'・'+_vn:''}</div>
-        <div class="a2-l3">${heads}/${cap} 人${past?'・已結束':(far?'・開課前一週開放':(full?'・已額滿':'・還可報名'))}</div>
+        <div class="a2-l3">${heads}/${cap} 人${past?'・已結束':(far?'・開課前一週開放':(noSeed?'・今天還沒有人報名，請洽櫃檯':(full?'・已額滿':'・還可報名')))}</div>
       </div>
       <div class="a2-side">
         <span class="a2-time">${b.start_time}</span>
@@ -64637,11 +64651,15 @@ async function memh2GrpTap(bid){
   /* 一週以後的場次還沒開放報名（2026-09-08）—— 排在「已結束」之後、「已額滿」之前：
      時間還沒到，是比人滿了更前面的一道門。 */
   const tooFar=!past && grpTooFar(b.date);
+  /* 當天還沒有人報名（2026-10-09）：排在「已結束／尚未開放」之後、「已額滿」之前 ——
+     它跟額滿一樣是「這一堂現在加不進去」，但原因不同，要寫清楚。 */
+  const noSeed=!past && !tooFar && grpNoSeedToday(b);
   const joinOrb = past ? orb('off','—','已結束',null)
     : (tooFar ? orb('off','—','尚未開放',null,`團體課開課前一週才開放報名（目前開放到 ${grpBookLastDayTxt()}）`)
+    : (noSeed ? orb('off','—','請洽櫃檯',null,'這堂今天還沒有人報名，教練可能另有安排 —— 想上請洽櫃檯')
     : (full ? orb('off','—','已額滿',null,`${heads}/${cap} 人`)
       : (tkN>0 ? orb('go','＋','加入',`memTaskClose();memh2GrpJoin('${b.id}')`)
-               : orb('cx','＋','需購票',`memTaskClose();memGrpPlans()`,'還沒有團體課票券，點我看方案'))));
+               : orb('cx','＋','需購票',`memTaskClose();memGrpPlans()`,'還沒有團體課票券，點我看方案')))));
   memTaskClose();
   const host=document.createElement('div');
   host.id='mem-task-pop';
@@ -65781,6 +65799,9 @@ const GRP_JOIN_ERR={'AUTH.FORBIDDEN':'僅限本人操作','BOOKING.NOT_FOUND':'�
   'BOOKING.PAST_DATE':'這堂課已開始或結束','BOOKING.DUP':'您已報名這堂課',
   /* 2026-09-08：資料庫端也擋一週以外的場次（fn_member_join_group），前端三道之外的最後一道 */
   'BOOKING.TOO_FAR':'團體課開課前一週才開放報名，這一堂還沒開放',
+  /* 2026-10-09：當天一個人都還沒有的團課不給自己報（教練可能有別的安排），
+     第一個人由櫃檯跟教練確認後再加。隔天以後的空堂不受限。 */
+  'BOOKING.NO_SEED':'這堂今天還沒有人報名，無法自行加入 —— 想上請洽櫃檯',
   'BOOKING.FULL':'這堂課名額已滿','TICKET.NONE':'沒有可用的團體課票券，請洽櫃檯',
   'TICKET.INVALID_PICK':'選的票券已不能用於這堂課（可能剛用完或已過效期），請重新選一次',
   'CANCEL.SAME_DAY':'開課當天無法自行取消，請聯繫櫃檯處理'};
