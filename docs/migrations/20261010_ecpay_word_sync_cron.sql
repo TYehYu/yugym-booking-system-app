@@ -24,5 +24,13 @@ select cron.schedule('ecpay-word-sync', '20 19 * * *', $job$
       'Content-Type','application/json',
       'Authorization','Bearer <PUBLISHABLE_KEY>',
       'apikey','<PUBLISHABLE_KEY>'),
-    body := '{"action":"syncWords","dryRun":false}'::jsonb)
+    body := '{"action":"syncWords","dryRun":false,"notify":true}'::jsonb)
 $job$);
+
+-- notify:true 只有排程會帶（2026-10-10 使用者：「如果自動建失敗　我人在國外會知道嗎
+-- 可以用line發送訊息給我嗎」）。畫面上手動按的人當場就看得到結果，不用再 LINE 給自己。
+-- 三種情況才發、其餘安靜：
+--   ① 建成功 ✅ 列出建了哪幾段
+--   ② 建失敗 ⚠ 附原因＋「現在該做什麼」（人在國外，光說失敗沒有用）
+--   ③ 下一期開始剩 ≤10 天、綠界還沒有那一期的 FX → 每天一則催促（刻意重複，這有期限）
+-- 收件人：在職的 admin（employees.role='admin'），櫃檯不收。

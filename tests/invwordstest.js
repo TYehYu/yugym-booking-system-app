@@ -36,7 +36,12 @@ ok('★★★ 失敗時還原按鈕（try/finally）',
 ok('★★ 寫完回頭重查一次，畫面要反映新狀態',
    (src.match(/await _invWordsCheck\(\);/g)||[]).length>=2);
 
-console.log('\n④ 期別文字只有一份');
+console.log('\n④ 人不在的時候要知道結果（2026-10-10 使用者：「我人在國外會知道嗎」）');
+ok('★★ 畫面有寫「會 LINE 通知管理員」', /都會 LINE 通知管理員/.test(src));
+/* 真正發訊息的程式在 edge function（ecpay-invoice v14），不在 index.html；
+   這支只能守「畫面有沒有講清楚」，實際發送靠 cron body 的 notify:true。 */
+
+console.log('\n⑤ 期別文字只有一份');
 ok('★★ invTermLabel 抽成共用，查詢與同步都用它', /function invTermLabel\(n\)\{/.test(src)
    && /const term=invTermLabel;/.test(src) && /invTermLabel\(p\.InvoiceTerm\)/.test(src));
 
