@@ -26,7 +26,9 @@ console.log('\n② 要建哪個字軌不由前端決定');
 /* 註解裡會寫到 FX，所以先把註解剝掉再斷言（見 yugym-assert-hits-comment 的教訓） */
 const code=src.replace(/\/\*[\s\S]*?\*\//g,'');
 ok('★★★ 前端沒有把字軌名稱送進 syncWords', !/syncWords',\{[^}]*Header/.test(code));
-ok('★★ 畫面上有講「只處理 FX、不動 FS」', /只處理 <b>FX<\/b>/.test(src));
+/* 2026-10-10 二修（使用者：「使用 FS 的這個系統在 9 月底就結束合作了　之後可以把所有的
+   配號都給綠界」）：從「只建 FX」改成「全部都建」，例外清單只留 115 年 9-10 月的 FS。 */
+ok('★★ 畫面上有講「全部都建、哪一段例外」', /財政部配給的字軌<b>全部都建<\/b>/.test(src));
 
 console.log('\n③ 按鈕不會按兩次、也不會卡住');
 ok('★★★ 兩支都包 onceAct', /onceAct\('invwsync', _invWordsSync\)/.test(src)
