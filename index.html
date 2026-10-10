@@ -3499,6 +3499,12 @@ body.mc-mode #tl-sheet,body.mc-mode #tl-add-sheet{top:60px;}
    所以不用紅色（紅留給真正該處理的事，見品牌色強度階級）。 */
 .rev-noinv{font-size:10.5px;font-weight:700;color:var(--t3);background:var(--card2);
   border:1px solid var(--bd);border-radius:5px;padding:1px 6px;white-space:nowrap;}
+.inv-words{display:flex;align-items:center;gap:10px;flex-wrap:wrap;margin:2px 0 10px;}
+.inv-words-n{font-size:11.5px;color:var(--t3);line-height:1.7;}
+.inv-wsec{margin:8px 0;font-size:12.5px;}
+.inv-wsec>b{display:block;margin-bottom:4px;}
+.inv-wrow{display:flex;gap:10px;align-items:baseline;flex-wrap:wrap;padding:3px 0;border-bottom:1px solid var(--bd);}
+.inv-wrow b{font-family:var(--num);}
 .inv-alert{background:#fdecea;border:1px solid var(--danger,#b5372e);border-radius:10px;padding:10px 12px;
   font-size:12.5px;color:var(--danger,#b5372e);line-height:1.75;margin-bottom:12px;}
 .inv-row{display:flex;align-items:center;justify-content:space-between;gap:12px;
@@ -14525,8 +14531,8 @@ function tbl(s){return TABLE_ALIAS[s]||s;}
 let sb=null;
 // ── 版本號（日期+時間格式：年後兩碼+月+日.時分，例 26620.1058 = 26年6/20 10:58）──
 // 每次改版手動更新這一行即可，畫面與 title 會一起更新
-const APP_VERSION = '261009.2123';
-const APP_VERSION_LABEL = 'v261009.2123';
+const APP_VERSION = '261010.1351';
+const APP_VERSION_LABEL = 'v261010.1351';
 const CLOUD = !!(window.YUGYM_CONFIG && window.YUGYM_CONFIG.url && window.YUGYM_CONFIG.anonKey);
 if(CLOUD){ sb = supabase.createClient(window.YUGYM_CONFIG.url, window.YUGYM_CONFIG.anonKey); }
 
@@ -71566,6 +71572,16 @@ async function finInvoices(){
             : '正式開立中，商店代號 '+(cfg.mid||'—')+'。')
         : '<b>尚未啟用</b>：'+(cfg.why||'等綠界字軌與金鑰下來後設定 ECPAY_ENV=prod 即可上線，程式不用再改。')}
     </div>
+    ${/* 字軌配號（2026-10-10 使用者：「每兩個月我要上傳號碼　這個有辦法自動化嗎」）——
+         綠界有三支 API：查財政部配號 → 新增字軌 → 啟用。這一版先做**唯讀**的查詢：
+         查得到＝取號時有授權給綠界，自動化才成立；查不到就只能手動填。
+         ⚠ 刻意先不放「建立／啟用」：字軌是稅務的東西，要先確認得到資料、
+           也要讓人看過要建哪幾組再動手。 */''}
+    <div class="inv-words">
+      <button class="btn btn-ghost btn-sm" onclick="invWordsCheck()">查字軌配號</button>
+      <span class="inv-words-n">看財政部這一期配給你哪些號碼（純查詢，不會動到任何設定）</span>
+    </div>
+    <div id="inv-words-out"></div>
     ${bad.length?`<div class="inv-alert">有 <b>${bad.length}</b> 筆開立失敗，按「重開」重試；同一筆重開不會開出兩張（用同一個單號）。</div>`:''}
     ${rows.length?rows.slice(0,200).map(line).join(''):'<div style="font-size:13px;color:var(--t3);padding:8px 0;">還沒有任何發票紀錄。</div>'}
     ${rows.length>200?`<div style="font-size:11.5px;color:var(--t3);margin-top:8px;">只列最近 200 筆（共 ${rows.length} 筆）。</div>`:''}
@@ -71573,6 +71589,38 @@ async function finInvoices(){
 }
 /* 重開：沿用同一個 merchant_order_no —— 綠界同單號重送不會開出第二張，
    所以按兩次也不會變兩張發票。 */
+/* 查字軌配號（2026-10-10）——同時問兩件事：
+     ① 財政部這一期配給我們哪幾組（GetGovInvoiceWordSetting）
+     ② 綠界這邊已經建了哪幾組（GetInvoiceWordSetting）
+   ⚠ 純讀取。查不到不等於壞了：多半是「取號時沒有把字軌授權給綠界」，
+     那種情況自動化就不成立，要先去綠界後台授權（或繼續手動填）。
+   ⚠ 期別只查當年與明年：API 本來就只接受去年／當年／明年。 */
+async function invWordsCheck(){ return onceAct('invwords', _invWordsCheck); }
+async function _invWordsCheck(){
+  const out=document.getElementById('inv-words-out'); if(!out) return;
+  out.innerHTML='<div class="inv-words-n" style="padding:8px 0;">查詢中…</div>';
+  const roc=String(new Date().getFullYear()-1911);
+  const [gov,mine]=await Promise.all([
+    invCall('govWords',{InvoiceYear:roc}),
+    invCall('words',{InvoiceYear:roc}).catch(()=>null)
+  ]);
+  const term=n=>({1:'1-2月',2:'3-4月',3:'5-6月',4:'7-8月',5:'9-10月',6:'11-12月'})[String(n)]||('第 '+n+' 期');
+  const list=(r)=>{
+    const d=(r&&r.data)||{};
+    const a=d.InvoiceInfo||d.InvoiceWordSetting||d.Data||[];
+    return Array.isArray(a)?a:[];
+  };
+  const rowsOf=(arr)=>arr.map(x=>`<div class="inv-wrow"><b>${escH(String(x.InvoiceHeader||''))}</b>
+      <span>${escH(String(x.InvoiceStart||''))} – ${escH(String(x.InvoiceEnd||''))}</span>
+      <span class="inv-words-n">${term(x.InvoiceTerm)}${x.InvType?('・'+(String(x.InvType)==='07'?'一般稅額':'特種稅額')):''}</span></div>`).join('');
+  const g=list(gov), m=list(mine);
+  out.innerHTML=`
+    <div class="inv-wsec"><b>財政部配給（民國 ${roc} 年）</b>${
+      (gov&&gov.ok&&g.length) ? rowsOf(g)
+      : `<div class="inv-words-n">查不到（${escH(String((gov&&(gov.msg||gov.code))||'無回應'))}）—— 多半是<b>取號時沒有把字軌授權給綠界</b>，要自動化得先去綠界後台授權。</div>`}</div>
+    <div class="inv-wsec"><b>綠界已建立</b>${
+      m.length ? rowsOf(m) : `<div class="inv-words-n">查不到或沒有資料（${escH(String((mine&&(mine.msg||mine.code))||'無回應'))}）。</div>`}</div>`;
+}
 async function invRetry(id){ return onceAct('invretry:'+id, ()=>_invRetry(id)); }
 async function _invRetry(id){
   const rows=(await dbGetAll('invoices').catch(()=>[]))||[];
