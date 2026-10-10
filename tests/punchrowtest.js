@@ -29,11 +29,13 @@ console.log('\n② 員工列表每一列的驚嘆號');
 ok('★ 名字後面掛驚嘆號，且只在有待處理時出現',
    /\$\{\(_punch\[c\.id\]\|\|0\)\?`<button class="st-punch-x"[\s\S]{0,200}openPunchFixModal\('\$\{c\.id\}'\)">!<\/button>`:''\}/.test(src));
 ok('★ 點驚嘆號不會順便觸發整列的「開員工明細」', /event\.stopPropagation\(\);openPunchFixModal/.test(src));
-ok('★ 滑過去看得到有幾筆', /title="打卡異常／補卡申請 \$\{_punch\[c\.id\]\} 筆，點一下查看修改"/.test(src));
+/* 2026-10-10 使用者：「都用驚嘆號表示就好」—— 遲到併進來，說明文字跟著改。 */
+ok('★ 滑過去看得到有幾筆、以及是哪三種',
+   /title="打卡異常 \$\{_punch\[c\.id\]\} 筆（漏打下班／遲到／補卡申請），點一下查看修改"/.test(src));
 ok('★ 用紅色（影響工時與薪資，是要處理的錯不是提醒）',
    /\.st-punch-x\{width:19px;height:19px;border-radius:50%;border:none;flex:0 0 auto;\s*\n\s*background:var\(--danger,#b5372e\);/.test(src));
 ok('★ 列表的筆數與彈窗共用 punchIssuesOf（兩邊不可能對不上）',
-   /coaches\.forEach\(c=>\{ _punch\[c\.id\]=punchIssuesOf\(_pa,_prq,c\.id,_td\)\.n; \}\);/.test(src));
+   /coaches\.forEach\(c=>\{ _punch\[c\.id\]=punchIssuesOf\(_pa,_prq,c\.id,_td,_psh\)\.n; \}\);/.test(src));
 ok('　　不限本月：忘記打下班擺著不處理，工時就一直是錯的',
    /不限本月：忘記打下班的紀錄擺著不處理，工時就一直是錯的/.test(src));
 ok('　　統計失敗不會讓整個員工列表畫不出來', /catch\(e\)\{ console\.error\('員工列表打卡待處理統計失敗:',e\); \}/.test(src));
@@ -63,8 +65,10 @@ ok('　　筆數多時彈窗內捲，不會長到看不到底', /\.pfx-list\{[^}
 
 console.log('\n④ 實跑：一位員工有哪些待處理');
 {
-  const i=src.indexOf('function punchIssuesOf(att, reqs, empId, today){');
-  const punchIssuesOf=new Function(src.slice(i, src.indexOf('\n}\n', i)+3)+'\nreturn punchIssuesOf;')();
+  /* 2026-10-10：簽名多了 shifts（遲到併進來）。這一段只測原本那兩種，
+     所以不帶 shifts —— 不帶就等於舊行為，正好驗「舊呼叫端沒被改壞」。 */
+  const i=src.indexOf('function punchIssuesOf(att, reqs, empId, today, shifts){');
+  const punchIssuesOf=new Function('punchLateOf', src.slice(i, src.indexOf('\n}\n', i)+3)+'\nreturn punchIssuesOf;')(()=>[]);
   const ATT=[
     {id:'A1',emp_id:'e1',date:'2026-07-28',clock_in:'09:00',clock_out:null},   // 忘記打下班
     {id:'A2',emp_id:'e1',date:'2026-07-30',clock_in:'09:00',clock_out:'18:00'},// 正常

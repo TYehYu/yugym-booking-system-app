@@ -695,6 +695,10 @@ body:has(#login-screen:not(.hidden)){background:#003d32;}
   padding:0;box-shadow:0 1px 4px rgba(181,55,46,.35);}
 .st-punch-x:hover{filter:brightness(1.14);}
 .st-punch-x:active{transform:scale(.92);}
+/* 遲到也算打卡異常（2026-10-10 使用者：「都用驚嘆號表示就好　代表這個員工打卡有異常」）——
+   原本想用金色另標一顆，使用者否決：一個員工只要一個訊號，看到驚嘆號就點進去看是什麼。
+   驚嘆號的紅色因此維持不變。 */
+.pfx-late{color:var(--danger,#b5372e);font-weight:800;}
 /* 打卡待處理彈窗 */
 .pfx-h{font-size:13px;font-weight:800;color:var(--text);margin-bottom:3px;}
 .pfx-note{font-size:11.5px;color:var(--t3);line-height:1.7;margin-bottom:8px;}
@@ -14531,8 +14535,8 @@ function tbl(s){return TABLE_ALIAS[s]||s;}
 let sb=null;
 // ── 版本號（日期+時間格式：年後兩碼+月+日.時分，例 26620.1058 = 26年6/20 10:58）──
 // 每次改版手動更新這一行即可，畫面與 title 會一起更新
-const APP_VERSION = '261010.1624';
-const APP_VERSION_LABEL = 'v261010.1624';
+const APP_VERSION = '261010.1635';
+const APP_VERSION_LABEL = 'v261010.1635';
 const CLOUD = !!(window.YUGYM_CONFIG && window.YUGYM_CONFIG.url && window.YUGYM_CONFIG.anonKey);
 if(CLOUD){ sb = supabase.createClient(window.YUGYM_CONFIG.url, window.YUGYM_CONFIG.anonKey); }
 
@@ -48430,12 +48434,17 @@ async function renderStaffList(){
   }catch(e){ console.error('員工列表本月統計失敗:',e); }
   /* 打卡待處理筆數（2026-08-01 使用者指示：有異常就在那一列顯示驚嘆號）——
      與彈窗共用 punchIssuesOf，兩邊數字必然一致。
-     不限本月：忘記打下班的紀錄擺著不處理，工時就一直是錯的，不該因為翻月就看不見。 */
+     不限本月：忘記打下班的紀錄擺著不處理，工時就一直是錯的，不該因為翻月就看不見。
+     ⚠ 只有「遲到」那一項是看本月（2026-10-10 使用者定）—— 它沒有東西要處理，
+       月底結算完就該歸零，跟漏打下班不一樣。 */
   const _punch={};
   try{
-    const[_pa,_prq]=await Promise.all([dbGetAll('attendance'), dbGetAll('punch_requests').catch(()=>[])]);
+    const[_pa,_prq,_psh]=await Promise.all([dbGetAll('attendance'),
+      dbGetAll('punch_requests').catch(()=>[]), dbGetAll('shifts').catch(()=>[])]);
     const _td=ymd(TODAY);
-    coaches.forEach(c=>{ _punch[c.id]=punchIssuesOf(_pa,_prq,c.id,_td).n; });
+    /* 遲到併進同一顆驚嘆號（2026-10-10 使用者：「都用驚嘆號表示就好」）——
+       數字＝漏打下班＋補卡申請＋本月遲到，與彈窗共用 punchIssuesOf，兩邊不會對不上。 */
+    coaches.forEach(c=>{ _punch[c.id]=punchIssuesOf(_pa,_prq,c.id,_td,_psh).n; });
   }catch(e){ console.error('員工列表打卡待處理統計失敗:',e); }
   /* 當月實領薪資（2026-07-30 使用者指示：放在休假日後面）——
      直接用薪資彙總那支 computeMonthlyPayroll，口徑與「薪資制度 → 月結明細」完全一致，
@@ -48679,7 +48688,7 @@ async function renderStaffList(){
                姓名格再加一塊底色就變成色塊疊色塊。 */''}
         <span class="st-l-who">
           <span class="st-l-nm">${(()=>{ const _lv=c.role==='admin'?'adm':(c.is_manager?'mgr':'');
-            return _lv?`<span class="st-lv st-lv-${_lv}">${escH(c.job_title||(_lv==='adm'?'管理員':'主管'))}</span>`:''; })()}${c.name||'（待填寫）'}${c.name_en?`<i>${c.name_en.toUpperCase()}</i>`:''}${stateOf(c)!=='active'?statusBadge(c):''}${(_punch[c.id]||0)?`<button class="st-punch-x" title="打卡異常／補卡申請 ${_punch[c.id]} 筆，點一下查看修改" onclick="event.stopPropagation();openPunchFixModal('${c.id}')">!</button>`:''}</span>
+            return _lv?`<span class="st-lv st-lv-${_lv}">${escH(c.job_title||(_lv==='adm'?'管理員':'主管'))}</span>`:''; })()}${c.name||'（待填寫）'}${c.name_en?`<i>${c.name_en.toUpperCase()}</i>`:''}${stateOf(c)!=='active'?statusBadge(c):''}${(_punch[c.id]||0)?`<button class="st-punch-x" title="打卡異常 ${_punch[c.id]} 筆（漏打下班／遲到／補卡申請），點一下查看修改" onclick="event.stopPropagation();openPunchFixModal('${c.id}')">!</button>`:''}</span>
           <span class="st-l-sub">${tl!=='—'?`<b style="color:${etc};">${tl}</b>`:''}${(tl!=='—'&&c.job_title)?'・':''}${c.job_title||''}${nameSub(c)?`　${nameSub(c)}`:''}${stBdayTag(c,_ym)}</span>
         </span>
         ${pending
@@ -62646,25 +62655,57 @@ async function renderStaffAttendance(tab){
    「管理員的打卡異常與補打卡移除，把這個功能設計在員工列表的每一列員工各自身上，
      如果有異常顯示驚嘆號，讓我可以點選查看修改」
 
-   一位員工的「打卡待處理」有兩種，合在一起算：
+   一位員工的「打卡異常」有三種，合在一起算：
    ① 異常打卡＝過去的日期有上班、沒下班（忘記打卡下班，工時會少算）
    ② 補卡申請＝他自己送出、還沒審核的
+   ③ 本月遲到（2026-10-10 新增，見下面的 punchLateOf）
    列表的驚嘆號與彈窗都讀這一支，兩邊的數字不可能對不上。
-   empId 傳 null＝全部員工（首頁待辦的「N 筆補打卡待審核」走這條）。 */
-function punchIssuesOf(att, reqs, empId, today){
+   empId 傳 null＝全部員工（首頁待辦的「N 筆補打卡待審核」走這條）。
+
+   ⚠ 2026-10-10 使用者：「都用驚嘆號表示就好　代表這個員工打卡有異常」——
+     遲到原本另外做了一顆金色標記，被否決：一個員工只要一個訊號。
+     shifts 有帶進來，n 就會包含遲到；不帶（舊呼叫端）行為完全不變。 */
+/* 本月遲到（2026-10-10 使用者：「小曾這一天晚打卡　系統都沒有警示嗎」）——
+   在此之前遲到**完全沒有任何警示**：驚嘆號只認「有上班沒下班」與補卡申請，
+   晚打卡不算異常；唯一看得到的是員工自己時間軸上那幾格紅色。
+
+   使用者定的兩條：
+   ・**不寬限** —— 晚 1 分鐘就算（他截圖那筆是排 16:00、16:06 打卡）。
+   ・**看本月** —— 跟薪資、班表同一個口徑，月底結算完就歸零。
+   ⚠ 請假那天不算：leave_type 有值代表那天本來就不用到，拿班表時間去比會變成「遲到」。
+   ⚠ 沒排班的人不算：沒有班表就沒有「該到的時間」可以比（自由上下班的正職）。 */
+function punchLateOf(att, shifts, empId, mkey){
+  const mine=r=>!empId || String(r.emp_id||'')===String(empId);
+  const shMap={};
+  (shifts||[]).forEach(s=>{ if(s && s.emp_id && s.date) shMap[s.emp_id+'|'+s.date]=s; });
+  return (att||[]).filter(r=>r && r.clock_in && r.date && String(r.date).slice(0,7)===mkey && mine(r))
+    .map(r=>{
+      const sh=shMap[r.emp_id+'|'+r.date];
+      if(!sh || !sh.start_time || sh.leave_type) return null;
+      const late=timeToMin(r.clock_in)-timeToMin(sh.start_time);
+      return late>0 ? {id:r.id, emp_id:r.emp_id, emp_name:r.emp_name, date:r.date,
+        clock_in:r.clock_in, start_time:sh.start_time, lateMin:late} : null;
+    })
+    .filter(Boolean)
+    .sort((a,b)=>String(b.date).localeCompare(String(a.date)));
+}
+function punchIssuesOf(att, reqs, empId, today, shifts){
   const mine=r=>!empId || String(r.emp_id||'')===String(empId);
   const abn=(att||[]).filter(r=>r && r.clock_in && !r.clock_out && r.date && String(r.date)<today && mine(r))
     .sort((a,b)=>String(b.date).localeCompare(String(a.date)));
   const pend=(reqs||[]).filter(r=>r && r.status==='pending' && mine(r))
     .sort((a,b)=>String(a.created_at||'').localeCompare(String(b.created_at||'')));
-  return {abn, pend, n:abn.length+pend.length};
+  const late=shifts ? punchLateOf(att, shifts, empId, String(today).slice(0,7)) : [];
+  return {abn, pend, late, n:abn.length+pend.length+late.length};
 }
 async function openPunchFixModal(empId){
   window._punchFixEmp = empId||null;
-  const[coaches,att,reqs]=await Promise.all([
-    dbGetAll('coaches'), dbGetAll('attendance'), dbGetAll('punch_requests').catch(()=>[])]);
+  const[coaches,att,reqs,shifts]=await Promise.all([
+    dbGetAll('coaches'), dbGetAll('attendance'), dbGetAll('punch_requests').catch(()=>[]),
+    dbGetAll('shifts').catch(()=>[])]);
   const nameOf=id=>{ const c=(coaches||[]).find(x=>String(x.id)===String(id)); return (c&&c.name)||''; };
-  const d=punchIssuesOf(att, reqs, empId, ymd(TODAY));
+  const d=punchIssuesOf(att, reqs, empId, ymd(TODAY), shifts);
+  const lateRows0=d.late;
   const who=empId?(nameOf(empId)||'該員工'):'全部員工';
   const esc=t=>String(t==null?'':t).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
   const nm=r=>empId?'':`<b class="pfx-who">${esc(nameOf(r.emp_id)||r.emp_name||'—')}</b>`;
@@ -62680,6 +62721,11 @@ async function openPunchFixModal(empId){
       <button class="btn btn-ghost btn-sm" onclick="rejectPunchReq('${r.id}')">駁回</button>
       <button class="btn btn-green btn-sm" onclick="approvePunchReq('${r.id}')">核准</button></span>
   </div>`).join('');
+  const lateRows=lateRows0.map(r=>`<div class="pfx-row">
+    <span class="pfx-main">${nm(r)}<b>${String(r.date).replace(/-/g,'/')}</b>
+      <span class="pfx-sub">班表 ${esc(r.start_time)}　·　打卡 ${esc(r.clock_in)}　·　<i class="pfx-late">晚 ${r.lateMin} 分</i></span></span>
+    ${SESSION&&SESSION.role==='admin'?`<button class="btn btn-ghost btn-sm" onclick="dutyPunchOutAsk('${r.id}')">修正時間</button>`:''}
+  </div>`).join('');
   showModal(`<div class="modal-title">打卡異常與補卡　·　${esc(who)}</div>
     ${d.n?`
       ${d.abn.length?`<div class="pfx-h">異常打卡（${d.abn.length}）</div>
@@ -62687,10 +62733,14 @@ async function openPunchFixModal(empId){
         <div class="pfx-list">${abnRows}</div>`:''}
       ${d.pend.length?`<div class="pfx-h"${d.abn.length?' style="margin-top:16px;"':''}>補卡申請待審核（${d.pend.length}）</div>
         <div class="pfx-note">員工自己送出的補登申請。核准後會直接寫進出勤紀錄。</div>
-        <div class="pfx-list">${reqRows}</div>`:''}`
+        <div class="pfx-list">${reqRows}</div>`:''}
+      ${lateRows0.length?`<div class="pfx-h"${(d.abn.length||d.pend.length)?' style="margin-top:16px;"':''}>本月遲到（${lateRows0.length}）</div>
+        <div class="pfx-note">打卡時間晚於班表開始時間，不寬限幾分鐘。請假那天與沒排班的人不算。
+          這一區不用處理，是給你知道的；打卡時間打錯才按「修正時間」。</div>
+        <div class="pfx-list">${lateRows}</div>`:''}`
     :`<div class="empty" style="padding:26px 8px;"><div class="em-t">沒有需要處理的打卡問題 👍</div>
        <div style="font-size:11.5px;color:var(--t3);margin-top:6px;line-height:1.7;">
-         這裡會列出「有上班沒下班」的紀錄，以及員工送出、還沒審核的補卡申請。</div></div>`}
+         這裡會列出「有上班沒下班」的紀錄、本月遲到，以及員工送出、還沒審核的補卡申請。</div></div>`}
     <div class="modal-foot">
       ${/* 代補打卡（2026-09-13 使用者：「今天員工mango忘記打卡　我無法幫她補打」）——
            那天她**整天沒打卡**，而兩個既有入口都要求「當天已經有一筆紀錄」：
