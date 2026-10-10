@@ -14531,8 +14531,8 @@ function tbl(s){return TABLE_ALIAS[s]||s;}
 let sb=null;
 // ── 版本號（日期+時間格式：年後兩碼+月+日.時分，例 26620.1058 = 26年6/20 10:58）──
 // 每次改版手動更新這一行即可，畫面與 title 會一起更新
-const APP_VERSION = '261010.1351';
-const APP_VERSION_LABEL = 'v261010.1351';
+const APP_VERSION = '261010.1614';
+const APP_VERSION_LABEL = 'v261010.1614';
 const CLOUD = !!(window.YUGYM_CONFIG && window.YUGYM_CONFIG.url && window.YUGYM_CONFIG.anonKey);
 if(CLOUD){ sb = supabase.createClient(window.YUGYM_CONFIG.url, window.YUGYM_CONFIG.anonKey); }
 
@@ -71579,7 +71579,8 @@ async function finInvoices(){
            也要讓人看過要建哪幾組再動手。 */''}
     <div class="inv-words">
       <button class="btn btn-ghost btn-sm" onclick="invWordsCheck()">查字軌配號</button>
-      <span class="inv-words-n">看財政部這一期配給你哪些號碼（純查詢，不會動到任何設定）</span>
+      <button class="btn btn-ghost btn-sm" onclick="invWordsSync()">同步字軌</button>
+      <span class="inv-words-n">查＝只看，不會動到設定。同步＝把財政部配給、綠界還沒有的號碼建進去並啟用（會先列出來給你確認）。<br>每天凌晨 03:20 自動跑一次，正常情況不用按。</span>
     </div>
     <div id="inv-words-out"></div>
     ${bad.length?`<div class="inv-alert">有 <b>${bad.length}</b> 筆開立失敗，按「重開」重試；同一筆重開不會開出兩張（用同一個單號）。</div>`:''}
@@ -71595,6 +71596,7 @@ async function finInvoices(){
    ⚠ 純讀取。查不到不等於壞了：多半是「取號時沒有把字軌授權給綠界」，
      那種情況自動化就不成立，要先去綠界後台授權（或繼續手動填）。
    ⚠ 期別只查當年與明年：API 本來就只接受去年／當年／明年。 */
+function invTermLabel(n){ return ({1:'1-2月',2:'3-4月',3:'5-6月',4:'7-8月',5:'9-10月',6:'11-12月'})[String(n)]||('第 '+n+' 期'); }
 async function invWordsCheck(){ return onceAct('invwords', _invWordsCheck); }
 async function _invWordsCheck(){
   const out=document.getElementById('inv-words-out'); if(!out) return;
@@ -71604,7 +71606,7 @@ async function _invWordsCheck(){
     invCall('govWords',{InvoiceYear:roc}),
     invCall('words',{InvoiceYear:roc}).catch(()=>null)
   ]);
-  const term=n=>({1:'1-2月',2:'3-4月',3:'5-6月',4:'7-8月',5:'9-10月',6:'11-12月'})[String(n)]||('第 '+n+' 期');
+  const term=invTermLabel;
   const list=(r)=>{
     const d=(r&&r.data)||{};
     const a=d.InvoiceInfo||d.InvoiceWordSetting||d.Data||[];
@@ -71620,6 +71622,60 @@ async function _invWordsCheck(){
       : `<div class="inv-words-n">查不到（${escH(String((gov&&(gov.msg||gov.code))||'無回應'))}）—— 多半是<b>取號時沒有把字軌授權給綠界</b>，要自動化得先去綠界後台授權。</div>`}</div>
     <div class="inv-wsec"><b>綠界已建立</b>${
       m.length ? rowsOf(m) : `<div class="inv-words-n">查不到或沒有資料（${escH(String((mine&&(mine.msg||mine.code))||'無回應'))}）。</div>`}</div>`;
+}
+/* 同步字軌（2026-10-10 使用者：「每兩個月我要上傳號碼　這個有辦法自動化嗎」）——
+   做的事等於人工在綠界後台的那三步：查財政部配號 → 新增字軌 → 設成啟用。
+   ⚠ 一定是兩段式：先 dryRun 把「要建哪幾組」列出來給人看過，按了確認才真的寫。
+     字軌是稅務的東西，不做成按一下就直接寫。
+   ⚠ 只處理 FX（新系統）。FS 是舊系統的字軌，白名單寫在 edge function 裡，
+     前端不給選 —— 不然誰按到都能改開票用的號碼。
+   每天凌晨 03:20 pg_cron 會自動跑同一支，所以正常情況這顆按鈕用不到，
+   留著是為了「這一期急著要用」的時候可以當場補。 */
+async function invWordsSync(){ return onceAct('invwsync', _invWordsSync); }
+async function _invWordsSync(){
+  const out=document.getElementById('inv-words-out');
+  if(out) out.innerHTML='<div class="inv-words-n" style="padding:8px 0;">查詢中…</div>';
+  const r=await invCall('syncWords',{dryRun:true});
+  const plan=(r&&r.plan)||[];
+  if(!plan.length){
+    const bad=((r&&r.years)||[]).find(y=>y&&y.ok===false);
+    showToast(bad ? ('⚠ 查不到配號：'+(bad.msg||'未知')) : '沒有要建的字軌，綠界已經是最新的', 5000);
+    await _invWordsCheck();
+    return;
+  }
+  showModal(`<div class="modal-title">把這些字軌建進綠界</div>
+    <div style="font-size:13px;color:var(--t2);padding:2px 0 12px;line-height:1.9;">
+      財政部配給我們、但綠界還沒有的號碼。</div>
+    <div style="background:var(--card2);border:1px solid var(--bd);border-radius:12px;padding:12px 14px;font-size:13px;line-height:2;">
+      ${plan.map(p=>`<div><b>${escH(String(p.InvoiceHeader||''))}</b>
+        <span class="num">${escH(String(p.InvoiceStart||''))} – ${escH(String(p.InvoiceEnd||''))}</span>
+        <span style="color:var(--t3);">民國 ${escH(String(p.InvoiceYear||''))} 年・${invTermLabel(p.InvoiceTerm)}</span></div>`).join('')}
+    </div>
+    <ul class="mk-pts" style="margin-top:12px;">
+      <li>建好會<b>直接設成啟用</b>，之後開的發票就用這段號碼</li>
+      <li>只處理 <b>FX</b>；FS 是舊系統的字軌，不會動到</li>
+      <li>已經建過的不會重建</li>
+    </ul>
+    <div class="modal-foot"><button class="btn btn-ghost" onclick="closeModal()">取消</button>
+      <button class="btn btn-green" id="invws-go" onclick="doInvWordsSync()">確認建立</button></div>`);
+}
+async function doInvWordsSync(){ return onceAct('invwsgo', _doInvWordsSync); }
+async function _doInvWordsSync(){
+  const btn=document.getElementById('invws-go');
+  if(btn){ btn.disabled=true; btn.textContent='建立中…'; }
+  try{
+    const r=await invCall('syncWords',{dryRun:false});
+    closeModal();
+    const done=(r&&r.done)||[];
+    const okN=done.filter(d=>d&&d.ok).length, bad=done.filter(d=>d&&!d.ok);
+    if(!done.length) showToast('⚠ 沒有建立任何字軌：'+((r&&r.msg)||'綠界沒有回應'), 6000);
+    else if(bad.length) showToast('⚠ 建立 '+okN+' 組、失敗 '+bad.length+' 組：'+String(bad[0].msg||''), 7000);
+    else showToast('已建立並啟用 '+okN+' 組字軌');
+    await _invWordsCheck();
+  }finally{
+    /* 失敗時彈窗還在，按鈕要還原，不然會卡在「建立中…」 */
+    const b2=document.getElementById('invws-go'); if(b2){ b2.disabled=false; b2.textContent='確認建立'; }
+  }
 }
 async function invRetry(id){ return onceAct('invretry:'+id, ()=>_invRetry(id)); }
 async function _invRetry(id){
