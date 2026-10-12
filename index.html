@@ -14548,8 +14548,8 @@ function tbl(s){return TABLE_ALIAS[s]||s;}
 let sb=null;
 // ── 版本號（日期+時間格式：年後兩碼+月+日.時分，例 26620.1058 = 26年6/20 10:58）──
 // 每次改版手動更新這一行即可，畫面與 title 會一起更新
-const APP_VERSION = '261012.1441';
-const APP_VERSION_LABEL = 'v261012.1441';
+const APP_VERSION = '261012.2011';
+const APP_VERSION_LABEL = 'v261012.2011';
 const CLOUD = !!(window.YUGYM_CONFIG && window.YUGYM_CONFIG.url && window.YUGYM_CONFIG.anonKey);
 if(CLOUD){ sb = supabase.createClient(window.YUGYM_CONFIG.url, window.YUGYM_CONFIG.anonKey); }
 
@@ -17346,8 +17346,25 @@ async function lineLoginStart(){
     await lineExchange();
   }catch(e){ showErr('LINE 登入失敗：'+(e.message||e)); setLineBtnBusy(false); }
 }
-// 取 LINE ID token → 換 Supabase session → 進 app 或引導申辦
+/* 取 LINE ID token → 換 Supabase session → 進 app 或引導申辦
+   ⚠ 整支包一層（2026-10-12）：這支一開頭就把按鈕設成「處理中…」，
+     中間任何一行丟出例外都會讓按鈕停在轉圈圈。呼叫端有兩個
+     （lineLoginStart 的 try、以及導回後自動續跑那條），與其指望每個呼叫端都接好，
+     不如在這裡自己保證「要嘛進 App、要嘛把按鈕放回去並說出原因」。 */
 async function lineExchange(){
+  try{ return await _lineExchange(); }
+  catch(e){
+    console.error('LINE 登入失敗', e);
+    try{ setLineBtnBusy(false); }catch(_){}
+    const _le=document.getElementById('login-err');
+    if(_le){
+      _le.innerHTML='LINE 登入沒有完成：'+String((e&&e.message)||e).replace(/</g,'&lt;')
+        +'<br><span style="font-size:11.5px;">請再按一次「使用 LINE 登入」</span>';
+      _le.style.display='block';
+    }
+  }
+}
+async function _lineExchange(){
   const cfg=window.YUGYM_CONFIG||{};
   const err=document.getElementById('login-err');
   const showErr=m=>{ if(err){err.textContent=m;err.style.display='block';} setLineBtnBusy(false); };
@@ -19547,7 +19564,22 @@ function bootYugym(){
         await ensureLiff();
         if(liff.isLoggedIn()){ await lineExchange(); return; }
       }
-    }catch(_){ }
+    }catch(e){
+      /* ⚠⚠ 這裡原本是空 catch（2026-10-12 使用者回報「會員卡在登入頁面轉圈圈」的成因）——
+         lineExchange 一進去就把按鈕設成「處理中，請稍候…」，中途丟出例外被這裡吃掉的話，
+         按鈕會**永遠**停在轉圈圈：沒有錯誤訊息、也按不下去，看起來就像當機。
+         而這條路是 liff.login 導回來之後自動跑的，客人根本沒按過任何東西。
+         ⚠ 失敗要做三件事：把按鈕放回去、把原因寫在畫面上、留一筆 console
+           （見「空 catch 會偽裝成沒資料」那條教訓）。 */
+      try{ setLineBtnBusy(false); }catch(_){}
+      console.error('LINE 登入續跑失敗', e);
+      const _le=document.getElementById('login-err');
+      if(_le){
+        _le.innerHTML='LINE 登入沒有完成：'+String((e&&e.message)||e).replace(/</g,'&lt;')
+          +'<br><span style="font-size:11.5px;">請再按一次「使用 LINE 登入」</span>';
+        _le.style.display='block';
+      }
+    }
     // LIFF 預熱（2026-07-27 提速）：登入頁一載入就先初始化 SDK，按下按鈕時省掉 init 等待
     try{ if((window.YUGYM_CONFIG||{}).lineLiffId) ensureLiff().catch(()=>{}); }catch(_){}
     // 未登入，停在登入頁
