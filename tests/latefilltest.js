@@ -163,10 +163,14 @@ console.log('\n②-d 收款審核要提醒折價券（有才出現）');
   /* 實跑：張數要夾三層，而且券的 id 要用重讀的那份 */
   const F=src.slice(src.indexOf('function grFillApply(P, quiet){'), src.indexOf('async function grantReqSaveFill(id){'));
   const splitSessions=(t,n)=>{const b=Math.floor(t/n),r=t%n;return Array.from({length:n},(_,i)=>b+(i<r?1:0));};
-  const run=(P,v,held,ids)=>new Function('document','showToast','splitSessions','splitAmount','Object','Math','window',
+  /* 2026-10-12：張數上限改成「每 4 堂 1 張」（voucherCapOf），所以要一起注進去。
+     這裡的 P.total=12 堂、一次付清 → 上限 3 張，與改版前的行為相同。 */
+  const voucherCapOf=(vt,sessions)=>vt!=='tt-discount-pt300'?Infinity:Math.max(0,Math.floor((Number(sessions)||0)/4));
+  const run=(P,v,held,ids)=>new Function('document','showToast','splitSessions','splitAmount','Object','Math','window','voucherCapOf',
       F+'\nreturn grFillApply;')(
         {getElementById:id=>(id in v)?{value:v[id]}:null}, ()=>{}, splitSessions, splitSessions, Object, Math,
-        {_grVoucherMax:held, _grVouchers:(ids||[]).map(id=>({id}))})(P);
+        {_grVoucherMax:held, _grVouchers:(ids||[]).map(id=>({id})), _grVoucherTt:'tt-discount-pt300'},
+        voucherCapOf)(P);
   const P={total:12, listPrice:14400, voucherN:0, voucherTkIds:[]};
   const r2=run(P,{'gr-amt':'14400','gr-method':'cash','gr-install':'1','gr-voucher':'2'},3,['V1','V2','V3']);
   eq('★★ 填 2 張 → 折 $600、實收 13800、用掉最先到期的兩張',

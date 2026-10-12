@@ -4993,6 +4993,10 @@ button.pp-name-edit:hover{border-bottom-color:var(--gold);}
 .tk-payrow .tk-amt{font-family:var(--num);}
 /* 還沒收的那一期（2026-10-12 使用者：「分期的票券 有辦法先顯示三期嗎」）——
    淡化＋灰籤「未繳」。不是紅色：分期本來就還沒到期，這不是警示（紅>金>綠）。 */
+/* 折抵券的使用規則（2026-10-12）：灰底一行，名目在前、一句話在後。
+   不用金色 —— 它不是提醒也不是警示，就是這張券的說明。 */
+.tk-vrule{font-size:11.5px;color:var(--t2);background:var(--card2);border-radius:8px;
+  padding:7px 10px;line-height:1.75;margin:0 0 10px;}
 .tk-payrow-due{opacity:.5;}
 .tk-due{font-size:10px;font-weight:700;color:var(--t2);background:rgba(0,0,0,.055);
   border-radius:5px;padding:1px 6px;white-space:nowrap;}
@@ -14544,8 +14548,8 @@ function tbl(s){return TABLE_ALIAS[s]||s;}
 let sb=null;
 // ── 版本號（日期+時間格式：年後兩碼+月+日.時分，例 26620.1058 = 26年6/20 10:58）──
 // 每次改版手動更新這一行即可，畫面與 title 會一起更新
-const APP_VERSION = '261012.1350';
-const APP_VERSION_LABEL = 'v261012.1350';
+const APP_VERSION = '261012.1441';
+const APP_VERSION_LABEL = 'v261012.1441';
 const CLOUD = !!(window.YUGYM_CONFIG && window.YUGYM_CONFIG.url && window.YUGYM_CONFIG.anonKey);
 if(CLOUD){ sb = supabase.createClient(window.YUGYM_CONFIG.url, window.YUGYM_CONFIG.anonKey); }
 
@@ -22414,6 +22418,26 @@ function tkVoucherUseDates(t, logs){
     .filter(l=>l && String(l.ticket_id)===String(t.id) && l.action==='deduct' && l.created_at)
     .map(l=>new Date(new Date(l.created_at).getTime()+8*3600*1000).toISOString().slice(0,10))
     .sort();
+}
+/* 折抵券的使用規則，寫在券上（2026-10-12 使用者：「運動按摩折抵券無使用限制
+   如果購買一堂1500 有五張按摩折抵券 可以完全折抵　所以要幫我在教練課折抵券寫上使用規則」）——
+   規則本身在 voucherCapOf，這裡只是把它翻成一句話畫在卡上。
+   ⚠ 同日二修（使用者：「只要顯示『每4堂課可折抵1張』其他文字不用
+     運動按摩折抵則不需要顯示」）——
+     ・教練課券只留那一句：12 堂／8 堂／分期各幾張，看卡的人自己除得出來，
+       寫出來只是把一行變三行。
+     ・運動按摩券**不畫**：它本來就沒有限制，寫「不限」等於為了對稱而多一行。
+   ⚠ 文字跟著常數走（VOUCHER_SESSIONS_PER），改規則不會漏改這一句。 */
+function tkVoucherRule(t){
+  const tid=String((t&&t.ticket_type_id)||'');
+  const nm=String((t&&t.plan_name)||'');
+  if(tid==='tt-discount-pt300' || /教練課折抵/.test(nm))
+    return `每 ${VOUCHER_SESSIONS_PER} 堂課可折抵 1 張`;
+  return '';
+}
+function tkVoucherRuleHtml(t){
+  const r=tkVoucherRule(t);
+  return r?`<div class="tk-vrule">使用規則　${escH(r)}</div>`:'';
 }
 /* 票卡編號的顯示樣式（2026-07-31）：一律 #N，卡片、下拉、明細講的都是同一個號碼。 */
 function tkNoTag(no){
@@ -44072,6 +44096,7 @@ async function openMemberDetail(member_id){
           : `<b style="color:var(--green);">${usedCount}</b><span style="color:var(--t3);font-weight:600;font-size:13px;"> / ${total}</span>`}</div>
       </div>
       <div class="mck-dots2" style="margin:10px 0 12px;">${circles}</div>
+      ${tkVoucherRuleHtml(t)}
       <div class="md-tk-foot">
         <span class="md-tk-meta">${tkBuyDateHtml(t)}　·　${tkExpireSeg(t,tkLogs,'到期')}　·　<span class="tag ${stTag[t.status]}" style="font-size:10.5px;">${stLabel[t.status]}</span>${tkMoneyHtml(t)}</span>
         ${(inst && (t.unlocked_sessions||0)<total && (isDeskLike()))?`<button class="btn btn-gold btn-sm" onclick="openInstallNext('${t.id}')">開通下一期</button>`:''}
@@ -51548,7 +51573,7 @@ function ppRecordHtml(){
                   ? `<span class="mtk mtk-ext mtk-ext-off" title="${escH(_w)}">展延</span>`
                   : `<button type="button" class="mtk mtk-ext" title="展延一次，期限同原方案；展延後依合約不得退費" onclick="event.stopPropagation();openTicketExtend('${t.id}')">展延</button>`;
               })():''}</div>
-            ${tkVoidNoteHtml(t, c.myLogs)}
+            ${tkVoucherRuleHtml(t)}${tkVoidNoteHtml(t, c.myLogs)}
             <div class="${_m2?'tkc-foot':''}" style="font-size:11px;color:var(--t3);margin-top:8px;display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:6px 10px;">
               <span style="min-width:0;">${_m2
                 ? `<span class="tkc-money">${tkMoneyHtml(t).replace(/^　·　/,'')}</span>`
@@ -51699,7 +51724,7 @@ function ppRecordHtml(){
                  ⚠ 非櫃檯角色（_m2 為假）維持原本的單行底列 —— 與 cardOf 的 else 分支一致。 */''}
             ${_m2?`<div class="tkc-meta">${tkBuyDateHtml(t)}　·　效期至 ${fmtExpire(t.expire_date,t)}</div>`:''}
             <div class="mck-dots2" style="margin:8px 0 2px;">${ticketTokens(t,bks,typeMap,used,null,PP.id,WAL.selfBk,null,{useDates:WAL.useDatesOf(t.id)})}</div>
-            ${tkVoidNoteHtml(t, c.myLogs)}
+            ${tkVoucherRuleHtml(t)}${tkVoidNoteHtml(t, c.myLogs)}
             <div class="${_m2?'tkc-foot':''}" style="font-size:11px;color:var(--t3);margin-top:7px;display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:6px 8px;">
               <span style="min-width:0;">${_m2
                 ? `<span class="tkc-money">${tkMoneyHtml(t).replace(/^　·　/,'')}</span>`
@@ -57681,14 +57706,25 @@ function gtAmtWarn(listPrice){
 /* ── 折抵券消費（2026-07-22 待辦2 使用者定案）：教練課/運動按摩簽約收款時可折抵，
    每張 $300；抽獎發的 tt-discount-* 票券即為折抵券。分期不併用（金額分段會亂）。 ── */
 const VOUCHER_TT={'私人教練':'tt-discount-pt300','運動按摩':'tt-discount-ms300'};
-/* 一次付清時的張數上限（2026-08-30 使用者定案）：
-     教練課折抵券 —— 最多 3 張（折上限 $900）
-     運動按摩折抵券 —— 不設限，$1,500 折到剩 $300 是使用者確認過的預期行為
-   沒列進來的就是不限。分期一律 1 張，那條規則比這裡優先（0729 定案）。
-   ⚠ 上限只有一份，refreshGrantVoucher（畫面）與 submitGrant（送出）都問這一支 ——
-     分成兩份寫，畫面擋住了但送出沒擋，等於沒擋。 */
-const VOUCHER_MAX={'tt-discount-pt300':3};
-function voucherCapOf(vt, isInst){ return isInst?1:(VOUCHER_MAX[vt]||Infinity); }
+/* ══ 教練課折抵券：每 4 堂 1 張（2026-10-12 使用者定版）══════════════════
+   使用者原話：「一次付清無使用張數限制　分3期 一期用一張也就是4堂可以用一張…
+   所以自訂方案的話課堂必須至少 4 堂才可以使用一張」。
+
+   這一條把過去兩條各自為政的規則收成同一個算式：
+     ・0830 的「一次最多 3 張」 ＝ 常態 12 堂 ÷ 4
+     ・0729 的「分期一期 1 張」 ＝ 每期 4 堂 ÷ 4
+   所以常態方案的行為**一格都沒變**，真正被補上的是自訂方案
+   （以前 1 堂也能折 3 張，$600 的方案折到 $0 還白燒一張）。
+
+   ⚠ 看的是「這一次付錢換到幾堂」：一次付清＝總堂數，分期＝這一期開通的堂數。
+   ⚠ 運動按摩折抵券維持不設限 —— 它的方案本來就是一堂一張，
+     套 ÷4 等於整個不能用（$1,500 折到剩 $300 是 0830 使用者確認過的預期行為）。
+   ⚠ 上限只有這一支，畫面與送出都問它 —— 分兩份寫，畫面擋住了但送出沒擋，等於沒擋。 */
+const VOUCHER_SESSIONS_PER=4;
+function voucherCapOf(vt, sessions){
+  if(vt!=='tt-discount-pt300') return Infinity;
+  return Math.max(0, Math.floor((Number(sessions)||0)/VOUCHER_SESSIONS_PER));
+}
 async function refreshGrantVoucher(){
   const wrap=document.getElementById('gt-voucher-wrap'); if(!wrap) return;
   const plan=window._grantPlanCache;
@@ -57710,11 +57746,14 @@ async function refreshGrantVoucher(){
   }catch(_){}
   const held=tks.reduce((s,t)=>s+(Number(t.sessions_remaining)||0),0);
   if(!held){ wrap.style.display='none'; return; }
-  /* 2026-07-29 使用者定案：分期＝一期只能用 1 張。
-     2026-08-30 再加一層：教練課折抵券一次最多 3 張（運動按摩仍不限）。 */
+  /* 每 4 堂 1 張（2026-10-12 定版，見 voucherCapOf 的說明）——
+     看的是「這一次付錢換到幾堂」：一次付清＝總堂數，分期＝這一期開通的堂數。 */
   const isInst=inst>1;
-  const cap=voucherCapOf(vt,isInst);
+  const _tot=(Number(plan.sessions_base)||0)+(Number(plan.sessions_bonus)||0);
+  const _segN=isInst?((splitSessions(_tot,inst)||[])[0]||0):_tot;
+  const cap=voucherCapOf(vt,_segN);
   const total=Math.min(held,cap);
+  if(!total){ wrap.style.display='none'; return; }   /* 堂數不夠換一張就整塊不畫 */
   window._gtVoucherMax=total; window._gtVoucherTks=tks; window._gtVoucherInst=isInst;
   window._gtVoucherHeld=held; window._gtVoucherTt=vt;
   wrap.style.display='';
@@ -57729,9 +57768,10 @@ async function refreshGrantVoucher(){
       <span class="gt-vh-ic">${LNI.gift||'🎟'}</span>
       ${/* 上限要寫出來 —— 櫃檯看到「有 5 張」卻只能輸入 3，不寫原因就會以為是壞了
            （呼應「不能用就寫原因，別藏按鈕」） */''}
+      ${/* 2026-10-12 使用者：「這邊也不用寫的那麼詳細」——籤上只留結論「最多 N 張」，
+           「為什麼是 N」收進滑鼠提示。規則本身寫在票券卡上（tkVoucherRule）。 */''}
       <span class="gt-vh-t">此會員有 <b>${held}</b> 張折抵券（每張折 $300）${
-        isInst?'<span class="gt-vh-lim">分期：本期限用 1 張</span>'
-        :(held>cap?`<span class="gt-vh-lim">本次最多 ${cap} 張</span>`:'')}</span>
+        held>cap?`<span class="gt-vh-lim" title="${isInst?`本期開通 ${_segN} 堂`:`${_segN} 堂`}・每 ${VOUCHER_SESSIONS_PER} 堂可折抵 1 張">最多 ${cap} 張</span>`:''}</span>
     </div>
     <div class="gt-vh-row">
       <span>本次使用</span>
@@ -57901,10 +57941,19 @@ async function submitGrant(){
   /* 折抵券張數上限（2026-07-29 分期 1 張／2026-08-30 教練課一次最多 3 張）——
      規則只有一份，見 voucherCapOf。window._gtVoucherMax 在 refreshGrantVoucher 已依此
      夾好，這裡再夾一次防繞過（畫面擋住、送出沒擋，等於沒擋）。 */
-  const _vCap = voucherCapOf(window._gtVoucherTt, isInstall);
-  const voucherN = Math.max(0, Math.min(
+  const _vCap = voucherCapOf(window._gtVoucherTt, isInstall?(Number(segs[0])||0):total);
+  /* ⚠ 2026-10-12 使用者：「如果今天會員有多張折抵券　可是自訂方案如果只開一堂課
+       是不是會把該堂課都折抵掉呢」——會。在此之前張數只夾「持有量」與「每次上限」，
+     **沒有夾金額**：一堂 $600 的自訂方案填 3 張，實收變 $0，第 3 張白白燒掉
+     （儲值金那邊本來就有夾 paidAmount，折抵券漏了）。
+     這裡補上「這一期的錢最多吸收得了幾張」。分期看第 1 期的金額，不是總額。 */
+  const _vBase = isInstall ? (Number(amts[0])||0) : dealAmount;
+  const _vByAmt = Math.max(0, Math.floor(_vBase/300));
+  const _vWant = Math.max(0, Math.min(
     Math.floor(Number((document.getElementById('gt-voucher')||{}).value)||0),
     Number(window._gtVoucherMax)||0, _vCap));
+  const voucherN = Math.min(_vWant, _vByAmt);
+  if(voucherN<_vWant) showToast(`這一筆只吸收得了 ${voucherN} 張折抵券（$${_vBase.toLocaleString()}），其餘留在會員帳上`, 6000);
   const voucherAmt=voucherN*300;
   const paidAmount=Math.max(0,dealAmount-voucherAmt);   // 非分期實收（分期見下方 firstAmount 折抵）
   /* ── 儲值金扣抵（2026-08-30）───────────────────────────────────
@@ -58769,7 +58818,7 @@ async function openGrantApprove(id){
      ⚠ 這一類錯不會白畫面、不會有紅字，只會安靜地少一塊功能 ——
        靠 tests/tdztest.js 掃「同一個函式裡宣告前先用」。 */
   const P=r.payload||{};
-  window._grVouchers=[]; window._grVoucherMax=0;
+  window._grVouchers=[]; window._grVoucherMax=0; window._grVoucherTt=null;
   try{
     const _vt=VOUCHER_TT[(P.plan&&P.plan.category)||''] ||
       (await (async()=>{ const types=window._ttCache&&window._ttCache.length?window._ttCache:await dbGetAll('ticket_types');
@@ -58781,6 +58830,7 @@ async function openGrantApprove(id){
         .sort((a,b)=>String(a.expire_date||'9999').localeCompare(String(b.expire_date||'9999')));
       window._grVouchers=_tks;
       window._grVoucherMax=_tks.reduce((n,t)=>n+(Number(t.sessions_remaining)||0),0);
+      window._grVoucherTt=_vt;   /* 張數上限要看券的種類（教練課才有「每 4 堂 1 張」） */
     }
   }catch(_){}
   const _vHeld=Number(window._grVoucherMax)||0;
@@ -59216,15 +59266,20 @@ function grFillApply(P, quiet){
   const amts=isInstall?splitAmount(amount,installCount):[amount];
   /* 折抵券：挑過的原封不動留著 —— 這一步只是「改收款方式／金額」，
      不該把人家挑好的券洗掉（2026-08-28 三修：教練那條也挑得到券了，不再一律歸零）。
-     ⚠ 分期每期限用 1 張（0729 定案）：櫃檯若在這裡改成分期，張數要跟著夾。 */
+     ⚠ 張數上限跟著堂數走（2026-10-12 定版：每 4 堂 1 張，見 voucherCapOf）：
+       櫃檯若在這裡改成分期，上限要跟著這一期的堂數重算。 */
   /* 張數以畫面上的為準（2026-08-28）：欄位不在（這一筆沒有券）就沿用 payload 裡那份。
-     ⚠ 上限夾三層：持有量、分期每期 1 張（0729 定案）、不能是負數。
+     ⚠ 上限夾三層：持有量、每 4 堂 1 張、這一期的錢吸收得了幾張。
      ⚠ 券的 id 也要重新給 —— 用開窗當下重讀的那份（payload 裡存的可能已經被別筆用掉）。 */
   const _vEl=document.getElementById('gr-voucher');
   const _vHeld=Math.max(0, Number(window._grVoucherMax)||0);
   const _vN0 = _vEl ? Math.max(0, Math.min(_vHeld, Math.floor(Number(_vEl.value)||0)))
                     : Math.max(0, Number(P.voucherN)||0);
-  const _vN  = isInstall ? Math.min(1, _vN0) : _vN0;
+  /* ⚠ 2026-10-12：堂數上限與金額上限都要夾 —— 不夾金額的話，
+     一堂 $600 的方案填 3 張會變成實收 $0、第 3 張白燒。 */
+  const _vBase2 = isInstall ? (Number(amts[0])||0) : amount;
+  const _vCap2 = voucherCapOf(window._grVoucherTt, isInstall?(Number(segs[0])||0):total);
+  const _vN  = Math.min(_vN0, _vCap2, Math.max(0, Math.floor(_vBase2/300)));
   const _vAmt = _vN*300;
   const _vIds = _vEl
     ? (window._grVouchers||[]).map(t=>t.id).slice(0, _vN)
@@ -59800,9 +59855,14 @@ async function openInstallNext(ticket_id){
       <button type="button" class="btn btn-ghost btn-sm" style="flex:1;" onclick="inxFill(${leftN},${restAmt})">剩餘全繳（${leftN} 堂・$${restAmt.toLocaleString()}）</button>
     </div>
     <div class="form-2col">
-      <div class="form-row"><label>開通堂數 *（1–${leftN}）</label><input type="number" id="inx-n" min="1" max="${leftN}" value="${seg||leftN}"></div>
-      <div class="form-row"><label>實收金額 *</label><input type="number" id="inx-amt" min="0" value="${amt}" oninput="inxInvSync()"></div>
+      <div class="form-row"><label>開通堂數 *（1–${leftN}）</label><input type="number" id="inx-n" min="1" max="${leftN}" value="${seg||leftN}" oninput="inxVoucherSync()"></div>
+      <div class="form-row"><label>實收金額 *</label><input type="number" id="inx-amt" min="0" value="${amt}" oninput="inxInvSync();inxVoucherCalc()" data-vch="0"></div>
     </div>
+    ${/* 折抵券（2026-10-12 使用者：「這個分期視窗 如果有折抵券可以使用嗎」→「要補上」）——
+         在此之前只有第 1 期（建票當下）問得到券，第 2、3 期等於用不到。
+         ⚠ 每期最多 1 張：沿用 0729 定案的「分期一期一張」，不是這裡另立的規則。
+         ⚠ 會員手上沒有對應的券就整塊不畫（同銷售那條路的 refreshGrantVoucher）。 */''}
+    <div id="inx-voucher-wrap" class="gt-voucher-hi" style="display:none;margin-bottom:12px;"></div>
     <div class="form-row"><label>付款方式</label>
       <select id="inx-method"><option value="cash">現金</option><option value="transfer">匯款</option></select></div>
     ${/* 電子發票（2026-09-15）：分期的每一期都是一次收款，都要能開發票。 */''}
@@ -59818,9 +59878,97 @@ async function openInstallNext(ticket_id){
   window._inxMembers=(m?[m]:[]);
   window._invGateBtn='inx-go';
   inxInvSync();
+  try{ await inxVoucherInit(t); }catch(e){ console.error('分期折抵券載入失敗',e); }
+}
+/* 這一期可以用的折抵券（2026-10-12）——
+   判準與銷售那條路同一支：看票種的**類別**（VOUCHER_TT），不是方案名稱。
+   ⚠ 張數上限＝這一期開通的堂數 ÷ 4（2026-10-12 定版，見 voucherCapOf）——
+     常態 12 堂分 3 期＝每期 4 堂＝每期 1 張，與 0729 定案的結果一樣。
+   ⚠ 預設 0 張：這是第 2、3 期，櫃檯不一定要在這一期用掉。
+     （銷售那條路預設帶入，是因為那是「買的當下」，不用白不用。） */
+async function inxVoucherInit(t){
+  const wrap=document.getElementById('inx-voucher-wrap'); if(!wrap) return;
+  window._inxVoucherTks=[]; window._inxVoucherHeld=0; window._inxVoucherTt=null;
+  let vt=null;
+  try{
+    const types=(window._ttCache&&window._ttCache.length)?window._ttCache:await dbGetAll('ticket_types');
+    const tt=(types||[]).find(x=>x&&x.id===t.ticket_type_id);
+    vt=tt?VOUCHER_TT[tt.category]:null;
+  }catch(_){}
+  if(!vt) return;
+  let tks=[];
+  try{
+    tks=((await dbGetAll('member_tickets'))||[]).filter(x=>x && x.member_id===t.member_id
+      && x.ticket_type_id===vt && (!x.status||x.status==='usable')
+      && (Number(x.sessions_remaining)||0)>0
+      && (!x.expire_date||String(x.expire_date).slice(0,10)>=ymd(TODAY)));
+  }catch(_){}
+  const held=tks.reduce((n,x)=>n+(Number(x.sessions_remaining)||0),0);
+  if(!held) return;
+  /* 最快到期的先用（與銷售那條路的挑法一致） */
+  tks.sort((a,b)=>String(a.expire_date||'9999-12-31').localeCompare(String(b.expire_date||'9999-12-31')));
+  window._inxVoucherHeld=held; window._inxVoucherTks=tks; window._inxVoucherTt=vt;
+  wrap.style.display='';
+  wrap.innerHTML=`<div class="gt-vh-top">
+      <span class="gt-vh-ic">${LNI.gift||'🎟'}</span>
+      <span class="gt-vh-t">這位會員有 <b>${held}</b> 張折抵券（每張折 $300）
+        <span class="gt-vh-lim" id="inx-voucher-lim"></span></span></div>
+    <div class="gt-vh-row" style="display:flex;align-items:center;gap:8px;">
+      <span>這一期用</span>
+      <input type="number" id="inx-voucher" min="0" value="0" style="width:72px;" oninput="inxVoucherSync()">
+      <span>張</span></div>
+    <div id="inx-voucher-calc" class="gt-vh-calc"></div>`;
+  inxVoucherSync(true);
+}
+/* 這一期最多能用幾張＝開通堂數 ÷ 4（2026-10-12 定版，見 voucherCapOf），
+   再夾「持有量」與「這一期的錢吸收得了幾張」。
+   ⚠ 開通堂數會變（「下一期」「剩餘全繳」或手改），所以上限要即時重算。 */
+function inxVoucherCap(){
+  const n=Math.floor(Number((document.getElementById('inx-n')||{}).value)||0);
+  const held=Math.max(0, Number(window._inxVoucherHeld)||0);
+  const byS=voucherCapOf(window._inxVoucherTt, n);
+  /* 金額看「還原折抵前」的原價：amt 已經被扣過了 */
+  const el=document.getElementById('inx-amt');
+  const gross=(Number(el&&el.value)||0)+300*(Number(el&&el.dataset.vch)||0);
+  return Math.max(0, Math.min(held, byS, Math.floor(gross/300)));
+}
+/* 張數改變時同步實收金額 —— 櫃檯要收的現金本來就少，手動減很容易漏。
+   ⚠ dataset.vch 記住「目前已經折掉幾張」，差額才加減得準（連點不會重複扣）。 */
+function inxVoucherSync(init){
+  const el=document.getElementById('inx-voucher'), amt=document.getElementById('inx-amt');
+  if(!el||!amt) return;
+  const cap=inxVoucherCap();
+  let want=Math.max(0, Math.floor(Number(el.value)||0));
+  if(want>cap){ want=cap;
+    if(!init) showToast(cap>0?`這一期最多折 ${cap} 張（每 4 堂 1 張）`:'這一期的堂數不到 4 堂，折抵券留著下次用', 5000); }
+  el.value=want; el.max=cap;
+  const was=Number(amt.dataset.vch)||0;
+  if(want!==was){ amt.value=Math.max(0,(Number(amt.value)||0)+300*(was-want)); amt.dataset.vch=String(want); }
+  /* 籤上只留結論（2026-10-12 使用者：「這邊也不用寫的那麼詳細」），
+     「為什麼是這個數字」放滑鼠提示。 */
+  const lim=document.getElementById('inx-voucher-lim');
+  if(lim){
+    const _n=Math.floor(Number((document.getElementById('inx-n')||{}).value)||0);
+    lim.textContent=cap>0?`最多 ${cap} 張`:'這一期不能折抵';
+    lim.title=`這一期開通 ${_n} 堂・每 ${VOUCHER_SESSIONS_PER} 堂可折抵 1 張`;
+  }
+  inxVoucherCalc(); inxInvSync();
+}
+function inxVoucherCalc(){
+  const box=document.getElementById('inx-voucher-calc'); if(!box) return;
+  const n=Math.max(0, Math.floor(Number((document.getElementById('inx-voucher')||{}).value)||0));
+  const amt=Math.round(Number((document.getElementById('inx-amt')||{}).value)||0);
+  box.innerHTML=n>0
+    ? `折抵 <b>$${(300*n).toLocaleString()}</b>　→　這一期實收 <b>$${amt.toLocaleString()}</b>`
+    : `<span style="color:var(--t3);font-weight:400;">未使用折抵券，這一期實收 $${amt.toLocaleString()}</span>`;
 }
 function inxFill(n,amt){ const a=document.getElementById('inx-n'), b=document.getElementById('inx-amt');
-  if(a) a.value=n; if(b) b.value=amt; inxInvSync(); }
+  if(a) a.value=n;
+  /* 快速鍵填的是原價 → 折抵等於被覆蓋掉，勾勾與記號一起歸零，
+     不然會變成「勾著券、金額卻是沒折的」，送出時又扣一次 $300。 */
+  if(b){ b.value=amt; b.dataset.vch='0'; }
+  const v=document.getElementById('inx-voucher'); if(v) v.value=0;
+  inxInvSync(); if(typeof inxVoucherSync==='function') inxVoucherSync(true); }
 /* 分期的發票區同步（2026-09-15）——
    ⚠ 實收金額 0 就收起來：invIssueForPurchase 有 `amt<=0 return null`，
      留在畫面上等於讓櫃檯白問一次載具／信箱（同商品與場租那個坑）。
@@ -59847,6 +59995,9 @@ async function _confirmInstallNext(ticket_id){
   if(!Number.isFinite(n)||n<1||n>leftN){ showToast(`開通堂數要在 1–${leftN} 之間`); return; }
   if(!Number.isFinite(amt)||amt<0){ showToast('請輸入實收金額'); return; }
   const method=(document.getElementById('inx-method')||{}).value||'cash';
+  /* 折抵券（2026-10-12）：在改動資料之前先讀，closeModal 之後表單就沒了。
+     ⚠ 券要重讀一次再扣：開窗到按下確認之間，可能已經被別筆用掉（同銷售那條路 0808 的教訓）。 */
+  const _vWant=Math.max(0, Math.floor(Number((document.getElementById('inx-voucher')||{}).value)||0));
   /* 電子發票（2026-09-15）：在改動資料之前先把表單讀起來，後面 closeModal 就沒了。 */
   const _inv=invReadFields();
   { const _e=invCheckFields(_inv); if(_e){ showToast('發票欄位：'+_e); return; } }
@@ -59861,15 +60012,46 @@ async function _confirmInstallNext(ticket_id){
   t.installment=inst;
   t.amount_paid=(t.amount_paid||0)+amt;              // 累計實收
   await dbPut('member_tickets',t);
+  /* 扣折抵券（2026-10-12）——與銷售那條路同一套寫法：餘額扣 1、歸零就 used_up，
+     帳本逐張記 deduct（那筆 note 就是票券卡上「折抵使用日」的來源）。
+     ⚠ 擺在票券更新之後、購買紀錄之前：扣券失敗要講清楚，不能靜靜吞掉。 */
+  /* 逐張扣（最快到期優先，與銷售那條路同一套）——
+     ⚠ 每一張都重讀：開窗到按下確認之間可能已經被別筆用掉（0808 的教訓）。
+     ⚠ 扣失敗不吞掉：票已經開通了，少扣幾張一定要講出來。 */
+  let _vUsed=0;
+  if(_vWant>0){
+    try{
+      let left=_vWant;
+      for(const v0 of (window._inxVoucherTks||[])){
+        if(left<=0) break;
+        const fresh=await dbGet('member_tickets',v0.id); if(!fresh) continue;
+        const take=Math.min(left, Number(fresh.sessions_remaining)||0);
+        if(take<=0) continue;
+        fresh.sessions_remaining=(Number(fresh.sessions_remaining)||0)-take;
+        if(fresh.sessions_remaining<=0) fresh.status='used_up';
+        await dbPut('member_tickets',fresh);
+        for(let k=0;k<take;k++) await logTicket(fresh.id,'deduct',1,null,SESSION.id,
+          `折抵 $300（分期第 ${inst.current} 期・${t.plan_name||'票券'}）`);
+        _vUsed+=take; left-=take;
+      }
+      if(left>0) showToast(`折抵券只扣到 ${_vUsed}/${_vWant} 張（餘額不足），請至會員票券確認`, 7000);
+    }catch(e){ console.error('分期折抵券扣點失敗',e);
+      showToast('折抵券扣點失敗，請至會員票券確認：'+((e&&e.message)||e), 7000); }
+  }
   const _full=t.unlocked_sessions>=total;
   // 記營收（購買紀錄新增一筆本期收款）
   try{
     /* ⚠ 2026-09-15：接成變數，下面開發票要拿它當載體（merchant_order_no 取自 id）。 */
     const _pRow={id:uid('PUR'),member_id:t.member_id,plan_id:t.source_plan_id||null,ticket_id:t.id,
-      plan_name:t.plan_name,list_price:null,deal_amount:amt,payment_method:method,
+      plan_name:t.plan_name,
+      /* 折抵的張數與金額寫進 note（票券卡右下角的「折抵券」標籤就是從這裡解析出來的，
+         格式要與銷售那條路一字不差，見 _tkPayMap 的 /折抵券×(\d+)\s*−\$([\d,]+)/）。
+         list_price 帶原價，卡片的提示才寫得出「原價多少」。 */
+      list_price:_vUsed?(amt+300*_vUsed):null,deal_amount:amt,payment_method:method,
       coach_id:t.sold_by||null,   /* 業績歸屬跟著票券（2026-08-15 蔡宜芬案例） */
       installment_count:inst.count,
-      note:`分期收款・開通 ${n} 堂${_full?'（已全數開通）':`（累計 ${t.unlocked_sessions}/${total}）`}`,operator:SESSION.id,source:'installment',
+      note:`分期收款・開通 ${n} 堂${_full?'（已全數開通）':`（累計 ${t.unlocked_sessions}/${total}）`}`
+        +(_vUsed?`（折抵券×${_vUsed} −$${(300*_vUsed).toLocaleString()}）`:''),operator:SESSION.id,source:'installment',
       created_at:new Date().toISOString()};
     await dbPut('purchases',_pRow);
     /* 電子發票（2026-09-15 使用者：「只要有收款都要出現」）——
@@ -59899,13 +60081,13 @@ async function _confirmInstallNext(ticket_id){
      改用 adjust＋delta 0：開通不改變餘額（sessions_remaining 沒動），只是把鎖打開，
      所以 delta 就是 0；_tkNetUsed 對 adjust 算 -delta＝0，不會擾動對帳。
      ⚠ 要新增動作類型就得改資料庫的 enum，不能只在前端寫一個新字串。 */
-  try{ await logTicket(t.id,'adjust',0,null,SESSION.id,`分期收款開通 ${n} 堂（累計 ${t.unlocked_sessions}/${total}），實收 $${amt.toLocaleString()}`); }
+  try{ await logTicket(t.id,'adjust',0,null,SESSION.id,`分期收款開通 ${n} 堂（累計 ${t.unlocked_sessions}/${total}），實收 $${amt.toLocaleString()}`+(_vUsed?`（折抵券×${_vUsed}）`:'')); }
   catch(e){ console.error('分期開通帳本寫入失敗',e); showToast('開通已完成，但帳本紀錄沒寫進去：'+dbFriendlyError(e), 8000); }
   // 把先前以「待繳費」保留的課補綁票券並扣課（由早到晚，最多本次開通的堂數）
   let bound=0;
   try{ bound=await bindHeldBookings(t.id, n); }catch(e){ console.error('補綁待繳費預約失敗',e); }
   closeModal();
-  showToast(`已收款並開通 ${n} 堂${_full?'（分期已全數開通）':''}`+(bound?`，並補扣 ${bound} 筆待繳費預約`:''));
+  showToast(`已收款並開通 ${n} 堂${_full?'（分期已全數開通）':''}`+(_vUsed?`，折抵券用掉 ${_vUsed} 張`:'')+(bound?`，並補扣 ${bound} 筆待繳費預約`:''));
   openMemberDetail(t.member_id);
 }
 /* 待繳費保留 → 正式預約（2026-07-29）：分期收到下一期時呼叫。

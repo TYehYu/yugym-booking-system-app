@@ -340,8 +340,10 @@ console.log('\n④-3 流程自我檢查抓到的三個洞（2026-09-15）');
   ok('★★★ 金額 0 就把發票區收起來 —— 分期（含「下一期／剩餘全繳」快捷）',
      /function inxInvSync\(\)\{/.test(src)
      && /try\{ invSync\(\{paid:amt>0, memberId:window\._inxMemberId\|\|''/.test(src)
-     && /id="inx-amt" min="0" value="\$\{amt\}" oninput="inxInvSync\(\)"/.test(src)
-     && /if\(a\) a\.value=n; if\(b\) b\.value=amt; inxInvSync\(\); \}/.test(src));
+     /* 2026-10-12：分期視窗多了折抵券，金額改動與快捷鍵要一併重算折抵說明
+        （見 instvouchtest）。這一條守的仍是「金額 0 → 發票區收起來」。 */
+     && /id="inx-amt" min="0" value="\$\{amt\}" oninput="inxInvSync\(\);inxVoucherCalc\(\)" data-vch="0"/.test(src)
+     && /inxInvSync\(\); if\(typeof inxVoucherSync==='function'\) inxVoucherSync\(true\); \}/.test(src));
   ok('★★ 未付款發放不會誤開（_dealRec 為 0 → invIssueForPurchase 的 amt<=0 擋掉）',
      /const _dealRec=\(P\.payment_status==='unpaid'\) \? 0/.test(src)
      && /if\(amt<=0\) return null;/.test(src));

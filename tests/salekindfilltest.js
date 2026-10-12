@@ -27,7 +27,10 @@ function run(fields, P){
   const env={
     document:{getElementById:id=>(id in box)?{value:box[id]}:null},
     showToast:()=>{},
-    window:{_grVoucherMax:0,_grVouchers:[]},
+    window:{_grVoucherMax:0,_grVouchers:[],_grVoucherTt:null},
+    /* 2026-10-12：張數上限改成「每 4 堂 1 張」（voucherCapOf）；
+       這一支測的是約別，持有 0 張，注一個同義的就好。 */
+    voucherCapOf:(vt,sessions)=>vt!=='tt-discount-pt300'?Infinity:Math.max(0,Math.floor((Number(sessions)||0)/4)),
     splitSessions:(t,n)=>Array.from({length:n},()=>Math.floor(t/n)),
     splitAmount:(a,n)=>Array.from({length:n},()=>Math.round(a/n)),
   };
