@@ -54,7 +54,10 @@ function build(env, code, exportNames){
 
 /* creditMove ＋ 作廢那一整段（含 CREDIT_FEE_PCT） */
 const CREDIT_SRC=slice('const CREDIT_FEE_PCT=20;','const CREDIT_SRC_LB=','儲值金核心');
-const VOID_SRC=slice('async function voidTicketAsk(id){','/* 特例補退（2026-07-28','作廢');
+/* 2026-10-12：起點往前挪到 tkMoneyRows —— 作廢流程改成從那一支拿金額
+   （舊系統導入的票沒有 purchases，錢在 member_tickets.amount_paid），
+   不含進來的話整段 new Function 會在執行時噴 tkMoneyRows is not defined。 */
+const VOID_SRC=slice('function tkMoneyRows(tk, purchases){','/* 特例補退（2026-07-28','作廢');
 
 console.log('① 規則寫在原地（改壞了要看得出來）');
 {

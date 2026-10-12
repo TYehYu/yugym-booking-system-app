@@ -14539,8 +14539,8 @@ function tbl(s){return TABLE_ALIAS[s]||s;}
 let sb=null;
 // ── 版本號（日期+時間格式：年後兩碼+月+日.時分，例 26620.1058 = 26年6/20 10:58）──
 // 每次改版手動更新這一行即可，畫面與 title 會一起更新
-const APP_VERSION = '261011.1910';
-const APP_VERSION_LABEL = 'v261011.1910';
+const APP_VERSION = '261012.1025';
+const APP_VERSION_LABEL = 'v261012.1025';
 const CLOUD = !!(window.YUGYM_CONFIG && window.YUGYM_CONFIG.url && window.YUGYM_CONFIG.anonKey);
 if(CLOUD){ sb = supabase.createClient(window.YUGYM_CONFIG.url, window.YUGYM_CONFIG.anonKey); }
 
@@ -42604,6 +42604,22 @@ async function _doSwapTicket(id){
     catch(_){ navTo(CUR_PAGE); }
   }catch(e){ done(); console.error('doSwapTicket',e); showToast('更換失敗：'+((e&&e.message)||e)); }
 }
+/* 這張票收了多少錢（2026-10-12 使用者：「雖然沒有收款紀錄 但也有金額 不能直接採用金額嗎」）——
+   正常票：錢記在 purchases（可能有兩筆，分期）。
+   舊系統導入的票：**沒有 purchases**，但 member_tickets.amount_paid 有金額
+   （7/11–7/25 導入的 3359 張可用票裡，1846 張有金額；其餘是點數／補課券那種本來就 $0）。
+   在此之前作廢視窗只看 purchases，所以那些票一律顯示「沒有對應的收款紀錄（$0）」，
+   三個出場選項整組不出現 —— 等於導入的票不能轉儲值金。
+   ⚠ 回傳 rows 是**拿來算錢**的，不等於可以寫回去：虛擬那筆的 virtual=true，
+     寫入端（doVoidTicket）要跳過，不然會憑空生出一筆收款紀錄。
+   ⚠ 優先序不能反過來：有 purchases 就以 purchases 為準（amount_paid 會被作廢流程改寫）。 */
+function tkMoneyRows(tk, purchases){
+  const real=(purchases||[]).filter(pc=>pc && String(pc.ticket_id)===String(tk&&tk.id));
+  if(real.length) return {rows:real, amt:real.reduce((s,pc)=>s+(Number(pc.deal_amount)||0),0), legacy:false};
+  const paid=Math.max(0, Math.round(Number(tk&&tk.amount_paid)||0));
+  if(!paid) return {rows:[], amt:0, legacy:false};
+  return {rows:[{id:'_tkamt', ticket_id:tk.id, deal_amount:paid, virtual:true}], amt:paid, legacy:true};
+}
 // refundMode：'auto'(依24h自動)、'force'(強制退)、'none'(強制不退)
 /* ══ 票券作廢（2026-07-28 建立；2026-08-30 改成三選一）════════════════════
    原本只有一種出場方式（整筆歸零＝全額退現）。使用者定案後拆成三種，
@@ -42635,8 +42651,9 @@ async function voidTicketAsk(id){
   const bks=(await dbGetAll('bookings')).filter(b=>b.ticket_id===id&&b.status!=='cancelled');
   const future=bks.filter(b=>String(b.date||'')>=_today);
   if(future.length){ showToast(`請先取消未來的 ${future.length} 筆預約，再作廢票券`); return; }
-  const purchases=(await dbGetAll('purchases').catch(()=>[])).filter(pc=>pc.ticket_id===id);
-  const amt=purchases.reduce((s,pc)=>s+(Number(pc.deal_amount)||0),0);
+  const _pcAll=(await dbGetAll('purchases').catch(()=>[])).filter(pc=>pc.ticket_id===id);
+  const _money=tkMoneyRows(tk, _pcAll);
+  const purchases=_money.rows, amt=_money.amt, _legacy=_money.legacy;
   const R=refundCalc(amt, tot, left, false);
   const base=R.base, fee=R.fee;
   /* 〔七日解除權〕簽約後 7 日內、且一堂都沒用過 → 全額退、不收任何費用。
@@ -42654,7 +42671,7 @@ async function voidTicketAsk(id){
        月底晚上開的發票拿它算月份會跨到下一天甚至下一期。created_at 才是正確的時間戳。 */
   let invRows=[], invSame=false, invPeriodLb='';
   try{
-    const pids=new Set(purchases.map(p=>p.id));
+    const pids=new Set(_pcAll.map(p=>p.id));
     invRows=((await dbGetAll('invoices').catch(()=>[]))||[])
       .filter(x=>x&&pids.has(x.purchase_id)&&x.status==='issued'&&x.invoice_number);
     invSame=invRows.length>0 && invRows.every(x=>invVoidable(x.created_at));
@@ -42669,6 +42686,7 @@ async function voidTicketAsk(id){
     <div style="font-size:13px;color:var(--text);line-height:1.9;">${escH(tk.plan_name||'票券')}　${tk.sessions_total} 堂${amt?`　·　交易金額 $${amt.toLocaleString()}`:''}<br>
     ${used>0?`<span style="color:var(--gold);font-size:12px;">已使用 ${used} 堂、未使用 ${left} 堂 —— 只能退未使用的部分（$${base.toLocaleString()}）。</span><br>`:''}
     ${day7?`<span style="color:var(--gold);font-size:12px;">簽約未滿 7 日且尚未使用：依合約可<b>全額退還、不收任何費用</b>（選「退款・不收手續費」）。</span><br>`:''}
+    ${_legacy?`<span style="color:var(--gold);font-size:12px;">這張是<b>舊系統導入</b>的票，金額取自票券上的 $${amt.toLocaleString()}（系統裡沒有對應的收款紀錄）。<br>轉儲值金沒有問題；若選退款，本系統的營收不會跟著減少 —— 那筆錢本來就不在這裡記過，實付的現金請另外記支出。</span><br>`:''}
     <span style="color:var(--t2);font-size:12px;">作廢後票券失效、不可復原。</span></div>
     ${amt>0?`<div class="form-row" style="margin-top:14px;"><label>這筆錢怎麼處理 *</label>
       <div class="vd-modes">
@@ -42774,8 +42792,8 @@ async function _voidTicketDo(id){
   const reason=(document.getElementById('void-reason')?.value||'').trim();
   const tk=await dbGet('member_tickets',id);
   if(!tk||tk.status!=='usable'){ showToast('此票券不可作廢'); return; }
-  const purchases=(await dbGetAll('purchases').catch(()=>[])).filter(pc=>pc.ticket_id===id);
-  const amt=purchases.reduce((s,pc)=>s+(Number(pc.deal_amount)||0),0);
+  const _money=tkMoneyRows(tk,(await dbGetAll('purchases').catch(()=>[])));
+  const purchases=_money.rows, amt=_money.amt;
   const mode=amt>0?window._voidMode:'refund_full';   // $0 的票沒得選，走原本那條
   if(!mode){ showToast('請先選擇這筆錢怎麼處理'); return; }
   /* 2026-09-15 部分使用後的退費（合約「五、契約解除、終止與退費」）——
@@ -42818,7 +42836,8 @@ async function _voidTicketDo(id){
 
   tk.status='refunded'; tk.sessions_remaining=0;
   tk.void_mode=mode;
-  /* 轉儲值金保留原金額（_dayTk 會放行，營收不動）；退款只留手續費那一段 */
+  /* 轉儲值金保留原金額（_dayTk 會放行，營收不動）；退款只留手續費與已使用的那一段。
+     keepOf 對虛擬那筆一樣算得出來，所以導入票退款後票面金額也會正確縮到「沒退的部分」。 */
   tk.amount_paid = (mode==='credit') ? (Number(tk.amount_paid)||0) : keepSum;
   await dbPut('member_tickets',tk);
   /* action 用 'adjust'——ticket_logs.action 是列舉（grant/deduct/refund/adjust/expire），
@@ -42828,6 +42847,10 @@ async function _voidTicketDo(id){
   for(const pc of purchases){
     const orig=Number(pc.deal_amount)||0;
     if(orig===0) continue;
+    /* 舊系統導入的票沒有收款紀錄，那一筆是算錢用的虛擬列 ——
+       不能 dbPut 回去（會憑空生出一筆營收），也沒有發票可沖。
+       票券本身的金額在迴圈外面已經改好了。 */
+    if(pc.virtual) continue;
     if(mode==='credit'){
       pc.note=((pc.note||'')+`【已作廢→轉儲值金 $${baseOf(orig).toLocaleString()}`
         +(used>0?`（已用 ${used} 堂不退）`:'')+(WHY?`：${WHY}`:'')+'】').trim();
