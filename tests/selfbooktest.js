@@ -6,6 +6,9 @@
    櫃檯或教練建立的寫的是員工 id。所以「created_by ＝ 這位會員本人」就是自助預約，
    不需要另外加欄位（也就不會有「新資料才有、舊資料沒有」的落差）。 */
 const fs=require('fs');
+/* 2026-10-12：ticketTokens 多收一個 opts.useDates（折抵券的折抵日期），
+   所以 selfBk 後面可能還有參數。斷言放寬到「selfBk 之後可以再帶東西」，
+   守的重點沒變：傳進去的使用人仍然是對的那一個。 */
 require('./_bkenv.js');   // 教練請假退堂那條判準（0830 收斂成一支，見 _bkenv.js）
 /* 2026-09-01：ticketTokens 的 md() 開始用 TODAY 判斷「這一堂是不是今年的」
    （跨年的圓點要多一行年份）—— 沙箱補上假時鐘，與各檔既有的測資年份一致。 */
@@ -109,7 +112,7 @@ console.log('\n③ 每個畫圓點的地方都要把「使用人」傳進去');
     .filter(x=>x.split(',').length<7);
   eq('★ 沒有任何呼叫點漏傳（每一處都有 7 個參數：使用人＋自助集合）', bad, []);
 }
-ok('　　會員資料 → 票券分頁傳 PP.id', /ticketTokens\(t,bks,typeMap,used,null,PP\.id,WAL\.selfBk\)/.test(src));
+ok('　　會員資料 → 票券分頁傳 PP.id', /ticketTokens\(t,bks,typeMap,used,null,PP\.id,WAL\.selfBk[^})]*\)/.test(src));
 ok('　　會員端「我的票券」傳 SESSION.id', /ticketTokens\(t,_bksC,typeMap,usedCnt,null,SESSION\.id,_sl\.selfBk\)/.test(src));
 ok('　　團課名單逐名額傳那一列的會員（0803 起連名額序一起傳）', /ticketTokens\(_sl\.t,_sl\.stamps,st\.typeMap,_sl\.used,b\.id,mid,_sl\.selfBk,_ord\)/.test(src));
 ok('　　預約明細（單人課）傳這一堂的會員', /ticketTokens\(tkC,tkBks2,_typeMapD,doneCount,b\.id,b\.member_id,_wSlotD&&_wSlotD\.selfBk\)/.test(src));
@@ -117,7 +120,7 @@ ok('　　會員列表的五格票券傳那一列的會員', /tkRowHtml\(sl, w\.
 ok('★ 有圖例說明金點是什麼（不解釋沒人看得懂）',
    /右上角金點＝會員自己從手機預約的/.test(src));
 ok('　　沒有自助預約的會員不顯示圖例（不佔版面）',
-   /\$\{act\.some\(t=>\(\(WAL\.of\(t\.id\)\|\|\{stamps:\[\]\}\)\.stamps\|\|\[\]\)\.some\(x=>bkSelfBooked\(x,PP\.id,WAL\.selfBk\)\)\)/.test(src));
+   /\$\{act\.some\(t=>\(\(WAL\.of\(t\.id\)\|\|\{stamps:\[\]\}\)\.stamps\|\|\[\]\)\.some\(x=>bkSelfBooked\(x,PP\.id,WAL\.selfBk[^})]*\)\)\)/.test(src));
 
 console.log(`\n${pass} 通過 / ${fail} 失敗`);
 process.exit(fail?1:0);

@@ -9,6 +9,9 @@
    ⚠ 條件一條都沒放寬 —— 只是把「看不到」換成「看得到但按不下去，而且知道為什麼」。
    2026-09-11 才放寬：到期前 30 天內就能按（見 tests/tkexttest.js）。 */
 const fs=require('fs');
+/* 2026-10-12：ticketTokens 多收一個 opts.useDates（折抵券的折抵日期），
+   所以 selfBk 後面可能還有參數。斷言放寬到「selfBk 之後可以再帶東西」，
+   守的重點沒變：傳進去的使用人仍然是對的那一個。 */
 const src=fs.readFileSync(process.env.HOME+'/Projects/yugym-booking-system-app/index.html','utf8');
 let pass=0,fail=0;
 const ok=(n,c,x)=>{ if(c){pass++;console.log('  ✓ '+n);} else {fail++;console.log('  ✗ '+n+(x!==undefined?'  → '+JSON.stringify(x):''));} };
@@ -68,7 +71,7 @@ console.log('\n② 三顆按鈕的順序與權限');
      && /<span class="mtk mtk-ext mtk-ext-off" title="\$\{escH\(_w\)\}">展延<\/span>/.test(src)
      && /onclick="event\.stopPropagation\(\);openTicketExtend\('\$\{t\.id\}'\)">展延<\/button>/.test(src));
   ok('★★★ 展延在圓點列最後，不再佔按鈕列的位置',
-     /\$\{ticketTokens\(t,bks,typeMap,used,null,PP\.id,WAL\.selfBk\)\}\$\{\s*\n\s*isDeskLike\(\)\?\(\(\)=>\{ const _w=tkExtWhyNot/.test(src)
+     /\$\{ticketTokens\(t,bks,typeMap,used,null,PP\.id,WAL\.selfBk,[\s\S]{0,80}?\)\}\$\{\s*\n\s*isDeskLike\(\)\?\(\(\)=>\{ const _w=tkExtWhyNot/.test(src)
      && !/btn btn-gold btn-sm"[^>]*onclick="openTicketExtend/.test(src));
   ok('★★ 底列只剩日常操作（出席證明／使用人／分期繳費／主管展延／收款）',
      /const _tkActs = `/.test(src)

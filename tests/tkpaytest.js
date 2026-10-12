@@ -133,9 +133,12 @@ console.log('\n③ 票券卡顯示發票號碼');
     {no:null,amt:6000,pm:'',vn:0,va:0,cu:0,lp:0}]}})({id:'A5',amount_paid:17700});
   /* ⚠ 折抵券在金額**左邊**（2026-09-23 使用者：「折抵券的位子改在金額左邊」）——
        放右邊會把有折抵那一列的金額推離發票，三期的金額右緣對不齊。
-     ⚠ 標籤只寫三個字（同日：「折抵券改成[折抵券]滑鼠提示金額」），數字進 title。 */
+     ⚠ 標籤只寫三個字（同日：「折抵券改成[折抵券]滑鼠提示金額」），數字進 title。
+     ⚠⚠ 2026-10-12 **再推翻一次**（使用者：「折抵券調整到發票後面　這樣畫面比較對齊」）——
+       10/09 底列改版後多期會直向堆疊，折抵在左邊反而把那一列的金額往右推、三列對不齊。
+       現在順序是 日期 → 付款 → 金額 → 發票 → 折抵券。 */
   ok('★★★ 折抵券接在**有用到的那一期**（第 2 期），不是固定第 1 期',
-     /<span class="tk-pay tk-pay-tr">匯款<\/span><span class="tk-amtcell"><span class="tk-disc"[^>]*>折抵券<\/span><b class="tk-amt">\$5,700<\/b><\/span><span class="rev-invno" title="第 2 期發票">/.test(dc2)
+     /<span class="tk-pay tk-pay-tr">匯款<\/span><span class="tk-amtcell"><b class="tk-amt">\$5,700<\/b><\/span><span class="rev-invno" title="第 2 期發票">FX2<\/span><span class="tk-disc"[^>]*>折抵券<\/span>/.test(dc2)
      && (dc2.match(/tk-disc/g)||[]).length===1, dc2);
   ok('★★ 張數、折抵金額與該期原價都寫進 title',
      /<span class="tk-disc" title="折抵券 1 張　·　折抵 \$300　·　原價 \$6,000">/.test(dc2), dc2);
@@ -143,14 +146,15 @@ console.log('\n③ 票券卡顯示發票號碼');
     {no:'FX1',amt:6000,pm:'cash',vn:0,va:0,cu:0,lp:0},
     {no:'FX2',amt:5700,pm:'cash',vn:0,va:0,cu:300,lp:0}]}})({id:'A6',amount_paid:11700});
   ok('★★ 儲值金同理（逐期，不是整張票一個值）',
-     /<span class="tk-disc" title="儲值金折抵 \$300">儲值金<\/span><b class="tk-amt">\$5,700<\/b><\/span><span class="rev-invno" title="第 2 期發票">/.test(dc3)
+     /<b class="tk-amt">\$5,700<\/b><\/span><span class="rev-invno" title="第 2 期發票">FX2<\/span><span class="tk-disc" title="儲值金折抵 \$300">儲值金<\/span>/.test(dc3)
      && (dc3.match(/tk-disc/g)||[]).length===1, dc3);
-  ok('★★★ 折抵包在 .tk-amtcell 裡（不包會自己佔一欄、把發票擠到下一列）',
-     /<span class="tk-amtcell">\$\{_amt\}<\/span>\$\{_iv\}/.test(src)
+  ok('★★★ 金額那一格只放金額（折抵移到最後，見 2026-10-12）',
+     /<span class="tk-amtcell">\$\{_amt\}<\/span>\$\{_iv\}\$\{_dcThis\}/.test(src)
      && /\.tk-amtcell\{display:inline-flex;/.test(src)
-     && /const _amt=`\$\{_dcThis\}<b class="tk-amt">\$\$\{\(Number\(v\.amt\)\|\|0\)\.toLocaleString\(\)\}<\/b>`;/.test(src));
-  ok('★★★ 三期的金額右緣要切齊：折抵在左邊（量過 783／783／783，之前是 783／883／883）',
-     /折抵券放在金額\*\*左邊\*\*/.test(src));
+     && /const _amt=`<b class="tk-amt">\$\$\{\(Number\(v\.amt\)\|\|0\)\.toLocaleString\(\)\}<\/b>`;/.test(src));
+  ok('★★★ 理由寫在原地（這一格被改過三次，下次要再動先看這段）',
+     /折抵券移到\*\*發票後面\*\*（2026-10-12/.test(src)
+     && /這推翻 0923 的「折抵券的位子改在金額左邊」/.test(src));
 
   /* ⚠ 下面兩條是保護①區的防線：那些 fixture 全都沒有 invs 欄位，
      這裡只要多畫一個字，就會打到「沒對照到的票不標」那幾條。 */

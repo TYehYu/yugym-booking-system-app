@@ -321,12 +321,14 @@ ok('★ 補登要留痕（寫得出補了哪些日期）',
    /票券校正：補登使用日期 \$\{mu\.join\('、'\)\}（無課卡，僅圓形卡標示）/.test(DO)
    && /票券校正：清掉補登的使用日期/.test(DO));
 
+/* 2026-10-12：同一格多了第二個來源 _ud（折抵券的折抵日期，見 vouchdatetest），
+   順序是「手動補登優先、折抵日期次之」—— 補登是人刻意寫上去的更正。 */
 console.log('\n圓形卡吃補登日期（ticketTokens）');
 const TT=grab('function ticketTokens(t,bks,typeMap,usedCount,curId,memberId,selfSet,seatN,opts){');
 ok('★★ 沒有課卡的格子（_ghost）依序吃 manual_uses 的日期',
    /const _mu=Array\.isArray\(t\.manual_uses\)\?t\.manual_uses\.filter\(Boolean\)\.slice\(\)\.sort\(\):\[\];/.test(TT)
    && /const _it=\(gi<_ghost\) \? \{b:null,st:'used',g:gi\+\+\}/.test(TT)
-   && /const _md=\(!b && _it\.g!=null\) \? \(_mu\[_it\.g\]\|\|''\) : '';/.test(TT));
+   && /const _md=\(!b && _it\.g!=null\) \? \(_mu\[_it\.g\]\|\|_ud\[_it\.g\]\|\|''\) : '';/.test(TT));
 ok('★ 沒補的還是畫 ✓（不能因為多了這個功能就變空白）',
    /\$\{_shBody\(b, b\?md\(b\):\(_md\?md\(\{date:_md\}\):'✓'\)\)\}/.test(TT)
    /* _shBody 沒有共享時原封不動回傳（2026-08-27） */

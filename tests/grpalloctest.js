@@ -14,6 +14,9 @@ globalThis.bkEatenCancel=b=>!!(b&&b.status==='cancelled'&&b.refund_waived);
 /* 2026-08-06 稽核 R4：推算切分日 —— 沙箱測資沒有 created_at，一律視為舊資料（照舊推算） */
 globalThis.inferAllowed=()=>true;
 const fs=require('fs');
+/* 2026-10-12：ticketTokens 多收一個 opts.useDates（折抵券的折抵日期），
+   所以 selfBk 後面可能還有參數。斷言放寬到「selfBk 之後可以再帶東西」，
+   守的重點沒變：傳進去的使用人仍然是對的那一個。 */
 const src=fs.readFileSync(process.env.HOME+'/Projects/yugym-booking-system-app/index.html','utf8');
 
 let pass=0,fail=0;
@@ -210,7 +213,7 @@ ok('　　單人課的票券卡也一起改（原本另有一套「以本堂為�
    && !/以本堂為中心取 total 堂的視窗推估\n/.test(src));
 ok('★ 圓點也改吃合併結果（票券夾的戳記；2026-08-04 起最新一張加畫無帳預約的紅圈）',
    /const bks=_shMark\(\(t\.id===_loTid\)\?sl\.stamps\.concat\(_lo\):sl\.stamps\);/.test(src)   /* 2026-08-04 共享票標註誰約的 */
-   && /const circles=ticketTokens\(t,WAL\.stampsOf\(t\.id\),typeMap,usedCount,null,member_id,WAL\.selfBk\);/.test(src));
+   && /const circles=ticketTokens\(t,WAL\.stampsOf\(t\.id\),typeMap,usedCount,null,member_id,WAL\.selfBk,[\s\S]{0,80}?\);/.test(src));
 ok('　　舊的「最近那張團課票」猜法已經拿掉',
    !/_grpNewestP/.test(src) && !/_grpTkNewest/.test(src));
 /* 2026-07-31 二修：會員端「我的票券」那份反查邏輯搬進票券夾，全系統共用同一份 */

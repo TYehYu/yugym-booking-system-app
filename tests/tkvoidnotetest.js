@@ -1,6 +1,9 @@
 /* 作廢原因要出現在票券卡上（2026-09-09 使用者：「黃唐施#11補課券　作廢有備註說明
    但現在看不到　要寫在方案這邊」） */
 const fs=require('fs');
+/* 2026-10-12：ticketTokens 多收一個 opts.useDates（折抵券的折抵日期），
+   所以 selfBk 後面可能還有參數。斷言放寬到「selfBk 之後可以再帶東西」，
+   守的重點沒變：傳進去的使用人仍然是對的那一個。 */
 const src=fs.readFileSync(process.env.HOME+'/Projects/yugym-booking-system-app/index.html','utf8');
 let pass=0,fail=0;
 const ok=(n,c,x)=>{ if(c){pass++;console.log('  ✓ '+n);} else {fail++;console.log('  ✗ '+n+(x!==undefined?'  → '+JSON.stringify(x):''));} };
@@ -43,11 +46,11 @@ console.log('\n② 畫在票券卡上');
 /* ⚠ 2026-09-23 一度把圓點與底列包進 .tkc-body 排成兩欄、作廢說明移到後面，
    使用者看過實機後決定「先維持現況」，整段收回，這裡也回到原本的位置。 */
 ok('★★★ 歷史紀錄那張卡有（使用者截圖就是這一張）',
-   /<div class="mck-dots2" style="margin:8px 0 2px;">\$\{ticketTokens\(t,bks,typeMap,used,null,PP\.id,WAL\.selfBk\)\}<\/div>\s*\n\s*\$\{tkVoidNoteHtml\(t, c\.myLogs\)\}/.test(src));
+   /<div class="mck-dots2" style="margin:8px 0 2px;">\$\{ticketTokens\(t,bks,typeMap,used,null,PP\.id,WAL\.selfBk,[\s\S]{0,80}?\)\}<\/div>\s*\n\s*\$\{tkVoidNoteHtml\(t, c\.myLogs\)\}/.test(src));
 /* 2026-10-03：圓點列尾端多了一顆「展延」圓形卡（見 tkcardactionstest），
    所以不再是 ...selfBk)}</div> 緊接著作廢說明。守的重點沒變：作廢說明接在圓點列後面。 */
 ok('★★★ 持有中那張卡也有（共享票等情況可能停在上面）',
-   /<div class="mck-dots2" style="margin:10px 0 2px;">\$\{ticketTokens\(t,bks,typeMap,used,null,PP\.id,WAL\.selfBk\)\}[\s\S]{0,600}?<\/div>\s*\n\s*\$\{tkVoidNoteHtml\(t, c\.myLogs\)\}/.test(src));
+   /<div class="mck-dots2" style="margin:10px 0 2px;">\$\{ticketTokens\(t,bks,typeMap,used,null,PP\.id,WAL\.selfBk,[\s\S]{0,80}?\)\}[\s\S]{0,600}?<\/div>\s*\n\s*\$\{tkVoidNoteHtml\(t, c\.myLogs\)\}/.test(src));
 ok('★★ .tkc-body 那一套確實收乾淨了（下次要再做，理由寫在 CSS 原地）',
    !/tkc-body/.test(src) && /使用者看過實機後決定「先維持現況」/.test(src));
 ok('★★ 帳本本來就在這個渲染器的手上（c.myLogs），不必為了這件事多撈一次',

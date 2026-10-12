@@ -2,6 +2,9 @@
    對應合約〔展延規則〕：課程到期後可申請展延一次（展延期限同原方案期限）；
    展延之課程不得申請退費。 */
 const fs=require('fs');
+/* 2026-10-12：ticketTokens 多收一個 opts.useDates（折抵券的折抵日期），
+   所以 selfBk 後面可能還有參數。斷言放寬到「selfBk 之後可以再帶東西」，
+   守的重點沒變：傳進去的使用人仍然是對的那一個。 */
 const src=fs.readFileSync(process.env.HOME+'/Projects/yugym-booking-system-app/index.html','utf8');
 
 let pass=0,fail=0;
@@ -178,7 +181,7 @@ ok('　　原因寫在程式裡', /展延開關只做在管理端的\s*\n\s*票�
 console.log('\n票券歷史紀錄改用圓形卡（2026-07-30 使用者指示）');
 ok('★ 歷史紀錄沿用可用票券的同一張卡（同一套 ticketTokens，不另做一套）',
    /return `<div class="bkd-tkcard bkd-tkcard-hist\$\{canExt\?' bkd-tkcard-ext':''\}">/.test(src)
-   && /<div class="mck-dots2" style="margin:8px 0 2px;">\$\{ticketTokens\(t,bks,typeMap,used,null,PP\.id,WAL\.selfBk\)\}<\/div>/.test(src));
+   && /<div class="mck-dots2" style="margin:8px 0 2px;">\$\{ticketTokens\(t,bks,typeMap,used,null,PP\.id,WAL\.selfBk,[\s\S]{0,80}?\)\}<\/div>/.test(src));
 ok('★ 原本的一行式列表已移除（看不出哪幾堂上在哪一天）',
    !/<div class="pp-hist-row\$\{canExt\?' pp-hist-ext':''\}">/.test(src));
 ok('★ 歷史卡縮小＋淡化表示「已結束」，滑過恢復',

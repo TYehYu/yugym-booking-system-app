@@ -19,8 +19,10 @@ const eq=(n,a,b)=>ok(n,JSON.stringify(a)===JSON.stringify(b),{得到:a,預期:b}
 console.log('① 收費資訊帶日期');
 {
   ok('★★★ 收款日期跟著每一期存進 invs', /at:p\.created_at\|\|'',/.test(src));
-  ok('★★★ 日期排最左（什麼時候 → 怎麼付 → 多少錢 → 發票）',
-     /return `<span class="tk-payrow">\$\{_when\}\$\{_pt\}<span class="tk-amtcell">\$\{_amt\}<\/span>\$\{_iv\}<\/span>`;/.test(src));
+  /* 2026-10-12：折抵券從金額左邊搬到最後面（使用者：「折抵券調整到發票後面
+     這樣畫面比較對齊」）。日期仍然排最左，這一條守的是那件事。 */
+  ok('★★★ 日期排最左（什麼時候 → 怎麼付 → 多少錢 → 發票 → 折抵券）',
+     /return `<span class="tk-payrow">\$\{_when\}\$\{_pt\}<span class="tk-amtcell">\$\{_amt\}<\/span>\$\{_iv\}\$\{_dcThis\}<\/span>`;/.test(src));
   /* ⚠ 多期是 grid：每一列都要輸出這一格，少一格整列往左位移（0923 期數那一欄踩過） */
   ok('★★★ 沒有日期的那一期也要佔一格',
      /: \(_multi\?'<span class="tk-when-na"><\/span>':''\)/.test(src)

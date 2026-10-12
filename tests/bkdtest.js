@@ -3,6 +3,9 @@
    成因：直接綁到票券時，已用堂數只數「清單裡的出席筆數」，
    而匯入會員的歷史課沒有逐筆預約 → 已核銷的堂數整個消失，看起來像全新的票。 */
 const fs=require('fs');
+/* 2026-10-12：ticketTokens 多收一個 opts.useDates（折抵券的折抵日期），
+   所以 selfBk 後面可能還有參數。斷言放寬到「selfBk 之後可以再帶東西」，
+   守的重點沒變：傳進去的使用人仍然是對的那一個。 */
 require('./_bkenv.js');   // 教練請假退堂那條判準（0830 收斂成一支，見 _bkenv.js）
 const src=fs.readFileSync(process.env.HOME+'/Projects/yugym-booking-system-app/index.html','utf8');
 
@@ -85,7 +88,7 @@ ok('★ 歷史判定改看「已上堂數」而非只看剩餘',
 ok('★ 卡片圓點與歷史判定用同一個數字（不會出現空心圓卻被收進歷史）',
    /const usedCount = tkUsedCount\(t\);/.test(src)
    && /const tkUsedCount=\(t\)=>\(\(WAL\.of\(t\.id\)\|\|\{\}\)\.used\)\|\|0;/.test(src)
-   && /const circles=ticketTokens\(t,WAL\.stampsOf\(t\.id\),typeMap,usedCount,null,member_id,WAL\.selfBk\);/.test(src));
+   && /const circles=ticketTokens\(t,WAL\.stampsOf\(t\.id\),typeMap,usedCount,null,member_id,WAL\.selfBk,[\s\S]{0,80}?\);/.test(src));
 ok('　　過期票仍照原規則歸類（不被新規則攔截）',
    /else if\(t\.expire_date && String\(t\.expire_date\)\.slice\(0,10\)<today\) state='expired';/.test(src)
    && /const _isExpiredTk=t=>\(\(WAL\.of\(t\.id\)\|\|\{\}\)\.state\)==='expired';/.test(src));

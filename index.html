@@ -4991,6 +4991,11 @@ button.pp-name-edit:hover{border-bottom-color:var(--gold);}
   font-variant-numeric:tabular-nums;white-space:nowrap;}
 .tk-when-na{display:block;}
 .tk-payrow .tk-amt{font-family:var(--num);}
+/* 還沒收的那一期（2026-10-12 使用者：「分期的票券 有辦法先顯示三期嗎」）——
+   淡化＋灰籤「未繳」。不是紅色：分期本來就還沒到期，這不是警示（紅>金>綠）。 */
+.tk-payrow-due{opacity:.5;}
+.tk-due{font-size:10px;font-weight:700;color:var(--t2);background:rgba(0,0,0,.055);
+  border-radius:5px;padding:1px 6px;white-space:nowrap;}
 /* 票券卡上的發票標籤（2026-09-15）：與付款方式同一列，左邊留一點距離。
    分期多格時允許換行 —— 三格排不下時往下堆，不要把金額擠掉。 */
 .tk-amt ~ .rev-invno,.tk-amt ~ .rev-noinv{margin-left:6px;}
@@ -14539,8 +14544,8 @@ function tbl(s){return TABLE_ALIAS[s]||s;}
 let sb=null;
 // ── 版本號（日期+時間格式：年後兩碼+月+日.時分，例 26620.1058 = 26年6/20 10:58）──
 // 每次改版手動更新這一行即可，畫面與 title 會一起更新
-const APP_VERSION = '261012.1025';
-const APP_VERSION_LABEL = 'v261012.1025';
+const APP_VERSION = '261012.1350';
+const APP_VERSION_LABEL = 'v261012.1350';
 const CLOUD = !!(window.YUGYM_CONFIG && window.YUGYM_CONFIG.url && window.YUGYM_CONFIG.anonKey);
 if(CLOUD){ sb = supabase.createClient(window.YUGYM_CONFIG.url, window.YUGYM_CONFIG.anonKey); }
 
@@ -22379,6 +22384,7 @@ function buildWallet(memberId, ctx){
     of:tid=>byId[tid]||null,
     noOf:tid=>_noOf[tid]||0,
     stampsOf:tid=>(byId[tid]?byId[tid].stamps:[]),
+    useDatesOf:tid=>tkVoucherUseDates((c.tickets||[]).find(t=>t&&t.id===tid), c.logs),
     ticketOf:bid=>byId[byBooking[bid]]||null,          // 這張課卡蓋在哪張票上
     /* 第 n 個名額蓋在哪張票（1 起算）。團課一堂可以跨多張票，單人課永遠只有第 1 個。 */
     seatOf:(bid,n)=>byId[(seatTk[bid]||[])[Math.max(0,(Number(n)||1)-1)]]||null,
@@ -22390,6 +22396,24 @@ function buildWallet(memberId, ctx){
     leftoverIn:k=>leftover.filter(b=>tkClass5({ticket_type_id:b.ticket_type_id,plan_name:b.category},typeMap)===k),
     sessionsLeft:k=>slots.filter(s=>s.state==='active'&&(!k||s.cls===k)).reduce((n,s)=>n+s.left,0)
   };
+}
+/* 折抵券用在哪一天（2026-10-12 使用者：「折抵券可以顯示折抵使用日期嗎」）——
+   折抵券不是上課用掉的，是買方案的時候折掉的，所以它**沒有 bookings**，
+   圓點那一格只畫得出一個 ✓、看不出哪天用的。日期在帳本裡：扣抵時
+   逐張寫了 `ticket_logs.action='deduct'`、note「折抵 $300（購買 ○○）」。
+
+   ⚠ 只給折抵券用。一般課程票的 deduct 筆數跟圓點格子對不齊
+     （舊系統匯入的票有 grant／deduct 來回調整的紀錄，例如 4 堂的團課票有 8 筆 deduct），
+     拿去填日期會填出一排錯的日子。課程票的日期本來就該來自課卡。
+   ⚠ created_at 是 UTC，要換成台北日期再切 —— 晚上 8 點之後扣的會差一天。 */
+function tkVoucherUseDates(t, logs){
+  if(!t) return [];
+  const isV=String(t.ticket_type_id||'').indexOf('tt-discount-')===0 || /折抵/.test(t.plan_name||'');
+  if(!isV) return [];
+  return (logs||[])
+    .filter(l=>l && String(l.ticket_id)===String(t.id) && l.action==='deduct' && l.created_at)
+    .map(l=>new Date(new Date(l.created_at).getTime()+8*3600*1000).toISOString().slice(0,10))
+    .sort();
 }
 /* 票卡編號的顯示樣式（2026-07-31）：一律 #N，卡片、下拉、明細講的都是同一個號碼。 */
 function tkNoTag(no){
@@ -44001,7 +44025,8 @@ async function openMemberDetail(member_id){
     /* 2026-07-23 使用者指示：票券逐堂顯示全系統統一 —— 改用 ticketTokens
        （課種色圓點：實心＋上課日期／空心＋預約日期／空心未使用），取代原本的灰色 tkc-dot。
        2026-07-31 起圓點直接拿票券夾的戳記，與已用堂數同源。 */
-    const circles=ticketTokens(t,WAL.stampsOf(t.id),typeMap,usedCount,null,member_id,WAL.selfBk);
+    const circles=ticketTokens(t,WAL.stampsOf(t.id),typeMap,usedCount,null,member_id,WAL.selfBk,
+      null,{useDates:WAL.useDatesOf(t.id)});
     const inst=t.installment&&typeof t.installment==='object'?t.installment:null;
     const instTag=inst?`<span class="tag" style="background:#f7efe0;color:#8a5e28;font-size:10px;margin-left:6px;">分期 ${t.unlocked_sessions||inst.current||0}/${total}</span>`:'';
     /* 共享票（2026-07-26）：標出跟誰共用；持有人非本人時額外註明「◎ 持有人」，
@@ -51517,7 +51542,7 @@ function ppRecordHtml(){
                  ⚠ 不塞進 ticketTokens —— 那一支是全站共用的（會員端、課卡、票券卡都吃它），
                    在裡面長出一顆只有櫃檯按得到的動作鈕，會員端也會看到。
                  ⚠ 不能按時**不藏起來**，淡化＋把原因寫在 title（0823 定的語彙）。 */''}
-            <div class="mck-dots2" style="margin:10px 0 2px;">${ticketTokens(t,bks,typeMap,used,null,PP.id,WAL.selfBk)}${
+            <div class="mck-dots2" style="margin:10px 0 2px;">${ticketTokens(t,bks,typeMap,used,null,PP.id,WAL.selfBk,null,{useDates:WAL.useDatesOf(t.id)})}${
               isDeskLike()?(()=>{ const _w=tkExtWhyNot(t,ymd(TODAY),usedOf(t));
                 return _w
                   ? `<span class="mtk mtk-ext mtk-ext-off" title="${escH(_w)}">展延</span>`
@@ -51673,7 +51698,7 @@ function ppRecordHtml(){
                  櫃檯以上看到的兩種卡才會是同一個版型。
                  ⚠ 非櫃檯角色（_m2 為假）維持原本的單行底列 —— 與 cardOf 的 else 分支一致。 */''}
             ${_m2?`<div class="tkc-meta">${tkBuyDateHtml(t)}　·　效期至 ${fmtExpire(t.expire_date,t)}</div>`:''}
-            <div class="mck-dots2" style="margin:8px 0 2px;">${ticketTokens(t,bks,typeMap,used,null,PP.id,WAL.selfBk)}</div>
+            <div class="mck-dots2" style="margin:8px 0 2px;">${ticketTokens(t,bks,typeMap,used,null,PP.id,WAL.selfBk,null,{useDates:WAL.useDatesOf(t.id)})}</div>
             ${tkVoidNoteHtml(t, c.myLogs)}
             <div class="${_m2?'tkc-foot':''}" style="font-size:11px;color:var(--t3);margin-top:7px;display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:6px 8px;">
               <span style="min-width:0;">${_m2
@@ -68430,8 +68455,26 @@ function tkMoneyHtml(t){
      ⚠ 付款方式讀 v.pm（那一期自己的），不是整張票的 _pe.m —— 分期可能一期現金一期匯款。
      ⚠ invs 缺席時完全不走這條 —— 舊票與既有測試 fixture 沒有這一欄，維持原本的單行輸出。 */
   if(_pe && Array.isArray(_pe.invs) && _pe.invs.length){
-    const _multi=_pe.invs.length>1;
-    const _rows=_pe.invs.map((v,i)=>{
+    /* 還沒收的那幾期也先畫出來（2026-10-12 使用者：「分期的票券 有辦法先顯示三期嗎」）——
+       原本只畫 purchases，三期的票在收第 3 期之前永遠只看得到兩列，
+       櫃檯要另外去記「這張是分幾期的」。期數與各期金額本來就存在票上
+       （installment.count／amounts，見發放時寫入的那一段），直接補成灰色的「未繳」列。
+       ⚠ 只補、不覆蓋：已收的期數一律以 purchases 為準（金額可能跟當初談的不一樣）。
+       ⚠ 不要用 installment.paid 判斷 —— 那是發放當下寫的旗標，實際收了幾期看收款筆數。 */
+    const _inst=(t.installment && typeof t.installment==='object')?t.installment:null;
+    const _instN=Math.max(0, Number(_inst&&_inst.count)||0);
+    const _amts=Array.isArray(_inst&&_inst.amounts)?_inst.amounts:[];
+    const _list=_pe.invs.slice();
+    for(let k=_list.length;k<_instN;k++) _list.push({due:true, amt:Number(_amts[k])||0});
+    const _multi=_list.length>1;
+    const _rows=_list.map((v,i)=>{
+      /* 未收的那一期：日期與付款方式還不知道，格子要留（多期是 grid，少一格整列會位移） */
+      if(v && v.due){
+        return `<span class="tk-payrow tk-payrow-due" title="第 ${i+1} 期尚未收款">`
+          +`<span class="tk-when-na"></span><span class="tk-pay-na"></span>`
+          +`<span class="tk-amtcell"><b class="tk-amt">${v.amt?'$'+v.amt.toLocaleString():'—'}</b></span>`
+          +`<span class="tk-due">未繳</span></span>`;
+      }
       const _pv=({cash:'現金',transfer:'匯款',card:'刷卡'})[v&&v.pm]||'';
       /* ⚠⚠ 期數那一格已經收掉（2026-09-23 使用者最後定案：右下角＝付款 → 金額 → 發票）。
          白天要過「排序調整並新增期數」，看過實機之後又拿掉 —— 三期的金額與發票
@@ -68459,10 +68502,13 @@ function tkMoneyHtml(t){
       const _dcThis=
         (Number(v&&v.vn)>0?`<span class="tk-disc" title="折抵券 ${v.vn} 張${Number(v.va)>0?`　·　折抵 $${Number(v.va).toLocaleString()}`:''}${_vOrig}">折抵券</span>`:'')
        +(Number(v&&v.cu)>0?`<span class="tk-disc" title="儲值金折抵 $${Number(v.cu).toLocaleString()}${_vOrig}">儲值金</span>`:'');
-      /* ⚠ 折抵券放在金額**左邊**（2026-09-23 使用者：「折抵券的位子改在金額左邊」）——
-         放右邊的話，有折抵那一列的金額會被推離發票，三期的金額對不齊；
-         放左邊之後金額一律貼著發票、右緣切齊，只有折抵券那一枚往左突出。 */
-      const _amt=`${_dcThis}<b class="tk-amt">$${(Number(v.amt)||0).toLocaleString()}</b>`;
+      /* 折抵券移到**發票後面**（2026-10-12 使用者：「折抵券調整到發票後面　這樣畫面比較對齊」，
+         附截圖＝三期直向堆疊的樣子）——
+         ⚠ 這推翻 0923 的「折抵券的位子改在金額左邊」。當時三期是橫排一列，
+           放左邊金額才貼得住發票；10/09 底列改版後多期會直向堆疊，
+           放左邊反而把有折抵那一列的金額整個往右推，三列的金額對不齊。
+           擺到最後面，每一列的「日期 付款 金額 發票」就逐欄對上了。 */
+      const _amt=`<b class="tk-amt">$${(Number(v.amt)||0).toLocaleString()}</b>`;
       /* 日期排最左（2026-10-03）：由左往右就是「什麼時候、怎麼付、多少錢、發票」。
          ⚠ 多期是 grid，**每一列一定要輸出這一格**（沒有日期就給空的 .tk-when-na），
            少一格整列會往左位移 —— 0923 期數那一欄就踩過一次。
@@ -68472,7 +68518,7 @@ function tkMoneyHtml(t){
       const _when=_wd
         ? `<span class="tk-when" title="第 ${i+1} 期收款日　${_wd.replace(/-/g,'/')}">${_wd.slice(5).replace('-','/')}</span>`
         : (_multi?'<span class="tk-when-na"></span>':'');
-      return `<span class="tk-payrow">${_when}${_pt}<span class="tk-amtcell">${_amt}</span>${_iv}</span>`;
+      return `<span class="tk-payrow">${_when}${_pt}<span class="tk-amtcell">${_amt}</span>${_iv}${_dcThis}</span>`;
     }).join('');
     return `　·　<span class="tk-paylist${_multi?' tk-paylist-multi':''}">${_rows}</span>`;
   }
@@ -68739,6 +68785,9 @@ function ticketTokens(t,bks,typeMap,usedCount,curId,memberId,selfSet,seatN,opts)
   const _ghost=Math.max(0, used-done.length);
   /* 補登的日期照日期排，依序填進前面那幾個無日期的格子 */
   const _mu=Array.isArray(t.manual_uses)?t.manual_uses.filter(Boolean).slice().sort():[];
+  /* 折抵券的折抵日期（2026-10-12）——呼叫端從 wallet 的 useDatesOf 帶進來。
+     ⚠ 管理員手動補登的 _mu 優先：那是人刻意寫上去的更正。 */
+  const _ud=(opts&&Array.isArray(opts.useDates))?opts.useDates:[];
   /* 一次最多畫 TK_DOT_MAX 顆（2026-08-21 使用者定案：一列 8 顆、最多兩列）——
      成因：使用者回報「行事曆點了 18:00 魚媽劉媽的自主訓練 畫面會當機 是因為圓形卡太多了嗎」。
      是的。那張「親友自主訓練」是無限次卡，sessions_total=9999，這個迴圈就照著畫 9,999 顆，
@@ -68774,14 +68823,17 @@ function ticketTokens(t,bks,typeMap,usedCount,curId,memberId,selfSet,seatN,opts)
          請假＝本堂照扣、另發補課券；取消未退＝取消時選了扣課不退。 */
       const lvc=_usedCls(b);
       /* 補登日期的格子（沒有課卡，_it.g 是它在 _ghost 裡的序號） */
-      const _md=(!b && _it.g!=null) ? (_mu[_it.g]||'') : '';
+      const _md=(!b && _it.g!=null) ? (_mu[_it.g]||_ud[_it.g]||'') : '';
+      /* 同樣是「沒有課卡的日期」，來源不一樣，說明也要不一樣：
+         折抵券是買方案時折掉的，不是舊系統補登的。 */
+      const _mdWhy=(!_md) ? '' : ((!_mu[_it.g] && _ud[_it.g]) ? '　·　折抵使用日' : '　·　舊系統補登（沒有對應課卡）');
       /* 沒有課卡的那幾格（帳面已用、綁不到預約）也要點得到（2026-08-28 使用者：
          「所以如果圓形卡只有顯示打勾 我選擇這個打勾的圓形卡的時候 也可以填寫日期進去」）——
          點下去跳到下面「補登使用日期」的那一格。用 tapGhost 帶進來，
          與 tapBooked 一樣是呼叫端決定要不要開放。 */
       const _tapG=(!b && _it.g!=null && opts && opts.tapGhost)
         ? ` onclick="event.stopPropagation();${opts.tapGhost}(${_it.g})"` : '';
-      s+=`<span class="mtk mtk-used${lvc}${cur}${slf}${shc}${_md?' mtk-manual':''}${_tapG?' mtk-tap':''}"${_tapG}" style="--tk-acc:${v.accent};" title="${_usedWhy(b)}${b&&b.date?' '+b.date:''}${_md?_md+'　·　舊系統補登（沒有對應課卡）':''}${b&&b._shName?'　·　'+b._shName+' 預約':''}${cur?'（本堂）':''}${slf?'　·　會員自行預約':''}">${_shBody(b, b?md(b):(_md?md({date:_md}):'✓'))}${cur?'<i class="mtk-comet"></i>':''}</span>`;
+      s+=`<span class="mtk mtk-used${lvc}${cur}${slf}${shc}${_md?' mtk-manual':''}${_tapG?' mtk-tap':''}"${_tapG}" style="--tk-acc:${v.accent};" title="${_usedWhy(b)}${b&&b.date?' '+b.date:''}${_md?_md+_mdWhy:''}${b&&b._shName?'　·　'+b._shName+' 預約':''}${cur?'（本堂）':''}${slf?'　·　會員自行預約':''}">${_shBody(b, b?md(b):(_md?md({date:_md}):'✓'))}${cur?'<i class="mtk-comet"></i>':''}</span>`;
     }
     else {
       const b=_it.b;
