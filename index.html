@@ -14548,8 +14548,8 @@ function tbl(s){return TABLE_ALIAS[s]||s;}
 let sb=null;
 // ── 版本號（日期+時間格式：年後兩碼+月+日.時分，例 26620.1058 = 26年6/20 10:58）──
 // 每次改版手動更新這一行即可，畫面與 title 會一起更新
-const APP_VERSION = '261012.2011';
-const APP_VERSION_LABEL = 'v261012.2011';
+const APP_VERSION = '261012.2033';
+const APP_VERSION_LABEL = 'v261012.2033';
 const CLOUD = !!(window.YUGYM_CONFIG && window.YUGYM_CONFIG.url && window.YUGYM_CONFIG.anonKey);
 if(CLOUD){ sb = supabase.createClient(window.YUGYM_CONFIG.url, window.YUGYM_CONFIG.anonKey); }
 
@@ -17364,28 +17364,66 @@ async function lineExchange(){
     }
   }
 }
+/* 每一步都要有逾時（2026-10-12 使用者回報「會員卡在登入頁面轉圈圈」第二現場）——
+   劉韻如那一次 **auth.users.last_sign_in_at 有更新**（13:41 登入成功），
+   但她手機上還是一直轉圈圈：伺服器收下了、回應在路上掉了，
+   client 的 await 就**永遠不會 resolve，也不會 reject** —— 沒有例外可以接，
+   所以前一版「把例外接起來」那個修法對這種情況完全無效。
+   行動網路（尤其 LINE 內建瀏覽器）發生這件事是常態，不是意外。
+   ⚠ 逾時之後第一件事是**回頭問 getSession()**：那一步很可能其實成功了，
+     只是回應沒回來；真的有 session 就直接往下走，不要叫客人重來一次。 */
+function _loTimeout(p, ms, what){
+  let t;
+  return Promise.race([
+    Promise.resolve(p).finally(()=>clearTimeout(t)),
+    new Promise((_,rej)=>{ t=setTimeout(()=>rej(new Error((what||'連線')+'逾時')), ms); })
+  ]);
+}
 async function _lineExchange(){
   const cfg=window.YUGYM_CONFIG||{};
   const err=document.getElementById('login-err');
-  const showErr=m=>{ if(err){err.textContent=m;err.style.display='block';} setLineBtnBusy(false); };
+  const showErr=m=>{ if(err){err.innerHTML=String(m).replace(/</g,'&lt;')
+      +'<br><span style="font-size:11.5px;">網路不穩時會這樣，請再按一次「使用 LINE 登入」</span>';
+    err.style.display='block';} setLineBtnBusy(false); };
   setLineBtnBusy(true);   // 交換過程 1–3 秒，顯示處理中避免像當機（2026-07-27）
   const idToken=liff.getIDToken();
   if(!idToken){ showErr('取不到 LINE 身分，請重試'); return; }
-  const r=await fetch(cfg.url+'/functions/v1/line-member-auth',{
-    method:'POST',
-    headers:{'Content-Type':'application/json','Authorization':'Bearer '+cfg.anonKey,'apikey':cfg.anonKey},
-    body:JSON.stringify({id_token:idToken})
-  });
+  /* fetch 用 AbortController 才真的斷得掉（只包 Promise.race 的話連線還掛著） */
+  const _ac=(typeof AbortController!=='undefined')?new AbortController():null;
+  const _at=setTimeout(()=>{ try{ _ac&&_ac.abort(); }catch(_){} }, 15000);
+  let r;
+  try{
+    r=await fetch(cfg.url+'/functions/v1/line-member-auth',{
+      method:'POST', signal:_ac?_ac.signal:undefined,
+      headers:{'Content-Type':'application/json','Authorization':'Bearer '+cfg.anonKey,'apikey':cfg.anonKey},
+      body:JSON.stringify({id_token:idToken})
+    });
+  }catch(e){ clearTimeout(_at); showErr('連不上伺服器（LINE 驗證）'); return; }
+  clearTimeout(_at);
   const d=await r.json().catch(()=>({}));
   if(!d.ok){ showErr('LINE 驗證失敗：'+(d.error||r.status)); return; }
   /* 換 Supabase session：改用一次性密碼 signInWithPassword（2026-07-25）。
      原本走 verifyOtp(magiclink)，但正式庫 JWT 簽章金鑰遷移成 ES256 後
-     admin.generateLink 回 403 bad_jwt，故後端改發一次性密碼、前端用它登入。 */
-  const{error:oe}=await sb.auth.signInWithPassword({email:d.email,password:d.password});
+     admin.generateLink 回 403 bad_jwt，故後端改發一次性密碼、前端用它登入。
+     ⚠ 20 秒逾時＋回頭確認 session：伺服器端這一步常常是成功的（見上面的說明）。 */
+  let oe=null;
+  try{
+    const _r=await _loTimeout(sb.auth.signInWithPassword({email:d.email,password:d.password}), 20000, '登入');
+    oe=_r&&_r.error||null;
+  }catch(_to){
+    let _ok=false;
+    try{ _ok=!!((await _loTimeout(sb.auth.getSession(),5000,'讀取登入狀態')).data||{}).session; }catch(_){}
+    if(!_ok){ showErr('登入沒有完成（連線逾時）'); return; }
+  }
   if(oe){ showErr('登入建立失敗：'+(oe.message||oe)); return; }
   if(d.linked){
-    const uid=(await sb.auth.getSession()).data.session.user.id;
-    const mm=(await sb.from('members').select('*').eq('auth_id',uid).maybeSingle()).data;
+    const _sess=(await _loTimeout(sb.auth.getSession(),10000,'讀取登入狀態').catch(()=>({data:{}}))).data||{};
+    if(!_sess.session){ showErr('登入沒有完成（連線逾時）'); return; }
+    const uid=_sess.session.user.id;
+    /* 這一步也要逾時：它一樣是網路呼叫，掉包一樣會卡死在這裡（量過只要 27ms） */
+    let mm=null;
+    try{ mm=((await _loTimeout(sb.from('members').select('*').eq('auth_id',uid).maybeSingle(),15000,'讀取會員資料'))||{}).data; }
+    catch(_){ showErr('讀取會員資料逾時'); return; }
     if(!mm){ showErr('會員資料讀取失敗，請洽櫃台'); return; }
     /* 帳號停用（2026-08-01）：新客免審核直接建檔，濫註冊改由櫃檯事後停用擋下來，
        所以登入這一關一定要看 status —— 不看的話停用等於沒有作用。 */

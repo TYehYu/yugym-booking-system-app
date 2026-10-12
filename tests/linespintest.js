@@ -45,5 +45,23 @@ ok('★★ 忙碌狀態的實作沒動（按鈕文案與還原機制）',
    /if\(btn\.dataset\.orig\) btn\.innerHTML=btn\.dataset\.orig;/.test(src)
    && /處理中，請稍候…/.test(src));
 
+console.log('\n④ 第二現場：回應掉在路上，await 永遠不會 resolve 也不會 reject');
+/* 劉韻如 2026-10-12 13:41 —— auth.users.last_sign_in_at **有更新**（伺服器端成功），
+   但她手機上還是一直轉圈圈。這種情況沒有例外可以接，
+   所以①②那種「把例外接起來」的修法完全無效，一定要有逾時。 */
+ok('★★★ 有共用的逾時工具，而且會清掉計時器（不要留一堆待爆的 timer）',
+   /function _loTimeout\(p, ms, what\)\{/.test(src)
+   && /Promise\.resolve\(p\)\.finally\(\(\)=>clearTimeout\(t\)\)/.test(src));
+ok('★★★ fetch 用 AbortController 才真的斷得掉（只 race 的話連線還掛著）',
+   /signal:_ac\?_ac\.signal:undefined/.test(src)
+   && /setTimeout\(\(\)=>\{ try\{ _ac&&_ac\.abort\(\); \}catch\(_\)\{\} \}, 15000\)/.test(src));
+ok('★★★ 登入逾時後**先回頭問 getSession**（那一步多半其實成功了）',
+   /\}catch\(_to\)\{[\s\S]{0,260}?sb\.auth\.getSession\(\)[\s\S]{0,120}?if\(!_ok\)\{ showErr/.test(src));
+ok('★★★ 讀會員資料那一步也有逾時（量過只要 27ms，卡住一定是網路）',
+   /_loTimeout\(sb\.from\('members'\)\.select\('\*'\)\.eq\('auth_id',uid\)\.maybeSingle\(\),15000,'讀取會員資料'\)/.test(src));
+ok('★★ 每一種失敗都告訴客人下一步（不是只留一個紅字）',
+   /網路不穩時會這樣，請再按一次「使用 LINE 登入」/.test(src));
+ok('★★ 錯誤訊息有跳脫', /err\.innerHTML=String\(m\)\.replace\(\/<\/g,'&lt;'\)/.test(src));
+
 console.log(`\n${pass} 通過 / ${fail} 失敗`);
 process.exit(fail?1:0);
