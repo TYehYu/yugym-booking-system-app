@@ -53,6 +53,15 @@ async function freshen(req, cached) {
     const now = head.headers.get('etag') || head.headers.get('last-modified') || '';
     const was = cached ? (cached.headers.get('etag') || cached.headers.get('last-modified') || '') : '';
     if (now && was && now === was) return;          // 沒換版 → 不抓那 1.7MB
+    /* ⚠⚠ 換版了也不要「馬上」抓（2026-10-12 陳力豪案例）——
+       使用者回報會員卡在登入頁，新版跳出的紅字是「連不上伺服器（LINE 驗證）」，
+       也就是登入的第一個請求逾時了。成因是這裡：推新版之後，開啟頁面的同時
+       這支在背景抓 880KB，把 4G 的頻寬整個吃掉；登入那個只有幾百 bytes 的請求
+       排在後面餓死，15 秒到了就被判逾時。
+       ⚠ 客人要的是「現在登得進去」，新版晚 20 秒再抓完全沒差（本來就要下次才生效）。
+       ⚠ 不要改成「等頁面通知我」那種作法 —— 多一條訊息管道，壞掉時更難查；
+         單純讓路就夠了。 */
+    await new Promise(r => setTimeout(r, 20000));
     const res = await fetch(req, { cache: 'reload' });
     if (res && res.ok && res.status === 200) {
       const c = await caches.open(CACHE);
