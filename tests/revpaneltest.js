@@ -61,7 +61,9 @@ console.log('① 視窗要顯示的四項資訊');
      /<span class="rvp-kind">續約<\/span>/.test(html));
 }
 
-console.log('\n② 五顆按鈕（條件齊備時全部可按）');
+console.log('\n② 六顆按鈕（條件齊備時全部可按）');
+/* 2026-10-13 新增第六顆「補開發票」（嚴晴那筆分期第 2 期沒開到發票，
+   見 invmakeuptest）—— 已經開過的那一筆它會是暗的，所以不列在「全部可按」裡。 */
 {
   const {html}=build(FULL, true);
   for(const [t,expect] of [['會員資料','開啟票券夾'],['約別','續約'],
@@ -86,11 +88,15 @@ console.log('\n③ 不能用的要暗化＋寫原因，不可以隱藏');
   }
   /* ⚠ 要釘 class="rvp-btn 後面接空白或引號 —— 只寫 class="rvp-btn 會把每顆鈕裡的
      rvp-btn-b／-t／-s／-go 四個 span 一起數進去（實際數到 25）。 */
-  ok('★★★ 五顆都還在畫面上（不能用 ≠ 隱藏）',
-     (html.match(/class="rvp-btn[ "]/g)||[]).length===5,
+  ok('★★★ 六顆都還在畫面上（不能用 ≠ 隱藏）',
+     (html.match(/class="rvp-btn[ "]/g)||[]).length===6,
      (html.match(/class="rvp-btn[ "]/g)||[]).length);
+  /* 這一筆有金額、有收款紀錄、沒開過發票 → 第六顆「補開發票」是**可按**的，
+     所以 disabled 仍然是 5 顆，而 rvpAct 會出現（只在那一顆上）。 */
   ok('★★ 不能按的真的按不下去（disabled，不是只有看起來灰）',
-     (html.match(/disabled/g)||[]).length===5 && !/rvpAct/.test(html));
+     (html.match(/disabled/g)||[]).length===5
+     && (html.match(/rvpAct/g)||[]).length===1
+     && /rvpAct\('inv'/.test(html));
   ok('★ 沒開發票的列寫「沒開發票」而不是空白',
      /發票號碼<\/span>\s*<span class="rvp-v rvp-dim">沒開發票</.test(html));
 }

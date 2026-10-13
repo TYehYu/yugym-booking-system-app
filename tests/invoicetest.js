@@ -262,8 +262,9 @@ console.log('\n④-2 每一個收款入口都要能開發票（2026-09-15）');
    一個入口要湊齊三件事才算接好：插 invFieldsHTML、開窗呼叫 invSync、存檔呼叫 invIssueForPurchase。 */
 {
   const cnt=re=>(src.match(re)||[]).length;
-  ok('★★★ 五個地方插了發票區（發放票券／場租／自主訓練票券／商品／分期）',
-     cnt(/\$\{invFieldsHTML\(\)\}/g)===5);
+  /* 2026-10-13：第六處是「補開發票」（已收款但沒開到的那一筆，見 invmakeuptest）。 */
+  ok('★★★ 六個地方插了發票區（發放票券／場租／自主訓練票券／商品／分期／補開）',
+     cnt(/\$\{invFieldsHTML\(\)\}/g)===6);
   ok('★★★ invSync 可傳入 paid／memberId／members（不傳就沿用 gt- 那套）',
      /async function invSync\(opt\)\{/.test(src)
      && /if\(O\.paid!=null\)\{/.test(src)

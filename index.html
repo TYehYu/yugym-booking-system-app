@@ -14548,8 +14548,8 @@ function tbl(s){return TABLE_ALIAS[s]||s;}
 let sb=null;
 // ── 版本號（日期+時間格式：年後兩碼+月+日.時分，例 26620.1058 = 26年6/20 10:58）──
 // 每次改版手動更新這一行即可，畫面與 title 會一起更新
-const APP_VERSION = '261013.1744';
-const APP_VERSION_LABEL = 'v261013.1744';
+const APP_VERSION = '261013.2228';
+const APP_VERSION_LABEL = 'v261013.2228';
 const CLOUD = !!(window.YUGYM_CONFIG && window.YUGYM_CONFIG.url && window.YUGYM_CONFIG.anonKey);
 if(CLOUD){ sb = supabase.createClient(window.YUGYM_CONFIG.url, window.YUGYM_CONFIG.anonKey); }
 
@@ -46246,6 +46246,71 @@ function rvpAct(what, key){
   if(what==='att'){ openRevAttribPick(r.attKind, r.attRef); return; }
   if(what==='pay'){ openRevPayPick(r.payRef); return; }
   if(what==='undo'){ openSaleUndo(r.tk?('tk:'+r.tk):('pur:'+r.pur)); return; }
+  if(what==='inv'){ openInvMakeup(r.pur); return; }
+}
+/* 補開發票（2026-10-13）——針對「已經收款、但沒有開出發票」的那一筆。
+   ⚠ 不是 invRetry：那一支處理的是 invoices 裡 status='failed' 的列（開過但失敗）；
+     這裡的情況是**連一列都沒有**（當初根本沒開），兩條路不能共用。
+   ⚠ 載具／信箱要當場問 —— 原始那一筆沒有存發票欄位（存了也不會是空的）。
+     沿用 invFieldsHTML／invReadFields，與收款時那一套完全相同。 */
+async function openInvMakeup(purId){
+  if(!isDeskLike()){ showToast('需要櫃檯以上權限'); return; }
+  const pur=await dbGet('purchases',purId).catch(()=>null);
+  if(!pur){ showToast('找不到這筆收款紀錄'); return; }
+  if(pur.invoice_number){ showToast('這一筆已經開過發票：'+pur.invoice_number); return; }
+  const amt=Math.round(Number(pur.deal_amount)||0);
+  if(amt<=0){ showToast('金額是 0，不用開發票'); return; }
+  const cfg=await invCfg();
+  if(!cfg.on){ showToast('電子發票目前沒有啟用'+(cfg.why?('：'+cfg.why):''), 6000); return; }
+  const mem=pur.member_id?await dbGet('members',pur.member_id).catch(()=>null):null;
+  window._invMkPur=purId;
+  window._invGateBtn='invmk-go';
+  showModal(`<div class="modal-title">補開發票</div>
+    <div style="background:var(--card2);border-radius:10px;padding:12px 14px;font-size:13px;line-height:1.9;margin-bottom:12px;">
+      <div><span style="color:var(--t2);">會員</span>　${escH((mem&&mem.name)||'散客')}</div>
+      <div><span style="color:var(--t2);">項目</span>　${escH(pur.plan_name||'消費')}</div>
+      <div><span style="color:var(--t2);">金額</span>　<b class="num">$${amt.toLocaleString()}</b>
+        　·　${escH(String(pur.created_at||'').slice(0,10).replace(/-/g,'/'))}</div>
+    </div>
+    ${invFieldsHTML()}
+    <ul class="mk-pts" style="margin-top:10px;">
+      <li>開立日期是<b>今天</b>，不是原本的收款日（綠界不能回溯開立）</li>
+      <li>開出去就不能改，要改只能作廢或開折讓</li>
+    </ul>
+    <div class="modal-foot"><button class="btn btn-ghost" onclick="closeModal()">取消</button>
+      <button class="btn btn-green" id="invmk-go" onclick="doInvMakeup()">確認開立</button></div>`);
+  window._invMembers=(mem?[mem]:[]);
+  try{ invSync({paid:true, memberId:(pur.member_id||''), members:(mem?[mem]:[]), defaultOn:true}); }catch(_){}
+}
+async function doInvMakeup(){ return onceAct('invmk', _doInvMakeup); }
+async function _doInvMakeup(){
+  const purId=window._invMkPur; if(!purId) return;
+  const f=invReadFields();
+  { const e=invCheckFields(f); if(e){ showToast('發票欄位：'+e); return; } }
+  if(f && f.mode==='none'){ showToast('選了不開發票，就不用補開了'); return; }
+  const btn=document.getElementById('invmk-go');
+  if(btn){ btn.disabled=true; btn.textContent='開立中…'; }
+  try{
+    const pur=await dbGet('purchases',purId);
+    if(!pur){ showToast('找不到這筆收款紀錄'); return; }
+    if(pur.invoice_number){ showToast('這一筆已經開過發票：'+pur.invoice_number); return; }
+    const mem=pur.member_id?await dbGet('members',pur.member_id).catch(()=>null):null;
+    const amt=Math.round(Number(pur.deal_amount)||0);
+    /* ⚠ 回傳的是 invoices 那一列（status / invoice_number），不是 invCall 的 {ok,msg}——
+         成功與失敗的提示 invIssueForPurchase 自己已經跳過了，這裡不要再跳一次。 */
+    const row=await invIssueForPurchase(pur, mem, f,
+      [{name:(pur.plan_name||'消費'), amt}], {category:'makeup'});
+    if(row && row.status==='issued'){
+      closeModal();
+      dbCacheClear(['purchases','invoices']);
+      try{ window._calStepping=true; navTo(CUR_PAGE, CUR_GROUP); }catch(_){}
+    }else if(!row){
+      showToast('沒有開立（發票服務未啟用或金額為 0）', 6000);
+    }
+    /* 失敗（status==='failed'）時視窗留著：櫃檯可以改載具／信箱再按一次，
+       那一列也已經寫進 invoices，之後在〔電子發票〕按「重開」也找得到。 */
+  }catch(e){ console.error('補開發票失敗',e); showToast('補開失敗：'+((e&&e.message)||e), 7000); }
+  finally{ const b=document.getElementById('invmk-go'); if(b){ b.disabled=false; b.textContent='確認開立'; } }
 }
 /* 把小浮層擺到「被點的那張卡片左邊」，並讓縮放原點落在卡片那一側
    （2026-09-21 使用者：「改成小視窗 從卡片往左放大縮放」）。
@@ -46321,6 +46386,14 @@ function revRowPanel(key, ev){
             desk?'這一筆不計入教練業績':'需要櫃檯以上權限')}
       ${btn('pay','付款方式', _payLbl, !!(desk&&r.payRef),
             desk?'找不到對應的收款紀錄':'需要櫃檯以上權限')}
+      ${/* 補開發票（2026-10-13 使用者：嚴晴那筆分期第 2 期沒開到發票，想退回重開卻
+             被「已經排了 6 堂課」擋住，問「修正退回功能還是補開發票」）——
+             答案是補開：錢確實收了，退回會動到已經上過的課；稅務上也該補開不是重來。
+             ⚠ 條件寫明白：有金額、還沒有號碼、找得到收款紀錄、櫃檯以上。
+             ⚠ 已經有號碼的不給按（要改那張得走作廢／折讓，不是再開一張）。 */''}
+      ${btn('inv','補開發票', r.invNo?('已開立 '+r.invNo):'這一筆沒開到發票，現在補開',
+            !!(desk && !r.invNo && Number(r.amt)>0 && r.pur && !r.lot),
+            r.invNo?'這一筆已經開過了':(desk?'這一筆沒有可開發票的收款紀錄':'需要櫃檯以上權限'))}
       ${btn('undo','退回', '整筆退回（輸入錯誤時用）', _undoOk,
             desk?'只能在收款當天退回':'需要櫃檯以上權限', 'rvp-undo')}
     </div>`);

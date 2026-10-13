@@ -17,8 +17,9 @@ const ok=(n,c,x)=>{ if(c){pass++;console.log('  ✓ '+n);} else {fail++;console.
 const eq=(n,a,e)=>ok(n,JSON.stringify(a)===JSON.stringify(e),`得到 ${JSON.stringify(a)}，預期 ${JSON.stringify(e)}`);
 
 console.log('① 每個收款入口都要問發票（2026-09-15 反轉 0802 的決定）');
-eq('★★★ 五處插了共用的發票區（發放票券／場租／自主訓練票券／商品／分期）',
-   (src.match(/\$\{invFieldsHTML\(\)\}/g)||[]).length, 5);
+/* 2026-10-13：第六處是「補開發票」（已收款但沒開到的那一筆，見 invmakeuptest）。 */
+eq('★★★ 六處插了共用的發票區（發放票券／場租／自主訓練票券／商品／分期／補開）',
+   (src.match(/\$\{invFieldsHTML\(\)\}/g)||[]).length, 6);
 ok('★★★ 是共用一份，不是各自做一套下拉（舊 id 沒有復活）',
    !/id="(fr-invoice|fv-invoice|ms-invoice|gt-invoice)"/.test(src));
 /* ⚠ 2026-09-15 二修：三個入口改成各自的 *InvSync 包裝（金額 0 要把發票區收起來，
