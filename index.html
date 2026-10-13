@@ -14548,8 +14548,8 @@ function tbl(s){return TABLE_ALIAS[s]||s;}
 let sb=null;
 // ── 版本號（日期+時間格式：年後兩碼+月+日.時分，例 26620.1058 = 26年6/20 10:58）──
 // 每次改版手動更新這一行即可，畫面與 title 會一起更新
-const APP_VERSION = '261013.1321';
-const APP_VERSION_LABEL = 'v261013.1321';
+const APP_VERSION = '261013.1744';
+const APP_VERSION_LABEL = 'v261013.1744';
 const CLOUD = !!(window.YUGYM_CONFIG && window.YUGYM_CONFIG.url && window.YUGYM_CONFIG.anonKey);
 if(CLOUD){ sb = supabase.createClient(window.YUGYM_CONFIG.url, window.YUGYM_CONFIG.anonKey); }
 
@@ -51731,8 +51731,16 @@ function ppRecordHtml(){
               ${escH(r.plan_name||'票券')}</span>
               <span class="bkd-tkcard-prog"><b class="num">${Number(r.sessions)||0}</b> 堂</span></div>
             <div class="gr-item-mid" style="margin-top:8px;">
-              <span class="gr-sign ${signed?'ok':'wait'}">${signed?'✓ 合約已簽回'
-          :((c&&c.sign_type==='remote')?'等會員簽回':'◻ 尚未選簽署方式')}</span>
+              ${/* 四態（2026-10-13 修）：簽回 → 電子（等簽回）→ 紙本（等收回）→ 真的還沒選。
+                   ⚠ 紙本是**已經選過**的方式，不能跟「還沒選」混在一起 ——
+                     正式庫 73 份紙本、66 份電子，等於過半的單都被標錯。 */''}
+              <span class="gr-sign ${signed?'ok':'wait'}">${(()=>{
+                if(signed) return '✓ 合約已簽回';
+                const _st=(c.ctSignType||{})[r.contract_id]||'';
+                if(_st==='remote') return '等會員簽回';
+                if(_st==='paper')  return '紙本簽署・等收回';
+                return '◻ 尚未選簽署方式';
+              })()}</span>
               <span class="gr-item-when">送出 ${fmtWhenLocal(r.requested_at)}</span>
             </div>
             <div style="font-size:11px;color:var(--t3);margin-top:8px;display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:6px 10px;">
@@ -53054,6 +53062,13 @@ async function ppLoadCtx(){
        把這位會員 pending 的發放申請帶進來，票券頁畫成「待審核」卡；合約簽回與否一併帶上。 */
     try{ c.myGR=(grPend||[]).filter(r=>r.member_id===PP.id); }catch(_){ c.myGR=[]; }
     c.ctSigned={}; (contractsAll||[]).forEach(x=>{ if(x&&x.id) c.ctSigned[x.id]=!!x.signed_at; });
+    /* 簽署方式也要帶（2026-10-13 使用者：「這邊我已經選了簽署方式了，但這個頁面還是
+       顯示尚未選簽署方式」）—— 待審核卡原本寫 `c.sign_type`，但那個 c 是**這一頁的
+       context 物件**（c.myGR／c.ctSigned 都是從它來的），不是合約，所以永遠是 undefined，
+       三態判斷就固定掉到最後一格「尚未選」。
+       ⚠ 不要在卡片裡自己去撈合約：這一頁已經把 contractsAll 讀進來了，
+         多一次查詢只會讓票券頁再慢一點。 */
+    c.ctSignType={}; (contractsAll||[]).forEach(x=>{ if(x&&x.id) c.ctSignType[x.id]=String(x.sign_type||''); });
     /* 分期第 N 期的待簽（2026-10-03）：票券卡上要看得出「有沒有發送出去」。
        ⚠ 只能用輕量欄位 pending_sign_n／pending_sign_at —— 簽名本體 installment_signs
          在 LEAN_DROP 裡，這一頁走 dbGetAll 撈不到（同 0922 會員端那一份的理由）。 */
