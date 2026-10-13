@@ -1021,6 +1021,16 @@ body:has(#login-screen:not(.hidden)){background:#003d32;}
   padding-bottom:.06em;white-space:nowrap;}
 .topbar .tb-brand{display:flex;flex-direction:column;line-height:1;}
 .topbar .tb-ver{font-family:var(--num);font-size:10.5px;color:var(--t3);letter-spacing:0.08em;margin-top:3px;}
+/* 版本號可以點開更新公告（2026-10-13 二修後只是第二入口，紅點搬到 #alert-dock 的
+   膠囊上 —— 頂欄這一區在桌機櫃檯／管理員的版面是 display:none，見 wnDotSync）。 */
+.topbar .tb-ver[title]{cursor:pointer;}
+.wn-list{max-height:min(56vh,440px);overflow-y:auto;display:flex;flex-direction:column;gap:10px;}
+.wn-item{background:var(--card2);border:1px solid var(--bd);border-radius:12px;padding:12px 14px;}
+.wn-h{display:flex;align-items:baseline;gap:8px;margin-bottom:6px;}
+.wn-h b{font-size:13.5px;font-weight:800;color:var(--text);}
+.wn-h i{font-style:normal;font-size:10.5px;color:var(--t3);font-family:var(--num);margin-left:auto;}
+.wn-ul{margin:0;padding-left:18px;font-size:12.5px;line-height:1.9;color:var(--t2);}
+.wn-ul li+li{margin-top:3px;}
 .topbar .tb-role{font-size:11px;background:var(--sage-bg);color:var(--green);padding:3px 10px;border-radius:20px;letter-spacing:0.05em;}
 /* 頂欄小管家：融入背景、無外框，緊接 LOGO（LOGO 為管家自稱） */
 .tb-butler{position:relative;display:flex;flex-direction:row;align-items:center;justify-content:center;min-width:0;padding-left:6px;margin-left:2px;gap:10px;}
@@ -12163,6 +12173,11 @@ button.tdl-row:hover{background:#ECF1E3;border-color:var(--green);}
   animation:grpulse 1.6s ease-in-out infinite;}
 @keyframes grpulse{0%,100%{opacity:1;}50%{opacity:.35;}}
 @media (max-width:900px){ .tb-review{padding:4px 9px;font-size:11px;} }
+/* 更新公告那顆（2026-10-13）：沿用同一個膠囊，但換成品牌金 ——
+   紅色是「有事情要處理」（會員申辦待確認），公告只是「有新東西可以看」。
+   紅>金>綠：降一階，才不會跟真正的待辦搶。 */
+.tb-review.tb-whatsnew{background:#fbf3e4;border-color:#e0c79a;color:#8a5e28;}
+.tb-review.tb-whatsnew .tb-review-dot{background:var(--gold,#b48a56);}
 .gr-list{display:flex;flex-direction:column;gap:10px;max-height:56vh;overflow-y:auto;}
 .gr-item{background:var(--card2);border:1px solid var(--bd);border-radius:12px;padding:12px 14px;
   display:flex;flex-direction:column;gap:7px;}
@@ -14444,6 +14459,12 @@ body.ink .tcard-row .tcard-co:not(.tcard-leavetag){display:none;}
   <div id="alert-dock" class="alert-dock">
     <!-- 會員申辦待審（2026-09-03 使用者指示：「這個審核確認要在櫃檯桌機每個頁面都看到」） -->
     <span id="tb-memreq-pill" style="display:none;"></span>
+    <!-- 更新公告（2026-10-13 使用者看過預覽後：「這個紅點要改在更清楚的地方」）——
+         原本掛在頂欄的版本號旁，但 `body.mc-mode .tb-left{display:none}`，
+         桌機櫃檯／管理員**根本看不到那一區**（0904 就是為了這件事才做了這個 dock）。
+         所以改掛這裡：position:fixed、每一頁都在，與會員申辦同一個座。
+         ⚠ 看過就消失（wnMarkSeen）—— 它是公告不是待辦，不該一直佔著位子。 -->
+    <span id="tb-whatsnew-pill" style="display:none;"></span>
     <!-- ⚠ 這裡**只放會員連動**（2026-09-04 使用者定案：
            「待審核只要做會員連動 不要做票券發放提醒」）。
          「待審核發放」那顆刻意不放：它在會員資料裡本來就看得到兩處 ——
@@ -14548,8 +14569,8 @@ function tbl(s){return TABLE_ALIAS[s]||s;}
 let sb=null;
 // ── 版本號（日期+時間格式：年後兩碼+月+日.時分，例 26620.1058 = 26年6/20 10:58）──
 // 每次改版手動更新這一行即可，畫面與 title 會一起更新
-const APP_VERSION = '261013.2237';
-const APP_VERSION_LABEL = 'v261013.2237';
+const APP_VERSION = '261013.2309';
+const APP_VERSION_LABEL = 'v261013.2309';
 const CLOUD = !!(window.YUGYM_CONFIG && window.YUGYM_CONFIG.url && window.YUGYM_CONFIG.anonKey);
 if(CLOUD){ sb = supabase.createClient(window.YUGYM_CONFIG.url, window.YUGYM_CONFIG.anonKey); }
 
@@ -18229,6 +18250,46 @@ function deskFeedStart(){
 const VERUP_MS=300000;                 // 5 分鐘問一次（HEAD，成本極低）
 let _verUpTimer=null, _verUpBusy=false, _verUpTag=null, _verUpSkip=null;
 function verUpEnabled(){ return !!(SESSION && SESSION.role!=='member'); }
+/* ══ 更新公告（2026-10-13 使用者：「像這種功能更新或新增功能的情況 有辦法跳公告嗎？
+     尤其是在員工使用的介面」；追問後定案「只給員工」「兩個都要」）══════════════
+
+   員工端本來就會偵測新版並跳「系統已更新 → 重新整理」那一條（verUpCheck），
+   缺的只是**改了什麼**。所以不另外做一套通知系統，就在這裡維護一份清單。
+
+   寫法：一個版本一筆，`big:true` 的進系統時跳一次視窗，其餘只進清單（頂欄紅點）。
+   ⚠ **只寫櫃檯／教練看得懂的話**：寫「分期按錯可以退回那一期」，
+     不要寫「rvpAct 依 src 分流」。技術細節留在 git commit 裡。
+   ⚠ 一次最多三、四句 —— 寫成落落長就沒有人會看（同「說明文字定版」那條）。
+   ⚠ 新的放最前面。推版時順手加一筆，不加也不會壞（只是那一版沒有公告）。
+   ⚠ 會員端看不到這個（verUpEnabled 已經排除 member）。 */
+const WHATS_NEW=[
+  {ver:'261013.2237', big:true, title:'分期與發票：兩個卡住的操作解開了', items:[
+    '分期收款按錯了，現在可以只「退回那一期」—— 票券與已排的課都不會動。',
+    '已經收款但沒開到發票的，點營收那一列有〔補開發票〕，不用再退回重來。',
+    '⚠ 補開的發票日期是「今天」，不是原本的收款日（綠界不能回溯）。']},
+  {ver:'261013.1744', big:false, title:'待審核的合約看得出簽署方式了', items:[
+    '紙本合約以前會被誤標成「尚未選簽署方式」，現在分成：等會員簽回／紙本等收回／真的還沒選。',
+    'VIP 多了「加購運動按摩」2 堂 $2,000。']},
+  {ver:'261013.1321', big:false, title:'場地規則補強', items:[
+    '團課與運動按摩不能再被換到訓練架或跑步機（規則上它們只能用團課教室）。']},
+  {ver:'261012.1441', big:true, title:'折抵券規則統一：每 4 堂 1 張', items:[
+    '教練課折抵券一律「每 4 堂課可折抵 1 張」：12 堂最多 3 張、8 堂 2 張、分期看那一期開通的堂數。',
+    '分期繳費的視窗也可以用折抵券了（以前只有第 1 期用得到）。',
+    '自訂方案堂數不到 4 堂就不能折 —— 以前 1 堂也能折 3 張，會把券白白燒掉。',
+    '運動按摩折抵券不受限制，維持原樣。']},
+  {ver:'261011.1910', big:false, title:'打烊後的時段可以排課了', items:[
+    '行事曆上打烊後那一格，教練以上點得下去（最多到營業時間後 1 小時），送出前會跳提示。',
+    '員工列表的驚嘆號現在也包含「本月遲到」。']},
+];
+/* 看到哪一版為止（存本機，換裝置會再跳一次 —— 那是刻意的，換裝置的人多半也沒看過） */
+const WN_SEEN_KEY='yugym_whatsnew_seen';
+function wnSeen(){ try{ return localStorage.getItem(WN_SEEN_KEY)||''; }catch(_){ return ''; } }
+function wnMarkSeen(){ try{ localStorage.setItem(WN_SEEN_KEY, (WHATS_NEW[0]||{}).ver||APP_VERSION); }catch(_){} }
+/* 還沒看過的幾筆（比版本號字串就夠：格式是 YYMMDD.HHmm，字典序＝時間序） */
+function wnUnseen(){
+  const seen=wnSeen();
+  return WHATS_NEW.filter(x=>x&&x.ver&&(!seen||String(x.ver)>seen));
+}
 function _verUpProbe(){ return location.pathname+'?_vc='+Date.now(); }   // 查詢字串只為穿過中間快取
 async function verUpCheck(){
   if(!verUpEnabled() || _verUpBusy || document.hidden) return;
@@ -18272,6 +18333,58 @@ function verUpShow(nv){
     +`<button class="vu-go" onclick="verUpReload()">重新整理</button>`
     +`<button class="vu-x" onclick="verUpDismiss()" title="稍後再說" aria-label="稍後再說">✕</button>`;
   document.body.classList.add('verup-on');
+}
+/* 更新公告的視窗（2026-10-13）——
+   ⚠ 用 showModal 不另做一套浮層：它已經處理好捲動鎖、Esc、點外面關閉。
+   ⚠ 看過就記起來（wnMarkSeen），同一版不會再跳第二次。 */
+function openWhatsNew(opt){
+  const only=(opt&&opt.only)||null;          // 'unseen' → 只畫沒看過的那幾筆
+  const list=(only==='unseen')?wnUnseen():WHATS_NEW;
+  if(!list.length){ showToast('目前沒有新的更新公告'); return; }
+  const esc=t=>escH(String(t==null?'':t));
+  const card=x=>`<div class="wn-item">
+      <div class="wn-h"><b>${esc(x.title||'更新')}</b><i>v${esc(x.ver)}</i></div>
+      <ul class="wn-ul">${(x.items||[]).map(t=>`<li>${esc(t)}</li>`).join('')}</ul>
+    </div>`;
+  showModal(`<div class="modal-title">${only==='unseen'?'這幾版更新了什麼':'更新公告'}</div>
+    <div class="wn-list">${list.slice(0,10).map(card).join('')}</div>
+    <div class="modal-foot">
+      ${only==='unseen'?'':'<button class="btn btn-ghost" onclick="closeModal()">關閉</button>'}
+      <button class="btn btn-green" onclick="wnMarkSeen();wnDotSync();closeModal()">知道了</button></div>`);
+}
+/* 提示要擺在**看得到**的地方（2026-10-13 二修，使用者：「這個紅點要改在更清楚的地方」）——
+   第一版掛在頂欄版本號旁邊，但 `body.mc-mode .tb-left{display:none}`：
+   桌機櫃檯／管理員那一區整個是隱藏的，等於對主要觀眾永遠看不見
+   （0904「沒看到申辦待確認」就是同一個坑，alert-dock 正是為此而生）。
+   ⚠ 版本號仍然可以點（第二入口，想回頭看舊公告時用），但紅點不靠它。 */
+function wnDotSync(){
+  /* ① 浮動座上的提示（主入口） */
+  const host=document.getElementById('tb-whatsnew-pill');
+  if(host){
+    const n=verUpEnabled()?wnUnseen().length:0;
+    if(!n){ host.innerHTML=''; host.style.display='none'; }
+    else{
+      host.style.display='';
+      host.innerHTML=`<button class="tb-review tb-whatsnew" onclick="openWhatsNew({only:'unseen'})"
+        title="這幾版更新了什麼"><span class="tb-review-dot"></span>系統更新了 <b>${n}</b> 項</button>`;
+    }
+    try{ alertDockSync(); }catch(_){}
+  }
+  /* ② 頂欄版本號：純第二入口，看得到的人才用得到 */
+  const el=document.getElementById('tb-ver');
+  if(el && verUpEnabled()){ el.title='看更新公告'; el.onclick=()=>openWhatsNew(); }
+}
+/* 進系統時跳一次 —— 只有標了 big 的才跳（其餘進清單就好，見 WHATS_NEW 的說明）。
+   ⚠ 等畫面長出來再跳：enterApp 還在組 DOM 時開彈窗，會被後面的渲染蓋掉。 */
+function wnBootShow(){
+  try{
+    wnDotSync();
+    if(!verUpEnabled()) return;
+    const un=wnUnseen();
+    if(!un.length) return;
+    if(!un.some(x=>x&&x.big)){ return; }      // 沒有重要的 → 只留紅點，不打擾
+    setTimeout(()=>{ try{ openWhatsNew({only:'unseen'}); }catch(_){} }, 600);
+  }catch(_){}
 }
 function verUpDismiss(){
   const el=document.getElementById('ver-up');
@@ -18325,6 +18438,7 @@ function enterApp(){
   try{ navStickInit(); }catch(_){}   /* 底部導覽列在 iOS 捲動後回位的保險（見 navStickInit） */
   document.getElementById('tb-role').textContent=ROLE_LABEL[SESSION.role];
   const tv=document.getElementById('tb-ver'); if(tv) tv.textContent=APP_VERSION;
+  try{ wnBootShow(); }catch(_){}   /* 更新公告（員工端；見 WHATS_NEW） */
   setAcctHead(SESSION.name, ROLE_LABEL[SESSION.role], SESSION.gender);
   const pvBtn=document.getElementById('acct-preview'); if(pvBtn) pvBtn.style.display = isRealAdmin()?'':'none';
   // 個人資料入口：員工（教練/管理員/櫃台）顯示，會員不顯示

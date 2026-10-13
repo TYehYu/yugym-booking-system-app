@@ -127,9 +127,15 @@ ok('★★★ host 已經不在 .tb-left 裡',
 /* 2026-09-04 使用者定案：「待審核只要做會員連動 不要做票券發放提醒」——
    同一天稍晚，dock 從兩顆縮成一顆。會員連動留著是因為它**沒有別的入口**；
    待審核發放拿掉是因為它在會員資料裡已經看得到兩處（見 grantreviewtest ③）。 */
-ok('★★★ dock 裡只有會員連動這一顆',
-   /<div id="alert-dock" class="alert-dock">([\s\S]{0,1200}?)<\/div>/.test(src)
-   && (RegExp.$1.match(/<span id="/g)||[]).length===1
+/* ⚠ 2026-10-13：dock 多了第二顆「更新公告」（使用者：「這個紅點要改在更清楚的地方」——
+   原本掛在頂欄版本號旁，而 body.mc-mode 的 .tb-left 是 display:none，
+   對桌機櫃檯／管理員等於看不見，正是這個 dock 當初要解決的同一個坑）。
+   ⚠ 守的重點沒變：**「待審核發放」那顆仍然不准回來**（0904 定案，它在會員資料
+   已經看得到兩處）。所以改成逐一點名，而不是只數顆數。 */
+ok('★★★ dock 裡只有「會員連動」與「更新公告」兩顆，待審核發放沒有回來',
+   /<div id="alert-dock" class="alert-dock">([\s\S]{0,2400}?)<\/div>/.test(src)
+   && (()=>{ const ids=(RegExp.$1.match(/<span id="([^"]+)"/g)||[]).map(x=>x.slice(10,-1));
+       return ids.length===2 && ids.indexOf('tb-memreq-pill')>=0 && ids.indexOf('tb-whatsnew-pill')>=0; })()
    && !/id="tb-review-pill"/.test(src));
 ok('★★★ dock 是 fixed，不依賴任何版面容器',
    /\.alert-dock\{position:fixed;left:24px;top:78px;z-index:97;display:none;/.test(src));
