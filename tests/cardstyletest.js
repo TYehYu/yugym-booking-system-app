@@ -332,8 +332,10 @@ console.log('\n更換場地：目前場地不淡化（使用者指示）');
 ok('★ 目前場地用正常字色＋綠框，不再跟「已滿」一樣灰',
    /o\.cur\s*\n?\s*\?`<button class="btn btn-ghost" disabled style="color:var\(--text\);border-color:var\(--green\)/.test(src)
    && !/o\.cur\s*\n?\s*\?`<button class="btn btn-ghost" disabled style="opacity:\.55;"/.test(src));
-ok('　　「已滿」仍然是淡的（那才是真的不能選）',
-   /disabled style="opacity:\.4;">\$\{o\.name\}（該時段已滿）/.test(src));
+/* 2026-10-13：原因改成逐項帶入（o.why）——「該時段已滿」之外多了
+   「這個課別不能用」（團課不能排訓練架，見 venuecattest）。 */
+ok('　　不能選的仍然是淡的，而且各自寫出原因',
+   /disabled style="opacity:\.4;">\$\{o\.name\}（\$\{o\.why\|\|'該時段已滿'\}）/.test(src));
 
 console.log('\n調整預約時間：日期也要置中');
 ok('★ 日期欄的內部元件撐滿並置中（只給外層 text-align 不生效）',

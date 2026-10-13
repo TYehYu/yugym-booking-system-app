@@ -88,8 +88,11 @@ ok('★ 時間／時長沒動 → 沿用原場地，不讓 validateBooking 重�
    && /if\(_forceVid\) vbk\.venue_pref=_forceVid;/.test(src));
 ok('★ 下拉明確選了場地就用那個，不自動改派',
    /if\(newVid && newVid!==curVid\)\{ nVenue=`\$\{newVid\}_1`; pickedVid=newVid; \}/.test(src));
+/* 2026-10-13：指定場地之前先擋「這個課別不能用那個場地」（見 venuecattest），
+   所以那一行前面多了一個白名單檢查；只試一個、overflow 必為 false 這件事沒變。 */
 ok('★ 指定場地時 allocateVenue 只試那一個 → overflow 必為 false（不會跳提示）',
-   /const pri=forceVid\?\[forceVid\]:venuePriorityFor\(category\);/.test(src)
+   /const pri=forceVid\?\[forceVid\]:allowVids;/.test(src)
+   && /const allowVids=venuePriorityFor\(category\);/.test(src)
    && /overflow: vid!==primaryVid/.test(src));
 ok('　　只改備註時場地原地不動，連編號都不重排',
    /const _keepVenue = !_timeMoved && !pickedVid && !!b\.venue_unit;/.test(src)

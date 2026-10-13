@@ -14548,8 +14548,8 @@ function tbl(s){return TABLE_ALIAS[s]||s;}
 let sb=null;
 // ── 版本號（日期+時間格式：年後兩碼+月+日.時分，例 26620.1058 = 26年6/20 10:58）──
 // 每次改版手動更新這一行即可，畫面與 title 會一起更新
-const APP_VERSION = '261012.2103';
-const APP_VERSION_LABEL = 'v261012.2103';
+const APP_VERSION = '261013.1321';
+const APP_VERSION_LABEL = 'v261013.1321';
 const CLOUD = !!(window.YUGYM_CONFIG && window.YUGYM_CONFIG.url && window.YUGYM_CONFIG.anonKey);
 if(CLOUD){ sb = supabase.createClient(window.YUGYM_CONFIG.url, window.YUGYM_CONFIG.anonKey); }
 
@@ -29854,7 +29854,20 @@ function allocateVenue(category, sameDay, ns, ne, selfId, forceVid){
      區間排程定理：同質單位池可容納新區間 ⇔ 時窗內每個時點的併發數 < 容量。 */
   const others=sameDay.filter(x=> x.id!==selfId);
   const loadAt=(inst)=>venueLoadAt(others, inst);
-  const pri=forceVid?[forceVid]:venuePriorityFor(category);
+  /* ⚠⚠ 指定場地也要守課別規則（2026-10-13 櫃檯回報：「同一個時段如果約了三台訓練架
+     跟團課教室，團課教室這堂用更改場地的方式還可以選訓練架」）——
+     forceVid 原本直接蓋掉 venuePriorityFor，等於「只要那個場地有空位就放行」，
+     完全繞過 VENUE_BY_CAT（團課與運動按摩只能用團課教室）。
+     容量滿的時候剛好會被下面擋下來，所以一直沒被發現；只要訓練架有一台空著，
+     團課就排得進去 —— 而團課根本不該出現在訓練架。
+     ⚠ 擋在這裡而不是只改畫面：更換場地、拖曳、改期、會員自助改場地都吃這一支，
+       只擋畫面等於沒擋（同 0823 營業時間那次的教訓）。 */
+  const allowVids=venuePriorityFor(category);
+  if(forceVid && !allowVids.includes(forceVid)){
+    const _vn=(getVenues().find(v=>v.id===forceVid)||{}).name||'這個場地';
+    return { error:`這個課別不能排在${_vn}`, catBlock:true };
+  }
+  const pri=forceVid?[forceVid]:allowVids;
   const primaryVid=pri[0]; // 首選場地
   /* 團課開課前的清場時段（2026-08-29）。要清場的課別自己不受限 —— 團課接團課是
      他們固定的排法，理由寫在 venuePrepAt。被擋下時把原因留著，最後當錯誤訊息用：
@@ -30400,6 +30413,12 @@ async function ashEditAsk(id){
      原本整列直接消失，使用者只看到「這裡沒有這個功能」。
      改成沿用「調整日期／時間」早就在用的那一套：不能改時照樣列出、淡化、原因寫副標。 */
   if(!_leave && A.venue==='self') rows+=row(`closeModal();bkOrbitVenue('${b.id}')`,'更換場地','更改場地・更改跑步機人數');
+  /* 只有一個場地可用的課別不要開那張視窗（2026-10-13）——
+     團課與運動按摩只能用團課教室（VENUE_BY_CAT），點進去三顆全是不能按的，
+     櫃檯只會以為壞了。另外三個入口本來就用 !bkIsGroup 擋掉了，這裡漏了。
+     ⚠ 不是藏起來：照 0823 的語彙淡化列出並寫原因。 */
+  else if(!_leave && A.venue==='any' && (venuePriorityFor(b.category)||[]).length<=1)
+    rows+=row('','更換場地','這個課別只能用'+((getVenues().find(v=>v.id===(venuePriorityFor(b.category)||[])[0])||{}).name||'固定場地'),'ash-ei-off');
   else if(!_leave && A.venue==='any') rows+=row(`ashBackArm('${b.id}');closeModal();openVenueChange('${b.id}','ash')`,'更換場地','更改場地');
   else if(!_leave) rows+=row('','更換場地',_lockWhy||'這堂目前不能更換場地','ash-ei-off');
   /* 團課不給「指派代課教練」（2026-09-08 使用者：「團課就不用代課教練了　更換授課教練」）——
@@ -39615,11 +39634,15 @@ async function openVenueChange(id, backTo){
   window._vcBack=(backTo==='ash')?String(id):null;
   const b=await dbGet('bookings',id); if(!b){showToast('找不到預約');return;}
   const curVid=venueEffId(b);   // 沒填 venue_unit 時也要推得出預設場地（2026-08-21）
+  /* 這個課別用得到哪些場地（2026-10-13）—— 團課與運動按摩只有團課教室。
+     不能用的**不要藏**，淡化列出並寫原因（0823 定的語彙）。 */
+  const _allow=venuePriorityFor(b.category);
   const opts=await Promise.all(getVenues().filter(v=>v.active!==false).map(async v=>{
     if(v.id===curVid) return {vid:v.id,name:v.name,ok:true,cur:true};
+    if(!_allow.includes(v.id)) return {vid:v.id,name:v.name,ok:false,cur:false,why:'這個課別不能用'};
     const probe={...b, venue_pref:v.id};
     const err=await validateBooking(probe,b.date,b.start_time,b.duration||60,{skipBizHours:true});
-    return {vid:v.id,name:v.name,ok:!err,cur:false};
+    return {vid:v.id,name:v.name,ok:!err,cur:false,why:'該時段已滿'};
   }));
   showModal(`<div class="modal-title">更換場地</div>
     <div style="font-size:12.5px;color:var(--t2);margin-bottom:12px;">${b.date.replace(/-/g,'/')}　${b.start_time}　·　目前：${(typeof venueDisplay==='function'?venueDisplay(b):'')||'—'}</div>
@@ -39630,7 +39653,7 @@ async function openVenueChange(id, backTo){
       ${opts.map(o=>o.cur
         ?`<button class="btn btn-ghost" disabled style="color:var(--text);border-color:var(--green);box-shadow:inset 0 0 0 1px var(--green);cursor:default;">${o.name}（目前場地）</button>`
         :(o.ok?`<button class="btn btn-ghost" onclick="doVenueChange('${id}','${o.vid}')">${o.name}</button>`
-              :`<button class="btn btn-ghost" disabled style="opacity:.4;">${o.name}（該時段已滿）</button>`)).join('')}
+              :`<button class="btn btn-ghost" disabled style="opacity:.4;">${o.name}（${o.why||'該時段已滿'}）</button>`)).join('')}
     </div>
     <div class="modal-foot"><button class="btn btn-ghost" onclick="${backTo==='ash'?`closeModal();ashEditAsk('${id}')`:`openBookingDetail('${id}')`}">返回</button></div>`);
 }

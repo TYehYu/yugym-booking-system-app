@@ -26,9 +26,11 @@ const body=src.slice(i,j);
    ⚠ 在 index.html 幫這一段加新依賴時，記得回來補 —— 少餵一個就 ReferenceError。 */
 function run(b, A, opts){
   opts=opts||{};
+  /* 2026-10-13：「更換場地」那一列多看了課別能用哪些場地（團課只能用團課教室，
+     見 venuecattest），所以沙箱要多餵這兩支。 */
   const fn=new Function('b','A','mids','bkIsCoachLeave','bkMoveBlockReason','ymd','TODAY',
     'bookingTypeName','bkDatePast','canCoachLeave','bkCoachLeaveSub','bkIsSelf','window',
-    'fmtRange','bkUndoNoShow','grpMaxStep',
+    'fmtRange','bkUndoNoShow','grpMaxStep','venuePriorityFor','getVenues',
     body+'\nreturn rows;');
   return fn(b, A,
     x=>x.member_ids||[],
@@ -39,7 +41,9 @@ function run(b, A, opts){
     x=>x.category||'課程',
     x=>String(x.date)<'2026-09-21',
     ()=>true, ()=>'', x=>x.category==='自主訓練',
-    {}, (d,t)=>`${d} ${t}`, ()=>'', ()=>'');
+    {}, (d,t)=>`${d} ${t}`, ()=>'', ()=>'',
+    c=>({'小班肌力':['group'],'運動按摩':['group'],'自主訓練':['multi','group','treadmill']}[c]||['multi','group']),
+    ()=>[{id:'multi',name:'史密斯訓練架'},{id:'treadmill',name:'跑步機'},{id:'group',name:'團課教室'}]);
 }
 // 解析出「每一列的標籤／副標／是不是淡化」
 function rowsOf(html){
