@@ -14548,8 +14548,8 @@ function tbl(s){return TABLE_ALIAS[s]||s;}
 let sb=null;
 // ── 版本號（日期+時間格式：年後兩碼+月+日.時分，例 26620.1058 = 26年6/20 10:58）──
 // 每次改版手動更新這一行即可，畫面與 title 會一起更新
-const APP_VERSION = '261013.2228';
-const APP_VERSION_LABEL = 'v261013.2228';
+const APP_VERSION = '261013.2237';
+const APP_VERSION_LABEL = 'v261013.2237';
 const CLOUD = !!(window.YUGYM_CONFIG && window.YUGYM_CONFIG.url && window.YUGYM_CONFIG.anonKey);
 if(CLOUD){ sb = supabase.createClient(window.YUGYM_CONFIG.url, window.YUGYM_CONFIG.anonKey); }
 
@@ -45965,11 +45965,25 @@ function saleUndoOk(at){
   if(!Number.isFinite(t.getTime())) return false;
   return ymd(t)===ymd(new Date());
 }
+/* 這一期開通了幾堂（2026-10-13）——退回分期收款時要收回同樣的數字。
+   note 是開通當下寫的「分期收款・開通 N 堂」，那是唯一記著「這一次開了幾堂」的地方
+   （installment.segments 是當初規劃的切法，櫃檯可以自己改堂數，不能拿來反推）。
+   ⚠ 讀不到就退回 segments 的那一段，再讀不到就 0 —— 寧可少收回也不要多收回，
+     多收回會把別期開通的堂數也鎖掉。 */
+function instUndoSessions(pur, tk){
+  const m=/開通\s*(\d+)\s*堂/.exec(String((pur&&pur.note)||''));
+  if(m) return Math.max(0, Number(m[1])||0);
+  const inst=(tk&&tk.installment&&typeof tk.installment==='object')?tk.installment:null;
+  const segs=Array.isArray(inst&&inst.segments)?inst.segments:[];
+  const cur=Math.max(1, Number(inst&&inst.current)||1);
+  return Math.max(0, Number(segs[cur-1])||0);
+}
 async function openSaleUndo(ref){
   if(!isDeskLike()){ showToast('僅管理員／櫃台可退回'); return; }
   const [kind,id]=String(ref||'').split(':');
   const _busy=uiBusy('檢查中…');
   let tk=null, pur=null, blocked='', bks=[], amt=0, title='';
+  let _instTk=null, _instN=0;   /* 分期那一期要收回幾堂（見下面的 instUndoSessions） */
   try{
     if(kind==='tk'){
       tk=await dbGet('member_tickets',id);
@@ -45991,6 +46005,22 @@ async function openSaleUndo(ref){
         title=pur.plan_name||'收款';
         amt=Number(pur.deal_amount)||0;
         if(!saleUndoOk(pur.created_at)) blocked='這筆不是今天建立的，不能直接退回';
+        /* 分期那一期（2026-10-13）：退的是「這一期」，所以要先確認收得回來 ——
+           開通的堂數可能已經被拿去上課了。
+           ⚠ 用「回退後的開通數 ≥ 已使用堂數」當關卡，剛好也涵蓋
+             「那次開通順便補綁了待繳費預約」那種情況（補綁會扣課，已使用就變多）。 */
+        else if(pur.source==='installment' && pur.ticket_id){
+          const _t=await dbGet('member_tickets',pur.ticket_id).catch(()=>null);
+          if(!_t) blocked='找不到這一期對應的票券';
+          else{
+            const _n=instUndoSessions(pur,_t);
+            const _used=Math.max(0,(Number(_t.sessions_total)||0)-(Number(_t.sessions_remaining)||0));
+            const _after=Math.max(0,(Number(_t.unlocked_sessions)||0)-_n);
+            if(_after<_used) blocked=`這一期開通的 ${_n} 堂已經有 ${_used-_after} 堂上掉了，不能直接退回`
+              +' —— 請先取消那幾堂預約，或改走票券退費';
+            else { _instTk=_t; _instN=_n; }
+          }
+        }
       }
     }
   }catch(e){ blocked='讀取失敗：'+((e&&e.message)||e); }
@@ -46006,7 +46036,8 @@ async function openSaleUndo(ref){
     <div class="mk-key">這不是退費，整筆會被清掉<small>給輸入錯誤用・限當天</small></div>
     <ul class="mk-pts">
       ${tk?'<li>票券作廢（會員看不到它）</li><li>購買紀錄刪除，今日營收少這一筆</li><li>折抵券還回去、合約作廢</li>'
-          :'<li>收款紀錄刪除，今日營收少這一筆</li>'}
+          :(_instTk?`<li>收款紀錄刪除，今日營收少這一筆</li><li>這一期開通的 <b>${_instN}</b> 堂收回去（票券與已排的課都不動）</li><li>期數退回上一期，之後可以重收一次</li>`
+                   :'<li>收款紀錄刪除，今日營收少這一筆</li>')}
       <li>真的要退費給客人請改走票券頁的退費流程，那邊會留下退款紀錄</li>
     </ul>
     <div class="modal-foot"><button class="btn btn-ghost" onclick="closeModal()">返回</button>
@@ -46066,8 +46097,40 @@ async function _doSaleUndo(kind,id){
       const pur=await dbGet('purchases',id);
       if(!pur){ done(); showToast('找不到這筆收款紀錄'); return; }
       if(!saleUndoOk(pur.created_at)){ done(); showToast('這筆不是今天建立的'); return; }
+      /* 分期那一期：把開通堂數、期數、累計實收收回去（2026-10-13）。
+         ⚠ 票券本身與已排的課一行都不動 —— 退的是「這一次收款」，不是這張票。
+         ⚠ 順序：先改票券再刪收款。反過來的話，中間失敗就會變成
+           「錢的紀錄沒了、堂數卻還開著」，那比兩個都在更難查。 */
+      if(pur.source==='installment' && pur.ticket_id){
+        try{
+          const t=await dbGet('member_tickets',pur.ticket_id);
+          if(t){
+            const n=instUndoSessions(pur,t);
+            const used=Math.max(0,(Number(t.sessions_total)||0)-(Number(t.sessions_remaining)||0));
+            const after=Math.max(0,(Number(t.unlocked_sessions)||0)-n);
+            if(after<used){ done(); showToast(`這一期已經有課上掉了，不能直接退回（開通 ${after}／已用 ${used}）`, 7000); return; }
+            t.unlocked_sessions=after;
+            t.amount_paid=Math.max(0,(Number(t.amount_paid)||0)-(Number(pur.deal_amount)||0));
+            const inst=(t.installment&&typeof t.installment==='object')?t.installment:null;
+            if(inst){
+              /* 期數照新的開通數重算，與開通那一支同一套算法（蓋滿哪一段就算收到哪一期） */
+              let cum=0, cur=0;
+              (inst.segments||[]).forEach((sg,i)=>{ cum+=(Number(sg)||0);
+                const done2=after>=cum;
+                if(Array.isArray(inst.paid)) inst.paid[i]=done2;
+                if(done2) cur=i+1; });
+              inst.current=Math.max(1,cur);
+              t.installment=inst;
+            }
+            await dbPut('member_tickets',t);
+            await logTicket(t.id,'adjust',0,null,SESSION.id,
+              `分期收款退回（當天，輸入錯誤）：收回開通 ${n} 堂，實收 −$${(Number(pur.deal_amount)||0).toLocaleString()}`);
+          }
+        }catch(e){ console.error('分期退回失敗',e); done();
+          showToast('退回失敗（票券沒有改到）：'+((e&&e.message)||e), 7000); return; }
+      }
       await dbDel('purchases',id);
-      dbCacheClear(['purchases']);
+      dbCacheClear(['purchases','member_tickets','ticket_logs']);
     }
     /* ⑥ 已開立的電子發票跟著作廢（2026-08-11；0902 改接綠界）——
          退回＝這筆交易不存在，發票不能留在那裡（留著就是白繳那筆稅）。 */
@@ -46245,7 +46308,16 @@ function rvpAct(what, key){
   if(what==='kind'){ openSaleKindPick(r.tk); return; }
   if(what==='att'){ openRevAttribPick(r.attKind, r.attRef); return; }
   if(what==='pay'){ openRevPayPick(r.payRef); return; }
-  if(what==='undo'){ openSaleUndo(r.tk?('tk:'+r.tk):('pur:'+r.pur)); return; }
+  /* 分期後續收款的「退回」要走**收款**那條，不是票券那條（2026-10-13 使用者：
+     「如果分期是真的不小心按錯 要退回呢?」）——
+     這種列的 r.tk 是那張分期票，走 tk 會去作廢整張票，而且一定被
+     「這張票已經排了 N 堂課」擋住（嚴晴那筆就是）。
+     實際要退的只有**這一期**：刪掉這筆收款、把開通堂數與期數收回去，票券本身不動。 */
+  if(what==='undo'){
+    const _instRow=(r.src==='installment' && r.pur);
+    openSaleUndo(_instRow?('pur:'+r.pur):(r.tk?('tk:'+r.tk):('pur:'+r.pur)));
+    return;
+  }
   if(what==='inv'){ openInvMakeup(r.pur); return; }
 }
 /* 補開發票（2026-10-13）——針對「已經收款、但沒有開出發票」的那一筆。

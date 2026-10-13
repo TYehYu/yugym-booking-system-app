@@ -126,11 +126,12 @@ console.log('\n⑤ 小浮層與派工');
   ok('★★★ 派工前先關掉側滑 —— 接著開的選擇視窗要是置中彈窗，不是滿高的滑出視窗',
      /window\._modalSideUntilClose=false;/.test(act)
      && act.indexOf('_modalSideUntilClose=false')<act.indexOf("what==='mem'"));
-  ok('★★★ 五種派工都接到既有的那一支（沒有另寫一份邏輯）',
+  ok('★★★ 六種派工都接到既有的那一支（沒有另寫一份邏輯）',
      /revRowGo\(r\.mid,/.test(act) && /openSaleKindPick\(r\.tk\)/.test(act)
      && /openRevAttribPick\(r\.attKind, r\.attRef\)/.test(act)
      && /openRevPayPick\(r\.payRef\)/.test(act)
-     && /openSaleUndo\(r\.tk\?\('tk:'\+r\.tk\):\('pur:'\+r\.pur\)\)/.test(act));
+     && /openSaleUndo\(_instRow\?\('pur:'\+r\.pur\):\(r\.tk\?\('tk:'\+r\.tk\):\('pur:'\+r\.pur\)\)\)/.test(act)
+     && /openInvMakeup\(r\.pur\)/.test(act));
 }
 
 console.log('\n⑥ 鍵值（兩處清單共用同一份資料，不能用索引）');

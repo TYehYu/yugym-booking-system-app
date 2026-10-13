@@ -52,9 +52,12 @@ console.log('\n② 退回的入口（2026-09-21 起在點出來的小視窗裡�
      && /const _undoOk=desk && /.test(P));
   ok('★★ 不是今天的就按不動（沿用同一支判準）',
      /typeof saleUndoOk!=='function' \|\| saleUndoOk\(r\.at\)/.test(P));
-  ok('★ 票券與純收款兩種都認（場租／商品／重啟）',
+  /* 2026-10-13：分期後續收款多走一條 —— 那種列的 r.tk 是分期票，走 tk 會去作廢整張票
+     而且一定被「已經排了 N 堂課」擋住（嚴晴那筆）。見 instundotest。 */
+  ok('★ 票券與純收款兩種都認（場租／商品／重啟），分期那一期走收款那條',
      /!!\(r\.tk\|\|r\.pur\)/.test(P)
-     && /openSaleUndo\(r\.tk\?\('tk:'\+r\.tk\):\('pur:'\+r\.pur\)\)/.test(A));
+     && /const _instRow=\(r\.src==='installment' && r\.pur\);/.test(A)
+     && /openSaleUndo\(_instRow\?\('pur:'\+r\.pur\):\(r\.tk\?\('tk:'\+r\.tk\):\('pur:'\+r\.pur\)\)\)/.test(A));
   /* 不能退的時候要暗化＋寫原因，不是整顆消失（yugym-disabled-with-reason）——
      櫃檯看不到按鈕會以為功能壞了。 */
   ok('★★★ 不能退時仍然畫出來，只是暗化並寫明原因',
@@ -106,8 +109,11 @@ console.log('\n④ 真的退回時做了哪些事');
      && /售票整筆退回（輸入錯誤）`;/.test(F));
   ok('★ 執行前再驗一次日期（視窗開著放過午夜也不能按過）',
      (F.match(/!saleUndoOk\((tk|pur)\.created_at\)/g)||[]).length===2);
-  ok('★ 純收款那條只刪收款紀錄（沒有票券要處理）',
-     /await dbDel\('purchases',id\);\n\s*dbCacheClear\(\['purchases'\]\);/.test(F));
+  /* 2026-10-13：這一條之前是「只刪收款紀錄」，現在分期那一期還要把開通堂數收回去，
+     所以快取也多清了 member_tickets／ticket_logs（見 instundotest）。 */
+  ok('★ 純收款那條刪收款紀錄；分期那一期另外把票券改回去',
+     /await dbDel\('purchases',id\);\n\s*dbCacheClear\(\['purchases','member_tickets','ticket_logs'\]\);/.test(F)
+     && /if\(pur\.source==='installment' && pur\.ticket_id\)\{/.test(F));
   ok('　　防連點', /async function doSaleUndo\(kind,id\)\{ return onceAct\('undo:'\+kind\+':'\+id, \(\)=>_doSaleUndo\(kind,id\)\); \}/.test(src));
   ok('　　寫入後清快取', /dbCacheClear\(\['member_tickets','ticket_logs','purchases','contracts','ticket_grant_requests'\]\);/.test(F));
 }
