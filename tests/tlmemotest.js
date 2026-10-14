@@ -25,8 +25,17 @@ console.log('\n畫面');
 ok('★ 鈕在標題列右上角，寫過會變金色',
    /<button type="button" class="tl-memo-btn\$\{_memo\?' on':''\}" onclick="tlMemoEdit\(\)"/.test(src)
    && /\.tl-memo-btn\.on\{background:#fbf3e4;border-color:#e8d9b8;color:#6b4517;\}/.test(src));
-ok('★★ 唯讀身分不給按（會員／別人的課）',
-   /\$\{_tlEditable\(\)\s*\n?\s*\? `<button type="button" class="tl-memo-btn/.test(src));
+ok('★★ 唯讀身分不給按（會員／別人的課）', /\$\{_tlEditable\(\)/.test(src)
+   && /\? `<button type="button" class="tl-memo-btn/.test(src));
+/* 2026-10-15 使用者：「因為加了備註　左邊的副標被壓縮了」——量過手機 390（面板內縮 12px）：
+   「✎ 今日備註」87px → 副標 2 行；「✎ 備註」62px → 1 行。 */
+ok('★★★ 鈕的文字縮成「✎ 備註」，副標才回得到一行',
+   />✎ 備註<\/button>/.test(src) && !/>✎ 今日備註<\/button>/.test(src));
+ok('★★ 視窗標題仍寫「今日備註」（縮的只有鈕）',
+   /<div class="modal-title">今日備註<\/div>/.test(src));
+ok('★★★ 「第 N\/M 堂」包成不可斷的一塊（票券名最長 20 字，再縮按鈕也會折行）',
+   /<span style="white-space:nowrap;">\$\{escH\(t\.slice\(i\+1\)\)\}<\/span>/.test(src)
+   && /中文預設任兩字之間都能斷/.test(src));
 ok('★ 寫過的話在最上面變成一條紙條，點一下再改',
    /class="tl-memo"\$\{_tlEditable\(\)\?' onclick="tlMemoEdit\(\)"':' style="cursor:default;"'\}/.test(src));
 ok('　　紙條排在「今日訓練紀錄」標題之前',
