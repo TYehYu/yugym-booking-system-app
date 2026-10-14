@@ -37,15 +37,21 @@ console.log('\n④ 顯示與留痕');
 /* 2026-10-14 改成兩行（使用者確認「只是提早到　不是在工作」）：
    上行＝班表時段（計薪依據，仍是起算時間的來源）、下行＝實際到場（純資訊）。
    原本那一行寫「起算時間 – 值班中」，在四欄格狀版會被截成「16:00 – 值...」。 */
-ok('★★★ 上行寫完整班表時段（不再被截成「16:00 – 值...」）',
-   /<div class="dr-time">\$\{shift\.start_time\}–\$\{shift\.end_time\}<\/div>/.test(src));
+/* ⚠ 2026-10-14 二修（使用者：「mac 看不到完整的訊息」）——
+   nowrap＋ellipsis 在四欄 grid 裡還是會被截（一格只有 85~100px）。
+   改成「只在我允許的地方換行」：<wbr> 放在破折號後與到／走之間。 */
+ok('★★★ 上行寫完整班表時段，而且允許在破折號後換行',
+   /<div class="dr-time">\$\{shift\.start_time\}–<wbr>\$\{shift\.end_time\}<\/div>/.test(src));
+ok('★★★ 不可以用 nowrap＋ellipsis（那會把字切掉，等於白寫）',
+   /\.dr-time\{font-size:11px;color:var\(--t2\);font-weight:600;font-family:var\(--num\);\s*\n\s*max-width:100%;line-height:1\.45;\}/.test(src)
+   && /不可以用 nowrap＋ellipsis/.test(src));
 ok('★★★ 下行才是實際到場，而且用「到／走」不是「上班／下班」',
    /<div class="dr-at\$\{_late\?' dr-at-late':''\}"><i>到<\/i> \$\{att\.clock_in\}/.test(src)
    && /<i>走<\/i> \$\{att\.clock_out\}/.test(src));
 ok('★★★ 計薪起算仍是 inLabel（圓環與中央時數照班表算，沒被這次顯示改動影響）',
    /const inMin=_early\?_shIn:_rawIn;/.test(src) && /const inLabel=_early\?shift\.start_time:att\.clock_in;/.test(src));
 ok('★★ 沒排班就沒有班表可寫 → 退回原本寫法，不留一行空的',
-   /<div class="dr-time">\$\{att\.clock_in\} – \$\{att\.clock_out\|\|'值班中'\}<\/div>/.test(src));
+   /<div class="dr-time">\$\{att\.clock_in\} –<wbr> \$\{att\.clock_out\|\|'值班中'\}<\/div>/.test(src));
 ok('★★ 提早到不標記、晚於班表才上色（提早是常態）',
    /const _late=\(_shIn!=null && _rawIn>_shIn\);/.test(src)
    && /\.dr-at\.dr-at-late\{color:var\(--gold-d,#8a5e28\);font-weight:700;\}/.test(src));

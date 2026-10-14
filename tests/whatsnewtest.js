@@ -36,7 +36,12 @@ ok('★★ 一筆最多四句（落落長就沒有人會看）',
    公告功能 10/13 才做，10/01–10/10 那 42 次推版按**主題**整理成三筆，
    不是一版一筆（逐版寫沒有人會看）。 */
 ok('★★★ 回頭補的那幾筆，版本號要落在真實推過的版本上（不能自己編）',
-   ['261010.1351','261009.2123'].every(v=>api.WHATS_NEW.some(x=>x.ver===v)));
+   ['261009.2123'].every(v=>api.WHATS_NEW.some(x=>x.ver===v)));
+/* 2026-10-14 使用者：「10月的所有更新都幫我盤查一下，有需要才留給員工看」——
+   「發票字軌自動化」（261010.1351）整筆移除：全自動、只有管理員相關，
+   員工看完不必改任何做法。 */
+ok('★★★ 字軌自動化那一筆已移除（員工不必做任何事）',
+   !api.WHATS_NEW.some(x=>x.title.indexOf('字軌')>=0));
 /* ⚠⚠ 2026-10-14 使用者定案：「跟功能有關係的才上公告讓員工知道」——
    判準是「他操作的方式會不會不一樣」。純修 bug／效能／版面微調不上，
    寫出來只會稀釋真正要看的那幾條。
@@ -47,9 +52,41 @@ ok('★★★ 純修 bug 的那一筆已經拿掉',
 ok('★★★ 規則寫在原地（下次寫公告時看得到判準）',
    /只有跟功能有關的才上公告/.test(src) && /他操作的方式會不會不一樣/.test(src)
    && /不上：純修 bug、效能、版面微調、資料修正/.test(src));
-ok('★★ 整理成主題的那幾筆要在標題寫出日期範圍（看的人才知道涵蓋多久）',
-   api.WHATS_NEW.filter(x=>x.title.indexOf('–')>=0).length>=2);
-ok('★★ 清單上限放寬到 20（補完之後超過 10 筆）', /list\.slice\(0,20\)/.test(src));
+/* 2026-10-14 使用者：「同一天的整理在一起」＋「盡量簡化文字（我們員工跟我一樣有點閱讀障礙）」
+   —— 日期改由「天」的組標題統一寫，標題不再自己帶日期範圍。 */
+ok('★★★ 同一天併成一組（一天一個標題，底下是那天的幾件事）',
+   /const last=groups\[groups\.length-1\];\s*\n\s*if\(last && last\.k===k\) last\.rows\.push\(x\);/.test(src)
+   && /<div class="wn-day" data-m="\$\{mkey\(grp\.k\)\}">/.test(src));
+ok('★★ 分組做在畫面端、資料仍是一版一筆（版本號是 wnUnseen 的依據）',
+   /分組做在畫面端、資料仍是一版一筆/.test(src));
+ok('★★ 日期只寫在組標題，卡片右上角那個拿掉（同一天重複五次）',
+   !/<i title="v\$\{esc\(x\.ver\)\}">/.test(src));
+ok('★★★ 最上方有月份按鈕，方便回頭查閱',
+   /<button type="button" class="wn-mchip on" data-m="" onclick="wnMonth\(this,''\)">最新<\/button>/.test(src)
+   && /function wnMonth\(btn, m\)\{/.test(src));
+ok('★★ 月份只切顯示不重畫（重畫會丟掉捲動位置與已載入的圖）',
+   /d\.style\.display = \(!m \|\| d\.dataset\.m===m\) \? '' : 'none';/.test(src));
+ok('★★★ 只有一個月份時也要畫（藏起來等於使用者打開看不到他要的東西）',
+   /\(only==='unseen'\|\|!months\.length\) \? '' :/.test(src)
+   && /只有一個月份時\*\*照樣畫\*\*/.test(src));
+ok('★★ 清單上限 40（同一天會併組，筆數本來就比組數多）', /list\.slice\(0,40\)/.test(src));
+
+console.log('\n文字要短（使用者與員工都有閱讀障礙）');
+{
+  const long=api.WHATS_NEW.filter(x=>x.title.length>14).map(x=>x.title);
+  ok('★★★ 標題不超過 14 個字', long.length===0, long);
+  const over=[];
+  api.WHATS_NEW.forEach(x=>(x.items||[]).forEach(t=>{ if(String(t).length>32) over.push(t); }));
+  ok('★★ 每一條不超過 32 個字（一條一行、一行一件事）', over.length===0, over);
+  const many=api.WHATS_NEW.filter(x=>(x.items||[]).length>3).map(x=>x.title);
+  ok('★★ 一筆最多三條', many.length===0, many);
+}
+ok('★★★ 寫法規矩寫在資料旁邊（下次寫公告的人看得到）',
+   /盡量簡化文字說明　我們員工跟我一樣是有點閱讀障礙的/.test(src)
+   && /title ＝ \*\*一句話講完這次改了什麼\*\*，不超過 14 個字/.test(src));
+ok('★★★ 什麼才要上公告：功能類型、員工要知道的才上',
+   /只是頁面調整的更新　就不用進公告了/.test(src)
+   && /員工看完之後，有沒有哪件事要改用不同的做法？/.test(src));
 ok('★★★ 不要寫程式用語（櫃檯看不懂）',
    !/rvpAct|allocateVenue|validateBooking|dbGetAll|venue_unit|catBlock|forceVid/.test(
      api.WHATS_NEW.map(x=>x.title+x.items.join('')).join('')));
@@ -207,7 +244,17 @@ ok('　　檔名帶版本號且永不修改（service worker 是快取優先，�
      refs.length>0 && refs.every(f=>f.startsWith('img/')), refs);
   ok('★★★ 公告引用的每一張圖都真的存在', refs.length>0 && refs.every(f=>fs.existsSync(dir+f)),
      refs.filter(f=>!fs.existsSync(dir+f)));
-  ok('　　圖不要太大（台灣到 GitHub 只有 35KB/s，一張 200KB 就要 6 秒）',
+    /* 使用者 2026-10-14：「今天的每則更新　都可以上個幫助理解的圖片嗎?」
+     ⚠ 只要求「今天」這一天 —— 不是所有歷史公告都要補圖。
+       判準用「最新那一天」，日子過了自然就只管新的那天。 */
+  const newest=(api.WHATS_NEW[0]||{}).ver.slice(0,6);
+  const today=api.WHATS_NEW.filter(x=>x.ver.slice(0,6)===newest);
+  const noImg=today.filter(x=>!(x.imgs&&x.imgs.length)).map(x=>x.title);
+  ok('★★★ 最新那一天的每一則都要配圖', noImg.length===0, noImg);
+  /* 2026-10-14 使用者：「留下的順便補上圖片」—— 盤查後留下的每一則都配了圖 */
+  const allNoImg=api.WHATS_NEW.filter(x=>!(x.imgs&&x.imgs.length)).map(x=>x.title);
+  ok('★★★ 盤查後留下的每一則都有圖', allNoImg.length===0, allNoImg);
+ok('　　圖不要太大（台灣到 GitHub 只有 35KB/s，一張 200KB 就要 6 秒）',
      refs.every(f=>fs.statSync(dir+f).size<200*1024),
      refs.map(f=>f+':'+Math.round(fs.statSync(dir+f).size/1024)+'KB'));
 }

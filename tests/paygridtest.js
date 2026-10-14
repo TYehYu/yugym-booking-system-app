@@ -80,6 +80,15 @@ ok('★ 名字之後是固定寬的標籤格，再來才是時間',
 ok('★ 待繳費抽成標籤、排在時間左邊（原本黏在事由最前面）',
    /<span class="tdl2-slot"><i class="tdl2-pill">新客戶簽約<\/i><\/span><span class="tdl2-tm tdl2-tm-pay">20:30<\/span>/.test(grid));
 ok('★ 課別排在最後（灰字、固定寬）', /<span class="tdl2-cat">教練課・續課<\/span>/.test(grid));
+/* ⚠⚠ 2026-10-14 使用者回報「不見了」—— 會員姓名整欄消失。
+   外層 .tdl-cell 是 align-items:flex-start，子項會收縮到內容寬，
+   這一列因此沒撐滿卡片（量到 288px / 卡內 447px），而姓名是唯一可伸縮的那一欄，
+   被壓成 0px。這兩條是防線，拿掉任何一條名字就會再消失一次。 */
+ok('★★★ 這一列要撐滿卡片（align-items:flex-start 不會自己撐）',
+   /\.tdl2-top\{display:flex;align-items:center;gap:10px;width:100%;min-width:0;\}/.test(src));
+ok('★★★ 姓名有寬度下限，不會被其他欄擠成 0',
+   /\.tdl2-nm\{font-size:14\.5px;font-weight:800;color:var\(--text\);flex:1 1 auto;min-width:4\.5em;/.test(src));
+ok('　　量過才改（288px→441px、姓名 0px→129px）', /列寬只有 288px（卡片內有 447px）/.test(src));
 ok('　　沒有標籤／沒有課別的列也留空格子（不然右邊整排會往左滑）',
    /<span class="tdl2-slot"><\/span>/.test(grid));
 ok('★ 待付費那列用紅框（紅>金：那是「還沒收到錢」的最高提示）',
