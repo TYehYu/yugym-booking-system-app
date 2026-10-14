@@ -48,6 +48,11 @@ ok('★★★ 那一列的鈕從〔套用〕改成〔查看〕',
    && !/<button class="tlh-apply" onclick="tlApplyHist\('\$\{h\.bid\}'\)">套用<\/button>/.test(src));
 ok('★★★ 小視窗列出每個動作的組／次／重量（不是只有動作名）',
    /<span class="tlv-n">\$\{tlLogHtml\(l\)\}<\/span>/.test(src));
+/* 2026-10-14 使用者：「底色跟動作列的顏色可以交換嗎　因為課表也是動作內容是白底　視窗是米底」
+   ⚠ .modal 本來就是米底（--surface-3 ＝ --card2），這一塊原本也吃 card2 ＝ 米配米。 */
+ok('★★★ 動作列白底＋細框，疊在米底視窗上（同 0916 定案的「米底白框」）',
+   /\.tlhv-list\{background:var\(--card\);border:1px solid var\(--bd\);/.test(src)
+   && !/\.tlhv-list\{background:var\(--card2\)/.test(src));
 ok('★★ 看過就是確認 —— 直接走 tlDoApplyHist，不再多一層',
    /onclick="tlDoApplyHist\('\$\{srcBid\}'\)">套用這一堂<\/button>/.test(src));
 ok('★★ 不再連一次伺服器（畫列表時就放進 _tlHistCache 了）',
