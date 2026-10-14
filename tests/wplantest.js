@@ -533,7 +533,8 @@ ok('★★ 左欄擋得住長備註（min-width:0）',
    ・「不折行」移到每一列 .tlh-setrow 身上 —— 掛在容器上已經沒有意義了。 */
 ok('★★ 右邊那段不被壓縮；一組一列之後，不折行改由每一列負責',
    /\.tlh-sets\{[^}]*flex:none;display:flex;flex-direction:column;align-items:flex-end;/.test(src)
-   && /\.tlh-setrow\{white-space:nowrap;\}/.test(src));
+   /* 2026-10-14：同一列多了組別編號，改成 flex；nowrap 仍釘在這一列身上 */
+   && /\.tlh-setrow\{white-space:nowrap;display:flex;align-items:baseline;justify-content:flex-end;gap:8px;\}/.test(src));
 
 
 console.log('\n⑪ 動作設定要有姿勢與工具（2026-09-25 使用者：「這邊要加上姿勢跟工具」）');

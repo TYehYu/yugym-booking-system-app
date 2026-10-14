@@ -176,5 +176,35 @@ ok('★ 字級放大一級（公告是每個人都要讀完的東西）', /font-
 ok('★ 金色警示框的字也加深（5.1:1 → 7.7:1）', /\.wn-ul li\.wn-warn\{[\s\S]{0,120}color:#6b4517;/.test(src));
 ok('　　標題跟著放大，維持階層', /\.wn-h b\{font-size:14\.5px;/.test(src));
 
+
+console.log('\n圖片輔助閱讀（2026-10-14 使用者：「公告有辦法圖片支援的話　就用圖片輔助閱讀」）');
+ok('★★★ 一筆公告可以帶 imgs:[{src,cap}]，畫在條列下面',
+   /const imgs=x=>!\(x\.imgs&&x\.imgs\.length\)\?'':`<div class="wn-figs">/.test(src)
+   && /<ul class="wn-ul">\$\{\(x\.items\|\|\[\]\)\.map\(li\)\.join\(''\)\}<\/ul>\s*\n\s*\$\{imgs\(x\)\}/.test(src));
+ok('★★★ 圖檔放 repo，不塞 data URI（那會長進 index.html，每次換版全店多抓一次）',
+   /不要塞 data URI/.test(src) && !/imgs:\[\{src:'data:/.test(src));
+ok('★★ 沒打開公告就不下載', /loading="lazy" decoding="async"/.test(src));
+ok('★★ 圖還沒下載完先佔住位子（否則條列會被推開、看起來像畫面在跳）',
+   /\.wn-fig img\{[\s\S]{0,200}min-height:60px;background:var\(--card\);/.test(src));
+ok('★ 點圖可放大（手機上公告視窗只有一半寬）', /function wnImgZoom\(src, cap\)\{/.test(src)
+   && /onclick="event\.stopPropagation\(\);wnImgZoom\(/.test(src));
+ok('★★ 放大層自己蓋一層，不用 showModal（那會把下面的公告視窗關掉）',
+   /不另外開 showModal：那會把下面那張公告視窗關掉/.test(src)
+   && /\.wn-zoom\{position:fixed;inset:0;z-index:10200;/.test(src));
+ok('　　圖與說明都有跳脫', /<img src="\$\{esc\(g\.src\)\}" alt="\$\{esc\(g\.cap\|\|x\.title\|\|'更新畫面'\)\}"/.test(src));
+ok('　　檔名帶版本號且永不修改（service worker 是快取優先，同名換圖會看到舊的）',
+   /圖檔名帶版本號、而且\*\*永不修改\*\*/.test(src));
+
+/* 圖檔真的在 repo 裡（公告寫了路徑卻沒推檔案 → 員工看到一塊空白） */
+{
+  const dir=process.env.HOME+'/Projects/yugym-booking-system-app/';
+  const refs=[...src.matchAll(/src:'(docs\/whatsnew\/[^']+)'/g)].map(m2=>m2[1]);
+  ok('★★★ 公告引用的每一張圖都真的存在', refs.length>0 && refs.every(f=>fs.existsSync(dir+f)),
+     refs.filter(f=>!fs.existsSync(dir+f)));
+  ok('　　圖不要太大（台灣到 GitHub 只有 35KB/s，一張 200KB 就要 6 秒）',
+     refs.every(f=>fs.statSync(dir+f).size<200*1024),
+     refs.map(f=>f+':'+Math.round(fs.statSync(dir+f).size/1024)+'KB'));
+}
+
 console.log(`\n${pass} 通過 / ${fail} 失敗`);
 process.exit(fail?1:0);
