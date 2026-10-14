@@ -198,7 +198,13 @@ ok('　　檔名帶版本號且永不修改（service worker 是快取優先，�
 /* 圖檔真的在 repo 裡（公告寫了路徑卻沒推檔案 → 員工看到一塊空白） */
 {
   const dir=process.env.HOME+'/Projects/yugym-booking-system-app/';
-  const refs=[...src.matchAll(/src:'(docs\/whatsnew\/[^']+)'/g)].map(m2=>m2[1]);
+  const refs=[...src.matchAll(/src:'([^']*whatsnew\/[^']+)'/g)].map(m2=>m2[1]);
+  /* ⚠⚠ 2026-10-14 使用者回報「圖片沒有出現」—— 圖放在 docs/whatsnew/，
+     而部署是「自己組 _site、只複製執行期要的檔案」，docs/ 被**刻意排除**
+     （migration 備查檔有會員姓名）。本機看得到、線上 404。
+     能發佈出去的只有 pages.yml 裡 cp 進 _site 的那幾個，圖片只能放 img/。 */
+  ok('★★★ 圖放在發佈得出去的資料夾（img/，不是被排除的 docs/）',
+     refs.length>0 && refs.every(f=>f.startsWith('img/')), refs);
   ok('★★★ 公告引用的每一張圖都真的存在', refs.length>0 && refs.every(f=>fs.existsSync(dir+f)),
      refs.filter(f=>!fs.existsSync(dir+f)));
   ok('　　圖不要太大（台灣到 GitHub 只有 35KB/s，一張 200KB 就要 6 秒）',
