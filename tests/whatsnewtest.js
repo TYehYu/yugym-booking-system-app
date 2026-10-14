@@ -132,7 +132,21 @@ ok('★★ 深色頂欄（mc-mode）下未讀點的外圈跟著換色，不會�
    /body\.mc-mode \.tb-right \.wn-btn-dot\{box-shadow:0 0 0 2px #0b4a3c;\}/.test(src));
 ok('★★★ 鈕永遠在、只有未讀點會收（與浮動座那顆的差別寫在原地）',
    /那顆看過就消失（提示），這顆\*\*永遠在\*\*（入口），只有未讀點會收起來/.test(src));
-ok('★★★ 只給員工', /const on=verUpEnabled\(\);\s*\n\s*btn\.style\.display=on\?'':'none';/.test(src));
+ok('★★★ 只給員工', /const _wnOn=verUpEnabled\(\), _wnDot=_wnOn && wnUnseen\(\)\.length>0;/.test(src));
+/* ⚠⚠ 2026-10-14 二修（使用者：「我這邊沒看到公告的按鈕」）——
+   頂欄有**兩套 DOM**：靜態 HTML 的 .tb-right 服務教練／手機，
+   而桌機櫃檯／管理員（mc-mode）**整條 .tb-right 是 display:none**，
+   看的是 renderLeftSidebar 自己畫的那一列。只做一顆＝一半的人看不到，
+   而且剛好是最常用的那一半。這已經是第三次踩到同一類坑
+   （0904 的 .tb-left、1013 的版本號、這次的 .tb-right）。 */
+ok('★★★ 兩套頂欄各放一顆，而且由同一支一起管',
+   /id="mc-whatsnew"/.test(src) && /id="tb-whatsnew"/.test(src)
+   && /\[\['tb-whatsnew','tb-whatsnew-dot'\],\['mc-whatsnew','mc-whatsnew-dot'\]\]\.forEach/.test(src));
+ok('★★★ mc 那一列每次換頁都重畫 → 重畫完要補叫一次',
+   /try\{ acctAvatarRefresh\(\); \}catch\(_\)\{\}[\s\S]{0,260}?try\{ wnDotSync\(\); \}catch\(_\)\{\}/.test(src));
+ok('★★ 成因寫在原地（下一個人才不會又只做一顆）',
+   /桌機管理版（mc-mode）\*\*整條 \.tb-right 都是\s*\n?\s*display:none\*\*/.test(src)
+   || /整條 \.tb-right 都是/.test(src));
 ok('★★ 換頁／換帳號時會重算（掛在 syncAcctMenuItems 裡）',
    /try\{ wnDotSync\(\); \}catch\(_\)\{\}   \/\* 頂欄那顆公告鈕/.test(src));
 
