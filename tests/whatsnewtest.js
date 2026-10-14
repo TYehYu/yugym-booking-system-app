@@ -32,6 +32,15 @@ ok('★★★ 新的排在最前面（wnUnseen 靠字典序比，順序錯會漏
    api.WHATS_NEW.every((x,k)=>k===0 || api.WHATS_NEW[k-1].ver > x.ver));
 ok('★★ 一筆最多四句（落落長就沒有人會看）',
    api.WHATS_NEW.every(x=>x.items.length<=4), api.WHATS_NEW.map(x=>x.items.length));
+/* 2026-10-14 使用者：「公告有辦法追朔嗎？就是看以前更新的內容」——
+   公告功能 10/13 才做，10/01–10/10 那 42 次推版按**主題**整理成三筆，
+   不是一版一筆（逐版寫沒有人會看）。 */
+ok('★★★ 回頭補的那幾筆，版本號要落在真實推過的版本上（不能自己編）',
+   ['261010.1351','261009.2123','261005.2140'].every(v=>api.WHATS_NEW.some(x=>x.ver===v)));
+ok('★★ 整理成主題的那幾筆要在標題寫出日期範圍（看的人才知道涵蓋多久）',
+   api.WHATS_NEW.filter(x=>/10\/0\d–10\/\d\d|10\/0\d–10\/0\d/.test(x.title)).length>=3
+   || api.WHATS_NEW.filter(x=>x.title.indexOf('–')>=0).length>=3);
+ok('★★ 清單上限放寬到 20（補完之後超過 10 筆）', /list\.slice\(0,20\)/.test(src));
 ok('★★★ 不要寫程式用語（櫃檯看不懂）',
    !/rvpAct|allocateVenue|validateBooking|dbGetAll|venue_unit|catBlock|forceVid/.test(
      api.WHATS_NEW.map(x=>x.title+x.items.join('')).join('')));
