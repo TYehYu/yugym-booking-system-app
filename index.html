@@ -11696,7 +11696,21 @@ body{background:linear-gradient(155deg,#F7F4EC 0%,#F1F2E7 42%,#E6EDE1 100%);back
    規則一併移除，避免下次找不到它是誰在用。 */
 .dr-center-done b{text-shadow:0 0 3px rgba(255,255,255,.9),0 0 3px rgba(255,255,255,.9);}
 .dr-name{font-size:12.5px;font-weight:600;color:var(--text);max-width:96px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;}
-.dr-time{font-size:10.5px;color:var(--t3);font-family:var(--num);white-space:nowrap;}
+/* 第一行＝班表時段（計薪依據）、第二行＝實際到場（純資訊）
+   （2026-10-14 使用者：「員工們都是值班時間前就打卡　但是顯示都是從值班時間開始」
+     ＋ 確認「只是提早到　不是在工作」）——
+   ⚠ 原本這一行寫「16:00 – 值班中」，在四欄格狀版被截成「16:00 – 值...」：
+     既看不到結束時間、也看不出狀態。改成寫完整班表，值班中交給圓環的流星表達。
+   ⚠ 實際打卡時間原本**只在 title 裡**，而首頁是手機在看的 —— 沒有 hover 等於不存在。
+     用「到／走」不用「上班／下班」：那是到場時間，不是工時（計薪仍照班表）。 */
+.dr-time{font-size:11px;color:var(--t2);font-weight:600;font-family:var(--num);
+  white-space:nowrap;max-width:100%;overflow:hidden;text-overflow:ellipsis;}
+.dr-at{font-size:10px;color:var(--t3);font-family:var(--num);white-space:nowrap;
+  max-width:100%;overflow:hidden;text-overflow:ellipsis;margin-top:1px;}
+.dr-at i{font-style:normal;}
+/* 提早到是常態（近 30 天 100 筆打卡有 97 筆提早），不標記；晚於班表才上色。
+   金色不是紅色 —— 這是提醒不是錯誤，與員工列表的驚嘆號同一套語彙。 */
+.dr-at.dr-at-late{color:var(--gold-d,#8a5e28);font-weight:700;}
 .mc-dutyring-card .mc-duty-empty{padding:10px 4px;font-size:12.5px;color:var(--t3);}
 /* 手機版值班環排版（2026-07-24 使用者回報：一列只放得下兩個、右邊大片留白）。
    成因：.dr-row 是 flex + gap:20px，項目寬度又由內容撐開（.dr-name 上限 96px、
@@ -14770,8 +14784,8 @@ function tbl(s){return TABLE_ALIAS[s]||s;}
 let sb=null;
 // ── 版本號（日期+時間格式：年後兩碼+月+日.時分，例 26620.1058 = 26年6/20 10:58）──
 // 每次改版手動更新這一行即可，畫面與 title 會一起更新
-const APP_VERSION = '261014.1705';
-const APP_VERSION_LABEL = 'v261014.1705';
+const APP_VERSION = '261014.1725';
+const APP_VERSION_LABEL = 'v261014.1725';
 const CLOUD = !!(window.YUGYM_CONFIG && window.YUGYM_CONFIG.url && window.YUGYM_CONFIG.anonKey);
 if(CLOUD){ sb = supabase.createClient(window.YUGYM_CONFIG.url, window.YUGYM_CONFIG.anonKey); }
 
@@ -18468,6 +18482,11 @@ function verUpEnabled(){ return !!(SESSION && SESSION.role!=='member'); }
    ⚠ 新的放最前面。推版時順手加一筆，不加也不會壞（只是那一版沒有公告）。
    ⚠ 會員端看不到這個（verUpEnabled 已經排除 member）。 */
 const WHATS_NEW=[
+  {ver:'261014.1725', big:false, title:'首頁「今日值班」看得到實際到場時間了', items:[
+    '每個人下面改成兩行：上行是班表時段（16:00–22:00），下行是實際到場（到 15:55、走 22:10）。',
+    '原本寫「16:00 – 值班中」會被切成「16:00 – 值...」，看不出幾點下班。',
+    '⚠ 計薪不變：值班時數仍從班表時間起算，提早到不多給也不少給。',
+    '晚於班表才會標金色的「遲」，提早到不標記。']},
   {ver:'261014.1705', big:true, title:'訓練課表多了「今日備註」', items:[
     '課表右上角〔✎ 今日備註〕：寫這堂課的狀況（膝蓋緊、今天狀況好、下週要加重…），寫過會在最上面變成一張金色紙條，點一下再改。',
     '⚠ 這是「一堂課一則」。某個動作自己的備註請照舊寫在那個動作上，兩個不一樣。',
@@ -26655,6 +26674,8 @@ function dutyRingHTML(name, att, shift, nowMinV, isToday){
   const _rawIn=timeToMin(att.clock_in);
   const _shIn=(shift&&shift.start_time)?timeToMin(shift.start_time):null;
   const _early=(_shIn!=null && _shIn>_rawIn);
+  /* 晚於班表才算遲到（剛好準時不算）。提早到是常態，不標記 —— 見 .dr-at-late 的說明。 */
+  const _late=(_shIn!=null && _rawIn>_shIn);
   const inMin=_early?_shIn:_rawIn;
   const inLabel=_early?shift.start_time:att.clock_in;
   const outMin=att.clock_out?timeToMin(att.clock_out):null;
@@ -26712,7 +26733,13 @@ function dutyRingHTML(name, att, shift, nowMinV, isToday){
       ${center}
     </div>
     <div class="dr-name">${name}</div>
-    <div class="dr-time">${inLabel} – ${att.clock_out||'值班中'}</div>
+    ${/* 兩行分工（2026-10-14）：上＝班表時段（計薪依據）、下＝實際到場（純資訊）。
+         ⚠ 沒排班的人沒有班表可寫 —— 退回原本的「打卡–下班」寫法，不要留一行空的。 */''}
+    ${(shift&&shift.start_time&&shift.end_time)
+      ? `<div class="dr-time">${shift.start_time}–${shift.end_time}</div>
+         <div class="dr-at${_late?' dr-at-late':''}"><i>到</i> ${att.clock_in}${
+            _late?'　遲':''}${att.clock_out?`　<i>走</i> ${att.clock_out}`:''}</div>`
+      : `<div class="dr-time">${att.clock_in} – ${att.clock_out||'值班中'}</div>`}
   </div>`;
 }
 

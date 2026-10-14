@@ -34,8 +34,21 @@ ok('★★★ 沒排班 → 維持打卡時間', calc({clock_in:'15:55'},null).i
 ok('★★ 排班缺開始時間 → 維持打卡時間', calc({clock_in:'15:55'},{end_time:'22:00'}).inLabel==='15:55');
 
 console.log('\n④ 顯示與留痕');
-ok('★★★ 下面那行用起算時間，不是原始打卡',
-   /<div class="dr-time">\$\{inLabel\} – \$\{att\.clock_out\|\|'值班中'\}<\/div>/.test(src));
+/* 2026-10-14 改成兩行（使用者確認「只是提早到　不是在工作」）：
+   上行＝班表時段（計薪依據，仍是起算時間的來源）、下行＝實際到場（純資訊）。
+   原本那一行寫「起算時間 – 值班中」，在四欄格狀版會被截成「16:00 – 值...」。 */
+ok('★★★ 上行寫完整班表時段（不再被截成「16:00 – 值...」）',
+   /<div class="dr-time">\$\{shift\.start_time\}–\$\{shift\.end_time\}<\/div>/.test(src));
+ok('★★★ 下行才是實際到場，而且用「到／走」不是「上班／下班」',
+   /<div class="dr-at\$\{_late\?' dr-at-late':''\}"><i>到<\/i> \$\{att\.clock_in\}/.test(src)
+   && /<i>走<\/i> \$\{att\.clock_out\}/.test(src));
+ok('★★★ 計薪起算仍是 inLabel（圓環與中央時數照班表算，沒被這次顯示改動影響）',
+   /const inMin=_early\?_shIn:_rawIn;/.test(src) && /const inLabel=_early\?shift\.start_time:att\.clock_in;/.test(src));
+ok('★★ 沒排班就沒有班表可寫 → 退回原本寫法，不留一行空的',
+   /<div class="dr-time">\$\{att\.clock_in\} – \$\{att\.clock_out\|\|'值班中'\}<\/div>/.test(src));
+ok('★★ 提早到不標記、晚於班表才上色（提早是常態）',
+   /const _late=\(_shIn!=null && _rawIn>_shIn\);/.test(src)
+   && /\.dr-at\.dr-at-late\{color:var\(--gold-d,#8a5e28\);font-weight:700;\}/.test(src));
 ok('★★★ tooltip 仍查得到真正幾點到的（工時有爭議時要查）',
    /提早打卡 \$\{att\.clock_in\}，自班表 \$\{shift\.start_time\} 起算/.test(src));
 /* 薪資那條本來就是 min(打卡時數, 排班時數)，不要為了這件事動它 */
