@@ -168,5 +168,13 @@ ok('★★ 成因寫在原地（下一個人才不會又只做一顆）',
 ok('★★ 換頁／換帳號時會重算（掛在 syncAcctMenuItems 裡）',
    /try\{ wnDotSync\(\); \}catch\(_\)\{\}   \/\* 頂欄那顆公告鈕/.test(src));
 
+
+console.log('\n讀起來的對比（2026-10-14 使用者：「灰色的字跟米色的底　看起來有點吃力」）');
+ok('★★★ 內文改本文色、不是次要灰（米色卡片上 5.3:1 → 16.5:1）',
+   /\.wn-ul\{margin:0;padding-left:0;list-style:none;font-size:13\.5px;line-height:1\.95;color:var\(--text\);\}/.test(src));
+ok('★ 字級放大一級（公告是每個人都要讀完的東西）', /font-size:13\.5px;line-height:1\.95;color:var\(--text\)/.test(src));
+ok('★ 金色警示框的字也加深（5.1:1 → 7.7:1）', /\.wn-ul li\.wn-warn\{[\s\S]{0,120}color:#6b4517;/.test(src));
+ok('　　標題跟著放大，維持階層', /\.wn-h b\{font-size:14\.5px;/.test(src));
+
 console.log(`\n${pass} 通過 / ${fail} 失敗`);
 process.exit(fail?1:0);

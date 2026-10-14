@@ -47,7 +47,8 @@ console.log('\n② 兩道門都要吃這個上限');
      && /el\.innerHTML=\(bad\|\|warn\)\?`<i>\$\{bad\|\|warn\}<\/i>`:'';/.test(src)
      && /<div class="gt-unitbox" id="gt-c-smax" style="display:none;"><\/div>/.test(src));
   ok('★★ 欄位標題直接寫上限（打之前就看得到）',
-     /<label>堂數 \*<span class="lb-warn">上限 \$\{GT_SESSIONS_MAX\} 堂<\/span><\/label>/.test(src));
+     /* 2026-10-14：改灰版 .lb-note（紅色留給真正的警示），文字照舊 */
+     /<label>堂數 \*<span class="lb-note">上限 \$\{GT_SESSIONS_MAX\} 堂<\/span><\/label>/.test(src));
   ok('★★ 不寫 max 屬性 —— 管理員要打得進去（理由寫在原地）',
      /不寫 max —— 管理員可以越線發無限卡（0828 定案），欄位鎖死反而變成/.test(src)
      && !/id="gt-c-sessions" min="1" max=/.test(src));
