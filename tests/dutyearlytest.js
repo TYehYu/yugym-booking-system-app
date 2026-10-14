@@ -40,18 +40,35 @@ console.log('\n④ 顯示與留痕');
 /* ⚠ 2026-10-14 二修（使用者：「mac 看不到完整的訊息」）——
    nowrap＋ellipsis 在四欄 grid 裡還是會被截（一格只有 85~100px）。
    改成「只在我允許的地方換行」：<wbr> 放在破折號後與到／走之間。 */
-ok('★★★ 上行寫完整班表時段，而且允許在破折號後換行',
-   /<div class="dr-time">\$\{shift\.start_time\}–<wbr>\$\{shift\.end_time\}<\/div>/.test(src));
-ok('★★★ 不可以用 nowrap＋ellipsis（那會把字切掉，等於白寫）',
+/* 2026-10-15 二修（使用者：「還是被斷句」）——
+   ① 1014 只改了共用的 .dr-time，但 .mc-dutyplain 那條**更具體**的覆寫還在，
+      首頁四欄卡照樣 nowrap＋ellipsis
+   ② 光放 <wbr> 不夠：中文與數字預設任兩字之間都能斷，所以它還是斷在
+      「到 08:26　走」／「17:02」中間。每一小段要自己 nowrap。 */
+ok('★★★ 班表時段整段不可拆',
+   /<div class="dr-time"><span style="white-space:nowrap;">\$\{shift\.start_time\}–\$\{shift\.end_time\}<\/span><\/div>/.test(src));
+ok('★★★ 到／走各自成一塊，要折只能折在它們之間',
+   /<span style="white-space:nowrap;"><i>到<\/i> \$\{att\.clock_in\}/.test(src)
+   && /<span style="white-space:nowrap;"><i>走<\/i> \$\{att\.clock_out\}<\/span>/.test(src));
+ok('★★★ 共用的 .dr-time 不用 nowrap＋ellipsis',
    /\.dr-time\{font-size:11px;color:var\(--t2\);font-weight:600;font-family:var\(--num\);\s*\n\s*max-width:100%;line-height:1\.45;\}/.test(src)
    && /不可以用 nowrap＋ellipsis/.test(src));
-ok('★★★ 下行才是實際到場，而且用「到／走」不是「上班／下班」',
-   /<div class="dr-at\$\{_late\?' dr-at-late':''\}"><i>到<\/i> \$\{att\.clock_in\}/.test(src)
-   && /<i>走<\/i> \$\{att\.clock_out\}/.test(src));
+ok('★★★ 更具體的那兩條覆寫也要放行（首頁四欄卡、手機格線）',
+   /\.mc-dutyplain \.dr-time,\.mc-dutyplain \.dr-at\{max-width:100%;\}/.test(src)
+   && !/\.mc-dutyplain \.dr-name,\.mc-dutyplain \.dr-time\{[^}]*ellipsis/.test(src)
+   && /\.dr-time\{max-width:100%;\}   \/\* ⚠ 不要加 ellipsis/.test(src));
+ok('　　姓名維持截斷（名字沒有合理的換行點）',
+   /\.mc-dutyplain \.dr-name\{max-width:100%;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;\}/.test(src));
+/* 2026-10-15：這一條原本把整串 markup 綁死（含 class 與緊接的 <i>），
+   加了 nowrap 的 span 之後就失效。語意改由上面那條「到／走各自成一塊」守，
+   這裡只守用詞。 */
+ok('★★ 用「到／走」不是「上班／下班」（那是到場時間，不是工時）',
+   /<i>到<\/i>/.test(src) && /<i>走<\/i>/.test(src)
+   && /用「到／走」不用「上班／下班」/.test(src));
 ok('★★★ 計薪起算仍是 inLabel（圓環與中央時數照班表算，沒被這次顯示改動影響）',
    /const inMin=_early\?_shIn:_rawIn;/.test(src) && /const inLabel=_early\?shift\.start_time:att\.clock_in;/.test(src));
 ok('★★ 沒排班就沒有班表可寫 → 退回原本寫法，不留一行空的',
-   /<div class="dr-time">\$\{att\.clock_in\} –<wbr> \$\{att\.clock_out\|\|'值班中'\}<\/div>/.test(src));
+   /<div class="dr-time"><span style="white-space:nowrap;">\$\{att\.clock_in\} – \$\{att\.clock_out\|\|'值班中'\}<\/span><\/div>/.test(src));
 ok('★★ 提早到不標記、晚於班表才上色（提早是常態）',
    /const _late=\(_shIn!=null && _rawIn>_shIn\);/.test(src)
    && /\.dr-at\.dr-at-late\{color:var\(--gold-d,#8a5e28\);font-weight:700;\}/.test(src));

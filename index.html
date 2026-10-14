@@ -11018,7 +11018,13 @@ body{background:linear-gradient(155deg,#F7F4EC 0%,#F1F2E7 42%,#E6EDE1 100%);back
 .mc-dutyplain .dr-row{display:grid;grid-template-columns:repeat(4,1fr);align-items:flex-start;
   justify-items:center;gap:14px 8px;}
 .mc-dutyplain .duty-ring{min-width:0;width:100%;}
-.mc-dutyplain .dr-name,.mc-dutyplain .dr-time{max-width:100%;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;}
+/* ⚠⚠ .dr-time 不可以放進這條（2026-10-15 使用者二次回報「還是被斷句」）——
+   1014 已經把共用的 .dr-time 改成可換行，但**這條更具體的覆寫還在**，
+   於是首頁那張四欄卡照樣 nowrap＋ellipsis，寫完整時段等於白寫。
+   ⚠ 改樣式前先 grep 這個 class 的**所有**規則，不要只改最一般的那一條。
+   姓名維持截斷：名字沒有合理的換行點，截斷比折行好看。 */
+.mc-dutyplain .dr-name{max-width:100%;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;}
+.mc-dutyplain .dr-time,.mc-dutyplain .dr-at{max-width:100%;}
 @media(max-width:1280px){ .mc-dutyplain .dr-row{grid-template-columns:repeat(3,1fr);} }
 .mc-dutyplain .dr-center{z-index:3;}
 .mc-dutyplain .dr-center b{text-shadow:0 0 4px rgba(244,241,232,.85);}
@@ -11744,7 +11750,7 @@ body{background:linear-gradient(155deg,#F7F4EC 0%,#F1F2E7 42%,#E6EDE1 100%);back
   .dr-row{display:grid;grid-template-columns:repeat(auto-fill,minmax(74px,1fr));gap:12px 6px;}
   .duty-ring{min-width:0;}                       /* 解除 86px 下限，改由格線決定 */
   .dr-name{max-width:100%;}
-  .dr-time{max-width:100%;overflow:hidden;text-overflow:ellipsis;}
+  .dr-time{max-width:100%;}   /* ⚠ 不要加 ellipsis，理由同 .mc-dutyplain 那條 */
 }
 /* 教練首頁：環放進今日摘要卡列（.dash-sum 內），底色沿用 ds-card、內容置中 */
 .ds-card-ring{display:flex;align-items:center;justify-content:center;}
@@ -14815,8 +14821,8 @@ function tbl(s){return TABLE_ALIAS[s]||s;}
 let sb=null;
 // ── 版本號（日期+時間格式：年後兩碼+月+日.時分，例 26620.1058 = 26年6/20 10:58）──
 // 每次改版手動更新這一行即可，畫面與 title 會一起更新
-const APP_VERSION = '261015.0027';
-const APP_VERSION_LABEL = 'v261015.0027';
+const APP_VERSION = '261015.0037';
+const APP_VERSION_LABEL = 'v261015.0037';
 const CLOUD = !!(window.YUGYM_CONFIG && window.YUGYM_CONFIG.url && window.YUGYM_CONFIG.anonKey);
 if(CLOUD){ sb = supabase.createClient(window.YUGYM_CONFIG.url, window.YUGYM_CONFIG.anonKey); }
 
@@ -26821,10 +26827,17 @@ function dutyRingHTML(name, att, shift, nowMinV, isToday){
     ${/* 兩行分工（2026-10-14）：上＝班表時段（計薪依據）、下＝實際到場（純資訊）。
          ⚠ 沒排班的人沒有班表可寫 —— 退回原本的「打卡–下班」寫法，不要留一行空的。 */''}
     ${(shift&&shift.start_time&&shift.end_time)
-      ? `<div class="dr-time">${shift.start_time}–<wbr>${shift.end_time}</div>
-         <div class="dr-at${_late?' dr-at-late':''}"><i>到</i> ${att.clock_in}${
-            _late?'　遲':''}${att.clock_out?`　<wbr><i>走</i> ${att.clock_out}`:''}</div>`
-      : `<div class="dr-time">${att.clock_in} –<wbr> ${att.clock_out||'值班中'}</div>`}
+      /* ⚠⚠ 每一小段都要自己 nowrap（2026-10-15 使用者二次回報）——
+         光放 wbr 不夠：中文與數字預設**任兩字之間都能斷**，所以 wbr 只是
+         「多一個可斷點」，不會阻止它斷在「到 08:26　走」／「17:02」中間。
+         把「到 HH:MM」「走 HH:MM」「HH:MM–HH:MM」各自包成不可斷的一塊，
+         要折就折在它們**之間**。
+         ⚠ 這裡是樣板字串的運算式內部，註解只能用普通區塊註解（今天第三次踩，
+           見 yugym-template-comment-trap）。 */
+      ? `<div class="dr-time"><span style="white-space:nowrap;">${shift.start_time}–${shift.end_time}</span></div>
+         <div class="dr-at${_late?' dr-at-late':''}"><span style="white-space:nowrap;"><i>到</i> ${att.clock_in}${
+            _late?' 遲':''}</span>${att.clock_out?` <span style="white-space:nowrap;"><i>走</i> ${att.clock_out}</span>`:''}</div>`
+      : `<div class="dr-time"><span style="white-space:nowrap;">${att.clock_in} – ${att.clock_out||'值班中'}</span></div>`}
   </div>`;
 }
 
