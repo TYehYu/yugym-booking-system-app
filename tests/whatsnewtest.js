@@ -16,10 +16,14 @@ const i=src.indexOf('const WHATS_NEW=[');
 const j=src.indexOf('function wnUnseen(){');
 let d=0,end=-1;
 for(let k=src.indexOf('{',j);k<src.length;k++){ if(src[k]==='{')d++; else if(src[k]==='}'){d--; if(!d){end=k+1;break;} } }
-let store='';
-const api=new Function('localStorage','APP_VERSION',
-  src.slice(i,end)+'\nreturn {WHATS_NEW,wnSeen,wnMarkSeen,wnUnseen,WN_SEEN_KEY};')(
-  {getItem:()=>store, setItem:(k,v)=>{store=v;}}, '261013.2237');
+/* 2026-10-14：鍵名改成逐帳號（yugym_whatsnew_seen_<員工 id>），所以沙箱的
+   localStorage 要真的分鍵存 —— 用一個物件模擬，才測得出「早班看過、晚班還看得到」。 */
+let bag={};
+const mkApi=(uid)=>new Function('localStorage','APP_VERSION','window',
+  src.slice(i,end)+'\nreturn {WHATS_NEW,wnSeen,wnMarkSeen,wnUnseen,wnSeenKey};')(
+  {getItem:k=>(k in bag?bag[k]:null), setItem:(k,v)=>{bag[k]=v;}}, '261013.2237',
+  {SESSION:{id:uid}});
+const api=mkApi('c-staff-A');
 
 console.log('① 清單本身（公告是給櫃檯／教練看的，不是給工程師看的）');
 ok('★★★ 每一筆都有版本、標題、至少一句內容',
@@ -36,16 +40,31 @@ ok('★★ 有需要注意的事就用 ⚠ 標出來（例如補開發票的日�
 
 console.log('\n② 看過就不再跳');
 {
-  store='';
+  bag={};
   eq('★★★ 第一次：全部都沒看過', api.wnUnseen().length, api.WHATS_NEW.length);
   api.wnMarkSeen();
   eq('★★★ 按了「知道了」之後：一筆都不剩', api.wnUnseen().length, 0);
-  eq('★★ 記的是最新那一版', store, api.WHATS_NEW[0].ver);
-  store='261012.1441';
+  eq('★★ 記的是最新那一版', bag[api.wnSeenKey()], api.WHATS_NEW[0].ver);
+  bag={}; bag[api.wnSeenKey()]='261012.1441';
   eq('★★★ 只回「比看過的更新」的那幾筆', api.wnUnseen().map(x=>x.ver),
      api.WHATS_NEW.filter(x=>x.ver>'261012.1441').map(x=>x.ver));
-  store='999999.9999';
+  bag={}; bag[api.wnSeenKey()]='999999.9999';
   eq('★★ 存了比全部都新的值也不會壞（回空）', api.wnUnseen().length, 0);
+}
+
+console.log('\n②-b 早班看過，晚班還看得到（2026-10-14 使用者回報的那件事）');
+{
+  /* 櫃檯是同一台電腦輪班用。原本整台共用一個鍵，早班按了「知道了」，
+     晚班換帳號登入也不會再跳 —— 等於晚班永遠不知道系統改了什麼。 */
+  bag={};
+  const 早=mkApi('c-staff-早'), 晚=mkApi('c-staff-晚');
+  早.wnMarkSeen();
+  eq('★★★ 早班看過之後自己不再跳', 早.wnUnseen().length, 0);
+  eq('★★★ 晚班（同一台電腦、不同帳號）照樣看得到', 晚.wnUnseen().length, api.WHATS_NEW.length);
+  eq('★★ 兩個人各存各的鍵', Object.keys(bag), ['yugym_whatsnew_seen_c-staff-早']);
+  /* 0到14 之前存的是整台共用的舊鍵，改版後不要讓全員又被跳一次 */
+  bag={'yugym_whatsnew_seen':'999999.9999'};
+  eq('★★ 舊鍵沿用一次（改版當下不會全員重跳）', mkApi('c-new').wnUnseen().length, 0);
 }
 
 console.log('\n③ 只給員工，而且不要每一版都打擾');
@@ -82,6 +101,40 @@ console.log('\n⑤ 寫公告的規矩要留在原地');
 ok('★★★ 註明只寫櫃檯看得懂的話、技術細節留 git',
    /只寫櫃檯／教練看得懂的話/.test(src) && /技術細節留在 git commit 裡/.test(src));
 ok('★★ 註明新的放最前面、不加也不會壞', /新的放最前面/.test(src));
+
+console.log('\n⑥ 常駐入口（2026-10-14 使用者：「可以多加一個在導覽列嗎」）');
+/* 浮動座那顆是**提示**（看過就消失），所以需要一個永遠在的入口 ——
+   否則晚班同事想回頭看早班看過的公告會找不到。 */
+ok('★★★ 帳號選單有一顆「系統更新公告」',
+   /<button class="tb-acct-item" id="acct-whatsnew" onclick="closeAcctMenu\(\);openWhatsNew\(\)"/.test(src));
+ok('★★★ 只給員工看得到（與浮動座同一個判斷）',
+   /const _on=\(typeof verUpEnabled==='function'\)&&verUpEnabled\(\);\s*\n\s*_wn\.style\.display=_on\?'':'none';/.test(src));
+ok('★★ 右邊那顆小點只代表「這個帳號還沒看過」',
+   /_d\.style\.display=\(_on && typeof wnUnseen==='function' && wnUnseen\(\)\.length\)\?'':'none';/.test(src));
+ok('★★ 打開的是同一張清單（不是只看沒看過的那幾筆）',
+   /onclick="closeAcctMenu\(\);openWhatsNew\(\)"/.test(src));
+ok('★★ 成因寫在原地（早班看過，晚班就看不到了）',
+   /早班同事\s*\n?\s*上班看過公告後　晚班同事就看不到了/.test(src) || /晚班同事就看不到了/.test(src));
+
+console.log('\n⑦ 頂欄的公告圖示（2026-10-14 使用者：「可以在導覽列上面新增一個公告圖示」）');
+ok('★★★ 頂欄有這顆鈕，點了開公告',
+   /<button type="button" class="rf-btn wn-btn" id="tb-whatsnew"[\s\S]{0,200}?onclick="openWhatsNew\(\)"/.test(src));
+/* ⚠ 用位置先後判斷，不要用「相隔幾個字」—— 註解很長，距離窗一開大就會兩邊都命中。 */
+ok('★★★ 放在 .tb-right（.tb-left 在 body.mc-mode 是 display:none，桌機櫃檯看不到）',
+   (()=>{ const L=src.indexOf('<div class="tb-left">'), R=src.indexOf('<div class="tb-right">'),
+            B=src.indexOf('id="tb-whatsnew"'), F=src.indexOf('id="tb-refresh"');
+          return L>=0 && R>L && B>R && F>B; })());
+ok('★★★ 沿用〔更新畫面〕那顆的外觀，不另做尺寸（使用者：「不會佔用太大空間」）',
+   /class="rf-btn wn-btn"/.test(src) && /\.rf-btn\.wn-btn\{position:relative;\}/.test(src));
+ok('★★ 未讀點用金色，不跟真正的待辦搶（紅>金>綠）',
+   /\.wn-btn-dot\{position:absolute[^}]*background:var\(--gold,#b48a56\)/.test(src));
+ok('★★ 深色頂欄（mc-mode）下未讀點的外圈跟著換色，不會糊成一片',
+   /body\.mc-mode \.tb-right \.wn-btn-dot\{box-shadow:0 0 0 2px #0b4a3c;\}/.test(src));
+ok('★★★ 鈕永遠在、只有未讀點會收（與浮動座那顆的差別寫在原地）',
+   /那顆看過就消失（提示），這顆\*\*永遠在\*\*（入口），只有未讀點會收起來/.test(src));
+ok('★★★ 只給員工', /const on=verUpEnabled\(\);\s*\n\s*btn\.style\.display=on\?'':'none';/.test(src));
+ok('★★ 換頁／換帳號時會重算（掛在 syncAcctMenuItems 裡）',
+   /try\{ wnDotSync\(\); \}catch\(_\)\{\}   \/\* 頂欄那顆公告鈕/.test(src));
 
 console.log(`\n${pass} 通過 / ${fail} 失敗`);
 process.exit(fail?1:0);
