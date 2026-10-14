@@ -138,7 +138,9 @@ console.log('\n⑧ 改期也要選場地（0824 使用者核可：選了就是�
      排除自己這件事收進 bkVenueStatus 的第四個參數，挑選視窗與重驗共用同一支。 */
   ok('★★ 排除自己（改期時自己佔的位不能把自己擋掉）',
      /async function bkVenueStatus\(ds, time, dur, selfId\)\{/.test(src)
-     && /return venueAvailAt\(day, ns, ne, selfId\|\|null\);/.test(src)
+     /* 2026-10-14：selfId 改成「一組 id」先過濾掉（跑步機第 2 台的 sibling 也是自己） */
+     && /const skip=new Set\(\[\]\.concat\(selfId\|\|\[\]\)\.filter\(Boolean\)\);/.test(src)
+     && /return venueAvailAt\(day, ns, ne, null\);/.test(src)
      && /我明明就在團課教室，它卻說滿了/.test(src));
   ok('★★ 挑選視窗與重驗都帶自己（改期）／都傳 null（建立）',
      /const _self=\(id==='amv-v' && window\._amvB\) \? window\._amvB : null;/.test(src)

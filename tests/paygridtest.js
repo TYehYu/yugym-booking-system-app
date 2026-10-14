@@ -71,10 +71,17 @@ ok('　　整疊可捲動', /\.tdl-grid\{[\s\S]{0,160}overflow-y:auto;/.test(src
 ok('★ 其他名單不受影響，維持清單', /class="tdl-list"/.test(plain) && !/class="tdl-grid"/.test(plain));
 
 console.log('\n按鈕內容');
-ok('★ 時間收進卡片裡（金色；待付費用紅）',
-   /<span class="tdl-cell-nm tdl2-nm">陳蘭馨<\/span>\s*\n?\s*<span class="tdl2-tm">10:00<\/span>/.test(grid)
+/* 2026-10-14 改版（使用者：「待繳費放到時間前面　讓訊息對齊」）：
+   名字 → 〔待繳費標籤格〕→ 時間 → 金額 → 課別。標籤格固定寬，沒有的列留空，
+   所以四列的時間與課別逐欄對齊。 */
+ok('★ 名字之後是固定寬的標籤格，再來才是時間',
+   /<span class="tdl-cell-nm tdl2-nm">陳蘭馨<\/span>\s*\n?\s*<span class="tdl2-slot"><\/span><span class="tdl2-tm">10:00<\/span>/.test(grid)
    && /<span class="tdl2-tm tdl2-tm-pay">20:30<\/span>/.test(grid));
-ok('★ 課別與原因跟在時間後面（灰字）', /<span class="tdl2-sub">教練課・續課<\/span>/.test(grid));
+ok('★ 待繳費抽成標籤、排在時間左邊（原本黏在事由最前面）',
+   /<span class="tdl2-slot"><i class="tdl2-pill">新客戶簽約<\/i><\/span><span class="tdl2-tm tdl2-tm-pay">20:30<\/span>/.test(grid));
+ok('★ 課別排在最後（灰字、固定寬）', /<span class="tdl2-cat">教練課・續課<\/span>/.test(grid));
+ok('　　沒有標籤／沒有課別的列也留空格子（不然右邊整排會往左滑）',
+   /<span class="tdl2-slot"><\/span>/.test(grid));
 ok('★ 待付費那列用紅框（紅>金：那是「還沒收到錢」的最高提示）',
    /class="tdl-cell tdl2-row tdl2-pay tdl-static"/.test(grid)
    && /\.tdl2-row\.tdl2-pay\{border-color:rgba\(127,3,3,\.35\);\}/.test(src));

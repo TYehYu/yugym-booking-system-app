@@ -207,18 +207,23 @@ ok('★ 教練／手機頂列：#tb-refresh 排在 #tb-clock 左邊',
    /<button type="button" class="rf-btn" id="tb-refresh" title="更新畫面（重新抓取最新資料）"\s*\n\s*aria-label="更新畫面" onclick="dashManualRefresh\(\)"><\/button>\s*\n\s*<span id="tb-clock" class="tb-clock"><\/span>/.test(src));
 /* 三修：桌機管理版（body.mc-mode）整條 .tb-right 是 display:none，看得見的時鐘是
    頂列的 #mc-topclock —— 按鈕做在 .tb-right 裡等於看不到（使用者回報「按鈕不見了」）。 */
-ok('★ 桌機管理版頂列：#mc-refresh 排在 #mc-topclock 左邊',
-   /<button type="button" class="rf-btn mc-rf" id="mc-refresh" title="更新畫面（重新抓取最新資料）"\s*\n\s*aria-label="更新畫面" onclick="dashManualRefresh\(\)">\$\{RF_ICON\}<\/button>\s*\n\s*<span class="mc-topclock" id="mc-topclock">/.test(src));
+/* 四修（2026-10-14 使用者：「公告跟更新可以加上文字嗎？右邊的時間移除」）——
+   兩顆都改成「圖示＋文字」膠囊 .mc-tbtn，大時鐘 #mc-topclock 整個拿掉。 */
+ok('★ 桌機管理版頂列：公告、更新兩顆都是圖示＋文字',
+   /<button type="button" class="mc-tbtn wn-btn" id="mc-whatsnew"/.test(src)
+   && /<button type="button" class="mc-tbtn" id="mc-refresh" title="更新畫面（重新抓取最新資料）"\s*\n\s*onclick="dashManualRefresh\(\)">\$\{RF_ICON\}更新<\/button>/.test(src));
+ok('　　大時鐘已移除（使用者確認桌機不留時間）',
+   !/id="mc-topclock"/.test(src));
 /* 2026-09-09：兩個 auto 都拿掉了（使用者回報「上方導覽列沒有置中」）——
    auto 邊界是平分剩餘空間，右邊多一個 auto 就會把中央膠囊擠偏。
    靠右現在是「膠囊的右側 auto 把剩餘空間吃掉」達成的。 */
 ok('　　右側那組不再自己搶 auto（置中交給中央膠囊的 margin:0 auto）',
-   !/body\.mc-mode \.mc-rf\{margin-left:auto;/.test(src)
-   && !/body\.mc-mode \.mc-topclock\{margin-left:auto;/.test(src)
+   !/body\.mc-mode \.mc-tbtn\{margin-left:auto;/.test(src)
    && /body\.mc-mode \.mc-nav\{position:static;transform:none;margin:0 auto;/.test(src));
 ok('　　非 mc-mode 時這顆不顯示（避免兩顆同時出現）', /body:not\(\.mc-mode\) \.mc-rf\{display:none;\}/.test(src));
-ok('　　綠底頂列上的配色（半透明白底＋淺色圖示）',
-   /body\.mc-mode \.mc-rf\{[\s\S]{0,180}background:rgba\(255,255,255,\.1\);border:1px solid rgba\(255,255,255,\.18\);color:#F4F1E8;/.test(src));
+ok('　　綠底頂列上的配色（半透明白底＋淺色文字）',
+   /body\.mc-mode \.mc-tbtn\{[\s\S]{0,420}background:rgba\(255,255,255,\.1\);border:1px solid rgba\(255,255,255,\.18\);color:#F4F1E8;/.test(src));
+ok('　　高度維持 32px（頂列一行沒變高）', /body\.mc-mode \.mc-tbtn\{height:32px;/.test(src));
 ok('　　側欄重繪也不會掉圖示（直接寫在 template 裡，不靠 init）',
    /aria-label="更新畫面" onclick="dashManualRefresh\(\)">\$\{RF_ICON\}<\/button>/.test(src));
 ok('　　兩顆都在 initTopRefresh 的清單裡', /\['tb-refresh','mc-refresh'\]\.forEach/.test(src));

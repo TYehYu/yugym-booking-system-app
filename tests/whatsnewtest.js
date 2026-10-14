@@ -36,10 +36,19 @@ ok('★★ 一筆最多四句（落落長就沒有人會看）',
    公告功能 10/13 才做，10/01–10/10 那 42 次推版按**主題**整理成三筆，
    不是一版一筆（逐版寫沒有人會看）。 */
 ok('★★★ 回頭補的那幾筆，版本號要落在真實推過的版本上（不能自己編）',
-   ['261010.1351','261009.2123','261005.2140'].every(v=>api.WHATS_NEW.some(x=>x.ver===v)));
+   ['261010.1351','261009.2123'].every(v=>api.WHATS_NEW.some(x=>x.ver===v)));
+/* ⚠⚠ 2026-10-14 使用者定案：「跟功能有關係的才上公告讓員工知道」——
+   判準是「他操作的方式會不會不一樣」。純修 bug／效能／版面微調不上，
+   寫出來只會稀釋真正要看的那幾條。
+   10/01–10/05 那一筆（漏列、薪資漏扣、刪除失敗、拖移）因此整筆移除。 */
+ok('★★★ 純修 bug 的那一筆已經拿掉',
+   !api.WHATS_NEW.some(x=>x.ver==='261005.2140')
+   && !api.WHATS_NEW.some(x=>/修正與順手改/.test(x.title)));
+ok('★★★ 規則寫在原地（下次寫公告時看得到判準）',
+   /只有跟功能有關的才上公告/.test(src) && /他操作的方式會不會不一樣/.test(src)
+   && /不上：純修 bug、效能、版面微調、資料修正/.test(src));
 ok('★★ 整理成主題的那幾筆要在標題寫出日期範圍（看的人才知道涵蓋多久）',
-   api.WHATS_NEW.filter(x=>/10\/0\d–10\/\d\d|10\/0\d–10\/0\d/.test(x.title)).length>=3
-   || api.WHATS_NEW.filter(x=>x.title.indexOf('–')>=0).length>=3);
+   api.WHATS_NEW.filter(x=>x.title.indexOf('–')>=0).length>=2);
 ok('★★ 清單上限放寬到 20（補完之後超過 10 筆）', /list\.slice\(0,20\)/.test(src));
 ok('★★★ 不要寫程式用語（櫃檯看不懂）',
    !/rvpAct|allocateVenue|validateBooking|dbGetAll|venue_unit|catBlock|forceVid/.test(
