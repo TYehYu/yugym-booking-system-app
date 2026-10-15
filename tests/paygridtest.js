@@ -20,18 +20,22 @@ const j=src.indexOf('\n}', src.indexOf('modal-foot', i))+2;
 /* 2026-09-22：多了 rn（這一列有沒有「續課」這個理由）與 due（這一期要收多少）。
    ⚠ rn=false 的分期列**不給續約三顆鈕**（使用者：「分期的會員應該不用出現
      ［續約］［考慮］［不續約］」）；M5 是「續課＋分期都有」，鈕要留。 */
+/* 2026-10-15：資料端改送 tag（紅標籤）／cat（課別），畫面不再拆字串。
+   ⚠ 最後一筆刻意只給 sub，驗「後備的舊拆法」還在（其他名單送進來的只有 sub）。 */
 const ITEMS=[
-  {id:'M1',name:'陳蘭馨',sub:'教練課・續課',tkid:'T1',rs:'',time:'10:00',rn:true},
-  {id:'M2',name:'王小明',sub:'團體課・續課',tkid:'T2',rs:'renewed',time:'19:00',rn:true},
-  {id:'',  name:'新客人',sub:'新客戶簽約・私人教練',tkid:'',rs:'',time:'20:30',pay:true},
-  {id:'M4',name:'李中間',sub:'教練課・分期繳費　第 2/3 期',tkid:'T4',rs:'',time:'21:00',rn:false,due:7200},
+  {id:'M1',name:'陳蘭馨',sub:'教練課・續課',tag:'',cat:'教練課・續課',tkid:'T1',rs:'',time:'10:00',rn:true},
+  {id:'M2',name:'王小明',sub:'團體課・續課',tag:'',cat:'團體課・續課',tkid:'T2',rs:'renewed',time:'19:00',rn:true},
+  {id:'',  name:'新客人',sub:'新客戶簽約・私人教練',tag:'新客戶簽約',cat:'私人教練',tkid:'',rs:'',time:'20:30',pay:true},
+  {id:'M4',name:'李中間',sub:'教練課・分期繳費　第 2/3 期',tag:'分期繳費',cat:'教練課　第 2/3 期',tkid:'T4',rs:'',time:'21:00',rn:false,due:7200},
   {id:'M5',name:'雙重奏',sub:'團體課・續課・教練課・分期繳費　第 3/4 期',tkid:'T5',rs:'considering',time:'18:00',rn:true,due:4500},
 ];
 const run=(kind,list)=>{
   let html='';
-  const fn=new Function('window','document','showModal','openMemberDetail','setRenewStatus',
+  /* escH 是全域的跳脫函式（課別／方案名可能含使用者輸入），沙箱要自己補一份 */
+  const escH=t=>String(t==null?'':t).replace(/[&<>"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));
+  const fn=new Function('window','document','showModal','openMemberDetail','setRenewStatus','escH',
     src.slice(i,j)+'\nreturn openTodoList;')(
-    {_todoLists:{[kind]:list}}, {querySelector:()=>null}, h=>{html=h;}, ()=>{}, ()=>{});
+    {_todoLists:{[kind]:list}}, {querySelector:()=>null}, h=>{html=h;}, ()=>{}, ()=>{}, escH);
   fn(kind);
   return html;
 };
@@ -84,11 +88,22 @@ ok('★ 課別排在最後（灰字、固定寬）', /<span class="tdl2-cat">教
    外層 .tdl-cell 是 align-items:flex-start，子項會收縮到內容寬，
    這一列因此沒撐滿卡片（量到 288px / 卡內 447px），而姓名是唯一可伸縮的那一欄，
    被壓成 0px。這兩條是防線，拿掉任何一條名字就會再消失一次。 */
-ok('★★★ 這一列要撐滿卡片（align-items:flex-start 不會自己撐）',
-   /\.tdl2-top\{display:flex;align-items:center;gap:10px;width:100%;min-width:0;\}/.test(src));
-ok('★★★ 姓名有寬度下限，不會被其他欄擠成 0',
-   /\.tdl2-nm\{font-size:14\.5px;font-weight:800;color:var\(--text\);flex:1 1 auto;min-width:4\.5em;/.test(src));
-ok('　　量過才改（288px→441px、姓名 0px→129px）', /列寬只有 288px（卡片內有 447px）/.test(src));
+/* 2026-10-15 改 grid（使用者：「這個排序是不是有點糟糕」）——
+   flex 版：姓名是唯一可伸縮的欄、金額又時有時無，沒金額的列後面整排往右滑 130px。
+   grid 的欄寬與那一列有沒有內容無關，所以逐欄對齊。 */
+ok('★★★ 整列是固定欄寬的 grid，不是 flex',
+   /\.tdl2-top\{display:grid;grid-template-columns:minmax\(4\.5em,1fr\) 78px 50px 58px minmax\(96px,1\.15fr\);/.test(src)
+   && /width:100%;min-width:0;\}/.test(src));
+ok('★★★ 金額自己一格（沒有金額的列也留著，後面才不會往左滑）',
+   /<span class="tdl2-amt">\$\{amt\(it\)\}<\/span>/.test(src)
+   && /\.tdl2-amt\{display:flex;justify-content:flex-end;min-width:0;\}/.test(src));
+ok('★★★ 姓名有寬度下限，不會被其他欄擠成 0', /minmax\(4\.5em,1fr\)/.test(src));
+ok('★★★ 窄的時候課別掉到第二行，而且斷點看「容器」不看螢幕',
+   /\.tdl2-row\{container-type:inline-size;\}/.test(src)
+   && /@container \(max-width:420px\)\{/.test(src)
+   && /\.tdl2-cat\{grid-column:1 \/ -1;/.test(src)
+   && /不要改回 ellipsis/.test(src));
+ok('　　門檻是算過再量過的（五欄最少 416px）', /五欄最少要 65\+78\+50\+58\+96＋間距 40 ＝ 387px/.test(src));
 ok('　　沒有標籤／沒有課別的列也留空格子（不然右邊整排會往左滑）',
    /<span class="tdl2-slot"><\/span>/.test(grid));
 ok('★ 待付費那列用紅框（紅>金：那是「還沒收到錢」的最高提示）',

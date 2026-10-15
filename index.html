@@ -12733,24 +12733,41 @@ body.verup-on .alert-dock{top:168px;}
    課別也跟著被截成「團…」。補上 width:100% 之後列寬回到 441px、姓名 129px。
    ⚠ min-width 給一個下限：就算哪天又多一欄，姓名也不會再被壓到 0。
      4.5em ≈ 65px ≈ 四個中文字，剛好是最長的常見姓名。 */
-.tdl2-top{display:flex;align-items:center;gap:10px;width:100%;min-width:0;}
+/* ⚠⚠ grid 不是 flex（2026-10-15 使用者：「這個排序是不是有點糟糕」）——
+   flex 版的毛病：姓名是唯一可伸縮的那一欄，金額那一欄又時有時無，
+   於是**沒有金額的列，後面整排往右滑**（量到時間差了 130px，看起來像亂排）。
+   grid 的每一欄寬度與那一列有沒有內容無關 → 四列逐欄對齊，空的就是空的。
+   欄序：姓名 → 待繳費標籤 → 時間 → 金額 → 課別。 */
+.tdl2-top{display:grid;grid-template-columns:minmax(4.5em,1fr) 78px 50px 58px minmax(96px,1.15fr);
+  align-items:center;gap:10px;width:100%;min-width:0;}
 .tdl2-nm{font-size:14.5px;font-weight:800;color:var(--text);flex:1 1 auto;min-width:4.5em;
   overflow:hidden;text-overflow:ellipsis;white-space:nowrap;}
 /* 三欄固定寬（2026-10-14）：標籤 → 時間 → 課別，每一列都對得齊。
    ⚠ 時間降一階、課別放大並提亮：真正要處理的理由是課別那一欄，
      時間只是「幾點來」。原本剛好相反（時間粗體彩色、課別 10.5px 最淺灰）。 */
-.tdl2-slot{flex:0 0 76px;display:flex;justify-content:flex-end;}
+.tdl2-slot{display:flex;justify-content:flex-end;min-width:0;}
 .tdl2-pill{font-style:normal;font-size:10.5px;font-weight:800;border-radius:5px;padding:1px 7px;
   background:var(--danger,#7F0303);color:#fff;white-space:nowrap;letter-spacing:.02em;}
 .tdl2-tm{font-family:var(--num);font-size:13px;font-weight:700;color:var(--t2);
-  flex:0 0 56px;text-align:right;}
+  text-align:right;min-width:0;}
+/* 金額自己一格：有的列沒有金額，固定一格空著，後面才不會跟著往左滑 */
+.tdl2-amt{display:flex;justify-content:flex-end;min-width:0;}
+.tdl2-amt .tdl-amt{margin-left:0;}
 .tdl2-tm-pay{color:var(--t2);}
-.tdl2-cat{flex:0 1 150px;padding-left:10px;font-size:12px;color:var(--t2);
-  white-space:nowrap;overflow:hidden;text-overflow:ellipsis;}
+.tdl2-cat{font-size:12px;color:var(--t2);min-width:0;line-height:1.45;}
 .tdl2-sub{font-size:12px;color:var(--t2);flex:none;}
-@media(max-width:480px){
-  .tdl2-slot{flex:0 0 72px;}
-  .tdl2-cat{flex:1 1 auto;}
+/* 窄的時候讓課別自己掉到第二行（整列仍然逐欄對齊）。
+   ⚠⚠ 用 container query 不用 media query（定案見 yugym-fluid-sizing）——
+     這張卡在視窗裡只有 520px、在別處更窄，**跟螢幕寬度無關**。
+     用 @media 的話：螢幕 600px、卡片 366px 時斷點不會觸發，課別直接溢出卡片外
+     （2026-10-15 量到的真實情形）。
+   ⚠ 門檻 420px 是算出來再量過的：五欄最少要 65+78+50+58+96＋間距 40 ＝ 387px，
+     加上卡片左右內距與邊框 29px ＝ 416px。
+   ⚠ 不要改回 ellipsis —— 截掉等於沒寫（1015 值班那邊剛踩過）。 */
+.tdl2-row{container-type:inline-size;}
+@container (max-width:420px){
+  .tdl2-top{grid-template-columns:minmax(4.5em,1fr) 72px 50px 58px;}
+  .tdl2-cat{grid-column:1 / -1;padding-left:2px;}
 }
 /* 三顆續約鈕靠右（2026-08-23 使用者指示）——上面那一行是「姓名靠左、時間與事由靠右」，
    按鈕跟著靠右，整張卡右緣才對得齊；靠左的話會在卡片中間留一大塊空白。 */
@@ -14821,8 +14838,8 @@ function tbl(s){return TABLE_ALIAS[s]||s;}
 let sb=null;
 // ── 版本號（日期+時間格式：年後兩碼+月+日.時分，例 26620.1058 = 26年6/20 10:58）──
 // 每次改版手動更新這一行即可，畫面與 title 會一起更新
-const APP_VERSION = '261015.0037';
-const APP_VERSION_LABEL = 'v261015.0037';
+const APP_VERSION = '261015.1006';
+const APP_VERSION_LABEL = 'v261015.1006';
 const CLOUD = !!(window.YUGYM_CONFIG && window.YUGYM_CONFIG.url && window.YUGYM_CONFIG.anonKey);
 if(CLOUD){ sb = supabase.createClient(window.YUGYM_CONFIG.url, window.YUGYM_CONFIG.anonKey); }
 
@@ -25216,7 +25233,7 @@ PAGES.g_dashboard=async function(){
         const _fut=isGrp?(_futGrpByMem[mid]||0):(_futPtByMem[mid]||0);
         if(_left>0 || _fut>0) return;
       }
-      const e=(_signBy[mid]=_signBy[mid]||{id:mid,name:m.name,tags:new Set(),times:new Set(),tkid:b.ticket_id||null,bkid:b.id});
+      const e=(_signBy[mid]=_signBy[mid]||{id:mid,name:m.name,tags:new Set(),cats:new Set(),kinds:new Set(),times:new Set(),tkid:b.ticket_id||null,bkid:b.id});
       /* ⚠ 續約三顆鈕只對「續課」有意義（2026-09-22 使用者：「分期的會員應該不用出現
            ［續約］［考慮］［不續約］」）—— 分期是「這一期的錢到了」，不是「要不要再買一期」。
          ⚠ 一個人可能同時有續課與分期（團課續課＋教練課分期），那還是有續約要談，鈕要留；
@@ -25227,7 +25244,14 @@ PAGES.g_dashboard=async function(){
       if(b.ticket_id && (!e.tkid || (_isRenew && !e.renew))) e.tkid=b.ticket_id;
       if(_isRenew) e.renew=true;
       if(kind==='install' && b.ticket_id && !e.instTk) e.instTk=b.ticket_id;
+      /* 課別與狀態分開存（2026-10-15 使用者：「這個排序是不是有點糟糕」—— 真正的毛病是
+         每一列的欄位對不齊、而且兩種「待繳費」長得完全不一樣）。
+         原本黏成「教練課・分期繳費」一個字串，畫面端再用 indexOf('・') 拆回來，
+         於是只有 pending_contract 那一種拆得出標籤，票券這一種整串塞進課別欄被截斷。
+         ⚠ tags 仍然保留：其他名單（非格狀版）吃的是 it.sub。 */
       e.tags.add((isGrp?'團體課・':'教練課・')+(kind==='install'?'分期繳費':'續課'));
+      e.cats.add(isGrp?'團體課':'教練課');
+      e.kinds.add(kind==='install'?'分期繳費':'續課');
       e.cc = isGrp?'group':'pt';   // 卡片顏色依課別（2026-07-30 使用者指示）
       if(b.start_time) e.times.add(String(b.start_time).slice(0,5)); });
   });
@@ -25255,7 +25279,13 @@ PAGES.g_dashboard=async function(){
       const _c=Number(_ins.current)||0, _n=Number(_ins.count)||0;
       if(_c<_n){ due=Number((_ins.amounts||[])[_c])||0; dueTxt=`第 ${_c+1}/${_n} 期`; }
     }
+    /* 標籤只標「錢已經該收」的那一種（分期繳費）——續課是「要談下一期」，不是待收款，
+       所以不給紅標，課別欄直接寫「教練課・續課」。紅>金>綠，紅色留給真的要收的錢。 */
+    const _kinds=[...(e.kinds||[])];
+    const _tag=_kinds.indexOf('分期繳費')>=0?'分期繳費':'';
+    const _cats=[...(e.cats||[])].join('・');
     return {id:e.id,name:e.name,sub:[...e.tags].join('・')+(dueTxt?'　'+dueTxt:''),
+      tag:_tag, cat:(_cats||'教練課')+(_tag?'':(_kinds.length?'・'+_kinds.join('・'):''))+(dueTxt?'　'+dueTxt:''),
       tkid:e.tkid||'',rs:st,rn:!!e.renew,due:due,
       time:[...e.times].sort().join('、'), cc:e.cc||'pt'};
   });
@@ -25275,6 +25305,7 @@ PAGES.g_dashboard=async function(){
              : (b.member_id?'分期待繳費・':'新客戶簽約・');
     _signList.push({id:b.member_id||'', name:nm, tkid:'', rs:'',
       sub:_pre+_cat,
+      tag:_pre.slice(0,-1), cat:_cat,   /* 同上：課別與狀態分開，畫面不必再拆字串 */
       time:String(b.start_time||'').slice(0,5), pay:true,
       cc:(bkIsGroup(b)?'group':(b.category==='體驗'?'trial':'pt'))});
   });
@@ -25872,22 +25903,28 @@ function openTodoList(kind){
       const _acts=acts(it);
       const inner=`<span class="tdl2-top">
           <span class="tdl-cell-nm tdl2-nm">${it.name||'—'}</span>
-          ${/* 2026-10-14 使用者：「待繳費放到時間前面　讓訊息對齊」——
-               事由原本是一整串「分期待繳費・私人教練」，待付費那幾列因此比別人長，
-               時間與事由在每一列的位置都不一樣。
-               拆成「標籤＋課別」：標籤佔一個**固定寬的格子**（沒有的列留空），
-               時間與課別也各自固定寬 → 四列逐欄對齊。
-               ⚠ 只在 it.pay 時拆：續約那幾列的 sub 是「團體課・續課」，
-                 前半不是狀態而是課別，拆了會變成一個奇怪的紅標籤。 */''}
+          ${/* 2026-10-15 使用者：「這個排序是不是有點糟糕」——
+               排序本身沒問題（照上課時間），糟的是**每一列的欄位對不齊**：
+                 ・金額那一欄有的列有、有的沒有，而姓名是 flex 會吃掉剩餘空間
+                   → 沒金額的列，後面整排往右滑（時間差了 130px）
+                 ・兩種「待繳費」長得完全不一樣：pending_contract 那種拆得出紅標籤，
+                   票券分期那種整串「教練課・分期繳費　第 2/3 期」塞進課別欄被截成「第…」
+               改法：
+                 ① 資料端就把「課別」與「狀態」分開（it.cat／it.tag），畫面不再拆字串
+                 ② 整列改 CSS grid 固定欄寬 → 每一列逐欄對齊，金額沒有的列也留著那一格
+               ⚠ 仍保留舊的拆法當後備：其他地方（非格狀名單）送進來的只有 it.sub。 */''}
           ${(()=>{
-            const _sub=String(it.sub||'');
-            const _p=it.pay && _sub.indexOf('・')>0;
-            const _lb=_p?_sub.slice(0,_sub.indexOf('・')):'';
-            const _cat=_p?_sub.slice(_sub.indexOf('・')+1):_sub;
-            return `<span class="tdl2-slot">${_lb?`<i class="tdl2-pill">${_lb}</i>`:''}</span>`
+            let _lb=it.tag, _cat=it.cat;
+            if(_lb==null && _cat==null){                      /* 後備：舊的字串拆法 */
+              const _sub=String(it.sub||'');
+              const _p=it.pay && _sub.indexOf('・')>0;
+              _lb=_p?_sub.slice(0,_sub.indexOf('・')):'';
+              _cat=_p?_sub.slice(_sub.indexOf('・')+1):_sub;
+            }
+            return `<span class="tdl2-slot">${_lb?`<i class="tdl2-pill">${escH(_lb)}</i>`:''}</span>`
               +(it.time?`<span class="tdl2-tm${it.pay?' tdl2-tm-pay':''}">${it.time}</span>`:'<span class="tdl2-tm"></span>')
-              +amt(it)
-              +(_cat?`<span class="tdl2-cat">${_cat}</span>`:'<span class="tdl2-cat"></span>');
+              +`<span class="tdl2-amt">${amt(it)}</span>`
+              +`<span class="tdl2-cat">${escH(_cat||'')}</span>`;
           })()}
           ${RS[it.rs]?tag(it):''}
         </span>`
