@@ -78,11 +78,14 @@ console.log('\n按鈕內容');
 /* 2026-10-14 改版（使用者：「待繳費放到時間前面　讓訊息對齊」）：
    名字 → 〔待繳費標籤格〕→ 時間 → 金額 → 課別。標籤格固定寬，沒有的列留空，
    所以四列的時間與課別逐欄對齊。 */
-ok('★ 名字之後是固定寬的標籤格，再來才是時間',
-   /<span class="tdl-cell-nm tdl2-nm">陳蘭馨<\/span>\s*\n?\s*<span class="tdl2-slot"><\/span><span class="tdl2-tm">10:00<\/span>/.test(grid)
+/* 2026-10-15 使用者指定欄序：會員姓名 → 時間 → 課程名稱 → 費用 → 待繳費 */
+ok('★★★ 欄序：姓名 → 時間 → 課程 → 費用 → 待繳費',
+   /<span class="tdl-cell-nm tdl2-nm">陳蘭馨<\/span>[\s\S]{0,60}<span class="tdl2-tm">10:00<\/span><span class="tdl2-cat">/.test(grid)
+   && /<span class="tdl2-cat">[^<]*<\/span><span class="tdl2-amt">/.test(grid)
+   && /<span class="tdl2-amt">[\s\S]{0,80}<\/span><span class="tdl2-slot">/.test(grid));
+ok('★ 待繳費標籤排在最後',
+   /<span class="tdl2-slot"><i class="tdl2-pill">新客戶簽約<\/i><\/span>/.test(grid)
    && /<span class="tdl2-tm tdl2-tm-pay">20:30<\/span>/.test(grid));
-ok('★ 待繳費抽成標籤、排在時間左邊（原本黏在事由最前面）',
-   /<span class="tdl2-slot"><i class="tdl2-pill">新客戶簽約<\/i><\/span><span class="tdl2-tm tdl2-tm-pay">20:30<\/span>/.test(grid));
 ok('★ 課別排在最後（灰字、固定寬）', /<span class="tdl2-cat">教練課・續課<\/span>/.test(grid));
 /* ⚠⚠ 2026-10-14 使用者回報「不見了」—— 會員姓名整欄消失。
    外層 .tdl-cell 是 align-items:flex-start，子項會收縮到內容寬，
@@ -92,17 +95,21 @@ ok('★ 課別排在最後（灰字、固定寬）', /<span class="tdl2-cat">教
    flex 版：姓名是唯一可伸縮的欄、金額又時有時無，沒金額的列後面整排往右滑 130px。
    grid 的欄寬與那一列有沒有內容無關，所以逐欄對齊。 */
 ok('★★★ 整列是固定欄寬的 grid，不是 flex',
-   /\.tdl2-top\{display:grid;grid-template-columns:minmax\(4\.5em,1fr\) 78px 50px 58px minmax\(96px,1\.15fr\);/.test(src)
+   /\.tdl2-top\{display:grid;grid-template-columns:minmax\(4\.5em,1fr\) 50px minmax\(96px,1\.15fr\) 58px 78px;/.test(src)
    && /width:100%;min-width:0;\}/.test(src));
 ok('★★★ 金額自己一格（沒有金額的列也留著，後面才不會往左滑）',
    /<span class="tdl2-amt">\$\{amt\(it\)\}<\/span>/.test(src)
    && /\.tdl2-amt\{display:flex;justify-content:flex-end;min-width:0;\}/.test(src));
 ok('★★★ 姓名有寬度下限，不會被其他欄擠成 0', /minmax\(4\.5em,1fr\)/.test(src));
-ok('★★★ 窄的時候課別掉到第二行，而且斷點看「容器」不看螢幕',
+ok('★★★ 窄的時候課程名稱掉到第二行，而且斷點看「容器」不看螢幕',
    /\.tdl2-row\{container-type:inline-size;\}/.test(src)
    && /@container \(max-width:420px\)\{/.test(src)
-   && /\.tdl2-cat\{grid-column:1 \/ -1;/.test(src)
+   && /\.tdl2-cat\{grid-area:2 \/ 1 \/ auto \/ -1;/.test(src)
    && /不要改回 ellipsis/.test(src));
+ok('★★★ 窄版每一格都明確指定（不然費用與待繳費會被推到第三行）',
+   /\.tdl2-nm \{grid-area:1 \/ 1;\}/.test(src)
+   && /\.tdl2-slot\{grid-area:1 \/ 4;\}/.test(src)
+   && /後面的費用與待繳費會被推到第三行/.test(src));
 ok('　　門檻是算過再量過的（五欄最少 416px）', /五欄最少要 65\+78\+50\+58\+96＋間距 40 ＝ 387px/.test(src));
 ok('　　沒有標籤／沒有課別的列也留空格子（不然右邊整排會往左滑）',
    /<span class="tdl2-slot"><\/span>/.test(grid));
