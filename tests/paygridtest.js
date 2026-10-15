@@ -25,8 +25,8 @@ const j=src.indexOf('\n}', src.indexOf('modal-foot', i))+2;
 const ITEMS=[
   {id:'M1',name:'陳蘭馨',sub:'教練課・續課',tag:'',cat:'教練課・續課',tkid:'T1',rs:'',time:'10:00',rn:true},
   {id:'M2',name:'王小明',sub:'團體課・續課',tag:'',cat:'團體課・續課',tkid:'T2',rs:'renewed',time:'19:00',rn:true},
-  {id:'',  name:'新客人',sub:'新客戶簽約・私人教練',tag:'新客戶簽約',cat:'私人教練',tkid:'',rs:'',time:'20:30',pay:true},
-  {id:'M4',name:'李中間',sub:'教練課・分期繳費　第 2/3 期',tag:'分期繳費',cat:'教練課　第 2/3 期',tkid:'T4',rs:'',time:'21:00',rn:false,due:7200},
+  {id:'',  name:'新客人',sub:'新客戶簽約・私人教練',tag:'新約',cat:'私人教練',tkid:'',rs:'',time:'20:30',pay:true},
+  {id:'M4',name:'李中間',sub:'教練課・分期繳費　第 2/3 期',tag:'分期',cat:'教練課　第 2/3 期',tkid:'T4',rs:'',time:'21:00',rn:false,due:7200},
   {id:'M5',name:'雙重奏',sub:'團體課・續課・教練課・分期繳費　第 3/4 期',tkid:'T5',rs:'considering',time:'18:00',rn:true,due:4500},
 ];
 const run=(kind,list)=>{
@@ -78,14 +78,22 @@ console.log('\n按鈕內容');
 /* 2026-10-14 改版（使用者：「待繳費放到時間前面　讓訊息對齊」）：
    名字 → 〔待繳費標籤格〕→ 時間 → 金額 → 課別。標籤格固定寬，沒有的列留空，
    所以四列的時間與課別逐欄對齊。 */
-/* 2026-10-15 使用者指定欄序：會員姓名 → 時間 → 課程名稱 → 費用 → 待繳費 */
-ok('★★★ 欄序：姓名 → 時間 → 課程 → 費用 → 待繳費',
-   /<span class="tdl-cell-nm tdl2-nm">陳蘭馨<\/span>[\s\S]{0,60}<span class="tdl2-tm">10:00<\/span><span class="tdl2-cat">/.test(grid)
-   && /<span class="tdl2-cat">[^<]*<\/span><span class="tdl2-amt">/.test(grid)
-   && /<span class="tdl2-amt">[\s\S]{0,80}<\/span><span class="tdl2-slot">/.test(grid));
-ok('★ 待繳費標籤排在最後',
-   /<span class="tdl2-slot"><i class="tdl2-pill">新客戶簽約<\/i><\/span>/.test(grid)
-   && /<span class="tdl2-tm tdl2-tm-pay">20:30<\/span>/.test(grid));
+/* 2026-10-15 二修（使用者：「姓名跟時間中間有一個空白區域　把待繳費提示擺到這邊」）
+   欄序：姓名 → 待繳費 → 時間 → 課程名稱 → 費用 */
+ok('★★★ 欄序：姓名 → 待繳費 → 時間 → 課程 → 費用',
+   /<span class="tdl-cell-nm tdl2-nm">陳蘭馨<\/span>[\s\S]{0,60}<span class="tdl2-slot">/.test(grid)
+   && /<span class="tdl2-slot">[^]*?<\/span><span class="tdl2-tm">10:00<\/span>/.test(grid)
+   && /<span class="tdl2-tm">10:00<\/span><span class="tdl2-cat">/.test(grid)
+   && /<span class="tdl2-cat">[^<]*<\/span><span class="tdl2-amt">/.test(grid));
+ok('★ 費用留在最右邊（數字沿右緣對齊）',
+   /<span class="tdl2-amt">[\s\S]{0,80}<\/span>\s*<\/span>/.test(grid));
+/* 2026-10-15 使用者：「簡化待繳費文字　分期　新約」—— 標籤只兩個字，欄寬跟著縮到 44px */
+ok('★★★ 標籤用短詞（分期／新約／待收），不是整句',
+   /<i class="tdl2-pill">新約<\/i>/.test(grid) && /<i class="tdl2-pill">分期<\/i>/.test(grid)
+   && !/<i class="tdl2-pill">新客戶簽約<\/i>/.test(grid));
+ok('★★ 完整說法仍留在 sub（其他名單在用，那邊有空間）',
+   /'待收款':'待收','分期待繳費':'分期','新客戶簽約':'新約'/.test(src)
+   && /sub 維持完整說法/.test(src));
 ok('★ 課別排在最後（灰字、固定寬）', /<span class="tdl2-cat">教練課・續課<\/span>/.test(grid));
 /* ⚠⚠ 2026-10-14 使用者回報「不見了」—— 會員姓名整欄消失。
    外層 .tdl-cell 是 align-items:flex-start，子項會收縮到內容寬，
@@ -95,7 +103,7 @@ ok('★ 課別排在最後（灰字、固定寬）', /<span class="tdl2-cat">教
    flex 版：姓名是唯一可伸縮的欄、金額又時有時無，沒金額的列後面整排往右滑 130px。
    grid 的欄寬與那一列有沒有內容無關，所以逐欄對齊。 */
 ok('★★★ 整列是固定欄寬的 grid，不是 flex',
-   /\.tdl2-top\{display:grid;grid-template-columns:minmax\(4\.5em,1fr\) 50px minmax\(96px,1\.15fr\) 58px 78px;/.test(src)
+   /\.tdl2-top\{display:grid;grid-template-columns:minmax\(4\.5em,1fr\) 44px 50px minmax\(96px,1\.15fr\) 58px;/.test(src)
    && /width:100%;min-width:0;\}/.test(src));
 ok('★★★ 金額自己一格（沒有金額的列也留著，後面才不會往左滑）',
    /<span class="tdl2-amt">\$\{amt\(it\)\}<\/span>/.test(src)
@@ -103,14 +111,15 @@ ok('★★★ 金額自己一格（沒有金額的列也留著，後面才不會
 ok('★★★ 姓名有寬度下限，不會被其他欄擠成 0', /minmax\(4\.5em,1fr\)/.test(src));
 ok('★★★ 窄的時候課程名稱掉到第二行，而且斷點看「容器」不看螢幕',
    /\.tdl2-row\{container-type:inline-size;\}/.test(src)
-   && /@container \(max-width:420px\)\{/.test(src)
+   && /@container \(max-width:390px\)\{/.test(src)
    && /\.tdl2-cat\{grid-area:2 \/ 1 \/ auto \/ -1;/.test(src)
    && /不要改回 ellipsis/.test(src));
 ok('★★★ 窄版每一格都明確指定（不然費用與待繳費會被推到第三行）',
-   /\.tdl2-nm \{grid-area:1 \/ 1;\}/.test(src)
-   && /\.tdl2-slot\{grid-area:1 \/ 4;\}/.test(src)
+   /\.tdl2-nm  \{grid-area:1 \/ 1;\}/.test(src)
+   && /\.tdl2-slot\{grid-area:1 \/ 2;\}/.test(src)
+   && /\.tdl2-amt \{grid-area:1 \/ 4;\}/.test(src)
    && /後面的費用與待繳費會被推到第三行/.test(src));
-ok('　　門檻是算過再量過的（五欄最少 416px）', /五欄最少要 65\+78\+50\+58\+96＋間距 40 ＝ 387px/.test(src));
+ok('　　門檻是算過再量過的（五欄最少 382px）', /五欄最少要 65\+44\+50\+96\+58＋間距 40 ＝ 353px/.test(src));
 ok('　　沒有標籤／沒有課別的列也留空格子（不然右邊整排會往左滑）',
    /<span class="tdl2-slot"><\/span>/.test(grid));
 ok('★ 待付費那列用紅框（紅>金：那是「還沒收到錢」的最高提示）',
