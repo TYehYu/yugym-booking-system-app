@@ -14844,8 +14844,8 @@ function tbl(s){return TABLE_ALIAS[s]||s;}
 let sb=null;
 // ── 版本號（日期+時間格式：年後兩碼+月+日.時分，例 26620.1058 = 26年6/20 10:58）──
 // 每次改版手動更新這一行即可，畫面與 title 會一起更新
-const APP_VERSION = '261018.1044';
-const APP_VERSION_LABEL = 'v261018.1044';
+const APP_VERSION = '261018.1214';
+const APP_VERSION_LABEL = 'v261018.1214';
 const CLOUD = !!(window.YUGYM_CONFIG && window.YUGYM_CONFIG.url && window.YUGYM_CONFIG.anonKey);
 if(CLOUD){ sb = supabase.createClient(window.YUGYM_CONFIG.url, window.YUGYM_CONFIG.anonKey); }
 
@@ -35673,6 +35673,80 @@ function grpPickOf(mid,seatIdx){
   if(Array.isArray(v)) return v[seatIdx]!=null ? v[seatIdx] : (v.length?v[v.length-1]:null);
   return v||null;
 }
+/* ══ 團課的招待名額（2026-10-18，管理員限定）══════════════════════════════
+   挑人 → 發一張 $0／1 堂／限當天的團課票 → 把人推進 _grpSel → 重開名單視窗。
+   ⚠ 重開用 keepSel=true：_grpSel 要留著，不然剛招待的那位又被清掉。
+   ⚠ 不手動改 _grpData —— 重開時它會從資料庫重建，那位自然就有票了。
+     自己補一份等於兩個真相，遲早對不上（這個檔案吃過最多虧的就是這個）。 */
+async function grpCompOpen(bid){
+  if(!(window.SESSION&&SESSION.role==='admin')){ showToast('招待名額只有管理員可以開'); return; }
+  const b=await dbGet('bookings',bid); if(!b){ showToast('找不到這堂課'); return; }
+  const _busy=uiBusy('讀取會員…');
+  let members=[];
+  try{ members=(await dbGetAll('members')).filter(m=>m&&m.status==='active'); }
+  catch(e){ _busy(); showToast('讀取失敗：'+((e&&e.message)||e)); return; }
+  _busy();
+  window._gcB=b;
+  window._gcRows=members.map(m=>({id:m.id,name:m.name||'—',phone:m.phone||''}))
+    .sort((x,y)=>String(x.name).localeCompare(String(y.name),'zh-Hant'));
+  grpCompShell('');
+}
+function grpCompShell(kw){
+  const b=window._gcB||{};
+  const rows=(window._gcRows||[]);
+  const q=String(kw||'').trim().toLowerCase();
+  const nq=q.replace(/[^0-9]/g,'');
+  const hit=rows.filter(r=>!q || r.name.toLowerCase().includes(q)
+    || (nq && String(r.phone).replace(/[^0-9]/g,'').includes(nq))).slice(0,40);
+  showModal(`<div class="ash-sheetmk"></div><div class="modal-title">招待名額</div>
+    <div class="gadd-sub">${String(b.date||'').slice(5).replace('-','/')}　${String(b.start_time||'').slice(0,5)}　·　團體課</div>
+    <div style="font-size:12px;color:var(--t2);line-height:1.8;margin:4px 0 10px;">
+      挑一位，系統會開一張 <b>$0、限這天、只有 1 堂</b>的招待票並加入名單。<br>
+      <b>名額正常計算，教練的課堂費照發。</b></div>
+    <input class="gt-search" id="gc-q" placeholder="搜尋姓名或手機（共 ${rows.length} 位）"
+      oninput="grpCompShell(this.value)" autocomplete="off" value="${escH(String(kw||''))}">
+    <div style="max-height:46vh;overflow-y:auto;-webkit-overflow-scrolling:touch;margin-top:8px;">
+      ${hit.length?hit.map(r=>`<button type="button" class="bk-opt" onclick="grpCompDo('${r.id}')">
+        <span class="bk-opt-l"><b class="bk-opt-t">${escH(r.name)}</b><em class="bk-opt-why">${escH(fmtPhone(r.phone)||'')}</em></span>
+        <span class="bk-opt-r">招待這位 ›</span></button>`).join('')
+      :'<div class="empty" style="padding:22px;"><div class="em-t">找不到符合的會員</div></div>'}
+    </div>
+    ${rows.length>40&&!q?'<div style="font-size:11.5px;color:var(--t3);margin-top:6px;">只列前 40 位，請用搜尋。</div>':''}
+    <div class="modal-foot"><button class="btn btn-ghost" onclick="closeModal();openGroupMembers('${b.id}',true,true)">‹ 返回名單</button></div>`);
+  try{ const el=document.getElementById('gc-q'); if(el&&kw){ el.focus(); el.setSelectionRange(el.value.length,el.value.length); } }catch(_){}
+}
+function grpCompDo(mid){
+  const b=window._gcB; if(!b){ closeModal(); return; }
+  if(!(window.SESSION&&SESSION.role==='admin')){ showToast('招待名額只有管理員可以開'); return; }
+  return onceAct('grpcomp:'+b.id+':'+mid, async ()=>{
+    const done=uiBusy('開立招待票…');
+    try{
+      const nm=((await dbGet('members',mid).catch(()=>null))||{}).name||'';
+      const _when=String(b.date||'')+' '+String(b.start_time||'').slice(0,5);
+      const t={id:uid('TK'), member_id:mid, ticket_type_id:b.ticket_type_id,
+        source_plan_id:null, plan_name:'招待名額', format:null,
+        source:'comp',
+        unit_price:0, amount_paid:0,
+        purchase_date:ymd(TODAY), start_date:b.date, expire_date:b.date,
+        valid_days:null, activated_at:new Date().toISOString(),
+        sessions_total:1, sessions_remaining:1,
+        unlocked_sessions:1, installment:null,
+        status:'usable', payment_status:'paid',
+        invoice_status:'none',
+        note:'管理員招待：'+_when+(nm?'　'+nm:''),
+        created_at:new Date().toISOString()};
+      await dbPut('member_tickets',t);
+      await logTicket(t.id,'grant',1,null,SESSION.id,'管理員招待名額（'+_when+'）');
+      dbCacheClear(['member_tickets','ticket_logs']);
+      /* 推進已選名單，重開時才會是勾起來的狀態 */
+      if(!Array.isArray(window._grpSel)) window._grpSel=[];
+      window._grpSel.push(mid);
+      done(); closeModal();
+      showToast('已開立招待票，請按〔加入〕完成');
+      return openGroupMembers(b.id, true, true);
+    }catch(e){ done(); showToast('招待失敗：'+((e&&e.message)||e), 5000); }
+  });
+}
 function renderGrpPick(){
   const box=document.getElementById('grp-list');
   const selEl=document.getElementById('grp-pick');
@@ -41563,7 +41637,17 @@ async function openGroupMembers(id, keepSel, addMode){
             <select id="grp-pick" onchange="grpPickSel(this.value)"></select>
           </div>
           <div id="grp-count" style="font-size:12px;color:var(--t2);margin:6px 0 0;"></div>
-          ${/* 選到的人手上有兩張以上票時，要挑用哪一張（2026-08-29 使用者：
+          ${(window.SESSION&&SESSION.role==='admin')?`
+          <details class="bam-guest" style="margin-top:10px;">
+            <summary class="ash-eirow">
+              <span class="ash-eilb">🎁 招待名額</span>
+              <span class="ash-eisub">沒買過團課票的人不會出現在上面的清單。招待會開一張 $0 的票再加入</span>
+            </summary>
+            <div class="bam-guest-b">
+              <button type="button" class="btn btn-gold" onclick="grpCompOpen('${id}')">挑一位來招待</button>
+            </div>
+          </details>`:''}
+                    ${/* 選到的人手上有兩張以上票時，要挑用哪一張（2026-08-29 使用者：
                「許佳慈本人有三個團課方案 #18補課 #25優惠團課 #26優惠團課
                  所以點許佳慈的時候要跳出選擇使用方案」）。
                只有一張就不出現 —— 沒得選的時候不要多一步。 */''}

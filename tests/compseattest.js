@@ -89,5 +89,38 @@ ok('★★★ 0820 那段「扣不到票就不寫入名單」還在',
    /取消教練招待（2026-08-20）：扣不到票的名額不再寫入名單/.test(src)
    || /沒扣到票的名額從名單移除/.test(src));
 
+/* ══ 團課那一支（2026-10-18 使用者回報：「管理員帳號還是沒看到招待的選項」）══
+   ⚠⚠ 團課走的是 openGroupMembers，不是課卡的［＋新增］——
+     bkCanAddMember 第一行就對團課回 false，所以 bamCompDo 永遠跑不到團課。
+     第一版只改了課卡那支，使用者在團課裡當然看不到。
+   ⚠ 而且 0829 定案「團課清單只列有團體課票券的會員」，沒票的人根本不出現，
+     招待鈕沒有地方掛 —— 所以是另開入口，不是在清單列上加按鈕。 */
+console.log('\n⑧ 團課的招待入口');
+ok('★★★ bkCanAddMember 對團課回 false（證明兩條路本來就分開）',
+   /if\(!b \|\| bkIsGroup\(b\)\) return false;/.test(src));
+const G=grab('grpCompDo'), O=grab('grpCompOpen');
+ok('★★★ 團課有自己的招待入口（grpCompOpen／grpCompDo）', !!G && !!O);
+ok('★★★ 兩支都只給管理員',
+   /SESSION\.role==='admin'/.test(O) && /SESSION\.role==='admin'/.test(G));
+ok('★★★ 入口鈕也只畫給管理員',
+   /\$\{\(window\.SESSION&&SESSION\.role==='admin'\)\?`[\s\S]{0,400}grpCompOpen/.test(src));
+ok('★★ 票的形狀與課卡那支一致（$0／1 堂／限當天／paid／comp）',
+   /source:'comp'/.test(G) && /unit_price:0, amount_paid:0/.test(G)
+   && /sessions_total:1, sessions_remaining:1/.test(G)
+   && /expire_date:b\.date/.test(G) && /payment_status:'paid'/.test(G));
+ok('★★★ 不寫 purchases', !/purchases/.test(G));
+/* 重開時 _grpData 會從資料庫重建 —— 自己補一份 sum/tks 等於兩個真相 */
+ok('★★★ 發完票是「重開名單視窗」，不是手動改 _grpData',
+   /openGroupMembers\(b\.id, true, true\)/.test(G) && !/_grpData/.test(G));
+ok('★★★ 重開要帶 keepSel（不然剛招待的那位會被清掉）',
+   /openGroupMembers\(b\.id, true, true\)/.test(G));
+ok('★★★ 有把人推進 _grpSel（重開後是勾起來的）',
+   /window\._grpSel\.push\(mid\)/.test(G));
+ok('★★ 有 onceAct 防連點', /onceAct\('grpcomp:'/.test(G));
+ok('★★ 返回名單也帶 keepSel', /openGroupMembers\('\$\{b\.id\}',true,true\)/.test(src));
+/* 最後仍然是走原本的存檔路徑 —— 0820 的「名額一定有票」不變 */
+ok('★★★ 加入仍然走 saveGroupMembers（沒有另開一條存檔路）',
+   /onclick="saveGroupMembers\('\$\{id\}'\)"/.test(src));
+
 console.log(`\n${pass} 通過 / ${fail} 失敗`);
 process.exit(fail?1:0);
