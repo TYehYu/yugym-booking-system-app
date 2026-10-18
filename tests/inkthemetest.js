@@ -84,8 +84,9 @@ console.log('① 尺寸與位置：一行計算都不能動（使用者第 11 �
      && /const leftPct  = \(dl\.left !=null\) \? dl\.left  : dl\.laneIdx\*\(100\/UNIT\);/.test(src));
   ok('★★ 半小時格高沒被改（7 日／5 日 48px）',
      /SLOT_PX = \(nDays===7\|\|nDays===5\) \? 48 : \(nDays===3 \? 44 : 48\);/.test(src));
+  /* 1018 前面多了 ${_coachBarVar}（左色條的教練色），但仍然是 JS 吐 inline style。 */
   ok('　 inline style 仍然由 JS 輸出（沒有改成 class）',
-     /style="\$\{useFixedLane\?dayLaneStyle:`top:\$\{top\}px;height:/.test(src));
+     /style="\$\{_coachBarVar\}\$\{useFixedLane\?dayLaneStyle:`top:\$\{top\}px;height:/.test(src));
 }
 
 console.log('\n② 狀態語意全部保留（顏色深淺、反灰、今日、紅線）');
@@ -269,8 +270,10 @@ ok('★★ 姓名是主角（墨色、加粗），不是靠字級撐大',
 console.log('\n④-2 兩套獨立的顏色對應（使用者第 3～5 點）');
 ok('★★ 課卡底色由「課程類型」決定：同色底（course-soft 混出來；2026-09-28 濃度 30%→80%）',
    /background:color-mix\(in srgb, var\(--course-soft,#EAF3EF\) 80%, #FFFDF8\) !important;/.test(src));
-ok('★★ 左側 3px 類型色條（course-accent）',
-   /body\.ink \.cal-ev\.cal-ev-std \.evc-body::before\{width:3px;border-radius:0;\s*\n\s*background:var\(--course-accent,#3D7039\);\}/.test(src));
+/* ⚠ 2026-10-18：左色條改吃教練色（使用者從四種對照裡選 C），課程色退成 var() 的預設值。
+   Ink 這條權重高過一般那條，兩邊都要改 —— 只改一邊的話開 Ink 的人看不到變化。 */
+ok('★★ 左側 3px 色條：教練色優先，沒有就退回 course-accent',
+   /body\.ink \.cal-ev\.cal-ev-std \.evc-body::before\{width:3px;border-radius:0;\s*\n\s*background:var\(--coach-bar, var\(--course-accent,#3D7039\)\);\}/.test(src));
 ok('★★ 教練顏色只上在名字文字：底、內距、框全部拿掉',
    /body\.ink \.cal-ev\.cal-ev-std \.evc-coach:not\(\.evc-leavetag\)\{\s*\n\s*background:transparent !important;padding:0 !important;border-radius:0;border:none;/.test(src));
 ok('★★ 教練色仍由 renderCalendar 的 inline color 帶（Ink 沒有自己訂一套教練色）',

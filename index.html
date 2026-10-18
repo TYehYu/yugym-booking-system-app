@@ -7015,9 +7015,17 @@ body.wp-dragging-on .wp-item{cursor:grabbing;}
 .cal-ev.cal-ev-std .evc-body,
 .tcard.tcard-std .tcard-body{ background:#FBFAF5 !important; border:1px solid #E4DECF !important; }
 .cal-ev.cal-ev-std .evc-body::before,
-.tcard.tcard-std .tcard-body::before{ content:''; position:absolute; left:0; top:0; bottom:0; width:5px; border-radius:10px 0 0 10px; background:var(--course-accent,#3D7039); }
+.tcard.tcard-std .tcard-body::before{ content:''; position:absolute; left:0; top:0; bottom:0; width:5px; border-radius:10px 0 0 10px; background:var(--coach-bar, var(--course-accent,#3D7039)); }
 .cal-ev.cal-ev-std.ev-massage .evc-body::before,
-.tcard.tcard-std.course-massage .tcard-body::before{ background:#2f8f83; }
+.tcard.tcard-std.course-massage .tcard-body::before{ background:var(--coach-bar,#2f8f83); }
+/* ── 左色條改成教練色（2026-10-18 使用者看過四種對照後選 C）────────────────
+   這條線原本是 --course-accent，也就是把底色已經講過的「課別」再講一次。
+   改成教練色之後：**底色＝課別、左條＝誰的課**，兩種資訊各走一個通道。
+   ⚠ 用 var() 的預設值接回課程色 —— 沒有 --coach-bar 的地方（首頁今日教練課卡
+     .tcard-std、沒有教練的自主訓練）行為完全不變，不必另外寫規則。
+   ⚠ 為什麼不改底色：底色帶的是**規則**（團課要清場、自主訓練不計堂數、體驗只能一次），
+     換成教練色就分不出團課與教練課；而且教練有 9 位，9 種淡色互相分不開。
+   ⚠ 教練色吃 coachTagColor(id).fg（深色那一支），淡色的 bg 在白底上看不見。 */
 .cal-ev.cal-ev-std .evc-txt,
 .tcard.tcard-std .tcard-txt{ align-items:flex-start !important; justify-content:flex-start !important; text-align:left !important; padding:5px 6px 5px 12px !important; }
 .cal-ev.cal-ev-std .evc-time,
@@ -13912,8 +13920,9 @@ body.ink .cal-ev.cal-ev-std .evc-body{
   background:color-mix(in srgb, var(--course-soft,#EAF3EF) 80%, #FFFDF8) !important;
   border:1px solid color-mix(in srgb, var(--course-accent,#3D7039) 20%, transparent) !important;
   border-radius:3px;box-shadow:none;}
+/* ⚠ Ink 這一條會蓋掉上面那條，兩邊都要吃 --coach-bar（見 yugym-ink-override-trap）。 */
 body.ink .cal-ev.cal-ev-std .evc-body::before{width:3px;border-radius:0;
-  background:var(--course-accent,#3D7039);}
+  background:var(--coach-bar, var(--course-accent,#3D7039));}
 body.ink .cal-ev.cal-ev-std{border-radius:3px;}
 /* 文字層級（使用者：「時間為小字，會員姓名為主要資訊，課程類型為次要小字，
    教練姓名再小一級」）—— 全部無襯線，字級不放大。
@@ -14867,8 +14876,8 @@ function tbl(s){return TABLE_ALIAS[s]||s;}
 let sb=null;
 // ── 版本號（日期+時間格式：年後兩碼+月+日.時分，例 26620.1058 = 26年6/20 10:58）──
 // 每次改版手動更新這一行即可，畫面與 title 會一起更新
-const APP_VERSION = '261018.2224';
-const APP_VERSION_LABEL = 'v261018.2224';
+const APP_VERSION = '261018.2239';
+const APP_VERSION_LABEL = 'v261018.2239';
 const CLOUD = !!(window.YUGYM_CONFIG && window.YUGYM_CONFIG.url && window.YUGYM_CONFIG.anonKey);
 if(CLOUD){ sb = supabase.createClient(window.YUGYM_CONFIG.url, window.YUGYM_CONFIG.anonKey); }
 
@@ -28992,8 +29001,11 @@ async function renderCalendar(opts){
         const n=Math.max(1, Number(b._units)||1);
         return `場地：${v}${v==='跑步機'?`　·　${n} 人`:''}`; })();
       const _tipStr = _tipEsc([`${b.start_time}–${_endT}`, _tipMem, _tipCoach, _tipVenue].filter(Boolean).join('\n'));
+      /* 左色條＝教練色（2026-10-18）。沒有教練（自主訓練、場租）或遮蔽身分時不設，
+         var() 會自動退回課程色 —— 不需要另外判斷。 */
+      const _coachBarVar = (!hideMember && _coachObj && _cc && _cc.fg) ? `--coach-bar:${_cc.fg};` : '';
       evHtml+=`<div class="cal-ev ${cls} ${editable?'':'readonly'} ${wCls} ${tipUp?'tip-up':''} ${hideMember?'bk-masked':''}${_viewOnly?' cal-ev-view':''} cal-ev-day cal-ev-std ${_densityCls} ${_courseCls} ${_checkedCls} ${_pendCls} ${_pastCls}${_alertCls}" data-bid="${b.id}" data-time="${b.start_time}" data-tip="${_tipStr}"
-        style="${useFixedLane?dayLaneStyle:`top:${top}px;height:${Math.max(h-2,(nDays===7||nDays===5)?40:64)}px;left:calc(${(lane.left!=null?lane.left:lane.idx)*(100/lane.total)}% + 3px);width:calc(${wpct}% - 6px);`}"
+        style="${_coachBarVar}${useFixedLane?dayLaneStyle:`top:${top}px;height:${Math.max(h-2,(nDays===7||nDays===5)?40:64)}px;left:calc(${(lane.left!=null?lane.left:lane.idx)*(100/lane.total)}% + 3px);width:calc(${wpct}% - 6px);`}"
         ${/* 2026-08-01 使用者指示：「教練的行事曆，非本人的課卡一樣正常顯示課卡內容，
              但是要移除互動的功能，手機跟桌機都是」——內容照舊畫，只是不掛任何點擊。
              （0731 曾改成「點得開唯讀明細」，現在收回：別人的課連看明細都不需要。） */''}
