@@ -307,8 +307,18 @@ ok('★★ 會員合約被拆成自己的一支（選單才叫得動它）', src
 ok('★★ 四支入口都在', ['function openJobContractView(','function openJobContractPrint(',
    'function jobCtGet(','function jobCtSignBlock('].every(x=>src.indexOf(x)>=0));
 ok('★★★ 選單分成「職務契約」與「人事表單」兩組',
-   /grp!=='form'\)\.map\(c=>row\(/.test(src) && /grp==='form'\)\.map\(c=>row\(/.test(src)
+   /grp!=='form' && !c\.draft\)\.map\(c=>row\(/.test(src)
+   && /grp==='form' && !c\.draft\)\.map\(c=>row\(/.test(src)
    && src.indexOf('人事表單　<span')>0);
+/* ⚠ 2026-10-18 使用者：「先上承攬契約跟離職單　其他正職　兼職　工讀　主管
+   先不要上　我還沒細看」。條文留在 JOB_CONTRACTS 裡不刪，只是掛 draft:true 不列出來 ——
+   看完把旗標拿掉就上架。這一條盯的是「沒有人把未定稿的偷偷放出去」。 */
+ok('★★★ 只有承攬與離職單會出現在選單',
+   api.JOB_CONTRACTS.filter(c=>!c.draft).map(c=>c.id).sort().join()==='coop,quit',
+   api.JOB_CONTRACTS.filter(c=>!c.draft).map(c=>c.id));
+ok('★★★ 未定稿的五份條文還在（只是不上架，不是刪掉）',
+   ['full','desk','part','intern','mgr'].every(id=>{
+     const c=byId(id); return c && c.draft===true && c.body.length>800; }));
 ok('★★ 選單用 .bk-opt（名字在左、說明靠右的定版列）',
    /openContractQuickView[\s\S]{0,1200}class="bk-opt"/.test(src));
 ok('★★ 列印走既有的 ctPrintOpen／ctBodyHTML（不另寫版型）',
