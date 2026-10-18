@@ -14844,8 +14844,8 @@ function tbl(s){return TABLE_ALIAS[s]||s;}
 let sb=null;
 // ── 版本號（日期+時間格式：年後兩碼+月+日.時分，例 26620.1058 = 26年6/20 10:58）──
 // 每次改版手動更新這一行即可，畫面與 title 會一起更新
-const APP_VERSION = '261018.1214';
-const APP_VERSION_LABEL = 'v261018.1214';
+const APP_VERSION = '261018.1228';
+const APP_VERSION_LABEL = 'v261018.1228';
 const CLOUD = !!(window.YUGYM_CONFIG && window.YUGYM_CONFIG.url && window.YUGYM_CONFIG.anonKey);
 if(CLOUD){ sb = supabase.createClient(window.YUGYM_CONFIG.url, window.YUGYM_CONFIG.anonKey); }
 
@@ -18616,7 +18616,9 @@ const WHATS_NEW=[
      晚班換帳號登入也不會再跳。改成鍵名帶 SESSION.id，各看各的。
    ⚠ 仍然存在本機（換裝置會再跳一次，那是刻意的 —— 換裝置的人多半也沒看過）。
    ⚠ 若共用同一組帳號，逐帳號也救不了，所以同時在帳號選單放了常駐入口。 */
-function wnSeenKey(){ return 'yugym_whatsnew_seen_'+(((window.SESSION||{}).id)||'anon'); }
+/* ⚠ 2026-10-18：原本寫 window.SESSION —— SESSION 是 let，不掛在 window 上，
+   於是所有人共用 'anon'：一個人看過，全店的金點就一起消失（1014 要的是逐帳號）。 */
+function wnSeenKey(){ return 'yugym_whatsnew_seen_'+(((SESSION||{}).id)||'anon'); }
 function wnSeen(){
   try{
     const v=localStorage.getItem(wnSeenKey());
@@ -34668,7 +34670,7 @@ function bamHoldAsk(mid){
        另外寫程式，但**也因此招待是有成本的**（要付教練錢），視窗裡要講。
      ⚠ 只有管理員：用 SESSION.role 而不是 isManagerUp() —— 店長與櫃檯都不給。
        身分預覽成店長時也會關掉，那是對的。 */
-  const _canComp=!!(window.SESSION&&SESSION.role==='admin');
+  const _canComp=!!(SESSION&&SESSION.role==='admin');   // ⚠ 不可寫 window.SESSION，見下方 renderTrainingLogSheet 的警語
   if(!r.inst && !_canComp) return bamHoldDo(mid,'sign');
   const _compBtn=_canComp?`
       <button class="btn btn-ghost" style="width:100%;text-align:left;padding:12px 14px;" onclick="closeModal();bamCompDo('${mid}')">
@@ -34696,7 +34698,7 @@ function bamHoldAsk(mid){
      一張飄在外面可以亂用的免費票。 */
 async function bamCompDo(mid){
   const b=window._bamB; if(!b){ closeModal(); return; }
-  if(!(window.SESSION&&SESSION.role==='admin')){ showToast('招待名額只有管理員可以開'); return; }
+  if(!(SESSION&&SESSION.role==='admin')){ showToast('招待名額只有管理員可以開'); return; }
   closeModal();
   return onceAct('bkcomp:'+b.id+':'+mid, async ()=>{
     const done=uiBusy('開立招待票…');
@@ -35679,7 +35681,7 @@ function grpPickOf(mid,seatIdx){
    ⚠ 不手動改 _grpData —— 重開時它會從資料庫重建，那位自然就有票了。
      自己補一份等於兩個真相，遲早對不上（這個檔案吃過最多虧的就是這個）。 */
 async function grpCompOpen(bid){
-  if(!(window.SESSION&&SESSION.role==='admin')){ showToast('招待名額只有管理員可以開'); return; }
+  if(!(SESSION&&SESSION.role==='admin')){ showToast('招待名額只有管理員可以開'); return; }
   const b=await dbGet('bookings',bid); if(!b){ showToast('找不到這堂課'); return; }
   const _busy=uiBusy('讀取會員…');
   let members=[];
@@ -35712,12 +35714,60 @@ function grpCompShell(kw){
       :'<div class="empty" style="padding:22px;"><div class="em-t">找不到符合的會員</div></div>'}
     </div>
     ${rows.length>40&&!q?'<div style="font-size:11.5px;color:var(--t3);margin-top:6px;">只列前 40 位，請用搜尋。</div>':''}
+    ${/* 還沒建檔的人（2026-10-18 使用者：「不建檔不能預約嗎？」）——
+         票一定要掛在某個會員身上（0820：名額一定有票），所以檔還是要有；
+         省掉的是「跑一趟會員管理填整張表」。姓名必填、手機選填，兩格就好。 */''}
+    <details class="bam-guest" style="margin-top:10px;">
+      <summary class="ash-eirow">
+        <span class="ash-eilb">不在名單上？直接建一位</span>
+        <span class="ash-eisub">還沒建檔的客人：只留姓名（手機選填），建好直接招待</span>
+      </summary>
+      <div class="bam-guest-b">
+        <input id="gc-nm" class="ms-search" style="margin-bottom:0;" placeholder="姓名 *" autocomplete="off">
+        <input id="gc-ph" class="ms-search" style="margin-bottom:0;" placeholder="手機（選填）" autocomplete="off">
+        <button type="button" class="btn btn-gold" onclick="grpCompNew()">建檔並招待</button>
+      </div>
+    </details>
     <div class="modal-foot"><button class="btn btn-ghost" onclick="closeModal();openGroupMembers('${b.id}',true,true)">‹ 返回名單</button></div>`);
   try{ const el=document.getElementById('gc-q'); if(el&&kw){ el.focus(); el.setSelectionRange(el.value.length,el.value.length); } }catch(_){}
 }
+/* 當場建一位再招待（2026-10-18）。
+   ⚠ 有填手機就先查 —— 同一個人被建成兩筆，之後票券與出席會分家。
+   ⚠ 建好之後直接走 grpCompDo，發票與加入的邏輯只有一份。 */
+function grpCompNew(){
+  const b=window._gcB; if(!b){ closeModal(); return; }
+  if(!(SESSION&&SESSION.role==='admin')){ showToast('招待名額只有管理員可以開'); return; }
+  const nm=String(((document.getElementById('gc-nm')||{}).value)||'').trim();
+  if(!nm){ showToast('請填姓名'); return; }
+  if(typeof memNameErr==='function' && memNameErr(nm)){ showToast(memNameErr(nm)); return; }
+  const phRaw=String(((document.getElementById('gc-ph')||{}).value)||'').trim();
+  const ph=phRaw?normPhone(phRaw):'';
+  if(phRaw && !/^09\d{8}$/.test(ph)){ showToast('手機格式不正確：請填 09 開頭的 10 位數字，或留空'); return; }
+  return onceAct('grpcompnew:'+b.id+':'+nm+':'+ph, async ()=>{
+    const done=uiBusy('建檔中…');
+    let mid=null;
+    try{
+      /* 有手機先查，避免建出第二個同一個人 */
+      if(ph){
+        try{ const hit=(await sb.from('members').select('id,name').eq('phone',ph).maybeSingle()).data;
+             if(hit&&hit.id) mid=hit.id; }catch(_){}
+      }
+      if(!mid){
+        const m={id:uid('m'), name:nm, phone:ph||null, status:'active', level:'regular',
+          must_setup:true, tier_epoch:false,
+          default_coach_id:(b&&b.coach_id)||null, created_at:new Date().toISOString()};
+        await dbPut('members',m);
+        dbCacheClear(['members']);
+        mid=m.id;
+      }
+    }catch(e){ done(); showToast('建檔失敗：'+((e&&e.message)||e), 5000); return; }
+    done();
+    return grpCompDo(mid);
+  });
+}
 function grpCompDo(mid){
   const b=window._gcB; if(!b){ closeModal(); return; }
-  if(!(window.SESSION&&SESSION.role==='admin')){ showToast('招待名額只有管理員可以開'); return; }
+  if(!(SESSION&&SESSION.role==='admin')){ showToast('招待名額只有管理員可以開'); return; }
   return onceAct('grpcomp:'+b.id+':'+mid, async ()=>{
     const done=uiBusy('開立招待票…');
     try{
@@ -41637,7 +41687,7 @@ async function openGroupMembers(id, keepSel, addMode){
             <select id="grp-pick" onchange="grpPickSel(this.value)"></select>
           </div>
           <div id="grp-count" style="font-size:12px;color:var(--t2);margin:6px 0 0;"></div>
-          ${(window.SESSION&&SESSION.role==='admin')?`
+          ${(SESSION&&SESSION.role==='admin')?`
           <details class="bam-guest" style="margin-top:10px;">
             <summary class="ash-eirow">
               <span class="ash-eilb">🎁 招待名額</span>

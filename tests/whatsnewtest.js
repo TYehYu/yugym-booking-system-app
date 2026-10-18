@@ -19,11 +19,18 @@ for(let k=src.indexOf('{',j);k<src.length;k++){ if(src[k]==='{')d++; else if(src
 /* 2026-10-14：鍵名改成逐帳號（yugym_whatsnew_seen_<員工 id>），所以沙箱的
    localStorage 要真的分鍵存 —— 用一個物件模擬，才測得出「早班看過、晚班還看得到」。 */
 let bag={};
-const mkApi=(uid)=>new Function('localStorage','APP_VERSION','window',
+/* ⚠ 2026-10-18：wnSeenKey 原本寫 window.SESSION —— SESSION 是 `let SESSION=null`，
+   不掛在 window 上，所以線上**所有人共用 'anon'**：早班按了知道了，晚班也不再亮金點，
+   正好是下面第 ⑤ 節要防的那件事，卻一直沒被測出來（沙箱餵的是 window，剛好餵對了）。
+   改成直接餵 SESSION，與程式實際讀的東西一致。 */
+const mkApi=(uid)=>new Function('localStorage','APP_VERSION','SESSION',
   src.slice(i,end)+'\nreturn {WHATS_NEW,wnSeen,wnMarkSeen,wnUnseen,wnSeenKey};')(
   {getItem:k=>(k in bag?bag[k]:null), setItem:(k,v)=>{bag[k]=v;}}, '261013.2237',
-  {SESSION:{id:uid}});
+  {id:uid});
 const api=mkApi('c-staff-A');
+
+ok('★★★ 鍵名真的帶到帳號（不是全店共用 anon）',
+   api.wnSeenKey()==='yugym_whatsnew_seen_c-staff-A', api.wnSeenKey());
 
 console.log('① 清單本身（公告是給櫃檯／教練看的，不是給工程師看的）');
 ok('★★★ 每一筆都有版本、標題、至少一句內容',

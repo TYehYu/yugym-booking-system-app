@@ -19,10 +19,33 @@ console.log('① 權限：只有管理員');
 const C=grab('bamCompDo');
 ok("★★★ 用 SESSION.role==='admin'，不是 isManagerUp（店長櫃檯都不給）",
    /SESSION\.role==='admin'/.test(C) && !/isManagerUp/.test(C));
+/* ⚠⚠ 2026-10-18 使用者回報兩次「管理員帳號還是沒看到招待的選項」——
+   我寫成 window.SESSION。SESSION 是 `let SESSION=null`，**不掛在 window 上**，
+   window.SESSION 永遠 undefined，所以四處判斷全部不成立：鈕不畫、按了也被擋。
+   這個地雷程式裡已經記過三次警語，我還是踩了。
+   ⚠ 上一版的測試只比對字串、沒有實跑，所以「通過」卻是壞的 —— 現在改成
+     ① 全檔禁止 window.SESSION 出現在程式碼裡（註解不算）
+     ② 把判斷式實跑一次，確認 admin 會過、店長與櫃檯不會過 */
+{
+  /* ⚠ 先整塊剝掉 /* … *\/ 再剝 // —— 只看「行首是不是 /*」會漏掉區塊內的續行，
+     那幾行正好就是在警告不要用 window.SESSION（見 68347）。 */
+  const code=src.replace(/\/\*[\s\S]*?\*\//g,'')
+                .split('\n').map(l=>l.replace(/\/\/.*$/,'')).join('\n');
+  const hits=(code.match(/window\.SESSION/g)||[]).length;
+  ok('★★★ 程式碼裡不可以出現 window.SESSION（SESSION 是 let，不在 window 上）',
+     hits===0, hits);
+  const gate=new Function('SESSION',"return !!(SESSION&&SESSION.role==='admin');");
+  ok('★★★ 判斷式實跑：管理員會過', gate({role:'admin'})===true);
+  ok('★★★ 判斷式實跑：店長不會過', gate({role:'coach',is_manager:true})===false);
+  ok('★★★ 判斷式實跑：櫃檯不會過', gate({role:'front_desk'})===false);
+  ok('★★ 還沒登入不會爆', gate(null)===false);
+  const bad=new Function('SESSION',"var window={};return !!(window.SESSION&&SESSION.role==='admin');");
+  ok('★★★ 壞寫法連管理員都過不了 —— 這就是當初的症狀', bad({role:'admin'})===false);
+}
 ok('★★★ 擋在函式最前面（不是只靠畫面沒畫出來）',
    C.indexOf("SESSION.role==='admin'") < C.indexOf('onceAct'));
 ok('★★★ 選單那一條也只畫給管理員',
-   /const _canComp=!!\(window\.SESSION&&SESSION\.role==='admin'\);/.test(src));
+   /const _canComp=!!\(SESSION&&SESSION\.role==='admin'\);/.test(src));
 ok('★★ 不是管理員時，沒有分期票就照舊直接走待簽約（不多一層視窗）',
    /if\(!r\.inst && !_canComp\) return bamHoldDo\(mid,'sign'\);/.test(src));
 
@@ -103,7 +126,7 @@ ok('★★★ 團課有自己的招待入口（grpCompOpen／grpCompDo）', !!G 
 ok('★★★ 兩支都只給管理員',
    /SESSION\.role==='admin'/.test(O) && /SESSION\.role==='admin'/.test(G));
 ok('★★★ 入口鈕也只畫給管理員',
-   /\$\{\(window\.SESSION&&SESSION\.role==='admin'\)\?`[\s\S]{0,400}grpCompOpen/.test(src));
+   /\$\{\(SESSION&&SESSION\.role==='admin'\)\?`[\s\S]{0,400}grpCompOpen/.test(src));
 ok('★★ 票的形狀與課卡那支一致（$0／1 堂／限當天／paid／comp）',
    /source:'comp'/.test(G) && /unit_price:0, amount_paid:0/.test(G)
    && /sessions_total:1, sessions_remaining:1/.test(G)
@@ -121,6 +144,22 @@ ok('★★ 返回名單也帶 keepSel', /openGroupMembers\('\$\{b\.id\}',true,tr
 /* 最後仍然是走原本的存檔路徑 —— 0820 的「名額一定有票」不變 */
 ok('★★★ 加入仍然走 saveGroupMembers（沒有另開一條存檔路）',
    /onclick="saveGroupMembers\('\$\{id\}'\)"/.test(src));
+
+console.log('\n⑨ 不用先建檔（2026-10-18 使用者：「不建檔不能預約嗎？」）');
+/* 票一定要掛在某個 member_id 上（0820：名額一定有票），所以檔還是要有 ——
+   省掉的是「跑一趟會員管理填整張表」。姓名必填、手機選填，兩格就好。
+   ⚠ 不用管理員自己的名義：那會把長輩的出席算到老闆頭上，教練人頭費與
+     統計都會歪，之後也查不到「那天是誰來上課」。 */
+const N=grab('grpCompNew');
+ok('★★★ 招待視窗裡可以當場建一位', !!N && /建檔並招待/.test(src));
+ok('★★★ 姓名必填', /if\(!nm\)\{ showToast\('請填姓名'\)/.test(N));
+ok('★★★ 手機選填', /placeholder="手機（選填）"/.test(src));
+ok('★★★ 有填手機就先查，不要建出第二個同一個人',
+   /\.eq\('phone',ph\)\.maybeSingle\(\)/.test(N));
+ok('★★★ 建完直接走同一支發票流程（邏輯只有一份）', /return grpCompDo\(mid\);/.test(N));
+ok('★★ 新會員帶上這堂課的教練當預設教練', /default_coach_id:\(b&&b\.coach_id\)\|\|null/.test(N));
+ok('★★ 建完要清 members 快取', /dbCacheClear\(\['members'\]\)/.test(N));
+ok('★★ 有 onceAct 防連點（不會建出兩筆）', /onceAct\('grpcompnew:'/.test(N));
 
 console.log(`\n${pass} 通過 / ${fail} 失敗`);
 process.exit(fail?1:0);
