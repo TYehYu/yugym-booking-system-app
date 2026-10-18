@@ -14844,8 +14844,8 @@ function tbl(s){return TABLE_ALIAS[s]||s;}
 let sb=null;
 // ── 版本號（日期+時間格式：年後兩碼+月+日.時分，例 26620.1058 = 26年6/20 10:58）──
 // 每次改版手動更新這一行即可，畫面與 title 會一起更新
-const APP_VERSION = '261018.2044';
-const APP_VERSION_LABEL = 'v261018.2044';
+const APP_VERSION = '261018.2153';
+const APP_VERSION_LABEL = 'v261018.2153';
 const CLOUD = !!(window.YUGYM_CONFIG && window.YUGYM_CONFIG.url && window.YUGYM_CONFIG.anonKey);
 if(CLOUD){ sb = supabase.createClient(window.YUGYM_CONFIG.url, window.YUGYM_CONFIG.anonKey); }
 
@@ -29706,6 +29706,10 @@ function assignLanesDay(evs){
     cl.forEach(({b})=>{ res[b.id].unit=n; });
 
     /* ══ ③ 每張卡各自的寬度（2026-09-04 使用者指示：「一個時段有 1～6 張卡」）══════
+       ⚠⚠ 這一版的做法（寬度＝1÷自己區間內最大同時張數，破碎就整群退回）
+          已在 2026-10-18 被下面那段取代。這裡的量測數字留著當歷史 ——
+          它們解釋了為什麼舊版「寫了等於沒寫」：一天是一條連鎖重疊，
+          只要有一個破碎的空隙，整天就退回最窄的等寬。
        在此之前，欄數是「整條**重疊鏈**的最大同時張數」，整群共用。
        只要有一堂半點開始的課把相鄰兩個整點串起來（9% 的課是半點，228/2460 筆），
        12:00 那三張就被 13:00 那六張拖著一起變成 1/6 寬。
@@ -29732,40 +29736,110 @@ function assignLanesDay(evs){
          這種情況整群退回原本的等寬分欄 —— 寧可維持現狀，也不要有一張變得比原本更窄。
        ⚠ 團課優先佔最左邊這件事沒有變：order 仍是「團課在前」，而由左往右擺的
          第一張自然落在 x=0。 */
-    const pts=[...new Set(cl.flatMap(it=>[it.s,it.e]))].sort((a,b)=>a-b);
-    const concAt=(t)=>{ let c=0; cl.forEach(o=>{ if(o.s<=t && o.e>t) c++; }); return c; };
-    const localMax=(it)=>{ let m=1;
-      pts.forEach(t=>{ if(t>=it.s && t<it.e){ const c=concAt(t); if(c>m) m=c; } }); return m; };
+    /* ── 2026-10-18 改寫（使用者第五次回報：「週一還是很多空白」）────────────
+       舊版的規則是「寬度＝1÷自己區間內的最大同時張數」，再加一道保險：
+       只要有一張比等寬還窄，整群放棄。一天通常是一條從早串到晚的連鎖重疊，
+       中間只要有一個破碎的空隙，**整天**就退回最窄的等寬 —— 所以畫面上看不出差別。
 
-    const done=[], out={};
-    let degraded=false;
-    order.forEach(it=>{
-      const w=1/localMax(it);
-      const busy=done.filter(p=>p.s<it.e && p.e>it.s)
-                     .map(p=>[p.x, p.x+p.w]).sort((a,b)=>a[0]-b[0]);
-      let cursor=0, x=null, gapS=0, gapW=0;
-      for(const [a,b2] of busy){
-        /* ⚠ 要夾 0：busy 裡彼此不一定重疊（A 在 12:00、B 在 13:00 可以都站在 x=0），
-           不夾的話會算出負的空隙。 */
-        const g=Math.max(0, a-cursor);
-        if(g>gapW){ gapW=g; gapS=cursor; }
-        if(g>=w-1e-9){ x=cursor; break; }
-        if(b2>cursor) cursor=b2;
-      }
-      if(x===null){
-        const g=Math.max(0, 1-cursor);
-        if(g>gapW){ gapW=g; gapS=cursor; }
-        if(g>=w-1e-9) x=cursor;
-      }
-      let ww=w;
-      if(x===null){ x=gapS; ww=gapW; }          // 空隙破碎 → 用最大的那塊，絕不重疊
-      if(ww < 1/n - 1e-9) degraded=true;        // 比原本的等寬還窄 → 整群放棄
-      done.push({s:it.s, e:it.e, x, w:ww});
-      out[it.b.id]={ left:x*100, width:ww*100 };
+       改成三段（與日檢視那支 assignLanes 同一套，已在 tests/lanespantest.js 驗過）：
+       ① 逐步放大：每張先 1 格，一輪一輪從最窄的開始加。先加最窄的就是在平分，
+          不會有人獨吞，而且每張至少 1 格 —— 不可能比等寬更窄，舊的保險自然不需要。
+       ①b 時段完全相同的幾張，放大目標先平均（5 格分給 2 張 → 各 2.5，不是 3 和 2）。
+       ② 擺位置試四種順序，挑「同時段卡片寬度最接近、又填得最滿」的那一種。
+          一張只有 1 格、卻跨過尖峰的窄卡如果卡在正中間，會把後面那段連續空間
+          切成兩半；換個順序讓它去補邊邊，後面兩張就能平分。
+       ③ 採用前整群掃一遍有沒有重疊，有就退回等寬。卡片互相壓住比留白難看一百倍。
+
+       ⚠ 團課固定排最左邊（2026-07-23 使用者指示）：四種順序都以 grp 當第一順位。 */
+    const EPS=1e-9;
+    const hitIt=(x,y)=> x.s<y.e && x.e>y.s;
+    const dur=o=>o.e-o.s;
+    const grp=o=>CAL_isGroupCat(o.b)?0:1;
+    const idxOf={}; order.forEach((o,i)=>{ idxOf[o.b.id]=i; });
+
+    const marks=[...new Set(cl.flatMap(it=>[it.s,it.e]))].sort((x,y)=>x-y);
+    const uOf={}; cl.forEach(o=>{ uOf[o.b.id]=1; });
+    const loadAt=t=>cl.reduce((k,o)=>k+((o.s<=t&&o.e>t)?uOf[o.b.id]:0),0);
+    const canGrow=o=>marks.every(t=>(t<o.s||t>=o.e)||loadAt(t)+1<=n);
+    for(let round=0; round<n*cl.length+4; round++){
+      let moved=false;
+      cl.slice().sort((x,y)=>(uOf[x.b.id]-uOf[y.b.id])||(x.s-y.s))
+        .forEach(o=>{ if(uOf[o.b.id]<n && canGrow(o)){ uOf[o.b.id]++; moved=true; } });
+      if(!moved) break;
+    }
+    const byIv={};
+    cl.forEach(o=>{ const k=o.s+'-'+o.e; (byIv[k]=byIv[k]||[]).push(o); });
+    Object.keys(byIv).forEach(k=>{
+      const S=byIv[k]; if(S.length<2) return;
+      const w=S.reduce((t,o)=>t+uOf[o.b.id],0)/S.length;
+      S.forEach(o=>{ uOf[o.b.id]=w; });
     });
-    /* 只有「每一張都不比原本窄」才採用新的擺法。 */
-    if(!degraded) cl.forEach(({b})=>{ if(out[b.id]){ res[b.id].left=out[b.id].left;
-                                                     res[b.id].width=out[b.id].width; } });
+
+    /* 時段完全相同、位置又首尾相連的幾張 → 總寬平分。
+       它們佔的那一段橫向空間是固定的，在裡面怎麼切都碰不到別人，所以安全。 */
+    const evenOut=(posOf,wOf)=>{
+      Object.keys(byIv).forEach(k=>{
+        const S=byIv[k].slice(); if(S.length<2) return;
+        S.sort((x,y)=>posOf[x.b.id]-posOf[y.b.id]);
+        for(let i=1;i<S.length;i++)
+          if(Math.abs(posOf[S[i-1].b.id]+wOf[S[i-1].b.id]-posOf[S[i].b.id])>EPS) return;
+        const a0=posOf[S[0].b.id];
+        const w=S.reduce((t,o)=>t+wOf[o.b.id],0)/S.length;
+        S.forEach((o,i)=>{ posOf[o.b.id]=a0+i*w; wOf[o.b.id]=w; });
+      });
+    };
+
+    const placeBy=ord=>{
+      const placed=[], posOf={}, wOf={}; let fit=true;
+      ord.forEach(o=>{
+        const busy=placed.filter(y=>hitIt(o,y))
+          .map(y=>[posOf[y.b.id], posOf[y.b.id]+wOf[y.b.id]])
+          .sort((m,q)=>m[0]-q[0]);
+        /* 放不下時先退到整數格（2.5→2→1），不要 2.5→1.5 卡在半格的位置 */
+        for(let u=uOf[o.b.id]; u>=1; u=(u>Math.floor(u)?Math.floor(u):u-1)){
+          let pos=0;
+          for(let i=0;i<busy.length;i++){
+            if(busy[i][0]-pos >= u-EPS) break;
+            if(busy[i][1]>pos) pos=busy[i][1];
+          }
+          if(pos+u <= n+EPS){ posOf[o.b.id]=pos; wOf[o.b.id]=u; break; }
+        }
+        if(wOf[o.b.id]==null){ fit=false; posOf[o.b.id]=0; wOf[o.b.id]=1; }
+        placed.push(o);
+      });
+      if(fit) evenOut(posOf,wOf);
+      for(let i=0;i<cl.length && fit;i++) for(let j=i+1;j<cl.length;j++){
+        const x=cl[i], y=cl[j]; if(!hitIt(x,y)) continue;
+        const xl=posOf[x.b.id], xr=xl+wOf[x.b.id], yl=posOf[y.b.id], yr=yl+wOf[y.b.id];
+        if(xl<yr-EPS && xr>yl+EPS){ fit=false; break; }
+      }
+      if(!fit) return null;
+      /* 評分：不公平＝重疊且額度相同的兩張寬度差 × 重疊時間；面積＝填得多滿。 */
+      let unfair=0, area=0;
+      cl.forEach(o=>{ area+=wOf[o.b.id]*dur(o); });
+      for(let i=0;i<cl.length;i++) for(let j=i+1;j<cl.length;j++){
+        const x=cl[i], y=cl[j];
+        if(!hitIt(x,y) || Math.abs(uOf[x.b.id]-uOf[y.b.id])>EPS) continue;
+        unfair+=Math.abs(wOf[x.b.id]-wOf[y.b.id])*(Math.min(x.e,y.e)-Math.max(x.s,y.s));
+      }
+      return {posOf:posOf, wOf:wOf, unfair:unfair, area:area};
+    };
+
+    const base=(x,y)=>(grp(x)-grp(y))||(x.s-y.s)||(idxOf[x.b.id]-idxOf[y.b.id]);
+    /* sort 是穩定的，分數一樣時留下第一種（團課優先、早的先放），畫面不會每次重算就跳動。 */
+    const best=[
+      cl.slice().sort(base),
+      cl.slice().sort((x,y)=>(grp(x)-grp(y))||(uOf[x.b.id]-uOf[y.b.id])||base(x,y)),
+      cl.slice().sort((x,y)=>(grp(x)-grp(y))||(dur(y)-dur(x))||base(x,y)),
+      cl.slice().sort((x,y)=>(grp(x)-grp(y))||(uOf[x.b.id]-uOf[y.b.id])||(y.s-x.s)
+                              ||(idxOf[x.b.id]-idxOf[y.b.id]))
+    ].map(placeBy).filter(Boolean)
+     .sort((m,q)=>(m.unfair-q.unfair)||(q.area-m.area))[0];
+
+    if(best) cl.forEach(o=>{
+      res[o.b.id].left  = best.posOf[o.b.id]/n*100;
+      res[o.b.id].width = best.wOf[o.b.id]/n*100;
+    });
   });
   return res;
 }

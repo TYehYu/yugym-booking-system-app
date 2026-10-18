@@ -29,24 +29,37 @@ const src=fs.readFileSync(process.env.HOME+'/Projects/yugym-booking-system-app/i
 let pass=0,fail=0;
 const ok=(n,c,x)=>{ if(c){pass++;console.log('  ✓ '+n);} else {fail++;console.log('  ✗ '+n+(x!==undefined?'  → '+JSON.stringify(x):''));} };
 
-console.log('① 每張卡各自的寬度');
-ok('★★★ 用「自己區間內」的最大同時張數，不是整群的',
-   /const localMax=\(it\)=>\{ let m=1;\s*\n\s*pts\.forEach\(t=>\{ if\(t>=it\.s && t<it\.e\)\{ const c=concAt\(t\); if\(c>m\) m=c; \} \}\); return m; \};/.test(src));
-ok('★★★ 由左往右找第一個放得下的空隙', /if\(g>=w-1e-9\)\{ x=cursor; break; \}/.test(src));
-/* busy 裡的卡片彼此不一定重疊（A 在 12:00、B 在 13:00 可以都站在 x=0），
-   不夾 0 會算出負的空隙，進而把卡片疊上去。 */
-ok('★★★ 空隙要夾 0（busy 彼此不一定重疊）', /const g=Math\.max\(0, a-cursor\);/.test(src));
-ok('★★ 為什麼不會重疊，證明寫在原地',
-   /某時刻 t 有 k 張同時，每張的 L 都 ≥ k[\s\S]{0,120}?總寬永遠不超過一欄/.test(src));
+console.log('① 每張卡各自的寬度（2026-10-18 改成逐步放大）');
+/* ⚠ 2026-09-04 的做法是「寬度＝1÷自己區間內最大同時張數」，破碎就整群退回等寬。
+   1018 使用者第五次回報「週一還是很多空白」—— 一天是一條從早串到晚的連鎖重疊，
+   中間只要有一個破碎的空隙，整天就退回最窄的等寬，所以畫面上看不出差別。
+   改成逐步放大：每張先 1 格、一輪一輪從最窄的開始加，再試幾種擺放順序挑最公平的。
+   每張至少 1 格，所以「絕不變窄」這個保證是算法本身給的，不必再靠退回。 */
+ok('★★★ 逐步放大：一輪一輪從最窄的開始加',
+   /cl\.slice\(\)\.sort\(\(x,y\)=>\(uOf\[x\.b\.id\]-uOf\[y\.b\.id\]\)\|\|\(x\.s-y\.s\)\)/.test(src)
+   && /if\(uOf\[o\.b\.id\]<n && canGrow\(o\)\)\{ uOf\[o\.b\.id\]\+\+; moved=true; \}/.test(src));
+ok('★★★ 放大上限看「自己區間內」每個時刻的總寬，不是整群',
+   /const canGrow=o=>marks\.every\(t=>\(t<o\.s\|\|t>=o\.e\)\|\|loadAt\(t\)\+1<=n\);/.test(src));
+ok('★★★ 時段完全相同的幾張，放大目標先平均',
+   /const w=S\.reduce\(\(t,o\)=>t\+uOf\[o\.b\.id\],0\)\/S\.length;\s*\n\s*S\.forEach\(o=>\{ uOf\[o\.b\.id\]=w; \}\);/.test(src));
+ok('★★★ 由左往右找第一個放得下的位置', /if\(busy\[i\]\[0\]-pos >= u-EPS\) break;/.test(src));
+ok('★★★ 試多種擺放順序，挑最公平、再挑最滿',
+   /\]\.map\(placeBy\)\.filter\(Boolean\)\s*\n\s*\.sort\(\(m,q\)=>\(m\.unfair-q\.unfair\)\|\|\(q\.area-m\.area\)\)\[0\];/.test(src));
 
-console.log('\n② 絕不變窄：整群退回等寬');
-ok('★★★ 有任何一張比原本窄就整群放棄', /if\(ww < 1\/n - 1e-9\) degraded=true;/.test(src));
-ok('★★★ 只有沒退化才採用', /if\(!degraded\) cl\.forEach\(\(\{b\}\)=>\{ if\(out\[b\.id\]\)\{ res\[b\.id\]\.left=out\[b\.id\]\.left;/.test(src));
+console.log('\n② 絕不變窄，而且絕不重疊');
+ok('★★★ 採用前整群掃一遍有沒有重疊',
+   /if\(xl<yr-EPS && xr>yl\+EPS\)\{ fit=false; break; \}/.test(src));
+ok('★★★ 每一種順序都排不下時，才退回等寬（best 為空就不寫 left/width）',
+   /if\(best\) cl\.forEach\(o=>\{\s*\n\s*res\[o\.b\.id\]\.left  = best\.posOf\[o\.b\.id\]\/n\*100;/.test(src));
 ok('★★★ 畫的時候兩條路都在（沒有 left/width 就用等寬）',
    /const laneWpct = \(dl\.width!=null\) \? dl\.width : 100\/UNIT;/.test(src)
    && /const leftPct  = \(dl\.left !=null\) \? dl\.left  : dl\.laneIdx\*\(100\/UNIT\);/.test(src));
 ok('★★ 退路的理由寫在原地（出事可以只拿掉 assignLanesDay 那段）',
    /兩條路都留著，出事可以只拿掉 assignLanesDay 那段/.test(src));
+/* ⚠ 1018 的教訓：舊做法的量測數字要留著當歷史，但要標明它已經被取代，
+   不然下一個人會照著一段不存在的程式去 debug。 */
+ok('★★★ 舊做法已標明被取代',
+   /已在 2026-10-18 被下面那段取代/.test(src));
 
 console.log('\n③ 既有行為不能被動到');
 ok('★★★ 團課仍固定排最左（order 仍是團課在前）',

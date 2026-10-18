@@ -192,6 +192,57 @@ console.log('\n③ 只往右長，不往左');
      r.b[1]===1, {b:r.b});
 }
 
+console.log('\n③b 週／日檢視真正用的是 assignLanesDay（1018 第五次回報的根因）');
+/* ⚠⚠ 這一段是整支測試最重要的部分。
+   1018 我把撐開的邏輯寫進 assignLanes，測試也全綠，推上線 —— 使用者回報
+   「週一還是很多空白」。原因是 renderCalendar 的 useFixedLane 在
+   **1／3／5／7 天檢視都是 true**，那些檢視吃的是 assignLanesDay，
+   assignLanes 只在其他天數才用得到。測試驗了一支畫面根本沒在呼叫的函式。
+   所以這裡同時釘兩件事：① 接線（哪個檢視吃哪一支）② assignLanesDay 的行為。 */
+ok('★★★ 1/3/5/7 天檢視都走 assignLanesDay（改另一支不會影響畫面）',
+   /const useFixedLane = \(nDays===1 \|\| nDays===7 \|\| nDays===5 \|\| nDays===3\);/.test(src)
+   && /const lanes= useFixedLane \? assignLanesDay\(dayEvs\) : assignLanes\(dayEvs\);/.test(src));
+ok('★★★ 固定 Lane 的寬度吃 dl.width／dl.left（不是只吃 laneIdx 等分）',
+   /const laneWpct = \(dl\.width!=null\) \? dl\.width : 100\/UNIT;/.test(src)
+   && /const leftPct  = \(dl\.left !=null\) \? dl\.left  : dl\.laneIdx\*\(100\/UNIT\);/.test(src));
+{
+  const T=x=>{const[a,b]=String(x).split(':').map(Number);return a*60+(b||0);};
+  const dayFn=new Function('timeToMin','CAL_isGroupCat','CAL_overlap',
+    grab('assignLanesDay')+'\nreturn assignLanesDay;')(
+    T, b=>b.category==='小班肌力', (s,e,s2,e2)=>s<e2&&e>s2);
+  const ev2=(id,st,cat)=>({id,start_time:st,duration:60,category:cat||'自主訓練'});
+  /* 正式庫 2026-10-19（使用者截圖那一天）的真實時段 */
+  const mon=[ev2('09:00','09:00'),
+    ev2('a','10:00','私人教練'),ev2('b','10:00'),ev2('c','10:30'),
+    ev2('d','11:00'),ev2('e','11:00','私人教練'),ev2('f','11:30'),
+    ev2('g','12:00','私人教練'),ev2('h','12:30'),
+    ev2('i','13:00','小班肌力'),ev2('j','13:00','私人教練'),ev2('k','13:30'),
+    ev2('l','14:00'),ev2('m','14:30'),ev2('n','15:00'),ev2('o','15:00','私人教練'),
+    ev2('p','15:30'),ev2('q','16:00','私人教練'),
+    ev2('r','16:30','私人教練'),ev2('s','16:30'),
+    ev2('t','17:00'),ev2('u','17:00'),ev2('v','17:00'),
+    ev2('w','17:45','小班肌力'),ev2('x','18:00'),ev2('y','18:00')];
+  const rd=dayFn(mon);
+  const W=k=>{const o=rd[k]; return o.width!=null?o.width:100/(o.unit||1);};
+  const L=k=>{const o=rd[k]; return o.left!=null?o.left:o.laneIdx*(100/(o.unit||1));};
+  /* 改之前整天都是 1/6＝16.7%；10:00–16:00 這一段應該要撐到 1/3。 */
+  ['a','b','c','d','e','f','g','h','i','j','k','l','m','n','o','p']
+    .forEach(k=>ok('★★★ '+k+' 撐到 1/3（原本 1/6）', Math.abs(W(k)-100/3)<0.5, {k:W(k)}));
+  ok('★★ 17:00 那三張維持 1/6（那個時刻真的擠）',
+     ['t','u','v'].every(k=>Math.abs(W(k)-100/6)<0.5), ['t','u','v'].map(W));
+  ok('★★★ 團課排最左邊（2026-07-23 使用者指示）', L('i')===0 && L('w')===0, [L('i'),L('w')]);
+  ok('★★★ 沒有一張比等分還窄（逐步放大保證每張至少 1 格）',
+     mon.every(e=>W(e.id) >= 100/(rd[e.id].unit||1) - 0.01));
+  let bad=0;
+  for(let i=0;i<mon.length;i++) for(let j=i+1;j<mon.length;j++){
+    const A=mon[i],B=mon[j];
+    const a1=T(A.start_time),b1=a1+60,a2=T(B.start_time),b2=a2+60;
+    if(!(a1<b2&&b1>a2)) continue;
+    if(L(A.id)<L(B.id)+W(B.id)-1e-6 && L(A.id)+W(A.id)>L(B.id)+1e-6) bad++;
+  }
+  eq('★★★ 整天沒有任何兩張會疊到', bad, 0);
+}
+
 console.log('\n④ 接線');
 ok('★★★ 寬度有乘上 span', /const wpct=\(100\/lane\.total\)\*\(lane\.span\|\|1\);/.test(src));
 /* ⚠ 寬度算得出來不代表位置排得進去 —— 最後一定要整份驗算，有問題就退回等分。
