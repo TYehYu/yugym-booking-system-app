@@ -214,9 +214,15 @@ ok('★ 右上角一顆備註鈕，有內容就直接顯示、靠右截斷',
    /<button type="button" class="ash-mnote\$\{_bkNote\?' on':''\}"/.test(src)
    && /\.ash-mnote\{margin-left:auto;[^}]*text-align:right;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;\}/.test(src));
 ok('　　沒有備註顯示「＋ 備註」', /\$\{_bkNote\?escH\(_bkNote\):'＋ 備註'\}/.test(src));
+/* ⚠ 2026-10-18：團課的備註改成逐名額（seat_notes[名額鍵]），單人課維持整堂。
+   這幾條守的用意沒變（右上角＝這一堂的事，不是跟著人走的會員備註），
+   只是程式形狀變成三元：_isGrp ? _seatNote : bkNoteSplit(b.note).user。 */
 ok('★★★ 右上角讀的是這一堂的備註，不是跟著人走的會員備註',
-   /const _bkNote=String\(\(typeof bkNoteSplit==='function'\?bkNoteSplit\(b\.note\)\.user:''\)\|\|''\)\.trim\(\);/.test(src)
-   && /onclick="event\.stopPropagation\(\);ashBkNoteAsk\('\$\{b\.id\}'\)"/.test(src));
+   /_bkNote=_isGrp \? _seatNote[\s\S]{0,140}bkNoteSplit\(b\.note\)\.user/.test(src)
+   && /onclick="event\.stopPropagation\(\);\$\{_noteCall\}"/.test(src)
+   && /ashBkNoteAsk\('\$\{b\.id\}'\)/.test(src));
+ok('★★★ 團課那條走逐名額（1018 新增）',
+   /_seatNote=\(_isGrp&&r\.sk\)[\s\S]{0,180}b\.seat_notes\[r\.sk\]/.test(src));
 ok('★★★ 與「預約明細」那個備註框同一個欄位、同一組 split／join（系統註記不會被洗掉）',
    /const next=bkNoteJoin\(bkNoteSplit\(b\.note\)\.sys, el\.value\);[\s\S]{0,400}?ashBackArm\(bid\); openBookingDetail\(bid\);/.test(src));
 ok('★★ 會員備註沒有消失：縮成名字後面的小章，有寫才畫',

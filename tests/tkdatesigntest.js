@@ -62,8 +62,13 @@ console.log('\n② 分期繳費送出後，票券卡上看得到');
 
 console.log('\n③ 課卡右上角＝這一堂的備註');
 {
-  ok('★★★ 讀的是 bookings.note 的使用者段，不是 members.note',
-     /const _bkNote=String\(\(typeof bkNoteSplit==='function'\?bkNoteSplit\(b\.note\)\.user:''\)\|\|''\)\.trim\(\);/.test(src));
+  /* ⚠ 2026-10-18：團課的備註改成逐名額（seat_notes[名額鍵]），單人課維持整堂。
+     這幾條守的用意沒變（右上角＝這一堂的事，不是跟著人走的會員備註），
+     只是程式形狀變成三元：_isGrp ? _seatNote : bkNoteSplit(b.note).user。 */
+  ok('★★★ 讀的是 bookings.note 的使用者段，不是 members.note（單人課）',
+     /_bkNote=_isGrp \? _seatNote[\s\S]{0,140}bkNoteSplit\(b\.note\)\.user/.test(src));
+  ok('★★★ 團課改讀 seat_notes[名額鍵]（1018）',
+     /b\.seat_notes\[r\.sk\]/.test(src));
   ok('★★★ 與「預約明細」那個備註框同一個欄位、同一組 split／join',
      /const next=bkNoteJoin\(bkNoteSplit\(b\.note\)\.sys, el\.value\);/.test(src)
      && (src.match(/bkNoteJoin\(bkNoteSplit\(b\.note\)\.sys, el\.value\)/g)||[]).length===2);
@@ -72,7 +77,7 @@ console.log('\n③ 課卡右上角＝這一堂的備註');
      /const _memNoteTag=\(r\.mid&&_memNote\)/.test(src)
      && /class="ash-mmemo"/.test(src));
   ok('★★ 兩顆都擋冒泡（整張卡本身是「開啟會員資料」）',
-     /onclick="event\.stopPropagation\(\);ashBkNoteAsk\('\$\{b\.id\}'\)"/.test(src)
+     /onclick="event\.stopPropagation\(\);\$\{_noteCall\}"/.test(src)
      && /onclick="event\.stopPropagation\(\);ashMemNoteAsk\('\$\{b\.id\}','\$\{r\.mid\}'\)"/.test(src));
   ok('★★ 存完回課卡（與會員備註那支同一個收尾）',
      /async function ashBkNoteSave\(bid\)\{[\s\S]{0,700}ashBackArm\(bid\); openBookingDetail\(bid\);/.test(src));

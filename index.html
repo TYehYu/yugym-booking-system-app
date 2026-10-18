@@ -14844,8 +14844,8 @@ function tbl(s){return TABLE_ALIAS[s]||s;}
 let sb=null;
 // ── 版本號（日期+時間格式：年後兩碼+月+日.時分，例 26620.1058 = 26年6/20 10:58）──
 // 每次改版手動更新這一行即可，畫面與 title 會一起更新
-const APP_VERSION = '261018.1228';
-const APP_VERSION_LABEL = 'v261018.1228';
+const APP_VERSION = '261018.1332';
+const APP_VERSION_LABEL = 'v261018.1332';
 const CLOUD = !!(window.YUGYM_CONFIG && window.YUGYM_CONFIG.url && window.YUGYM_CONFIG.anonKey);
 if(CLOUD){ sb = supabase.createClient(window.YUGYM_CONFIG.url, window.YUGYM_CONFIG.anonKey); }
 
@@ -18556,6 +18556,11 @@ const WHATS_NEW=[
        要 → 上（新功能、規則改了、按鈕的行為變了、要注意的事）
        不要 → 不上（挪位置、改字級、改顏色、對齊、修 bug）
      ⚠ 整版都是版面調整就**整筆不要寫**，寧可那一版沒有公告。 */
+  {ver:'261018.1332', big:true, title:'團課備註改成每人一則', items:[
+    '以前四張會員卡顯示同一句，改一個全部跟著改。',
+    '現在每一格的備註只屬於那一位。',
+    '⚠ 整堂的事（換教室、冷氣壞了）寫在〔預約明細〕的備註。'],
+    imgs:[{src:'img/whatsnew/261018-seatnote.png', cap:'前後對照'}]},
   {ver:'261018.1044', big:false, title:'套用歷史課表的順序修好了', items:[
     '以前套用上次課表，動作順序會變回「當初記錄的順序」。',
     '現在跟你拖曳排好的順序一樣。'],
@@ -31290,6 +31295,45 @@ async function ashBkNoteAsk(bid){
       <button class="btn btn-green" onclick="ashBkNoteSave('${bid}')">儲存</button>
     </div>`);
 }
+/* ══ 團課逐名額的備註（2026-10-18）══════════════════════════════════════
+   ⚠ 寫入前一定要重讀再合併：同一堂課可能有別的名額同時在寫（櫃檯一台、教練一台），
+     拿畫面上那份舊的 seat_notes 整個覆蓋回去，會把別人剛寫的那格洗掉。
+     與「今日備註」（training_note）同一個教訓。
+   ⚠ 名額鍵不存在就不要留空殼：刪掉那個 key，而不是存一個空字串。 */
+async function ashSeatNoteAsk(bid, sk){
+  const b=await dbGet('bookings',bid); if(!b){ showToast('找不到預約'); return; }
+  const cur=String(((b.seat_notes&&typeof b.seat_notes==='object')?b.seat_notes[sk]:'')||'');
+  const _d=String(b.date||'').slice(5).replace('-','/');
+  let who='';
+  try{
+    const mid=(typeof seatMid==='function')?seatMid(sk):'';
+    if(mid){ const m=await dbGet('members',mid).catch(()=>null); who=(m&&m.name)||''; }
+    if(String(sk).indexOf('#')>=0) who+='（第 '+String(sk).split('#')[1]+' 位）';
+  }catch(_){}
+  showModal(`<div class="ash-sheetmk"></div><div class="modal-title">${who?escH(who)+'　':''}本堂備註</div>
+    <div class="ash-eihead">${_d}　${String(b.start_time||'').slice(0,5)}　·　<b>只記這一位的事</b>，不會出現在其他人的卡片上</div>
+    <textarea id="ash-sn" rows="4" placeholder="例：肩傷，今天減重量／第一次上課，動作先放慢"
+      style="width:100%;box-sizing:border-box;font-family:inherit;font-size:14px;resize:vertical;">${escH(cur)}</textarea>
+    <div class="modal-foot">
+      <button class="btn btn-ghost" onclick="closeModal();ashBackArm('${bid}');openBookingDetail('${bid}')">返回</button>
+      <button class="btn btn-green" onclick="ashSeatNoteSave('${bid}','${String(sk).replace(/'/g,"\\'")}')">儲存</button>
+    </div>`);
+}
+async function ashSeatNoteSave(bid, sk){
+  const el=document.getElementById('ash-sn'); if(!el) return;
+  const val=String(el.value||'').trim();
+  /* ⚠ 重讀再合併 —— 不要用開視窗當下那份 */
+  const b=await dbGet('bookings',bid); if(!b){ showToast('找不到預約'); return; }
+  const cur=(b.seat_notes&&typeof b.seat_notes==='object')?Object.assign({},b.seat_notes):{};
+  const before=String(cur[sk]||'');
+  if(before===val){ closeModal(); return; }
+  if(val) cur[sk]=val; else delete cur[sk];
+  b.seat_notes=Object.keys(cur).length?cur:null;
+  try{ await dbPut('bookings',b); }catch(e){ showToast('儲存失敗：'+((e&&e.message)||e)); return; }
+  dbCacheClear(['bookings']);
+  closeModal(); showToast(val?'已存備註':'已清除備註');
+  try{ if(typeof navTo==='function' && typeof CUR_PAGE!=='undefined') navTo(CUR_PAGE); }catch(_){}
+}
 async function ashBkNoteSave(bid){
   const el=document.getElementById('ash-bn'); if(!el) return;
   const b=await dbGet('bookings',bid); if(!b){ showToast('找不到預約'); return; }
@@ -37990,13 +38034,27 @@ async function bkCardPop(el, b, btns, acts){
 
          ⚠ 會員備註沒有不見：移到名字後面一枚小章（有才畫、點了一樣能改）——
            它仍然有用（體況、稱呼），只是不該佔據「這一堂」的位置。
-         ⚠ 團課：一堂課只有一份備註，四張會員卡會顯示同一句話。
-           這是對的（那本來就是整堂的備註），而且四顆都編輯同一個欄位；
-           與「開課 ○○○」那一行刻意畫在標題卡不同 —— 那一行是會被誤讀成
-           「某人把他加進來」，備註沒有這個問題。 */
-      const _bkNote=String((typeof bkNoteSplit==='function'?bkNoteSplit(b.note).user:'')||'').trim();
-      const _noteBtn=`<button type="button" class="ash-mnote${_bkNote?' on':''}" title="${_bkNote?'編輯本堂備註':'新增本堂備註'}"
-             onclick="event.stopPropagation();ashBkNoteAsk('${b.id}')">${_bkNote?escH(_bkNote):'＋ 備註'}</button>`;
+
+         ⚠⚠ 2026-10-18 推翻當天對團課的判斷。原本寫「團課一堂只有一份備註，
+           四張會員卡顯示同一句，這是對的」—— 實際用起來不是。使用者回報
+           「團體課的備註會一次調整到全部的人上面」，而正式庫裡唯一一筆人寫的
+           團課備註是「魏曉微 8/26請假」：想記某個人的事，只能把名字塞進整堂備註。
+           改成**團課逐名額**（bookings.seat_notes[名額鍵]），單人課維持整堂。
+           ⚠ 鍵用名額鍵（r.sk）不是 member_id —— 同一位會員可以佔兩格（替家人報名），
+             用 member_id 會讓媽媽那格與本人那格共用同一則，等於沒修。 */
+      const _isGrp=(typeof bkIsGroup==='function') && bkIsGroup(b);
+      const _seatNote=(_isGrp&&r.sk)
+        ? String(((b.seat_notes&&typeof b.seat_notes==='object')?b.seat_notes[r.sk]:'')||'').trim() : '';
+      const _bkNote=_isGrp ? _seatNote
+        : String((typeof bkNoteSplit==='function'?bkNoteSplit(b.note).user:'')||'').trim();
+      const _noteTitle=_isGrp
+        ? (_bkNote?'編輯這一位的備註':'只記這一位的事')
+        : (_bkNote?'編輯本堂備註':'新增本堂備註');
+      const _noteCall=(_isGrp&&r.sk)
+        ? `ashSeatNoteAsk('${b.id}','${String(r.sk).replace(/'/g,"\\'")}')`
+        : `ashBkNoteAsk('${b.id}')`;
+      const _noteBtn=(_isGrp&&!r.sk) ? '' : `<button type="button" class="ash-mnote${_bkNote?' on':''}" title="${_noteTitle}"
+             onclick="event.stopPropagation();${_noteCall}">${_bkNote?escH(_bkNote):'＋ 備註'}</button>`;
       /* 會員的永久備註：縮成名字後面的小章，只有真的有寫才畫。 */
       const _memNote=r.mid?String((_maps.note||{})[r.mid]||'').trim():'';
       const _memNoteTag=(r.mid&&_memNote)
