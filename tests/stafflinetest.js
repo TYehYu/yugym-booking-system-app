@@ -83,10 +83,13 @@ console.log('\n④ 待分期／待簽約已搬到課卡的［＋新增］');
   ok('★★ 選了會員就整串掛他名下（不是匿名空堂）',
      /member_id:w\.member_id\|\|null, coach_id:w\.coach_id\|\|null/.test(src)
      && /openHold 不代表「沒有人」/.test(src));
+  /* ⚠ 2026-10-18：管理員多了「招待名額」這條，所以對管理員而言選項永遠 >= 2，
+     捷徑的條件改成 `!r.inst && !_canComp`。這一條守的是原本的用意 ——
+     「只有一種選項時不要多跳一層視窗」—— 對非管理員仍然成立。 */
   ok('★★ 兩種保留都在［＋新增］裡，而且只有一種可選時不多問一層',
      /onclick="closeModal\(\);bamHoldDo\('\$\{mid\}','inst'\)"/.test(src)
      && /onclick="closeModal\(\);bamHoldDo\('\$\{mid\}','sign'\)"/.test(src)
-     && /if\(!r\.inst\) return bamHoldDo\(mid,'sign'\);/.test(src));
+     && /if\(!r\.inst && !_canComp\) return bamHoldDo\(mid,'sign'\);/.test(src));
   ok('★ 有分期票才給「待分期」（判定沿用同一段分期票條件）',
      /!tkIsInstall\(x\)/.test(src) && /_instSet\[mid\]=1/.test(src));
   ok('★ 搬家的理由寫在原地', /待簽約跟分期，應該留到＋新增這邊/.test(src));

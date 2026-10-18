@@ -119,5 +119,53 @@ console.log('\n⑦ migration');
   ok('★★ 有索引（讀取端一律 order by seq）', /training_logs_bk_seq_idx/.test(sql));
 }
 
+/* ══ 歷史課表也要照 seq（2026-10-18 使用者回報）══════════════════════════
+   「我發現我在上課套用前一次訓練的時候　動作順序沒有跟上次一樣」
+
+   0916 修過一次（歷史那區改成照 created_at 升冪），當時是對的。
+   但 0925 加了拖曳排序之後，「記錄的先後」與「實際做的順序」分家了 ——
+   今日紀錄那一區當天就接上 tlSeqSort，**歷史這一區漏接**，於是拖過順序的課
+   在歷史預覽與套用時又回到記錄順序。
+
+   實測 BK-mv4ysfethdj2（10/17，11 個動作有 10 個位置不同）：
+     真實：啟動·轉 → 懸吊抬腿 → 啟動·推 → 啟動·拉 → 史密斯肩推 → …
+     錯的：啟動·轉 → 啟動·推 → 懸吊抬腿 → 寬下拉 → … → 啟動·拉（第 4 掉到第 11）
+
+   ⚠ 這組斷言盯的是「讀取端全部都要接上」。tlSeqSort 的註解已經列了四個共用點，
+     歷史這個是第五個 —— 以後再多一個讀取端，記得一起接。 */
+console.log('\n⑧ 歷史課表（套用的來源）也要照 seq');
+{
+  const i=src.indexOf('// ── P1-2 歷史課表');
+  const j=src.indexOf('const sec4 =', i);
+  ok('★★ 切得到歷史課表那一段', i>0 && j>i, {i,j});
+  const H=src.slice(i,j);
+  ok('★★★ 分組後有套 tlSeqSort（這就是 1018 的修正）',
+     /Object\.keys\(byBk\)\.forEach\(k=>\{ byBk\[k\]=tlSeqSort\(byBk\[k\]\); \}\);/.test(H));
+  /* 順序很重要：要先分組再排。seq 只在同一堂課內唯一，跨堂比大小沒意義。 */
+  ok('★★★ 是「先分組、後排序」，不是對整份 memLogs 排',
+     H.indexOf('memLogs.forEach(l=>{ (byBk[l.booking_id]')
+       < H.indexOf('byBk[k]=tlSeqSort(byBk[k])'));
+  /* created_at 那道預排不能被當成多餘的拿掉 —— tlSessKey 查不到 booking 時靠它 */
+  ok('★★★ created_at 升冪那道還在（tlSessKey 的 fallback 要靠它）',
+     /\.sort\(\(a,b2\)=>String\(a\.created_at\|\|''\)\.localeCompare\(String\(b2\.created_at\|\|''\)\)\)/.test(H));
+  ok('★★ 預覽／快取／套用三處共用 byBk（所以改一行就三處一起好）',
+     /_tlHistCache=Object\.fromEntries\(hist\.map\(h=>\[h\.bid,h\.ls\]\)\)/.test(src)
+     && /hist=Object\.entries\(byBk\)/.test(H));
+}
+{
+  /* 用使用者那堂課的真實資料實跑一次 */
+  const f=new Function(grab('tlSeqSort')+'\nreturn tlSeqSort;')();
+  const real=[['啟動·轉',1,1],['啟動·推',3,2],['懸吊抬腿',2,3],['寬下拉',6,4],
+              ['單手划船',7,5],['股四分腿蹲',9,6],['臀肌分腿蹲',10,7],['壺鈴擺盪',11,8],
+              ['史密斯胸推',8,9],['史密斯肩推',5,10],['啟動·拉',4,11]]
+    .map(([n,seq,t])=>({id:n,seq,created_at:'T'+String(t).padStart(2,'0')}));
+  eq('★★★ BK-mv4ysfethdj2（10/17）排出來要等於教練拖好的順序',
+     f(real).map(x=>x.id),
+     ['啟動·轉','懸吊抬腿','啟動·推','啟動·拉','史密斯肩推','寬下拉','單手划船',
+      '史密斯胸推','股四分腿蹲','臀肌分腿蹲','壺鈴擺盪']);
+  ok('★★★ 「啟動·拉」要排第 4，不是最後一個',
+     f(real).map(x=>x.id).indexOf('啟動·拉')===3);
+}
+
 console.log(`\n${pass} 通過 / ${fail} 失敗`);
 process.exit(fail?1:0);

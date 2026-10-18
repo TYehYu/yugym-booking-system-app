@@ -14844,8 +14844,8 @@ function tbl(s){return TABLE_ALIAS[s]||s;}
 let sb=null;
 // ── 版本號（日期+時間格式：年後兩碼+月+日.時分，例 26620.1058 = 26年6/20 10:58）──
 // 每次改版手動更新這一行即可，畫面與 title 會一起更新
-const APP_VERSION = '261015.1032';
-const APP_VERSION_LABEL = 'v261015.1032';
+const APP_VERSION = '261018.1044';
+const APP_VERSION_LABEL = 'v261018.1044';
 const CLOUD = !!(window.YUGYM_CONFIG && window.YUGYM_CONFIG.url && window.YUGYM_CONFIG.anonKey);
 if(CLOUD){ sb = supabase.createClient(window.YUGYM_CONFIG.url, window.YUGYM_CONFIG.anonKey); }
 
@@ -18556,6 +18556,10 @@ const WHATS_NEW=[
        要 → 上（新功能、規則改了、按鈕的行為變了、要注意的事）
        不要 → 不上（挪位置、改字級、改顏色、對齊、修 bug）
      ⚠ 整版都是版面調整就**整筆不要寫**，寧可那一版沒有公告。 */
+  {ver:'261018.1044', big:false, title:'套用歷史課表的順序修好了', items:[
+    '以前套用上次課表，動作順序會變回「當初記錄的順序」。',
+    '現在跟你拖曳排好的順序一樣。'],
+    imgs:[{src:'img/whatsnew/261018-tlorder.png', cap:'以前「啟動·拉」會從第 4 掉到最後'}]},
   {ver:'261014.1705', big:true, title:'課表可以寫今天的狀況', items:[
     '右上角〔✎ 今日備註〕，寫完變成一張金色紙條。',
     '⚠ 一堂課一則。動作的備註還是寫在那個動作上。'],
@@ -22037,12 +22041,16 @@ function tkIsGift(t){
      source:'lottery'（見 openLottoModal 那一段），是明確的旗標，比備註可靠。
      舊的「隨 ⋯ 加贈」留著：那句話只有舊系統匯入的票有，仍要認得。 */
   if(String(t.source||'')==='lottery') return true;
+  /* 招待名額（2026-10-18）：管理員開的免費名額，與抽獎同性質 —— $0、不是買來的。
+     認得它，自動挑票時才會把付費的票排在前面（見 tkZeroAsk）。 */
+  if(String(t.source||'')==='comp') return true;
   return /加贈/.test(String(t.note||''));
 }
 /* 這張 $0 是哪來的 —— 提醒裡要講，櫃檯才判斷得出「能不能先用」。 */
 function tkZeroWhy(t){
   if(!t) return '';
   if(String(t.source||'')==='lottery') return '抽獎贈送';
+  if(String(t.source||'')==='comp') return '管理員招待';
   if(/加贈/.test(String(t.note||''))) return '隨方案加贈';
   if(/待確認/.test(String(t.note||''))) return '金額待確認';
   if(String(t.id||'').startsWith('MTK-')||String(t.id||'').startsWith('IMP')) return '舊系統匯入・無金額';
@@ -34648,18 +34656,76 @@ function bamSwap(mid){
 function bamHoldAsk(mid){
   const b=window._bamB; if(!b){ closeModal(); return; }
   const r=(window._bamRows||[]).find(x=>x.id===mid); if(!r) return;
-  if(!r.inst) return bamHoldDo(mid,'sign');
+  /* ══ 招待名額（2026-10-18 使用者：「幫我新增管理員帳號可以免費預約名額
+     下週一想要讓兩個長輩免費體驗13:00的團課」「只限定管理員帳號使用
+     但是要算教練的薪資堂數喔」）══════════════════════════════════════════
+     ⚠ 做法刻意是「發一張 $0 的票再用正常流程加入」，不是硬塞一個無票名額 ——
+       0820 使用者定案「名額一定有票」，起因是林婉華那次：硬加的無票名額後續
+       請假又發補課券，變成雙重補償。發票保住這個不變量，請假／補課券／名額
+       計算全部不必改。
+     ⚠ 教練薪資自動就對：團課人頭費算的是 grpAttendHeads（已簽到的名額數），
+       根本不看票的金額；教練課則是照堂數。所以「要算教練的薪資堂數」不需要
+       另外寫程式，但**也因此招待是有成本的**（要付教練錢），視窗裡要講。
+     ⚠ 只有管理員：用 SESSION.role 而不是 isManagerUp() —— 店長與櫃檯都不給。
+       身分預覽成店長時也會關掉，那是對的。 */
+  const _canComp=!!(window.SESSION&&SESSION.role==='admin');
+  if(!r.inst && !_canComp) return bamHoldDo(mid,'sign');
+  const _compBtn=_canComp?`
+      <button class="btn btn-ghost" style="width:100%;text-align:left;padding:12px 14px;" onclick="closeModal();bamCompDo('${mid}')">
+        <b>🎁 招待名額</b><br><span style="font-size:11.5px;color:var(--t3);line-height:1.7;">免費讓這位上這一堂：系統會開一張 $0、限這天、只有 1 堂的招待票再加入。<b>名額正常計算</b>，教練的課堂費照發。</span></button>`:'';
   showModal(`<div class="modal-title">要用哪一種保留？</div>
     <div style="font-size:12.5px;color:var(--t2);line-height:1.85;padding:2px 0 12px;">
       <b>${escH(r.name)}</b>　·　${String(b.date||'').replace(/-/g,'/')} ${String(b.start_time||'').slice(0,5)}
-      <br>兩種都<b>不扣票、不進統計</b>，差別在後續怎麼補上。</div>
+      <br>${_canComp?'保留的兩種<b>不扣票、不進統計</b>；招待名額會<b>正式佔一個名額</b>。':'兩種都<b>不扣票、不進統計</b>，差別在後續怎麼補上。'}</div>
     <div style="display:flex;flex-direction:column;gap:9px;">
       <button class="btn btn-ghost" style="width:100%;text-align:left;padding:12px 14px;" onclick="closeModal();bamHoldDo('${mid}','inst')">
         <b>待分期</b><br><span style="font-size:11.5px;color:var(--t3);line-height:1.7;">接上這位會員的分期票：收到下一期款項、在票券卡按「開通下一期」後，會自動補綁票券並扣課。</span></button>
       <button class="btn btn-ghost" style="width:100%;text-align:left;padding:12px 14px;" onclick="closeModal();bamHoldDo('${mid}','sign')">
         <b>🕒 待簽約</b><br><span style="font-size:11.5px;color:var(--t3);line-height:1.7;">客人尚未購票：先佔住時段與場地，簽約付款後在課卡明細按「轉正式預約」。</span></button>
+      ${_compBtn}
     </div>
     <div class="modal-foot"><button class="btn btn-ghost" onclick="bkAddMemberOpen('${b.id}')">‹ 返回名單</button></div>`);
+}
+/* 招待名額的實作（2026-10-18）：發一張 $0／1 堂／限當天的票，再走正常加入流程。
+   ⚠ 票 id 直接傳給 bkAddMemberDo —— 不讓它自動挑票。這位會員可能剛好有別張票，
+     自動挑會扣到人家付過錢的那張。
+   ⚠ 不寫 purchases：沒有收到錢就不要進營收（抽獎那條會寫 $0 的 purchases 是
+     因為要留抽獎紀錄，招待沒有這個需求）。
+   ⚠ expire_date 設成上課那天：tkFitsBooking 是 `expire_date < bookDate` 才擋，
+     等於當天仍可用；萬一後面加入失敗，這張票當天過後就自動失效，不會變成
+     一張飄在外面可以亂用的免費票。 */
+async function bamCompDo(mid){
+  const b=window._bamB; if(!b){ closeModal(); return; }
+  if(!(window.SESSION&&SESSION.role==='admin')){ showToast('招待名額只有管理員可以開'); return; }
+  closeModal();
+  return onceAct('bkcomp:'+b.id+':'+mid, async ()=>{
+    const done=uiBusy('開立招待票…');
+    let t=null;
+    try{
+      const nm=((await dbGet('members',mid).catch(()=>null))||{}).name||'';
+      const _when=String(b.date||'')+' '+String(b.start_time||'').slice(0,5);
+      t={id:uid('TK'), member_id:mid, ticket_type_id:b.ticket_type_id,
+        source_plan_id:null, plan_name:'招待名額', format:null,
+        source:'comp',
+        unit_price:0, amount_paid:0,
+        purchase_date:ymd(TODAY), start_date:b.date, expire_date:b.date,
+        valid_days:null, activated_at:new Date().toISOString(),
+        sessions_total:1, sessions_remaining:1,
+        unlocked_sessions:1, installment:null,
+        status:'usable', payment_status:'paid',
+        invoice_status:'none',
+        note:'管理員招待：'+_when+(nm?'　'+nm:''),
+        created_at:new Date().toISOString()};
+      await dbPut('member_tickets',t);
+      await logTicket(t.id,'grant',1,null,SESSION.id,'管理員招待名額（'+_when+'）');
+      dbCacheClear(['member_tickets','ticket_logs']);
+    }catch(e){
+      done(); showToast('開立招待票失敗：'+((e&&e.message)||e), 5000); return;
+    }
+    done();
+    /* bkAddMemberDo 自己有 uiBusy，不要包在上面那層裡 */
+    return bkAddMemberDo(b.id, mid, t.id);
+  });
 }
 function bamHoldDo(mid, mode){
   const b=window._bamB; if(!b){ closeModal(); return; }
@@ -45931,7 +45997,7 @@ const SALARY_TPL_DEFAULT = {
     /* 級距起點 1（2026-07-29 修正）：原本 min:0 會讓第一階算成 60 堂（0~59），
        每人每月多算 1 堂。實際規則是「前 59 堂」，與手動薪資表一致。 */
     pt_tiers:[
-      {min:1,  max:59,  rate:625},
+      {min:1,  max:59,  rate:600},
       {min:60, max:79,  rate:650},
       {min:80, max:99,  rate:675},
       {min:100,max:null,rate:700},
@@ -50649,7 +50715,7 @@ function hrRerenderDuty(){
 function hrTeachBlockHtml(c){
   const cfg=empPayConfig(c);
   const mode=cfg.pt_mode==='tier'?'tier':'flat';
-  const tiers=(cfg.pt_tiers||[]).length?cfg.pt_tiers:[{min:1,max:59,rate:625}];
+  const tiers=(cfg.pt_tiers||[]).length?cfg.pt_tiers:[{min:1,max:59,rate:600}];
   const bonus=(cfg.pt_bonus||[]);
   return `
     <div class="form-row"><label>課堂薪資制度</label><select id="hr-ptmode" onchange="hrTogglePtMode()">
@@ -50658,7 +50724,7 @@ function hrTeachBlockHtml(c){
     </select></div>
 
     <div id="hr-tier-box" style="display:${mode==='tier'?'block':'none'};border:1px dashed var(--bd);border-radius:10px;padding:12px;margin-bottom:12px;">
-      <div style="font-size:11.5px;color:var(--t2);margin-bottom:8px;">級距以「第 N 堂」計算，例：1-59 堂每堂 625 元。</div>
+      <div style="font-size:11.5px;color:var(--t2);margin-bottom:8px;">級距以「第 N 堂」計算，例：1-59 堂每堂 600 元。</div>
       <div id="hr-tier-list">${tiers.map((t,i)=>hrTierRow(t,i)).join('')}</div>
       <button class="btn btn-ghost btn-sm" onclick="hrAddTier()" style="margin-top:8px;">＋ 新增級距</button>
     </div>
@@ -50684,7 +50750,7 @@ function hrTeachBlockHtml(c){
     </div>`;
 }
 /* 級距表底下那一行（2026-09-30）：取代原本那句固定的舉例
-   「級距以『第 N 堂』計算，例：1-59 堂每堂 625 元」——
+   「級距以『第 N 堂』計算，例：1-59 堂每堂 600 元」——
    改成講**這一組實際的最後一階**，設錯了一眼看得出來。
    ⚠ 純顯示，不參與計算（算薪走 calcSalary 的 pt_tiers）。 */
 function hrTierSumText(tiers){
@@ -54299,7 +54365,7 @@ function hrSalaryBodyHtml(c,et){
         ? `這位生日 <b>${_bd.slice(5,7)}/${_bd.slice(8,10)}</b>，目前<b>不發</b>（取消勾選的狀態）。`
         : `這位生日 <b>${_bd.slice(5,7)}/${_bd.slice(8,10)}</b>，禮金隨 <b>${_bdM===1?12:_bdM-1} 月</b>的薪資於 <b>${_bdM}/5</b> 發放。`);
   const mode=cfg.pt_mode==='tier'?'tier':'flat';
-  const tiers=(cfg.pt_tiers||[]).length?cfg.pt_tiers:[{min:1,max:59,rate:625}];
+  const tiers=(cfg.pt_tiers||[]).length?cfg.pt_tiers:[{min:1,max:59,rate:600}];
   const bonus=(cfg.pt_bonus||[]);
   /* ══ 排序（2026-08-24 使用者定案：「排序可以整理一下」）══════════════════
      照「錢怎麼來」由大到小排：固定薪資 → 課堂薪資 → 團課費 → 達標獎金 → 管理職津貼
@@ -68564,6 +68630,18 @@ async function renderTrainingLogSheet(){
     .sort((a,b2)=>String(a.created_at||'').localeCompare(String(b2.created_at||'')));
   const byBk={};
   memLogs.forEach(l=>{ (byBk[l.booking_id]=byBk[l.booking_id]||[]).push(l); });
+  /* ⚠⚠ 2026-10-18 使用者回報：「上課套用前一次訓練的時候　動作順序沒有跟上次一樣」——
+     0916 那次把這裡改成照 created_at 升冪，當時是對的；但 0925 加了拖曳排序
+     （training_logs.seq）之後，「記錄的先後」與「實際做的順序」就分家了，
+     而這一區沒有跟著改用 tlSeqSort —— 今日紀錄那邊（見下方的 logs）0925 當天
+     就接上了，歷史這邊漏掉。
+     實測 BK-mv4ysfethdj2（10/17）：真實順序 啟動·轉→懸吊抬腿→啟動·推→啟動·拉→…，
+     畫面與套用卻是 啟動·轉→啟動·推→懸吊抬腿→…→啟動·拉（「啟動·拉」從第 4 掉到第 11）。
+     ⚠ 分組之後才排：seq 只在同一堂課內唯一，跨堂比大小沒有意義。
+     ⚠ 上面那行 created_at 升冪**不能拿掉** —— tlSessKey 查不到 booking 時會退回
+       ls[0].created_at 當日期，要靠它保證 ls[0] 是最早那筆。
+     ⚠ 預覽、_tlHistCache、套用三處都讀 byBk，所以改這一行就三處一起好。 */
+  Object.keys(byBk).forEach(k=>{ byBk[k]=tlSeqSort(byBk[k]); });
   /* ⚠ t 取該組**最早**那筆（排序後就是第一筆）—— 原本寫的也是 ls[0]，
      但在沒排序的情況下那只是「碰巧被放在第一個」的那筆，
      於是「最近三次」挑中哪三堂、以及這三堂的先後，都可能不對。 */

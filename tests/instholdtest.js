@@ -79,8 +79,11 @@ ok('★ 還沒建檔的客人仍然打得了姓名（搬家不能把這個能力
    /function bamGuestHold\(\)\{/.test(src)
    && /不在名單上？直接建立待簽約<\/span>/.test(src)
    && /bkAddHoldDo\(b\.id, null, 'sign', nm, ph\)/.test(src));
-ok('　　只有一種選項時不多問一層（沒有分期票就直接待簽約）',
-   /if\(!r\.inst\) return bamHoldDo\(mid,'sign'\);/.test(src));
+/* ⚠ 2026-10-18：管理員多了「招待名額」這條，所以對管理員而言選項永遠 >= 2，
+   捷徑的條件改成 `!r.inst && !_canComp`。這一條守的是原本的用意 ——
+   「只有一種選項時不要多跳一層視窗」—— 對非管理員仍然成立。 */
+ok('　　只有一種選項時不多問一層（非管理員、沒有分期票就直接待簽約）',
+   /if\(!r\.inst && !_canComp\) return bamHoldDo\(mid,'sign'\);/.test(src));
 /* 2026-08-04 追加：「最多只能約剩下的堂數」 */
 ok('★ 連續保留夾上限＝未開通堂數（超過自動縮並提示）',
    /window\._bkInstMax=_instMax;/.test(src)
