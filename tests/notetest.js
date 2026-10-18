@@ -174,8 +174,13 @@ ok('　　有無限迴圈保險絲', /if\(page>40\) break;/.test(src));
 ok('　　產檔失敗會退回列印路徑並說明', /請改按「列印」，在印表機選「另存為 PDF」/.test(src));
 ok('　　量測用的暫時樣式一定會還原（finally）',
    /\}finally\{[\s\S]{0,220}pg\.style\.width=keep\.w/.test(src));
+/* ⚠ 只數**會員合約**那三個入口。1018 職務契約也走同一支 ctPrintOpen（那是對的，
+   就是要共用版型），數全部會變成 4 —— 數錯的是測試不是程式。 */
 ok('★ 三個入口都走同一支（檔名帶會員與日期）',
-   (src.match(/ctPrintOpen\(ctPdfName\(/g)||[]).length===3);
+   (src.match(/ctPrintOpen\(ctPdfName\(\['YUGYM會員服務合約'/g)||[]).length===3,
+   (src.match(/ctPrintOpen\(ctPdfName\(/g)||[]).length);
+ok('★ 職務契約也共用同一支列印版型',
+   /ctPrintOpen\(ctPdfName\(\['筋實堂',c\.name/.test(src));
 
 /* ── 沒綁會員的課：標籤要對（2026-07-29 使用者回報：施佩怡待簽約卡位被標成「體驗」） ── */
 const gl=new Function(grabBody('bkGuestLabel')+'\n'+grabBody('bkGuestName')+'\nreturn {bkGuestLabel,bkGuestName};')();
