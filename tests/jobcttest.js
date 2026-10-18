@@ -39,9 +39,9 @@ ok('★★★ 另有人事表單（自願離職申請書）',
 ok('★★★ 每一份都有 id／name／sub／tag／body', api.JOB_CONTRACTS.every(c=>c.id&&c.name&&c.sub&&c.tag&&c.body));
 ok('★★ id 不重複', new Set(api.JOB_CONTRACTS.map(c=>c.id)).size===7);
 ok('★★ jobCtGet 查得到、查不到回 null', !!byId('full') && byId('nope')===null);
-/* ⚠ 門檻 1018 從 900 降到 800：離職單被使用者一路刪短（到職日、工資結算金額、
-   合計應領都拿掉了），剩 889 字。這一條只是要擋「只有標題的空殼」，不是在比長度。 */
-ok('★★ 每一份都夠長（不是只有標題的空殼）', api.JOB_CONTRACTS.every(c=>c.body.length>800),
+/* ⚠ 門檻 1018 一路降到 700：離職單被使用者刪短了五次（到職日、工資結算金額、
+   合計應領、第六條整條…），剩 772 字。這一條只是要擋「只有標題的空殼」，不是在比長度。 */
+ok('★★ 每一份都夠長（不是只有標題的空殼）', api.JOB_CONTRACTS.every(c=>c.body.length>700),
    api.JOB_CONTRACTS.map(c=>c.body.length));
 
 console.log('\n② 甲方＝登記名「筋實堂」，不是品牌名（見 yugym-biz-identity）');
@@ -244,11 +244,12 @@ ok('★★★ 明寫是本人意願、非資遣解僱',
    quit.body.indexOf('這份申請是我自己提出的，不是資遣或解僱')>=0);
 ok('★★★ 明寫沒有資遣費、不能領失業給付（簽的人要知道代價）',
    quit.body.indexOf('沒有資遣費')>=0 && quit.body.indexOf('失業給付')>=0);
-/* ⚠ Mango 的情況是「離職當天就簽承攬契約」，所以這兩件事一定要寫在紙上：
-   年資不合併、公司從離職日起停保。少了任一句，這份文件就失去它存在的意義。 */
-ok('★★★ 後續合作：年資不併計、公司從離職日起停保',
-   quit.body.indexOf('年資算到最後工作日，不合併計算')>=0
-   && quit.body.indexOf('停止提繳勞退')>=0);
+/* ⚠ 1018 使用者把「之後如果要合作」整條拿掉了（年資不併計那句一起走）。
+   留下來的防線是第五條 1：公司在離職日辦退保、停止提繳勞退 —— 那是實際動作，
+   不是宣示，少了它連退保都沒有依據。 */
+ok('★★★ 公司從離職日起退保、停止提繳勞退',
+   quit.body.indexOf('停止提繳勞退')>=0);
+ok('★★ 「之後如果要合作」整條已移除', quit.body.indexOf('之後如果要合作')<0);
 ok('★★★ 要結清工資與未休特休（折現）',
    quit.body.indexOf('沒休完的特休')>=0 && quit.body.indexOf('折發')>=0);
 ok('★★ 公司要辦退保、停止提繳勞退',
@@ -295,7 +296,9 @@ ok('★★ 全形空白開頭的段落有縮排（不是 ct-p0）', (()=>{
 /* 每一份的第一條都要被認出來，否則那一份的排版整個失效 */
 ok('★★★ 每一份契約的每個「第N條」都認得出來', api.JOB_CONTRACTS.every(c=>{
   const heads=c.body.split('\n').filter(l=>/^第[一二三四五六七八九十百]+條/.test(l));
-  return heads.length>=7 && heads.every(l=>ctBodyHTML(l).indexOf('ct-h2')>=0);
+  /* ⚠ 下限 1018 從 7 降到 6：離職單被刪到剩六條。這一條盯的是「每個第N條都被認出來」，
+     不是在數有幾條 —— 條數是使用者的決定。 */
+  return heads.length>=6 && heads.every(l=>ctBodyHTML(l).indexOf('ct-h2')>=0);
 }), api.JOB_CONTRACTS.map(c=>c.body.split('\n').filter(l=>/^第/.test(l)).length));
 
 console.log('\n⑥ 權限與接線');
