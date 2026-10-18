@@ -47,7 +47,20 @@ ok('★★★ 是合併不是覆蓋（Object.assign 既有的）',
 ok('★★★ 清空是刪掉那個鍵，不留空字串', /delete cur\[sk\]/.test(S));
 ok('★★ 全部清光就存 null，不留空物件', /Object\.keys\(cur\)\.length\?cur:null/.test(S));
 ok('★★ 沒改就不寫（省一次網路、也不會洗掉別人的）', /if\(before===val\)\{ closeModal\(\); return; \}/.test(S));
-ok('★★ 存完清快取並重畫', /dbCacheClear\(\['bookings'\]\)/.test(S) && /navTo\(CUR_PAGE\)/.test(S));
+/* ⚠ 2026-10-18 使用者回報：「輸入備註的時候簡易預約課卡會自動關閉，
+   又要重新打開才知道輸入了什麼」—— 我原本寫 navTo(CUR_PAGE) 重畫整頁，
+   課卡當然收起來。既有的 ashBkNoteSave 早就有正確收尾，照抄它就好。 */
+/* ⚠ 反面斷言要先剝掉註解 —— 不然會命中「原本寫 navTo(CUR_PAGE)」那句說明。
+   這個坑記憶裡已經記過三次（yugym-assert-hits-comment），這是第四次。 */
+const noCmt=t=>String(t||'').replace(/\/\*[\s\S]*?\*\//g,'').replace(/^\s*\/\/.*$/gm,'');
+ok('★★★ 存完回到那張課卡，不是重畫整頁',
+   /ashBackArm\(bid\); openBookingDetail\(bid\);/.test(S) && !/navTo\(CUR_PAGE\)/.test(noCmt(S)));
+ok('★★★ 與整堂備註那支同一個收尾（不要自己發明）', (()=>{
+  const B=grab('ashBkNoteSave');
+  return /ashBackArm\(bid\); openBookingDetail\(bid\);/.test(B)
+      && /ashBackArm\(bid\); openBookingDetail\(bid\);/.test(S);
+})());
+ok('★★ 存完有清快取', /dbCacheClear\(\['bookings'\]\)/.test(S));
 
 console.log('\n④ 三種備註不要混在一起');
 /* members.note＝跟著人、bookings.note＝整堂、training_note＝課表今日、seat_notes＝這一格 */
