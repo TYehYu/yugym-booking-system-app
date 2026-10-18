@@ -14844,8 +14844,8 @@ function tbl(s){return TABLE_ALIAS[s]||s;}
 let sb=null;
 // ── 版本號（日期+時間格式：年後兩碼+月+日.時分，例 26620.1058 = 26年6/20 10:58）──
 // 每次改版手動更新這一行即可，畫面與 title 會一起更新
-const APP_VERSION = '261018.1504';
-const APP_VERSION_LABEL = 'v261018.1504';
+const APP_VERSION = '261018.2044';
+const APP_VERSION_LABEL = 'v261018.2044';
 const CLOUD = !!(window.YUGYM_CONFIG && window.YUGYM_CONFIG.url && window.YUGYM_CONFIG.anonKey);
 if(CLOUD){ sb = supabase.createClient(window.YUGYM_CONFIG.url, window.YUGYM_CONFIG.anonKey); }
 
@@ -28650,8 +28650,9 @@ async function renderCalendar(opts){
         dayLaneStyle=`top:${top+2}px;height:${fixedH-6}px;left:calc(${leftPct}% + ${edge}px);width:calc(${laneWpct}% - ${gap}px);`;
         if(dl.conflict) dayLaneStyle+='outline:2px solid var(--danger);outline-offset:-1px;';
       }
-      const lane= useFixedLane ? {idx:0,total:1} : (lanes[b.id]||{idx:0,total:1});
-      const wpct=100/lane.total;
+      const lane= useFixedLane ? {idx:0,total:1,span:1,left:0} : (lanes[b.id]||{idx:0,total:1,span:1,left:0});
+      /* span＝這張卡往右吃掉幾欄（見 assignLanes）。沒有的話當 1，行為與舊版相同。 */
+      const wpct=(100/lane.total)*(lane.span||1);
       /* 2026-08-01：代課接手的那位也要能編輯自己要上的課 —— 這裡原本只比主責教練，
          但下面的 isMine 用的是 bkCoachId（代課優先），兩者不一致會出現
          「卡片算我的、卻不能拖不能改」。統一用「這堂實際由誰上」。 */
@@ -28705,7 +28706,7 @@ async function renderCalendar(opts){
       //  70–90px：縮字（ev-w-narrow）
       //  <70px：只顯示時間＋會員（省略教練，ev-w-tiny）
       const colW = (window.innerWidth - 80) / Math.max(nDays,1); // 每日欄約略寬度
-      const cardW = colW / lane.total; // 同時段均分後每張卡寬度
+      const cardW = colW / lane.total * (lane.span||1); // 同時段均分後每張卡寬度（含往右撐滿的格數）
       const mobile7 = isMobileLayout() && (nDays===7||nDays===5);
       const wCls = cardW < 70 ? 'ev-w-tiny' : (cardW < 90 ? 'ev-w-narrow' : '');
       /* 整點開始的卡不印時間（2026-09-03 使用者：密集課卡優化第 1 項）——
@@ -28969,7 +28970,7 @@ async function renderCalendar(opts){
         return `場地：${v}${v==='跑步機'?`　·　${n} 人`:''}`; })();
       const _tipStr = _tipEsc([`${b.start_time}–${_endT}`, _tipMem, _tipCoach, _tipVenue].filter(Boolean).join('\n'));
       evHtml+=`<div class="cal-ev ${cls} ${editable?'':'readonly'} ${wCls} ${tipUp?'tip-up':''} ${hideMember?'bk-masked':''}${_viewOnly?' cal-ev-view':''} cal-ev-day cal-ev-std ${_densityCls} ${_courseCls} ${_checkedCls} ${_pendCls} ${_pastCls}${_alertCls}" data-bid="${b.id}" data-time="${b.start_time}" data-tip="${_tipStr}"
-        style="${useFixedLane?dayLaneStyle:`top:${top}px;height:${Math.max(h-2,(nDays===7||nDays===5)?40:64)}px;left:calc(${lane.idx*wpct}% + 3px);width:calc(${wpct}% - 6px);`}"
+        style="${useFixedLane?dayLaneStyle:`top:${top}px;height:${Math.max(h-2,(nDays===7||nDays===5)?40:64)}px;left:calc(${(lane.left!=null?lane.left:lane.idx)*(100/lane.total)}% + 3px);width:calc(${wpct}% - 6px);`}"
         ${/* 2026-08-01 使用者指示：「教練的行事曆，非本人的課卡一樣正常顯示課卡內容，
              但是要移除互動的功能，手機跟桌機都是」——內容照舊畫，只是不掛任何點擊。
              （0731 曾改成「點得開唯讀明細」，現在收回：別人的課連看明細都不需要。） */''}
@@ -29327,10 +29328,135 @@ function assignLanes(evs){
       const s=timeToMin(b.start_time),e=s+(b.duration||60);
       let idx=ends.findIndex(end=>end<=s);
       if(idx===-1){idx=ends.length;ends.push(e);}else{ends[idx]=e;}
-      res[b.id]={idx,total:0};
+      res[b.id]={idx,total:0,span:1};
     });
-    g.forEach(b=>res[b.id].total=ends.length);
-  });
+    const total=ends.length;
+    g.forEach(b=>res[b.id].total=total);
+    /* ── 往右撐滿空的欄（2026-10-18 使用者：「這一天有好多空白區」）──────────
+       上面那段只決定「排在第幾欄」，寬度一律 1/total。但一組是「連鎖重疊」算出來的：
+       10:00–15:00 只要一路有人接力，中間某個時刻其實只有一張卡，它仍然只佔 1/3，
+       右邊兩格就空在那裡。
+       ⚠ 判斷依據是「**真的跟我重疊**的卡佔了哪幾欄」，不是整組 ——
+         同一組裡時間錯開的卡不該擋住彼此，那正是這次要修的毛病。
+       ⚠ 只往右長，不往左：往左會讓同時段的卡左緣對不齊，看起來更亂。
+       ⚠ 欄位格線不變（仍是 total 等分），所以同時段並排時還是對得整齊。 */
+    const iv=x=>{ const t=timeToMin(x.start_time); return [t, t+(x.duration||60)]; };
+    const hit=(x,y)=>{ const [a1,b1]=iv(x),[a2,b2]=iv(y); return a1<b2 && b1>a2; };
+
+    /* ① 逐步放大：每張先 1 格，一輪一輪從最窄的開始加，加到誰都加不動為止。
+       「先加最窄的」就是在平分 —— 不會有人獨吞。 */
+    const marks=[...new Set(g.flatMap(x=>iv(x)))].sort((m,n)=>m-n);
+    const uOf={}; g.forEach(x=>{ uOf[x.id]=1; });
+    const loadAt=t=>g.reduce((k,y)=>{ const [ys,ye]=iv(y); return k+((ys<=t&&ye>t)?uOf[y.id]:0); },0);
+    const canGrow=x=>{
+      const [s0,e0]=iv(x);
+      return marks.every(t=>(t<s0||t>=e0) || loadAt(t)+1<=total);
+    };
+    for(let round=0; round<total*g.length+4; round++){
+      let moved=false;
+      g.slice().sort((x,y)=>(uOf[x.id]-uOf[y.id]) || (iv(x)[0]-iv(y)[0]))
+        .forEach(x=>{ if(uOf[x.id]<total && canGrow(x)){ uOf[x.id]++; moved=true; } });
+      if(!moved) break;
+    }
+
+    /* ①b 時段完全相同的幾張，放大目標先平均。
+       ①是一格一格加的，5 格分給 2 張必然是 3 和 2 —— 看起來就一大一小。
+       它們蓋到的時刻完全一樣，所以把總和平均分回去不會影響任何人的額度。 */
+    (function(){
+      const byIv={};
+      g.forEach(x=>{ const k=iv(x).join('-'); (byIv[k]=byIv[k]||[]).push(x); });
+      Object.keys(byIv).forEach(k=>{
+        const S=byIv[k]; if(S.length<2) return;
+        const w=S.reduce((t,x)=>t+uOf[x.id],0)/S.length;
+        S.forEach(x=>{ uOf[x.id]=w; });
+      });
+    })();
+
+    /* ② 擺位置：由左往右找第一個放得下的位置，放不下就只縮這一張。
+       ⚠ 擺放的順序會決定結果好不好。一張只有 1 格、卻跨過尖峰的窄卡
+         （它窄是因為跟前一個尖峰重疊）如果卡在正中間，就會把後面那段
+         連續空間切成兩半 —— 晚一點那兩張本該各 2.5 格的卡只好分成 3 格和 2 格。
+       所以這裡不只試一種順序：試三種，挑「同時段的卡寬度最接近、又填得最滿」的那一種。
+       ⚠ 不能無腦改成「寬的先放」—— 窄卡會被寬卡圍死、連 1 格都放不下。
+         放不下的順序直接丟掉，至少還有「早的先放」這個保底。 */
+    const EPS=1e-9;
+    const dur=x=>iv(x)[1]-iv(x)[0];
+    const sameIv={};
+    g.forEach(x=>{ const k=iv(x).join('-'); (sameIv[k]=sameIv[k]||[]).push(x); });
+
+    /* 時段完全相同、位置又首尾相連的幾張 → 總寬平分（5 格分給 2 張 → 各 2.5）。
+       它們佔的那一段橫向空間是固定的，在裡面怎麼切都碰不到別人，所以安全。 */
+    const evenOut=(posOf,wOf)=>{
+      Object.keys(sameIv).forEach(k=>{
+        const S=sameIv[k].slice(); if(S.length<2) return;
+        S.sort((x,y)=>posOf[x.id]-posOf[y.id]);
+        for(let i=1;i<S.length;i++)
+          if(Math.abs(posOf[S[i-1].id]+wOf[S[i-1].id]-posOf[S[i].id])>EPS) return;
+        const a0=posOf[S[0].id];
+        const w=S.reduce((t,x)=>t+wOf[x.id],0)/S.length;
+        S.forEach((x,i)=>{ posOf[x.id]=a0+i*w; wOf[x.id]=w; });
+      });
+    };
+
+    const placeBy=order=>{
+      const placed=[], posOf={}, wOf={}; let ok=true;
+      order.forEach(x=>{
+        const busy=placed.filter(y=>hit(x,y))
+          .map(y=>[posOf[y.id], posOf[y.id]+wOf[y.id]])
+          .sort((m,n)=>m[0]-n[0]);
+        /* 放不下時先退到整數格（2.5→2→1），不要 2.5→1.5 那樣卡在半格的位置 */
+        for(let u=uOf[x.id]; u>=1; u=(u>Math.floor(u)?Math.floor(u):u-1)){
+          let pos=0;
+          for(let i=0;i<busy.length;i++){
+            if(busy[i][0]-pos >= u-EPS) break;
+            if(busy[i][1]>pos) pos=busy[i][1];
+          }
+          if(pos+u <= total+EPS){ posOf[x.id]=pos; wOf[x.id]=u; break; }
+        }
+        if(wOf[x.id]==null){ ok=false; posOf[x.id]=0; wOf[x.id]=1; }
+        placed.push(x);
+      });
+      if(ok) evenOut(posOf,wOf);
+      /* ③ 驗算：真的沒有任何兩張會疊到，這個順序才算可用。卡片互相壓住比留白難看一百倍。 */
+      for(let i=0;i<g.length && ok;i++) for(let j=i+1;j<g.length;j++){
+        const x=g[i], y=g[j]; if(!hit(x,y)) continue;
+        const xl=posOf[x.id], xr=xl+wOf[x.id], yl=posOf[y.id], yr=yl+wOf[y.id];
+        if(xl<yr-EPS && xr>yl+EPS){ ok=false; break; }
+      }
+      if(!ok) return null;
+      /* 評分 ——
+         不公平：兩張卡重疊、而且①算出來的額度一樣，寬度就不該差。差多少 × 重疊多久。
+           ⚠ 只比「時段完全相同」的不夠 —— 葉政義 14:55 跟陳蘭燕 15:00 時段不同，
+             但使用者點名這四張要一樣寬，那種差距必須被算到。
+         面積：全部卡片的寬 × 時長，就是「填得多滿」。公平先看，再看滿。 */
+      let unfair=0, area=0;
+      g.forEach(x=>{ area+=wOf[x.id]*dur(x); });
+      for(let i=0;i<g.length;i++) for(let j=i+1;j<g.length;j++){
+        const x=g[i], y=g[j];
+        if(!hit(x,y) || Math.abs(uOf[x.id]-uOf[y.id])>EPS) continue;
+        const ov=Math.min(iv(x)[1],iv(y)[1])-Math.max(iv(x)[0],iv(y)[0]);
+        unfair+=Math.abs(wOf[x.id]-wOf[y.id])*ov;
+      }
+      return {posOf:posOf, wOf:wOf, unfair:unfair, area:area};
+    };
+
+    const byStart=(x,y)=>(iv(x)[0]-iv(y)[0])||(res[x.id].idx-res[y.id].idx);
+    /* ⚠ 每一種順序裡，同一時間開始的幾張都必須照原本的欄序（byStart 的第二段、
+       或 res.idx）—— 先放的會拿到左邊，順序顛倒就會看到「胡瑜文跑到曾俐萍左邊」。
+       sort 是穩定的，所以分數一樣時留下第一種（早的先放），畫面不會每次重算就跳動。 */
+    const best=[
+      g.slice().sort(byStart),                                     /* 早的先放（保底） */
+      g.slice().sort((x,y)=>(uOf[x.id]-uOf[y.id])||byStart(x,y)),  /* 窄的先放 */
+      g.slice().sort((x,y)=>(dur(y)-dur(x))||byStart(x,y)),        /* 長的先放 */
+      g.slice().sort((x,y)=>(uOf[x.id]-uOf[y.id])||(iv(y)[0]-iv(x)[0])
+                            ||(res[x.id].idx-res[y.id].idx))       /* 窄的先放、同寬則晚的先放 */
+    ].map(placeBy).filter(Boolean)
+     .sort((m,n)=>(m.unfair-n.unfair)||(n.area-m.area))[0];
+
+    g.forEach(x=>{
+      if(best){ res[x.id].left=best.posOf[x.id]; res[x.id].span=best.wOf[x.id]; }
+      else    { res[x.id].left=res[x.id].idx;    res[x.id].span=1; }
+    });  });
   return res;
 }
 // ── Phase 1：日檢視專用 Lane 分配（區間重疊，非 start slot 分組）──
@@ -34717,7 +34843,7 @@ function bamHoldAsk(mid){
        另外寫程式，但**也因此招待是有成本的**（要付教練錢），視窗裡要講。
      ⚠ 只有管理員：用 SESSION.role 而不是 isManagerUp() —— 店長與櫃檯都不給。
        身分預覽成店長時也會關掉，那是對的。 */
-  const _canComp=!!(SESSION&&SESSION.role==='admin');   // ⚠ 不可寫 window.SESSION，見下方 renderTrainingLogSheet 的警語
+  const _canComp=!!(SESSION&&SESSION.role==='admin');   // ⚠ 不可寫 window.SESSION，見 68345 的警語
   if(!r.inst && !_canComp) return bamHoldDo(mid,'sign');
   const _compBtn=_canComp?`
       <button class="btn btn-ghost" style="width:100%;text-align:left;padding:12px 14px;" onclick="closeModal();bamCompDo('${mid}')">
@@ -41758,7 +41884,7 @@ async function openGroupMembers(id, keepSel, addMode){
               <button type="button" class="btn btn-gold" onclick="grpCompOpen('${id}')">挑一位來招待</button>
             </div>
           </details>`:''}
-                    ${/* 選到的人手上有兩張以上票時，要挑用哪一張（2026-08-29 使用者：
+          ${/* 選到的人手上有兩張以上票時，要挑用哪一張（2026-08-29 使用者：
                「許佳慈本人有三個團課方案 #18補課 #25優惠團課 #26優惠團課
                  所以點許佳慈的時候要跳出選擇使用方案」）。
                只有一張就不出現 —— 沒得選的時候不要多一步。 */''}
@@ -68828,8 +68954,8 @@ async function renderTrainingLogSheet(){
   /* ⚠⚠ 2026-10-18 使用者回報：「上課套用前一次訓練的時候　動作順序沒有跟上次一樣」——
      0916 那次把這裡改成照 created_at 升冪，當時是對的；但 0925 加了拖曳排序
      （training_logs.seq）之後，「記錄的先後」與「實際做的順序」就分家了，
-     而這一區沒有跟著改用 tlSeqSort —— 今日紀錄那邊（見下方的 logs）0925 當天
-     就接上了，歷史這邊漏掉。
+     而這一區沒有跟著改用 tlSeqSort —— 今日紀錄那邊（見 renderTrainingLogSheet 的 logs）
+     0925 當天就接上了，歷史這邊漏掉。
      實測 BK-mv4ysfethdj2（10/17）：真實順序 啟動·轉→懸吊抬腿→啟動·推→啟動·拉→…，
      畫面與套用卻是 啟動·轉→啟動·推→懸吊抬腿→…→啟動·拉（「啟動·拉」從第 4 掉到第 11）。
      ⚠ 分組之後才排：seq 只在同一堂課內唯一，跨堂比大小沒有意義。
