@@ -14876,8 +14876,8 @@ function tbl(s){return TABLE_ALIAS[s]||s;}
 let sb=null;
 // ── 版本號（日期+時間格式：年後兩碼+月+日.時分，例 26620.1058 = 26年6/20 10:58）──
 // 每次改版手動更新這一行即可，畫面與 title 會一起更新
-const APP_VERSION = '261019.1240';
-const APP_VERSION_LABEL = 'v261019.1240';
+const APP_VERSION = '261019.1325';
+const APP_VERSION_LABEL = 'v261019.1325';
 const CLOUD = !!(window.YUGYM_CONFIG && window.YUGYM_CONFIG.url && window.YUGYM_CONFIG.anonKey);
 if(CLOUD){ sb = supabase.createClient(window.YUGYM_CONFIG.url, window.YUGYM_CONFIG.anonKey); }
 
@@ -39115,7 +39115,7 @@ function bkCoachLeaveBtn(b, editable){
    ⚠ '教練請假' 只可能由 coachLeaveToRoster 寫入：人工選的假別只有
      特休／病假／事假／其他四種（見 openShiftEdit 的下拉），所以這個字串足以分辨。 */
 function shIsClassLeave(s){ return !!(s && s.leave_type==='教練請假'); }
-/* 真正的排班請假（特休／病假／事假／其他）＝今天這個人不上班 */
+/* 真正的排班請假（特休／病假／生理假／事假／喪假／其他）＝今天這個人不上班 */
 function shIsRosterLeave(s){ return !!(s && s.leave_type) && !shIsClassLeave(s); }
 /* 整天請假的人，那天的「教練請假」補登列不再畫（2026-10-04 使用者：「美蓉今天請病假
    這邊有重複資訊」）—— 她 10/04 排 09:00-15:00 標病假 6 小時，10:00 那一堂又被
@@ -46879,12 +46879,17 @@ function fmtHours(h){
 // ── 請假彙總：算某員工某月各假別時數 ──
 function leaveSummary(shifts, empId, month){
   const list=(shifts||[]).filter(s=>s.emp_id===empId&&(s.date||'').slice(0,7)===month);
-  let 特休=0, 病假=0, 事假=0, 喪假=0, 其他=0, scheduled=0;
+  let 特休=0, 病假=0, 生理假=0, 事假=0, 喪假=0, 其他=0, scheduled=0;
   list.forEach(s=>{
     scheduled+=(Number(s.hours)||0);
     const lh=Number(s.leave_hours)||0;
     if(s.leave_type==='特休') 特休+=lh;
     else if(s.leave_type==='病假') 病假+=lh;
+    /* 生理假（2026-10-19 使用者：「今天我已經幫她標註病假了，你順便幫我修改」）——
+       性別平等工作法第 14 條：每月得請一日，**工資減半發給**，費率與普通傷病假相同。
+       ⚠ 那為什麼不直接併進病假？因為「全年未逾三日不併入病假計算」——
+         分開記，之後查得出今年用掉幾天；併在一起就分不開了。 */
+    else if(s.leave_type==='生理假') 生理假+=lh;
     else if(s.leave_type==='事假') 事假+=lh;
     /* 喪假（2026-09-30 使用者定案：「喪假要加 不扣薪」）——
        勞基法（勞工請假規則第 3 條）喪假期間工資照給，正職兼職都一樣，
@@ -46896,8 +46901,8 @@ function leaveSummary(shifts, empId, month){
        不扣薪，與特休同一條規則；原因寫在班表的備註欄。 */
     else if(s.leave_type==='其他') 其他+=lh;
   });
-  const leaveTotal=特休+病假+事假+喪假+其他;
-  return { scheduled, 特休, 病假, 事假, 喪假, 其他, leaveTotal, actual:Math.max(scheduled-leaveTotal,0) };
+  const leaveTotal=特休+病假+生理假+事假+喪假+其他;
+  return { scheduled, 特休, 病假, 生理假, 事假, 喪假, 其他, leaveTotal, actual:Math.max(scheduled-leaveTotal,0) };
 }
 // ── 年度特休帳（設計A）──
 // 基數存員工欄位：al_carry_hours(去年結轉)、al_earned_hours(本年度新增)
@@ -48139,7 +48144,7 @@ function calcSalary(emp, ptDone, groupHeads, dutyHours, leave, classOverlap, ext
   if(et==='contractor' && dutyHours>0 && dhr<200) dhr=200; // 合作教練值班保底 200
   const _dutyHrs = tpl.need_duty ? dutyHours : 0;   // 不需值班 → 不計值班薪資
   const dutyGross=Math.round(_dutyHrs*dhr); // 原應值班費（依排班時數）
-  const L=leave||{特休:0,病假:0,事假:0,喪假:0,其他:0};
+  const L=leave||{特休:0,病假:0,生理假:0,事假:0,喪假:0,其他:0};
   /* 2026-08-01 使用者指示：請假扣薪改成「算完本月總薪資後再扣除」。
      原本先扣底薪（adjBase）、再與課費取高者 —— 課費高於調整後底薪時，扣款會被
      max() 整個吃掉，等於沒扣；而且值班費那邊又扣一次，語意重複。
@@ -48166,21 +48171,25 @@ function calcSalary(emp, ptDone, groupHeads, dutyHours, leave, classOverlap, ext
      用固定分母，同一個人每個月的時薪才一樣 —— 改用「當月實際排班時數」的話，
      班排比較多的月份時薪反而變低，同樣請一天扣的錢會不一樣。
      時薪先四捨五入到整數再乘時數，薪資單上的算式才對得起來（227 × 18 = 4,086）。
-     事假全扣、病假折半(50%)、特休與其他（颱風假等）不扣。 */
+     事假全扣、病假折半(50%)、特休與其他（颱風假等）不扣。
+     生理假（2026-10-19）與病假同為折半，但分開一欄 —— 全年未逾三日不併入病假計算。 */
   const _divisor = Number((window.SALARY_GLOBAL||{}).base_hours_divisor) || 130;
   const schedHours = (leave && Number(leave.scheduled)>0) ? Number(leave.scheduled) : 0;
   const baseHourly = base>0 ? Math.round(base/_divisor) : 0;
   const leavePersonal = (L.事假||0); // 事假時數
   const leaveSick = (L.病假||0);     // 病假時數
+  const leaveMens = (L.生理假||0);   // 生理假時數（與病假同費率，分開列）
   const baseLeavePersonalDed = Math.round(leavePersonal*baseHourly);       // 事假：全扣
   const baseLeaveSickDed = Math.round(leaveSick*baseHourly*0.5);           // 病假：折半
-  const baseLeaveDeduct = baseLeavePersonalDed + baseLeaveSickDed;
+  const baseLeaveMensDed = Math.round(leaveMens*baseHourly*0.5);           // 生理假：折半
+  const baseLeaveDeduct = baseLeavePersonalDed + baseLeaveSickDed + baseLeaveMensDed;
   const adjBase = base;   // 2026-08-01：底薪不再先扣請假，請假在最後統一扣
   // 請假扣款計算說明（供薪資明細顯示）
   const leaveDeductDetail = (baseLeaveDeduct>0 && baseHourly>0)
     ? `時薪 $${baseHourly.toLocaleString()}（底薪 $${base.toLocaleString()} ÷ ${_divisor}h）`
       + (leavePersonal>0?`　事假 ${leavePersonal}h × 時薪 = −$${baseLeavePersonalDed.toLocaleString()}`:'')
       + (leaveSick>0?`　病假 ${leaveSick}h × 時薪 × 50% = −$${baseLeaveSickDed.toLocaleString()}`:'')
+      + (leaveMens>0?`　生理假 ${leaveMens}h × 時薪 × 50% = −$${baseLeaveMensDed.toLocaleString()}`:'')
     : '';
 
   // 保障底薪：教練課費與底薪取高者（其餘項目另外加）
@@ -48876,7 +48885,7 @@ async function renderShiftsTab(){
        （見 shLvAbbr）。
      ⚠ 顏色用現成的 coachTagColor —— 行事曆課卡、值班週曆都是這一組，不另訂。
      ⚠ 兩種請假都收，只差假別那個字：
-       ・排班請假（特休／病假／事假／喪假／其他）＝ 今天這個人不上班
+       ・排班請假（特休／病假／生理假／事假／喪假／其他）＝ 今天這個人不上班
        ・教練請假（shIsClassLeave）＝ 值班照上，只是某一堂課沒上 → 假別段畫淡一階
      ⚠ 他自己那一列的格子本來就會標請假（sh-leave 小字），這裡是**刻意重複**的 ——
        上面回答「他那天排什麼班」，這一列回答「這個月誰請了假、哪幾天」。
@@ -49066,6 +49075,9 @@ function openShiftEdit(empId,dateStr){
             <option value="">無</option>
             <option value="特休"${cur.leave_type==='特休'?' selected':''}>特休（不扣薪）</option>
             <option value="病假"${cur.leave_type==='病假'?' selected':''}>病假（半薪）</option>
+            ${/* 生理假（2026-10-19 使用者）：性平法第 14 條工資減半，費率與病假相同。
+                 分開一個選項不是為了算錢，是為了「全年未逾三日不併入病假」查得出來。 */''}
+            <option value="生理假"${cur.leave_type==='生理假'?' selected':''}>生理假（半薪）</option>
             <option value="事假"${cur.leave_type==='事假'?' selected':''}>事假（不給薪）</option>
             ${/* 喪假（2026-09-30 使用者：「喪假要加 不扣薪」）——勞基法工資照給，
                  與特休同一條規則。天數依親等，系統不管上限。 */''}
@@ -49565,7 +49577,7 @@ async function computeMonthlyPayroll(month){
     isSupervisor:false, supPay:0, isLeader:false, leaderPay:0, leaderDetail:'', leaderTotal:0, leaderUnits:0, mgmtPay:0,
     leaderList:[], leaderT1:0, leaderT2:0, leaderB1:0, leaderB2:0,
     insGrade:null, insLaborEmp:0, insHealthEmp:0, insEmpDeduct:0, insLaborCo:0, insHealthCo:0, insCoCost:0,
-    insGradeMissing:'', leave:{特休:0,病假:0,事假:0,喪假:0,其他:0}, leaveDeduct:0,
+    insGradeMissing:'', leave:{特休:0,病假:0,生理假:0,事假:0,喪假:0,其他:0}, leaveDeduct:0,
     grossPay:n, netPay:n, total:n });
   const rows=staff.map(emp=>{
     if(_legacy){
@@ -77493,6 +77505,7 @@ async function renderSalaryContent(TARGET, withHead){
           if(sal.baseHourly>0) h+=`<div class="sal-note">請假時薪 $${sal.baseHourly.toLocaleString()}（底薪 ÷ ${sal.divisor}h）</div>`;
           if(myLeave.事假>0) h+=ded(`事假 ${myLeave.事假} 小時`, sal.baseLeavePersonalDed);
           if(myLeave.病假>0) h+=ded(`病假 ${myLeave.病假} 小時（半薪）`, sal.baseLeaveSickDed);
+          if(myLeave.生理假>0) h+=ded(`生理假 ${myLeave.生理假} 小時（半薪）`, sal.baseLeaveMensDed);
         }
         /* 不扣薪的假別照列（特休／喪假／其他）—— 它們不影響金額，是給員工看「請了沒被扣」。 */
         if(myLeave.特休>0) h+=`<div class="sal-row sal-row-ded"><span class="sal-rl">特休 ${myLeave.特休} 小時</span><span class="sal-rv" style="color:var(--t3);">不扣薪</span></div>`;

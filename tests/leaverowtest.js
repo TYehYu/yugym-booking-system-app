@@ -90,17 +90,19 @@ console.log('\n⑤ 喪假：新的假別，不扣薪');
   eq('★★★ 喪假自己一桶', [r.喪假, r.特休, r.事假, r.病假, r.其他], [8,6,4,2,3]);
   eq('★★★ 喪假算進請假總時數', r.leaveTotal, 23);
   /* ⚠ 不扣薪＝不進事假／病假那兩桶，calcSalary 只從那兩桶扣錢 */
-  ok('★★★ calcSalary 只扣事假（全扣）與病假（半薪），喪假碰不到',
+/* ⚠ 2026-10-19 多了生理假（性平法第 14 條，與病假同為折半、但分開一欄）。
+   這一條要盯的是「喪假碰不到扣款」，不是「只有兩種假會扣」—— 別把新假別當成壞掉。 */
+  ok('★★★ calcSalary 的扣款只有事假（全扣）、病假與生理假（半薪），喪假碰不到',
      /const leavePersonal = \(L\.事假\|\|0\); \/\/ 事假時數/.test(src)
      && /const leaveSick = \(L\.病假\|\|0\);/.test(src)
-     && /const baseLeaveDeduct = baseLeavePersonalDed \+ baseLeaveSickDed;/.test(src)
+     && /const baseLeaveDeduct = baseLeavePersonalDed \+ baseLeaveSickDed \+ baseLeaveMensDed;/.test(src)
      && !/L\.喪假/.test(src));
   ok('★★★ 排班視窗選得到「喪假（不扣薪）」',
      /<option value="喪假"\$\{cur\.leave_type==='喪假'\?' selected':''\}>喪假（不扣薪）<\/option>/.test(src));
   ok('★★★ 兩張薪資單都列得出來（管理員的、教練自己的）',
      /r\.leave\.喪假>0/.test(src) && /myLeave\.喪假>0/.test(src));
-  ok('★★ 預設桶也補上喪假（沒有請假的人不會變成 undefined）',
-     (src.match(/\{特休:0,病假:0,事假:0,喪假:0,其他:0\}/g)||[]).length===2);
+  ok('★★ 預設桶也補上喪假與生理假（沒有請假的人不會變成 undefined）',
+     (src.match(/\{特休:0,病假:0,生理假:0,事假:0,喪假:0,其他:0\}/g)||[]).length===2);
   ok('★★ 法源與「系統不管上限」寫在原地',
      /勞工請假規則第 3 條/.test(src) && /系統不自動管上限/.test(src));
 }
