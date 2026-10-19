@@ -1,0 +1,87 @@
+/* 臨時停課（2026-10-19 使用者：「這個禮拜可能會有颱風假」→「可以　開始寫」）
+
+   颱風、政府宣布停班或臨時停業時，把整天的課一次停掉。管理員與店長可用。
+
+   這支盯四件事：
+     ① 哪些課會被停（只有 booked；已簽到／已完成／教練請假／已取消都不碰）
+     ② 哪些票會被延（只延那天真的用到的，不是會員手上所有票）
+     ③ 取消走既有的 cancelBooking，而且是 force＋silent
+     ④ 權限只給管理員／店長 */
+const fs=require('fs');
+const src=fs.readFileSync(process.env.HOME+'/Projects/yugym-booking-system-app/index.html','utf8');
+let pass=0,fail=0;
+const ok=(n,c,x)=>{ if(c){pass++;console.log('  ✓ '+n);} else {fail++;console.log('  ✗ '+n+(x!==undefined?'  → '+JSON.stringify(x):''));} };
+const eq=(n,a,b)=>ok(n, JSON.stringify(a)===JSON.stringify(b), {got:a,want:b});
+const grab=n=>{let i=src.indexOf('async function '+n+'(');if(i<0)i=src.indexOf('function '+n+'(');
+ let d=0;for(let k=src.indexOf('{',i);k<src.length;k++){if(src[k]=='{')d++;else if(src[k]=='}'){d--;if(!d)return src.slice(i,k+1);}}};
+
+/* ⚠ 停班通常中午才宣布，早上有上到課的那幾堂一定要留著 —— b3 已簽到、b5 教練請假 */
+const BK=[
+ {id:'b1',date:'2026-10-20',status:'booked',category:'私人教練',member_id:'m1',coach_id:'c1',ticket_id:'t1'},
+ {id:'b2',date:'2026-10-20',status:'booked',category:'自主訓練',member_id:'m2',ticket_id:'t2'},
+ {id:'b3',date:'2026-10-20',status:'checked_in',category:'私人教練',member_id:'m3',coach_id:'c1',ticket_id:'t3'},
+ {id:'b4',date:'2026-10-20',status:'cancelled',category:'私人教練',member_id:'m4',ticket_id:'t4'},
+ {id:'b5',date:'2026-10-20',status:'coach_leave',category:'小班肌力',coach_id:'c2'},
+ {id:'b6',date:'2026-10-20',status:'booked',category:'小班肌力',coach_id:'c2',member_ids:['m5','m6'],seat_tickets:{m5:'t5','m6#2':'t6'}},
+ {id:'b7',date:'2026-10-21',status:'booked',category:'私人教練',member_id:'m7',ticket_id:'t7'}];
+const TK=[{id:'t1',expire_date:'2026-10-25'},{id:'t2',expire_date:'2027-08-31'},
+ {id:'t3',expire_date:'2026-10-25'},{id:'t5',expire_date:'2026-11-01'},
+ {id:'t6',expire_date:'2027-01-01'},{id:'t7',expire_date:'2026-10-22'}];
+const api=new Function('dbGetAll','parseYmd','ymd','mids','bkCoachId','CDAY_SOON_DAYS',
+  grab('cdayTickets')+'\n'+grab('cdayStat')+'\n'+grab('cdayCatLine')+'\nreturn {cdayTickets,cdayStat,cdayCatLine};')(
+  async t=>({bookings:BK,member_tickets:TK})[t],
+  s=>{const[a,b,c]=String(s).split('-').map(Number);return new Date(a,b-1,c);},
+  d=>d.getFullYear()+'-'+String(d.getMonth()+1).padStart(2,'0')+'-'+String(d.getDate()).padStart(2,'0'),
+  b=>b.member_ids||(b.member_id?[b.member_id]:[]),
+  b=>b.substitute_coach_id||b.coach_id, 14);
+
+(async()=>{
+console.log('① 哪些課會被停');
+const st=await api.cdayStat('2026-10-20');
+eq('★★★ 只停 booked 的三堂（b1 b2 b6）', st.bs.map(b=>b.id), ['b1','b2','b6']);
+ok('★★★ 已簽到的不動（b3）', !st.bs.some(b=>b.id==='b3'));
+ok('★★★ 已取消的不重複動（b4）', !st.bs.some(b=>b.id==='b4'));
+ok('★★★ 教練請假的不動（b5，那一班本來就沒了）', !st.bs.some(b=>b.id==='b5'));
+ok('★★★ 不會動到別天（b7）', !st.bs.some(b=>b.id==='b7'));
+eq('★★ 會員數含團課的每一位名額', st.mem, 4);
+eq('★★ 教練數去重', st.coach, 2);
+eq('★★ 分類明細', api.cdayCatLine(st.cat), '教練課 1　·　自主訓練 1　·　團體課 1');
+
+console.log('\n② 哪些票會被延');
+/* ⚠ 只延「那天真的用到的」。實測 10/20：34 位會員手上共 337 張票，
+   302 張是自主訓練點數、到期日散到 2027/08 —— 全延等於在帳本灌 300 筆沒意義的紀錄。 */
+eq('★★★ 單人課吃 ticket_id、團課吃 seat_tickets', st.tk.map(t=>t.id).sort(), ['t1','t2','t5','t6']);
+ok('★★★ 已簽到那堂的票不延（t3）', !st.tk.some(t=>t.id==='t3'));
+ok('★★★ 別天的票不延（t7）', !st.tk.some(t=>t.id==='t7'));
+eq('★★ 兩週內到期的張數（提醒用）', st.soon, 2);
+eq('★★ 團課一個名額一張票', api.cdayTickets(BK[5]).sort(), ['t5','t6']);
+eq('★★ 沒有票的課不會吐出 undefined', api.cdayTickets(BK[4]), []);
+
+console.log('\n③ 接線');
+/* force 不會進 RPC（RPC 會套 24 小時扣課規則，天災停課一律要退）；
+   silent 讓它不要每取消一筆就 navTo 重畫一次。 */
+ok('★★★ 取消走既有的 cancelBooking，force＋silent',
+   /await cancelBooking\(b\.id,'force',\{silent:true\}\);/.test(src));
+ok('★★★ 取消理由先寫進 booking（cancelBooking 會重讀，所以留得住）',
+   /cur\.cancel_reason='天災停課（'\+ds\+'）';\s*\n\s*await dbPut\('bookings',cur\);/.test(src));
+ok('★★★ 動手前重算一次（視窗可能開很久）',
+   /const st=await cdayStat\(ds\);\s+\/\/ 重新算一次/.test(src));
+ok('★★★ 展延有寫進票券帳本', /天災停課展延：\$\{from\} → \$\{to\}/.test(src));
+ok('★★ 做完清掉動到的那幾張表的快取',
+   /dbCacheClear\(\['bookings','member_tickets','ticket_logs','notifications'\]\);[\s\S]{0,80}closeModal\(\);/.test(src));
+ok('★★ 防連點（onceAct）', /async function cdayRun\(\)\{ return onceAct\('cday', \(\)=>_cdayRun\(\)\); \}/.test(src));
+
+console.log('\n④ 權限與入口');
+ok('★★★ 開窗要管理員／主管', /if\(!isManagerUp\(\)\)\{ showToast\('臨時停課只有管理員或主管可以操作'\); return; \}/.test(src));
+ok('★★★ 真正動手那一支也要再擋一次（不能只擋畫面）',
+   (src.match(/showToast\('臨時停課只有管理員或主管可以操作'\)/g)||[]).length===2);
+/* ⚠ 0903 量過「三樣擠一列在 1440 一定 wrap」，所以放列 2 不放列 1。 */
+ok('★★★ 按鈕在行事曆列 2，且只有管理員／主管看得到',
+   /const _cdayBtn=\(typeof isManagerUp==='function' && isManagerUp\(\)\)/.test(src)
+   && /const _calNavHtml=`<div class="cal-nav">\$\{_cdayBtn\}/.test(src));
+ok('★★ 按鈕有說明用途（這顆會一次取消一整天）',
+   /title="颱風、政府宣布停班時，把整天的課一次停掉"/.test(src));
+
+console.log('\n'+(fail?'✗ ':'✓ ')+pass+' 通過 / '+fail+' 失敗');
+process.exit(fail?1:0);
+})();

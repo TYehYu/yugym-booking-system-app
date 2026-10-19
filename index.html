@@ -14876,8 +14876,8 @@ function tbl(s){return TABLE_ALIAS[s]||s;}
 let sb=null;
 // ── 版本號（日期+時間格式：年後兩碼+月+日.時分，例 26620.1058 = 26年6/20 10:58）──
 // 每次改版手動更新這一行即可，畫面與 title 會一起更新
-const APP_VERSION = '261019.0013';
-const APP_VERSION_LABEL = 'v261019.0013';
+const APP_VERSION = '261019.1233';
+const APP_VERSION_LABEL = 'v261019.1233';
 const CLOUD = !!(window.YUGYM_CONFIG && window.YUGYM_CONFIG.url && window.YUGYM_CONFIG.anonKey);
 if(CLOUD){ sb = supabase.createClient(window.YUGYM_CONFIG.url, window.YUGYM_CONFIG.anonKey); }
 
@@ -29076,7 +29076,13 @@ async function renderCalendar(opts){
      第二列＝課程 chips（左）＋日期導覽＋今天＋新增預約（右，放大一號）。 */
   /* 順序：今天 → ‹ → 日期 → ›（2026-09-03 使用者附截圖：「[預約模式][今天]日期列」）。
      「今天」是回到基準點，日期列是相對移動 —— 基準在前、移動在後，跟閱讀順序一致。 */
-  const _calNavHtml=`<div class="cal-nav">
+  /* 〔臨時停課〕放列 2（2026-10-19）：列 1 已經有團課課表＋預約模式，
+     0903 量過「三樣擠一列在 1440 一定 wrap」。列 2 的內容約 1242，還有空間。
+     ⚠ 只有管理員／主管看得到 —— 這顆會一次取消一整天的課。 */
+  const _cdayBtn=(typeof isManagerUp==='function' && isManagerUp())
+    ? `<button class="btn btn-ghost" title="颱風、政府宣布停班時，把整天的課一次停掉" onclick="openCloseDayModal()">臨時停課</button>`
+    : '';
+  const _calNavHtml=`<div class="cal-nav">${_cdayBtn}
         ${''/* 2026-09-21 使用者：「這顆要改成［回到當週］」—— 行事曆有 1／3／5／7 日檢視，
              單日檢視回的是「今天」、多日檢視回的是「這一週」，calToToday() 本來就分兩條路，
              字面跟著模式走才不會名實不符。 */}
@@ -29150,6 +29156,166 @@ function gsTagOf(heads,max){
   if(heads>0)    return {t:'即將滿班', c:'#b9770e', bg:'#fdf3e0'};
   return {t:'招生中', c:'#1f6f54', bg:'#e7f0ea'};
 }
+/* ══ 臨時停課（2026-10-19 使用者：「這個禮拜可能會有颱風假」）═══════════════
+   颱風、政府宣布停班或臨時停業時，把整天的課一次停掉。管理員與主管可用。
+
+   ⚠ 只動 status==='booked' 的課。已簽到、已完成、教練請假、已取消都不碰 ——
+     停班通常中午才宣布，早上有上到課的那幾堂要留著。
+   ⚠ 票券只延「那天真的用到的那幾張」，不是會員手上所有票。
+     實測 10/20：34 位會員手上共 337 張可用票，其中 302 張是自主訓練點數、
+     到期日一路散到 2027/08。全部延等於在票券帳本灌 300 筆沒意義的紀錄；
+     而兩週內到期的那 9 張剛好都在「那天有用到」的集合裡。
+     一堂對一張也最好解釋：「你停掉我這一堂，我這張票多七天」。
+   ⚠ 取消走既有的 cancelBooking(id,'force',{silent:true})：
+     ・force 不會進 RPC（RPC 會套 24 小時扣課規則，天災停課一律要退）
+     ・備援那條會先問帳本有沒有扣過才退，不會憑空多退一堂
+     ・silent 讓它不要每取消一筆就 navTo 重畫一次（37 筆會重畫 37 次）
+   ⚠ 取消理由先寫進 booking 再呼叫 cancelBooking —— 它是重讀後再寫，所以寫得進去。
+     少了這一欄，之後櫃檯看到一整天的取消會查不出原因。 */
+const CDAY_EXT_DAYS=7;
+const CDAY_SOON_DAYS=14;
+function cdayTickets(b){
+  /* 那一堂用到的票：單人課在 ticket_id，團課逐名額記在 seat_tickets（2026-08-06 起）。 */
+  const out=[];
+  if(b && b.ticket_id) out.push(b.ticket_id);
+  const st=(b && b.seat_tickets && typeof b.seat_tickets==='object')?b.seat_tickets:null;
+  if(st) Object.keys(st).forEach(k=>{ if(st[k]) out.push(st[k]); });
+  return out;
+}
+async function cdayStat(ds){
+  const bs=(await dbGetAll('bookings')).filter(b=>b.date===ds && b.status==='booked');
+  const ids={}; bs.forEach(b=>cdayTickets(b).forEach(id=>{ ids[id]=1; }));
+  const tk=(await dbGetAll('member_tickets')).filter(t=>ids[t.id]);
+  const lim=(()=>{ const d=parseYmd(ds); if(!d) return ''; d.setDate(d.getDate()+CDAY_SOON_DAYS); return ymd(d); })();
+  const soon=tk.filter(t=>{ const e=String(t.expire_date||'').slice(0,10); return e && lim && e<=lim; }).length;
+  const cat={}; bs.forEach(b=>{ const k=b.category||'其他'; cat[k]=(cat[k]||0)+1; });
+  const mem={}, co={};
+  bs.forEach(b=>{ (mids(b)||[]).forEach(m=>{ if(m) mem[m]=1; });
+                  const c=bkCoachId(b); if(c) co[c]=1; });
+  return { ds, bs, tk, soon, cat, n:bs.length,
+           mem:Object.keys(mem).length, coach:Object.keys(co).length };
+}
+function cdayCatLine(cat){
+  const nm={'私人教練':'教練課','小班肌力':'團體課','自主訓練':'自主訓練','體驗':'體驗課','運動按摩':'按摩','場租':'場租'};
+  return Object.keys(cat).map(k=>`${nm[k]||k} ${cat[k]}`).join('　·　')||'—';
+}
+async function openCloseDayModal(){
+  if(!isManagerUp()){ showToast('臨時停課只有管理員或主管可以操作'); return; }
+  const ds=(window._cdayDate)||ymd(TODAY);
+  window._cdayDate=ds;
+  showModal(`<div class="modal-title">臨時停課</div>
+    <div style="font-size:12px;color:var(--t3);margin:-4px 0 14px;">颱風、政府宣布停班或臨時停業時，把整天的課一次停掉。</div>
+    <div style="display:flex;align-items:center;gap:12px;">
+      <span style="font-size:13px;font-weight:700;min-width:68px;">停課日期</span>
+      <input type="date" id="cday-date" value="${ds}" onchange="cdayPick(this.value)"
+             style="font:inherit;font-size:14px;padding:7px 10px;border:1px solid var(--bd);border-radius:7px;background:#fff;color:var(--text);">
+    </div>
+    <div id="cday-stat" style="margin-top:14px;font-size:13px;color:var(--t3);">計算中…</div>
+    <label style="display:flex;align-items:center;gap:9px;margin-top:14px;font-size:14px;font-weight:700;">
+      <input type="checkbox" id="cday-ext" checked><span>票券效期順延
+      <input type="number" id="cday-days" value="${CDAY_EXT_DAYS}" min="0" max="60"
+             style="width:64px;text-align:center;margin:0 4px;padding:3px 6px;font:inherit;border:1px solid var(--bd);border-radius:6px;"> 天</span></label>
+    <div id="cday-extwhy" style="font-size:12.5px;color:var(--t3);line-height:1.75;margin:3px 0 0 25px;"></div>
+    <label style="display:flex;align-items:center;gap:9px;margin-top:12px;font-size:14px;font-weight:700;">
+      <input type="checkbox" id="cday-notify" checked><span>發 LINE 通知會員</span></label>
+    <div style="font-size:12.5px;color:var(--t3);line-height:1.75;margin:3px 0 0 25px;">通知內容：今天停課、堂數沒有扣、要重新預約。</div>
+    <div style="margin-top:16px;border:1.5px solid var(--danger);background:#FAEDEC;border-radius:8px;padding:12px 15px;">
+      <b style="color:var(--danger);font-size:13.5px;">按下去會發生什麼</b>
+      <ul class="mk-pts" style="margin:7px 0 0;">
+        <li>這天的課會變成<b>已取消</b>，理由寫「天災停課」</li>
+        <li>會員的<b>堂數不會被扣</b></li>
+        <li>那天用到的票各延長效期（上面那格的天數），每一張都會寫進帳本</li>
+        <li>教練的薪資堂數<b>不計</b>這天</li>
+        <li><b>已簽到或已上完的不動</b>（早上有上到課的那幾堂會留著）</li>
+      </ul>
+    </div>
+    <div style="font-size:12px;color:var(--t3);margin-top:12px;border-top:1px solid var(--bd);padding-top:10px;">
+      員工的班要另外處理：人事頁請假選「其他（不扣薪，如颱風假）」。</div>
+    <div class="modal-foot">
+      <button class="btn btn-ghost" onclick="closeModal()">取消</button>
+      <button class="btn" id="cday-go" style="background:var(--danger);color:#fff;border-color:var(--danger);"
+              onclick="cdayRun()">確認停課</button>
+    </div>`);
+  cdayRefresh();
+}
+function cdayPick(v){ window._cdayDate=String(v||'').slice(0,10); cdayRefresh(); }
+async function cdayRefresh(){
+  const box=document.getElementById('cday-stat'); if(!box) return;
+  const st=await cdayStat(window._cdayDate);
+  window._cdayStat=st;
+  const cell=(n,l)=>`<div style="background:#fff;border:1px solid var(--bd);border-radius:8px;padding:9px 6px;text-align:center;">
+      <b style="display:block;font-size:24px;font-weight:800;color:var(--green);line-height:1.1;">${n}</b>
+      <i style="font-style:normal;font-size:11.5px;color:var(--t3);">${l}</i></div>`;
+  box.innerHTML=`<div style="border:1px solid var(--bd);border-radius:9px;padding:12px 14px;background:var(--card2);">
+      <div style="font-size:13px;font-weight:700;color:var(--text);">這一天會影響</div>
+      <div style="display:grid;grid-template-columns:repeat(3,1fr);gap:10px;margin:10px 0 6px;">
+        ${cell(st.n,'堂課')}${cell(st.mem,'位會員')}${cell(st.coach,'位教練')}</div>
+      <div style="font-size:12px;color:var(--t3);">${cdayCatLine(st.cat)}</div></div>`;
+  const why=document.getElementById('cday-extwhy');
+  if(why) why.innerHTML=`這天用到的票共 <b>${st.tk.length}</b> 張${st.soon?`，其中 <b>${st.soon} 張兩週內到期</b>`:''}。`;
+  const go=document.getElementById('cday-go');
+  if(go){ go.textContent=st.n?`確認停課（${st.n} 堂）`:'這天沒有課'; go.disabled=!st.n; go.style.opacity=st.n?'':'.5'; }
+}
+async function cdayRun(){ return onceAct('cday', ()=>_cdayRun()); }
+async function _cdayRun(){
+  if(!isManagerUp()){ showToast('臨時停課只有管理員或主管可以操作'); return; }
+  const ds=window._cdayDate;
+  const doExt=!!(document.getElementById('cday-ext')||{}).checked;
+  const days=Math.max(0, Math.min(60, Number((document.getElementById('cday-days')||{}).value)||0));
+  const doNotify=!!(document.getElementById('cday-notify')||{}).checked;
+  const st=await cdayStat(ds);          // 重新算一次：視窗可能開很久
+  if(!st.n){ showToast('這天沒有可以停的課'); return; }
+  const go=document.getElementById('cday-go');
+  const step=(t)=>{ if(go) go.textContent=t; };
+  if(go){ go.disabled=true; go.style.opacity='.6'; }
+  let ok=0, bad=0;
+  for(let i=0;i<st.bs.length;i++){
+    const b=st.bs[i];
+    step(`停課中… ${i+1}/${st.bs.length}`);
+    try{
+      /* 先寫理由再取消：cancelBooking 會重讀這一筆，所以這欄留得住。 */
+      const cur=await dbGet('bookings',b.id);
+      if(!cur || cur.status!=='booked') continue;
+      cur.cancel_reason='天災停課（'+ds+'）';
+      await dbPut('bookings',cur);
+      await cancelBooking(b.id,'force',{silent:true});
+      ok++;
+    }catch(e){ bad++; console.error('停課失敗',b.id,e); }
+  }
+  let ext=0;
+  if(doExt && days>0){
+    for(let i=0;i<st.tk.length;i++){
+      step(`展延票券… ${i+1}/${st.tk.length}`);
+      try{
+        const t=await dbGet('member_tickets',st.tk[i].id); if(!t) continue;
+        const from=String(t.expire_date||'').slice(0,10)||ymd(TODAY);
+        const to=tkMgrExtTo(t,days); if(!to) continue;
+        t.expire_date=to;
+        if(t.status==='expired') t.status='usable';
+        await dbPut('member_tickets',t);
+        await logTicket(t.id,'adjust',0,null,(SESSION&&SESSION.name)||'',
+          `天災停課展延：${from} → ${to}（${days} 天）｜${ds} 全館停課`);
+        ext++;
+      }catch(e){ console.error('展延失敗',st.tk[i].id,e); }
+    }
+  }
+  if(doNotify){
+    const seen={};
+    for(const b of st.bs) (mids(b)||[]).forEach(m=>{ if(m) seen[m]=1; });
+    const list=Object.keys(seen);
+    for(let i=0;i<list.length;i++){
+      step(`通知會員… ${i+1}/${list.length}`);
+      try{ await pushNotification(list[i],'announce','課程停課通知',
+        `因天災停課，${String(ds).replace(/-/g,'/')} 的課程已取消，堂數沒有扣。`
+        +(doExt&&days>0?`票券效期已延長 ${days} 天。`:'')+'請重新預約，造成不便請見諒。'); }catch(_){}
+    }
+  }
+  dbCacheClear(['bookings','member_tickets','ticket_logs','notifications']);
+  closeModal();
+  showToast(`已停課 ${ok} 堂`+(bad?`（${bad} 堂失敗，請重按一次）`:'')+(ext?`，展延 ${ext} 張票券`:''), 6000);
+  navTo(CUR_PAGE);
+}
+
 async function openGroupScheduleModal(){
   if(!_gsStart){ const d=new Date(TODAY); _gsStart=addDays(d,-((d.getDay()+6)%7)); }
   const [bookings,coaches,types]=await Promise.all([
