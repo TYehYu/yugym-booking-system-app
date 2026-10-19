@@ -2880,6 +2880,21 @@ tr:hover td{background:var(--card2);}
 .sh-table .sh-dayhead.sh-today-h{background:var(--green);color:#fff;}
 .sh-table .sh-dayhead.sh-today-h span{color:rgba(255,255,255,.85);}
 .sh-table .sh-cell.sh-today-c{background:rgba(0,61,50,.09);}
+/* 過去的日期（2026-10-19）：整格退到背景去，但**不要改顏色語意** ——
+   用 opacity 而不是另外調一組灰，班別章的紅／金／綠仍然是同一組色，只是淡。
+   ⚠ 請假格子沒有這個 class（見 _past 的算式），所以回頭查請假時一眼就跳出來。
+   ⚠ 淡到 .42 還點得到也看得見；再淡就變成「以為不能按」。 */
+.sh-table .sh-cell.sh-past{opacity:.42;}
+.sh-table .sh-cell.sh-past:hover{opacity:1;}
+.sh-table .sh-dayhead.sh-past-h{opacity:.5;}
+/* 今天那一欄放大（2026-10-19 使用者：「有辦法把今天這一欄稍稍放大　方便閱讀嗎」）──
+   ⚠ table-layout:fixed —— 只要給表頭那一格 width，其餘 30 欄會自己平分剩下的寬度，
+     不必動別人。整張表仍然是 width:100%，不會變成要左右捲。
+   ⚠ 只放大「今天」一欄：兩欄以上就不是重點，是整排字級不一致。
+   ⚠ 班別章跟著放大一號；請假小標不動 —— 它已經是最小的字，再放大會把格子撐高。 */
+.sh-table .sh-dayhead.sh-today-h{width:76px;font-size:13.5px;}
+.sh-table .sh-dayhead.sh-today-h span{font-size:11px;}
+.sh-table .sh-cell.sh-today-c .sh-code{min-width:30px;height:28px;font-size:17px;}
 .sh-today-arrow{color:#d9342b;font-size:13px;line-height:1;margin-bottom:2px;}   /* 品牌紅（2026-07-27） */
 .modal:has(.msched){max-width:min(96vw,1120px);}
 /* 會員詳細單頁：整體限高，基本資料+會員屬性固定，只有票券列表捲動 */
@@ -14876,8 +14891,8 @@ function tbl(s){return TABLE_ALIAS[s]||s;}
 let sb=null;
 // ── 版本號（日期+時間格式：年後兩碼+月+日.時分，例 26620.1058 = 26年6/20 10:58）──
 // 每次改版手動更新這一行即可，畫面與 title 會一起更新
-const APP_VERSION = '261019.1325';
-const APP_VERSION_LABEL = 'v261019.1325';
+const APP_VERSION = '261019.1344';
+const APP_VERSION_LABEL = 'v261019.1344';
 const CLOUD = !!(window.YUGYM_CONFIG && window.YUGYM_CONFIG.url && window.YUGYM_CONFIG.anonKey);
 if(CLOUD){ sb = supabase.createClient(window.YUGYM_CONFIG.url, window.YUGYM_CONFIG.anonKey); }
 
@@ -48799,6 +48814,14 @@ async function renderShiftsTab(){
 
   // 先算空班日期集合（供表頭標記）
   const _gapSet=new Set(monthShiftGaps(monthShifts, month).map(g=>g.date));
+  /* 過去的日期淡化（2026-10-19 使用者：「過去的日期可以暗化　除了請假的格子」）——
+     班表往回看主要是在查「誰請了假」，已經過去的班本身不需要再被看見。
+     ⚠ 請假格子不淡化：那正是回頭要看的東西。整列都是請假的那一列（最下面那列）
+       也完全不碰。
+     ⚠ 用整串日期比大小，不要比「日」—— 看 11 月的時候每一天都還沒到，
+       看 9 月的時候每一天都過去了，只比日號會整個錯月。 */
+  const _todayS=ymd(TODAY);
+  const _isPast=ds=>ds<_todayS;
   // 表格：列＝員工，欄＝日期；每格顯示該員工該天的班
   const dayHeaders=Array.from({length:daysInMonth},(_,i)=>{
     const d=new Date(Number(my),Number(mm)-1,i+1);
@@ -48806,7 +48829,7 @@ async function renderShiftsTab(){
     const wk=d.getDay()===0||d.getDay()===6;
     const ds=`${my}-${mm}-${String(i+1).padStart(2,'0')}`;
     const gapMark=_gapSet.has(ds)?'<span class="sh-gapdot" title="此日有空班時段">●</span>':'';
-    return `<th class="sh-dayhead${wk?' sh-wk':''}">${i+1}<br><span>${dow}</span>${gapMark}</th>`;
+    return `<th class="sh-dayhead${wk?' sh-wk':''}${_isPast(ds)?' sh-past-h':''}">${i+1}<br><span>${dow}</span>${gapMark}</th>`;
   }).join('');
 
   const rowsHtml=staff.map(e=>{
@@ -48829,7 +48852,8 @@ async function renderShiftsTab(){
       }).join('');
       const hasLeave=list.some(shIsRosterLeave);   /* 2026-09-07：課程請假的補登列不把整格標成請假日 */
       const cellClick=_canEditShifts?` onclick="openShiftEdit('${e.id}','${dateStr}')"`:'';
-      return `<td class="sh-cell${list.length?' has':''}${hasLeave?' has-leave':''}${isWk?' sh-cell-wk':''}${_canEditShifts?'':' sh-cell-ro'}"${cellClick}>${inner||(_canEditShifts?'<span class="sh-plus">＋</span>':'')}</td>`;
+      const _past=_isPast(dateStr)&&!hasLeave;   /* 請假格子不淡化 */
+      return `<td class="sh-cell${list.length?' has':''}${hasLeave?' has-leave':''}${isWk?' sh-cell-wk':''}${_past?' sh-past':''}${_canEditShifts?'':' sh-cell-ro'}"${cellClick}>${inner||(_canEditShifts?'<span class="sh-plus">＋</span>':'')}</td>`;
     }).join('');
     const tplDuty=(window.SALARY_TPL||{})[normEmp(e.employment_type||e.pay_type)]||{};
     const rate=(e.custom_salary?(e.duty_hourly||0):(tplDuty.duty_hourly||0));
@@ -48867,7 +48891,7 @@ async function renderShiftsTab(){
         return main+(s.sub_name?`<span class="sh-subnm${_paid?' paid':''}" title="${_paid?'店內員工，值班費照算':'店外人員，不計薪'}">${escH(s.sub_name)}</span>`:'');
       }).join('');
       const click=_canEditShifts?` onclick="openShiftEdit('${SUB_ROSTER_ID}','${dateStr}')"`:'';
-      return `<td class="sh-cell${list.length?' has':''}${isWk?' sh-cell-wk':''}${_canEditShifts?'':' sh-cell-ro'}"${click}>${inner||(_canEditShifts?'<span class="sh-plus">＋</span>':'')}</td>`;
+      return `<td class="sh-cell${list.length?' has':''}${isWk?' sh-cell-wk':''}${_isPast(dateStr)?' sh-past':''}${_canEditShifts?'':' sh-cell-ro'}"${click}>${inner||(_canEditShifts?'<span class="sh-plus">＋</span>':'')}</td>`;
     }).join('');
     const _n=monthShifts.filter(shIsSub).length;
     return `<tr class="sh-subrow">
