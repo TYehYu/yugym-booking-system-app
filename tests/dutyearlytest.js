@@ -47,9 +47,11 @@ console.log('\n④ 顯示與留痕');
       「到 08:26　走」／「17:02」中間。每一小段要自己 nowrap。 */
 ok('★★★ 班表時段整段不可拆',
    /<div class="dr-time"><span style="white-space:nowrap;">\$\{shift\.start_time\}–\$\{shift\.end_time\}<\/span><\/div>/.test(src));
-ok('★★★ 到／走各自成一塊，要折只能折在它們之間',
-   /<span style="white-space:nowrap;"><i>到<\/i> \$\{att\.clock_in\}/.test(src)
-   && /<span style="white-space:nowrap;"><i>走<\/i> \$\{att\.clock_out\}<\/span>/.test(src));
+/* ⚠ 2026-10-19 使用者把「到／走」改成「上班／下班」—— 字從 1 個變 2 個，
+   每一塊各自 nowrap 這件事因此更重要，不是變不重要。 */
+ok('★★★ 上班／下班各自成一塊，要折只能折在它們之間',
+   /<span style="white-space:nowrap;"><i>上班<\/i> \$\{att\.clock_in\}/.test(src)
+   && /<span style="white-space:nowrap;"><i>下班<\/i> \$\{att\.clock_out\}<\/span>/.test(src));
 ok('★★★ 共用的 .dr-time 不用 nowrap＋ellipsis',
    /\.dr-time\{font-size:11px;color:var\(--t2\);font-weight:600;font-family:var\(--num\);\s*\n\s*max-width:100%;line-height:1\.45;\}/.test(src)
    && /不可以用 nowrap＋ellipsis/.test(src));
@@ -60,11 +62,13 @@ ok('★★★ 更具體的那兩條覆寫也要放行（首頁四欄卡、手機
 ok('　　姓名維持截斷（名字沒有合理的換行點）',
    /\.mc-dutyplain \.dr-name\{max-width:100%;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;\}/.test(src));
 /* 2026-10-15：這一條原本把整串 markup 綁死（含 class 與緊接的 <i>），
-   加了 nowrap 的 span 之後就失效。語意改由上面那條「到／走各自成一塊」守，
-   這裡只守用詞。 */
-ok('★★ 用「到／走」不是「上班／下班」（那是到場時間，不是工時）',
-   /<i>到<\/i>/.test(src) && /<i>走<\/i>/.test(src)
-   && /用「到／走」不用「上班／下班」/.test(src));
+   加了 nowrap 的 span 之後就失效。語意改由上面那條守，這裡只守用詞。
+   ⚠ 1014 原本用「到／走」，理由是「那是到場時間，不是工時」；
+     1019 使用者指定改成「上班／下班」。用詞換了，**計薪依據沒有換** ——
+     下一條（inMin／inLabel）就是在守那件事，兩條要一起看。 */
+ok('★★ 用「上班／下班」（1019 使用者指定）',
+   /<i>上班<\/i>/.test(src) && /<i>下班<\/i>/.test(src)
+   && /2026-10-19 使用者指定改成「上班／下班」/.test(src));
 ok('★★★ 計薪起算仍是 inLabel（圓環與中央時數照班表算，沒被這次顯示改動影響）',
    /const inMin=_early\?_shIn:_rawIn;/.test(src) && /const inLabel=_early\?shift\.start_time:att\.clock_in;/.test(src));
 ok('★★ 沒排班就沒有班表可寫 → 退回原本寫法，不留一行空的',
