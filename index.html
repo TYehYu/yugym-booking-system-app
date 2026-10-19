@@ -2887,6 +2887,19 @@ tr:hover td{background:var(--card2);}
 .sh-table .sh-cell.sh-past{opacity:.42;}
 .sh-table .sh-cell.sh-past:hover{opacity:1;}
 .sh-table .sh-dayhead.sh-past-h{opacity:.5;}
+/* 「收回」鈕（2026-10-19）：只出現在從「本月未排班」加回來、而且還沒排班的那幾列。
+   ⚠ 擺右上角不要排進第二列 —— 姓名格只有 124px，第二列已經有班別小章、
+     僱用別與〔週期〕，再塞一顆字鈕一定折行（量過，不是估的）。
+   ⚠ .sh-name 本來就是 position:sticky（＝已經是定位元素），所以這顆 absolute
+     會貼著它，不必再加 position:relative 去打壞 sticky。
+   ⚠ 用中性灰不用品牌色 —— 它不是一個功能，是把誤觸收回去。 */
+.sh-table .shn-undo{position:absolute;top:2px;right:3px;width:16px;height:16px;padding:0;
+  display:flex;align-items:center;justify-content:center;font-size:10px;line-height:1;
+  border:1px solid var(--bd);border-radius:50%;background:var(--card);color:var(--t3);cursor:pointer;}
+.sh-table .shn-undo:hover{background:var(--card2);color:var(--danger);border-color:var(--danger);}
+/* ⚠ 第一列右邊是時數（靠右對齊），不留位置給 ✕ 它就會壓在上面。
+   只有真的有 ✕ 的那幾列讓位，其他列不受影響。 */
+.sh-table .sh-name.shn-hasundo .shn-row1{padding-right:17px;}
 /* 今天那一欄放大（2026-10-19 使用者：「有辦法把今天這一欄稍稍放大　方便閱讀嗎」）──
    ⚠ table-layout:fixed —— 只要給表頭那一格 width，其餘 30 欄會自己平分剩下的寬度，
      不必動別人。整張表仍然是 width:100%，不會變成要左右捲。
@@ -10810,6 +10823,10 @@ body.wtl-dragging-active *{-webkit-user-select:none!important;user-select:none!i
      class 版，而小章沒有 .sh-code，等於白字配透明底，整個小章看不見。 */
 .shn-kind{display:inline-block;font-size:10px;font-weight:800;line-height:1;color:#fff;
   border-radius:4px;padding:2px 5px;margin-right:5px;vertical-align:1px;}
+/* 多字代號（2026-10-19）：字小一號、章加寬、字距收緊，排成一行不折行。
+   ⚠ 只縮字不縮章高 —— 章一矮就跟別人不等高，整列看起來參差。 */
+.sh-code.sh-code-lg{min-width:38px;font-size:12.5px;letter-spacing:-.02em;padding:0 4px;}
+.sh-code.sh-code-xl{min-width:38px;font-size:11px;letter-spacing:0;padding:0 3px;}
 .sh-code-full{background:#8C4A3E;}   /* 全班：品牌紅（首頁沒有這一種） */
 .sh-code-am{background:#D9A441;}     /* 早班：琥珀金，同首頁 */
 .sh-code-mid{background:#1F6F54;}    /* 中班：品牌綠，同首頁 */
@@ -14891,8 +14908,8 @@ function tbl(s){return TABLE_ALIAS[s]||s;}
 let sb=null;
 // ── 版本號（日期+時間格式：年後兩碼+月+日.時分，例 26620.1058 = 26年6/20 10:58）──
 // 每次改版手動更新這一行即可，畫面與 title 會一起更新
-const APP_VERSION = '261019.1344';
-const APP_VERSION_LABEL = 'v261019.1344';
+const APP_VERSION = '261019.1400';
+const APP_VERSION_LABEL = 'v261019.1400';
 const CLOUD = !!(window.YUGYM_CONFIG && window.YUGYM_CONFIG.url && window.YUGYM_CONFIG.anonKey);
 if(CLOUD){ sb = supabase.createClient(window.YUGYM_CONFIG.url, window.YUGYM_CONFIG.anonKey); }
 
@@ -48488,6 +48505,17 @@ function shiftCode(start,end,dateStr){
 }
 // 班表顯示統一（2026-07-27 使用者指示）：A→早、C→晚、午→中（僅顯示層，儲存代碼不動）
 function shiftCodeDisp(c){ return ({'A':'早','A1':'早','C':'晚','C1':'晚','午':'中','B':'中','B1':'中'})[c]||c; }
+/* 多字代號排成一行（2026-10-19 使用者看過三個版本後選 C）──────────────────
+   班別章預設是「一個字」的尺寸（min-width 26px、15px 字）。正式庫裡有兩個多字代號：
+   「假晚」（15–21 的假日晚班）與「ALL」（09–21），塞進去會被擠成兩行、
+   那一整列跟著被撐高。
+   ⚠ 不改成一個字：「假」已經被請假列用掉了（最下面那列的「假 RA」），
+     同一張表同一個字兩個意思，比折行更糟。
+   ⚠ 依字數分兩階，不是寫死「假晚」—— 以後有人新增別的代號也吃得到。 */
+function shiftCodeLenCls(disp){
+  const n=String(disp||'').length;
+  return n>=3 ? ' sh-code-xl' : (n>=2 ? ' sh-code-lg' : '');
+}
 // 營業時間（依星期；0=日）：週一~五 9-22（2026-08-04 起，原 10 點開門）、週六 9-21、週日 9-15
 // DB 端 fn_biz_hours（會員自助預約/改期的守門）同步改，見 20260804_biz_hours_weekday_0900
 /* ★ 全站唯一的營業時間（2026-08-22 起）：自主訓練訂位、快速預約的最後一格、
@@ -48689,7 +48717,7 @@ async function openMonthScheduleModal(mon){
         const _cd=shiftCodeDisp(code);
         /* 2026-07-27 使用者指示：平日綠、假日金（假日晚班 15:00 起，順便做區別）、全班紅（9:00–17:00） */
         const _ccls=shiftCodeCls(_cd,isWk);
-        const main=code?`<span class="sh-chip sh-chip-code"><b class="sh-code${_ccls}">${_cd}</b></span>`:`<span class="sh-chip sh-chip-time"><span class="sh-t1">${s.start_time}</span><span class="sh-t2">${s.end_time}</span></span>`;
+        const main=code?`<span class="sh-chip sh-chip-code"><b class="sh-code${_ccls}${shiftCodeLenCls(_cd)}">${_cd}</b></span>`:`<span class="sh-chip sh-chip-time"><span class="sh-t1">${s.start_time}</span><span class="sh-t2">${s.end_time}</span></span>`;
         return main+leaveTag; }).join('');
       const hasLeave=list.some(shIsRosterLeave);   /* 2026-09-07：課程請假的補登列不把整格標成請假日 */
       return `<td class="sh-cell${list.length?' has':''}${hasLeave?' has-leave':''}${isWk?' sh-cell-wk':''}${i+1===_todayD?' sh-today-c':''} sh-cell-ro">${inner}</td>`;
@@ -48844,7 +48872,7 @@ async function renderShiftsTab(){
         const _cd=shiftCodeDisp(code);
         /* 2026-07-27 使用者指示：平日綠、假日金（假日晚班 15:00 起，順便做區別）、全班紅（9:00–17:00） */
         const _ccls=shiftCodeCls(_cd,isWk);
-        const main=code?`<span class="sh-chip sh-chip-code"><b class="sh-code${_ccls}">${_cd}</b></span>`:`<span class="sh-chip sh-chip-time"><span class="sh-t1">${s.start_time}</span><span class="sh-t2">${s.end_time}</span></span>`;
+        const main=code?`<span class="sh-chip sh-chip-code"><b class="sh-code${_ccls}${shiftCodeLenCls(_cd)}">${_cd}</b></span>`:`<span class="sh-chip sh-chip-time"><span class="sh-t1">${s.start_time}</span><span class="sh-t2">${s.end_time}</span></span>`;
         /* 補班（2026-09-08）：同一筆也畫在補班列上。這裡標一個「補」，
            不然他自己那一列多一個班、卻看不出來是怎麼多的。時數照算 —— 那是他的值班費。 */
         /* 2026-09-29 改名「支援班」之後，chip 上那個字也跟著從「補」改成「援」 */
@@ -48857,14 +48885,21 @@ async function renderShiftsTab(){
     }).join('');
     const tplDuty=(window.SALARY_TPL||{})[normEmp(e.employment_type||e.pay_type)]||{};
     const rate=(e.custom_salary?(e.duty_hourly||0):(tplDuty.duty_hourly||0));
+    const _canUndo=_canEditShifts && (window._shiftShowExtra||[]).includes(e.id) && !_hasRealDuty(e.id);
     return `<tr>
-      <td class="sh-name">
+      <td class="sh-name${_canUndo?' shn-hasundo':''}">
         <div class="shn-row1"><span class="shn-name">${e.name||'—'}</span><span class="shn-hr">${shHrHtml(empTotal[e.id], empPaid[e.id])}</span></div>
         <div class="shn-row2">${/* 主要班別的小章（2026-09-29）——列是照這個排的，不標出來會看不出規則。
              ⚠ 顏色沿用格子裡那一套（全紅／早金／晚綠，見 shiftCodeCls），不另訂一組。 */''}${
           ({0:'<b class="shn-kind sh-code-full">全</b>',1:'<b class="shn-kind sh-code-am">早</b>',
             2:'<b class="shn-kind sh-code-mid">中</b>',3:'<b class="shn-kind sh-code-pm">晚</b>'})[e._shKind]||''
-        }<span class="shn-type">${PAY_LABEL[e.employment_type||e.pay_type]||''} $${rate}</span>${_canEditShifts?`<button class="shn-wk" onclick="event.stopPropagation();openWeeklyShift('${e.id}')" title="週期排班">週期</button>`:''}</div>
+        }<span class="shn-type">${PAY_LABEL[e.employment_type||e.pay_type]||''} $${rate}</span>${_canEditShifts?`<button class="shn-wk" onclick="event.stopPropagation();openWeeklyShift('${e.id}')" title="週期排班">週期</button>`:''}${
+          /* 從「本月未排班」點名字加回來的那幾位，給一顆收回鈕
+             （2026-10-19 使用者：「我剛剛誤觸下方本月未排班名字，結果就跑上去班表，沒有回頭的按鈕」）。
+             ⚠ 只有「這個月真的還沒有班」的人才給 —— 已經排了班的人收回去會讓那些班看不見。
+             ⚠ 這不會刪任何資料：_shiftShowExtra 只是這一次瀏覽的顯示清單。 */''
+        }${_canUndo
+          ? `<button class="shn-undo" onclick="event.stopPropagation();shiftHideIdle('${e.id}')" title="收回到「本月未排班」那一行">✕</button>` : ''}</div>
       </td>${cells}</tr>`;
   }).join('')
   /* 支援班：固定排在最後一列（2026-09-08 做的「補班人員」，2026-09-29 使用者改名「支援班」）。
@@ -48882,7 +48917,7 @@ async function renderShiftsTab(){
       const inner=list.map(s=>{
         const code=s.code||shiftCode(s.start_time,s.end_time,s.date);
         const main=code
-          ? `<span class="sh-chip sh-chip-code"><b class="sh-code${shiftCodeCls(shiftCodeDisp(code),isWk)}">${escH(code)}</b></span>`
+          ? `<span class="sh-chip sh-chip-code"><b class="sh-code${shiftCodeCls(shiftCodeDisp(code),isWk)}${shiftCodeLenCls(shiftCodeDisp(code))}">${escH(shiftCodeDisp(code))}</b></span>`
           : `<span class="sh-chip sh-chip-time"><span class="sh-t1">${s.start_time}</span><span class="sh-t2">${s.end_time}</span></span>`;
         /* 人員名字擺在班別章下面（跟請假標同一個位置）—— 一格裡兩件事，班別先、誰來後 */
         /* 名字擺在班別章下面。掛在真員工身上的（＝要付值班費）標成深色，
@@ -49000,6 +49035,15 @@ async function renderShiftsTab(){
 /* 把「本月未排班」的某位加回表格（2026-09-30）——只存在這一次瀏覽，重新整理就恢復收起 */
 function shiftShowIdle(id){
   window._shiftShowExtra=(window._shiftShowExtra||[]).concat([id]);
+  renderShiftsTab();
+}
+/* 收回去（2026-10-19 使用者誤觸回報）——
+   ⚠ 這兩支都只動 window._shiftShowExtra，**不碰任何資料**：
+     加回來只是把那一列畫出來，收回去只是不畫。班一筆都沒有新增或刪除。
+   ⚠ 已經排了班的人不會有這顆鈕（見姓名格的 _hasRealDuty 判斷）——
+     收回去會讓他已經排好的班整列消失，那才是真的嚇人。 */
+function shiftHideIdle(id){
+  window._shiftShowExtra=(window._shiftShowExtra||[]).filter(x=>x!==id);
   renderShiftsTab();
 }
 
