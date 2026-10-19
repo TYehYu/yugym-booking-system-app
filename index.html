@@ -14876,8 +14876,8 @@ function tbl(s){return TABLE_ALIAS[s]||s;}
 let sb=null;
 // ── 版本號（日期+時間格式：年後兩碼+月+日.時分，例 26620.1058 = 26年6/20 10:58）──
 // 每次改版手動更新這一行即可，畫面與 title 會一起更新
-const APP_VERSION = '261019.1233';
-const APP_VERSION_LABEL = 'v261019.1233';
+const APP_VERSION = '261019.1240';
+const APP_VERSION_LABEL = 'v261019.1240';
 const CLOUD = !!(window.YUGYM_CONFIG && window.YUGYM_CONFIG.url && window.YUGYM_CONFIG.anonKey);
 if(CLOUD){ sb = supabase.createClient(window.YUGYM_CONFIG.url, window.YUGYM_CONFIG.anonKey); }
 
@@ -29203,6 +29203,7 @@ async function openCloseDayModal(){
   if(!isManagerUp()){ showToast('臨時停課只有管理員或主管可以操作'); return; }
   const ds=(window._cdayDate)||ymd(TODAY);
   window._cdayDate=ds;
+  const _g=window._cdayGo||{};   /* 從第二關按「回去改」回來時，沿用剛剛的勾選 */
   showModal(`<div class="modal-title">臨時停課</div>
     <div style="font-size:12px;color:var(--t3);margin:-4px 0 14px;">颱風、政府宣布停班或臨時停業時，把整天的課一次停掉。</div>
     <div style="display:flex;align-items:center;gap:12px;">
@@ -29212,12 +29213,12 @@ async function openCloseDayModal(){
     </div>
     <div id="cday-stat" style="margin-top:14px;font-size:13px;color:var(--t3);">計算中…</div>
     <label style="display:flex;align-items:center;gap:9px;margin-top:14px;font-size:14px;font-weight:700;">
-      <input type="checkbox" id="cday-ext" checked><span>票券效期順延
-      <input type="number" id="cday-days" value="${CDAY_EXT_DAYS}" min="0" max="60"
+      <input type="checkbox" id="cday-ext"${_g.doExt===false?'':' checked'}><span>票券效期順延
+      <input type="number" id="cday-days" value="${_g.days!=null?_g.days:CDAY_EXT_DAYS}" min="0" max="60"
              style="width:64px;text-align:center;margin:0 4px;padding:3px 6px;font:inherit;border:1px solid var(--bd);border-radius:6px;"> 天</span></label>
     <div id="cday-extwhy" style="font-size:12.5px;color:var(--t3);line-height:1.75;margin:3px 0 0 25px;"></div>
     <label style="display:flex;align-items:center;gap:9px;margin-top:12px;font-size:14px;font-weight:700;">
-      <input type="checkbox" id="cday-notify" checked><span>發 LINE 通知會員</span></label>
+      <input type="checkbox" id="cday-notify"${_g.doNotify===false?'':' checked'}><span>發 LINE 通知會員</span></label>
     <div style="font-size:12.5px;color:var(--t3);line-height:1.75;margin:3px 0 0 25px;">通知內容：今天停課、堂數沒有扣、要重新預約。</div>
     <div style="margin-top:16px;border:1.5px solid var(--danger);background:#FAEDEC;border-radius:8px;padding:12px 15px;">
       <b style="color:var(--danger);font-size:13.5px;">按下去會發生什麼</b>
@@ -29256,13 +29257,54 @@ async function cdayRefresh(){
   const go=document.getElementById('cday-go');
   if(go){ go.textContent=st.n?`確認停課（${st.n} 堂）`:'這天沒有課'; go.disabled=!st.n; go.style.opacity=st.n?'':'.5'; }
 }
-async function cdayRun(){ return onceAct('cday', ()=>_cdayRun()); }
-async function _cdayRun(){
+/* ── 第二道確認（2026-10-19 使用者：「這個是有退路的嗎　如果不小心選錯日期」）──
+   沒有退路，所以防線要擺在按下去之前。三件事的可逆程度：
+     ・課：沒有一鍵復原，要一筆一筆重新預約（堂數已退回票券，帳對得上，但要重建）
+     ・票券 +7 天：技術上改得回來，但沒有介面（展延只能往後）
+     ・LINE 通知：**收不回來** —— 這是真正的單向門
+   ⚠ 選錯日期幾乎都是差一天或差一週，所以這一關把**星期幾**寫得最大 ——
+     「10/25（週日）」比「2026-10-25」容易當場發現不對。
+   ⚠ 過去的日期、超過兩週以後的日期另外加一行紅字，那兩種最可能是選錯。 */
+async function cdayRun(){
   if(!isManagerUp()){ showToast('臨時停課只有管理員或主管可以操作'); return; }
   const ds=window._cdayDate;
   const doExt=!!(document.getElementById('cday-ext')||{}).checked;
   const days=Math.max(0, Math.min(60, Number((document.getElementById('cday-days')||{}).value)||0));
   const doNotify=!!(document.getElementById('cday-notify')||{}).checked;
+  const st=await cdayStat(ds);
+  if(!st.n){ showToast('這天沒有可以停的課'); return; }
+  window._cdayGo={ds, doExt, days, doNotify};
+  const d=parseYmd(ds);
+  const wd=d?('週'+WD[d.getDay()]):'';
+  const md=d?((d.getMonth()+1)+'/'+d.getDate()):ds;
+  const diff=d?Math.round((d-parseYmd(ymd(TODAY)))/86400000):0;
+  const odd = diff<0 ? '這是<b>過去的日期</b>（'+(-diff)+' 天前）'
+            : diff>14 ? '這是 <b>'+diff+' 天後</b>的日期'
+            : '';
+  showModal(`<div class="modal-title">再確認一次</div>
+    <div style="text-align:center;margin:18px 0 6px;">
+      <div style="font-size:44px;font-weight:900;line-height:1.1;color:var(--danger);">${md}<span style="font-size:24px;margin-left:8px;">（${wd}）</span></div>
+      <div style="font-size:15px;color:var(--t2);margin-top:10px;">
+        要停 <b>${st.n}</b> 堂　·　影響 <b>${st.mem}</b> 位會員</div>
+    </div>
+    ${odd?`<div style="margin-top:10px;border:1.5px solid var(--danger);background:#FAEDEC;border-radius:8px;padding:10px 14px;font-size:13.5px;color:var(--danger);text-align:center;">⚠ ${odd}，確定嗎？</div>`:''}
+    <ul class="mk-pts" style="margin-top:16px;">
+      <li>${doNotify?`<b>${st.mem} 位會員會立刻收到 LINE 通知</b> —— 這個收不回來`:'不發通知'}</li>
+      <li>${doExt&&days>0?`${st.tk.length} 張票券各延 ${days} 天`:'票券不延'}</li>
+      <li>取消<b>沒有一鍵復原</b>，要救得一筆一筆重新預約</li>
+    </ul>
+    <div class="modal-foot">
+      <button class="btn btn-ghost" onclick="openCloseDayModal()">← 回去改</button>
+      <button class="btn" style="background:var(--danger);color:#fff;border-color:var(--danger);"
+              id="cday-go" onclick="cdayGo()">確定停 ${md}（${wd}）的 ${st.n} 堂</button>
+    </div>`);
+}
+async function cdayGo(){ return onceAct('cday', ()=>_cdayRun()); }
+async function _cdayRun(){
+  if(!isManagerUp()){ showToast('臨時停課只有管理員或主管可以操作'); return; }
+  const g=window._cdayGo||{};
+  const ds=g.ds, doExt=!!g.doExt, days=Math.max(0,Math.min(60,Number(g.days)||0)), doNotify=!!g.doNotify;
+  if(!ds){ showToast('沒有選到日期'); return; }
   const st=await cdayStat(ds);          // 重新算一次：視窗可能開很久
   if(!st.n){ showToast('這天沒有可以停的課'); return; }
   const go=document.getElementById('cday-go');

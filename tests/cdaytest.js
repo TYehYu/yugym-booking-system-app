@@ -69,12 +69,38 @@ ok('★★★ 動手前重算一次（視窗可能開很久）',
 ok('★★★ 展延有寫進票券帳本', /天災停課展延：\$\{from\} → \$\{to\}/.test(src));
 ok('★★ 做完清掉動到的那幾張表的快取',
    /dbCacheClear\(\['bookings','member_tickets','ticket_logs','notifications'\]\);[\s\S]{0,80}closeModal\(\);/.test(src));
-ok('★★ 防連點（onceAct）', /async function cdayRun\(\)\{ return onceAct\('cday', \(\)=>_cdayRun\(\)\); \}/.test(src));
+ok('★★ 防連點（onceAct）', /async function cdayGo\(\)\{ return onceAct\('cday', \(\)=>_cdayRun\(\)\); \}/.test(src));
 
 console.log('\n④ 權限與入口');
 ok('★★★ 開窗要管理員／主管', /if\(!isManagerUp\(\)\)\{ showToast\('臨時停課只有管理員或主管可以操作'\); return; \}/.test(src));
-ok('★★★ 真正動手那一支也要再擋一次（不能只擋畫面）',
-   (src.match(/showToast\('臨時停課只有管理員或主管可以操作'\)/g)||[]).length===2);
+/* 三支都要擋：開窗、第二關、真正動手那一支。只擋畫面等於沒擋。 */
+ok('★★★ 三個入口都擋權限（不能只擋畫面）',
+   (src.match(/showToast\('臨時停課只有管理員或主管可以操作'\)/g)||[]).length===3);
+
+console.log('\n⑤ 第二道確認（選錯日期沒有退路，防線只能擺在按下去之前）');
+/* ⚠ 選錯日期幾乎都是差一天或差一週 —— 把星期幾寫出來最容易當場發現。 */
+ok('★★★ 第二關把日期與星期寫成大字',
+   /font-size:44px;font-weight:900;[^"]*">\$\{md\}<span[^>]*>（\$\{wd\}）<\/span>/.test(src));
+ok('★★★ 確認鈕上也寫著日期與堂數（不是只有「確定」）',
+   /確定停 \$\{md\}（\$\{wd\}）的 \$\{st\.n\} 堂/.test(src));
+/* 過去的日期、兩週以後的日期最可能是選錯 */
+ok('★★★ 過去或太遠的日期會多一行紅字',
+   /const odd = diff<0 \? '這是<b>過去的日期<\/b>（'\+\(-diff\)\+' 天前）'/.test(src)
+   && /: diff>14 \? '這是 <b>'\+diff\+' 天後<\/b>的日期'/.test(src));
+/* LINE 通知是唯一真正收不回來的東西，要在最後一關講明白 */
+ok('★★★ 第二關明講通知收不回來',
+   /位會員會立刻收到 LINE 通知<\/b> —— 這個收不回來/.test(src));
+ok('★★★ 第二關明講取消沒有一鍵復原',
+   /取消<b>沒有一鍵復原<\/b>，要救得一筆一筆重新預約/.test(src));
+ok('★★ 可以回上一關改，而且勾選會留著',
+   /onclick="openCloseDayModal\(\)">← 回去改<\/button>/.test(src)
+   && /const _g=window\._cdayGo\|\|\{\};/.test(src)
+   && /\$\{_g\.doNotify===false\?'':' checked'\}/.test(src));
+/* ⚠ 第一關只是收集選項，真正動手的是 cdayGo → _cdayRun。
+   這一條防的是「哪天有人把 onclick 改回去直接呼叫 _cdayRun，第二關就被跳過了」。 */
+ok('★★★ 第一關的按鈕呼叫 cdayRun（收集選項），不是直接動手',
+   /onclick="cdayRun\(\)">確認停課<\/button>/.test(src)
+   && /window\._cdayGo=\{ds, doExt, days, doNotify\};/.test(src));
 /* ⚠ 0903 量過「三樣擠一列在 1440 一定 wrap」，所以放列 2 不放列 1。 */
 ok('★★★ 按鈕在行事曆列 2，且只有管理員／主管看得到',
    /const _cdayBtn=\(typeof isManagerUp==='function' && isManagerUp\(\)\)/.test(src)
