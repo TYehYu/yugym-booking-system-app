@@ -247,8 +247,13 @@ ok('★★ ★ 與堂數放 data-*，不寫進 option 文字 —— 那段文字
    && /<option value="\$\{m\.id\}"\$\{star\}\$\{cnt\}>\$\{m\.name\}（\$\{fmtPhone\(m\.phone\)\}）<\/option>/.test(src));
 ok('★★ 挑選視窗把 data-sub 畫成靠右那一格（使用者：「課堂數靠右顯示」）',
    /<span class="mpk-nm">\$\{star\}\$\{esc\(o\.textContent\)\}<\/span><span class="mpk-sub">\$\{esc\(sub\)\}<\/span>/.test(src)
-   && /\.mpk-item\.mpk-item-2c\{display:flex;align-items:baseline;gap:10px;\}/.test(src)
-   && /\.mpk-item-2c \.mpk-sub\{flex:none;[^}]*font-variant-numeric:tabular-nums;\}/.test(src));
+   && /\.mpk-item\.mpk-item-2c\{display:flex;align-items:baseline;gap:10px;flex-wrap:wrap;\}/.test(src)
+   && /\.mpk-item-2c \.mpk-sub\{flex:none;margin-left:auto;[^}]*font-variant-numeric:tabular-nums;\}/.test(src));
+/* 2026-10-20：附註長的時候換行到第二列，不要繼續吃名字（390px 量出來整個名字會消失）。
+   「靠右」這件事沒有變 —— margin-left:auto 讓它在哪一列都貼右邊。 */
+ok('★★ 附註太長時整列換行，名字有 9em 下限（不會被壓成 0）',
+   /\.mpk-item-2c \.mpk-nm\{flex:1 1 auto;min-width:9em;/.test(src)
+   && /整個名字消失，0907 那句「可用另一張票再加一格」也只剩「柯麗…」。/.test(src));
 ok('★★ 沒有附註的清單（教練、票種、場地…）輸出跟以前一樣，不能改到 .mpk-item 基底',
    /: star\+esc\(o\.textContent\)/.test(src)
    && /不要直接把 \.mpk-item 改成 flex/.test(src));
