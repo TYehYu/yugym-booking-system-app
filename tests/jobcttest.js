@@ -413,6 +413,26 @@ ok('★★★ 地址欄夠長（至少 24 格）且獨佔一行', (()=>{
 /* ⚠ 1018 使用者回報（附截圖）：「電話這一項跳行了」——
    姓名＋身分證字號＋電話擠同一行，在彈窗寬度下會把最後兩格底線折到下一行變成孤兒。
    電話改成自己一行。跟地址同一個教訓：**留白欄位不要跟別人擠一行**。 */
+/* 給付方式（2026-10-19 使用者：「要加　然後順便寫上匯款或現金的選項　讓教練去勾選」）——
+   原本五份都寫死「匯款」，但沒有地方填帳號。改成基本資料區勾選＋帳戶三行。
+   ⚠ 條文裡的「匯款」兩個字一定要跟著拿掉：勾了現金、條文卻寫匯款，就是自打嘴巴。
+   ⚠ 主管職協議書是附約、離職單是表單，兩份沒有給付方式，刻意不加。 */
+ok('★★★ 五份契約都有給付方式的勾選',
+   ['full','desk','part','intern','coop'].every(id=>byId(id).body.indexOf('給付方式：□ 匯款　□ 現金（擇一勾選）')>=0),
+   ['full','desk','part','intern','coop'].filter(id=>byId(id).body.indexOf('給付方式：□ 匯款')<0));
+ok('★★★ 也有匯款帳戶可以填（銀行／分行／戶名／帳號）',
+   ['full','desk','part','intern','coop'].every(id=>{ const b=byId(id).body;
+     return b.indexOf('匯款帳戶：')>=0 && b.indexOf('戶名：')>=0 && b.indexOf('帳號：')>=0; }));
+ok('★★★ 條文不可以再寫死「匯款」（勾現金會自打嘴巴）',
+   ['full','desk','part','intern','coop'].every(id=>{
+     const b=byId(id).body.replace(/給付方式：[^\n]*\n匯款帳戶：[^\n]*/g,'');
+     return b.indexOf('發薪（匯款）')<0 && b.indexOf('結算匯款')<0; }));
+ok('★★★ 條文改成指向上面那一格',
+   ['full','desk','part','intern','coop'].every(id=>byId(id).body.indexOf('依上方勾選的方式給付')>=0));
+/* 附約與表單刻意不加：主管職沒有自己的給付、離職單是結清不是常態給付 */
+ok('★★ 主管職附約與離職單沒有給付方式（刻意）',
+   ['mgr','quit'].every(id=>byId(id).body.indexOf('給付方式：')<0));
+
 ok('★★ 電話欄自己一行（擠在姓名那行會折行）',
    api.JOB_CONTRACTS.filter(c=>/\n電話：＿/.test(c.body)).length===6,
    api.JOB_CONTRACTS.filter(c=>!/\n電話：＿/.test(c.body)).map(c=>c.id));
