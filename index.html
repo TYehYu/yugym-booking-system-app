@@ -14927,8 +14927,8 @@ function tbl(s){return TABLE_ALIAS[s]||s;}
 let sb=null;
 // ── 版本號（日期+時間格式：年後兩碼+月+日.時分，例 26620.1058 = 26年6/20 10:58）──
 // 每次改版手動更新這一行即可，畫面與 title 會一起更新
-const APP_VERSION = '261020.1530';
-const APP_VERSION_LABEL = 'v261020.1530';
+const APP_VERSION = '261020.1539';
+const APP_VERSION_LABEL = 'v261020.1539';
 const CLOUD = !!(window.YUGYM_CONFIG && window.YUGYM_CONFIG.url && window.YUGYM_CONFIG.anonKey);
 if(CLOUD){ sb = supabase.createClient(window.YUGYM_CONFIG.url, window.YUGYM_CONFIG.anonKey); }
 
@@ -48944,8 +48944,18 @@ async function renderShiftsTab(){
   const _hasRealDuty=id=>_monthShifts0.some(s=>s.emp_id===id && !shIsSub(s) && !shIsClassLeave(s));
   const _pool=coaches.filter(c=>(c.need_duty || _monthShifts0.some(s=>s.emp_id===c.id))
     && c.role!=='front_desk' && c.status!=='inactive' && c.invite_status!=='pending');
-  window._shiftIdle=_pool.filter(c=>!_hasRealDuty(c.id) && !(window._shiftShowExtra||[]).includes(c.id));
-  let staff=_pool.filter(c=>_hasRealDuty(c.id) || (window._shiftShowExtra||[]).includes(c.id));
+  /* ══ 正職與兼職一律畫出來（2026-10-20 使用者：「正職兼職的名字應該可以都預設在班表上」）══
+     他們本來就是每個月都要排的人，還沒排班的月份要他們先從下面那行點上來，等於多一步。
+     ⚠ 只放這兩種身分：合作與工讀是「有班才排」，照舊收在「本月未排班」，
+       0930 要解的「0 小時卻佔一整列」沒有整個回來。
+     ⚠ 還是要先過 _pool（need_duty 或這個月有排過班）—— 關掉值班標籤的正職
+       （余東曄、劉怡秀兩位管理員）不會因為這條又被拉回來。
+     ⚠ 一律畫的人不會有收回鈕（_canUndo 看的是 _shiftShowExtra），收不掉是對的。 */
+  const _alwaysRow=c=>['full_time','part_time'].includes(normEmp(c.employment_type||c.pay_type));
+  window._shiftIdle=_pool.filter(c=>!_hasRealDuty(c.id) && !_alwaysRow(c)
+    && !(window._shiftShowExtra||[]).includes(c.id));
+  let staff=_pool.filter(c=>_hasRealDuty(c.id) || _alwaysRow(c)
+    || (window._shiftShowExtra||[]).includes(c.id));
   // Scope：從 Employee Profile 進來 → 只顯示這位員工的排班
   if(scopeActive('employee')){
     const only=staff.filter(c=>c.id===SCOPE.id);

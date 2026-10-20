@@ -115,6 +115,20 @@ console.log('\n⑤ 沒值班的人不畫，但名字還在');
   ok('★★ 「沒值班的人不畫」那條規則本身沒被拆掉',
      /let staff=_pool\.filter\(c=>_hasRealDuty\(c\.id\)/.test(src)
      && /不改「沒值班的人不畫」那條規則 —— 它解的是歷史月份佔一整列的問題。/.test(src));
+  /* 2026-10-20 使用者：「正職兼職的名字應該可以都預設在班表上」——
+     他們每個月本來就要排，先從下面那行點上來等於多一步。
+     ⚠ 只放這兩種：合作與工讀照舊「有班才排」，0930 的問題沒有整個回來。 */
+  ok('★★★ 正職與兼職一律畫一列（不用先從「本月未排班」點上來）',
+     /const _alwaysRow=c=>\['full_time','part_time'\]\.includes\(normEmp\(c\.employment_type\|\|c\.pay_type\)\);/.test(src)
+     && /let staff=_pool\.filter\(c=>_hasRealDuty\(c\.id\) \|\| _alwaysRow\(c\)/.test(src));
+  ok('★★★ 而且不會再出現在「本月未排班」那一行（同一個人不能兩邊都有）',
+     /window\._shiftIdle=_pool\.filter\(c=>!_hasRealDuty\(c\.id\) && !_alwaysRow\(c\)/.test(src));
+  ok('★★★ 仍然要先過 _pool —— 關掉值班標籤的正職不會被這條拉回來',
+     /const _pool=coaches\.filter\(c=>\(c\.need_duty \|\| _monthShifts0\.some\(s=>s\.emp_id===c\.id\)\)/.test(src)
+     && /關掉值班標籤的正職/.test(src));
+  ok('★★ 一律畫的人沒有收回鈕（收不掉是對的）',
+     /const _canUndo=_canEditShifts && \(window\._shiftShowExtra\|\|\[\]\)\.includes\(e\.id\) && !_hasRealDuty\(e\.id\);/.test(src)
+     && /一律畫的人不會有收回鈕/.test(src));
 }
 
 console.log('\n⑥ 薪資完全沒被動到（使用者：「要檢查會不會影響到員工薪資喔」）');
