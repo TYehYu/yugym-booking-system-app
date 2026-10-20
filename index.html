@@ -14927,8 +14927,8 @@ function tbl(s){return TABLE_ALIAS[s]||s;}
 let sb=null;
 // ── 版本號（日期+時間格式：年後兩碼+月+日.時分，例 26620.1058 = 26年6/20 10:58）──
 // 每次改版手動更新這一行即可，畫面與 title 會一起更新
-const APP_VERSION = '261020.1715';
-const APP_VERSION_LABEL = 'v261020.1715';
+const APP_VERSION = '261020.1909';
+const APP_VERSION_LABEL = 'v261020.1909';
 const CLOUD = !!(window.YUGYM_CONFIG && window.YUGYM_CONFIG.url && window.YUGYM_CONFIG.anonKey);
 if(CLOUD){ sb = supabase.createClient(window.YUGYM_CONFIG.url, window.YUGYM_CONFIG.anonKey); }
 
@@ -48420,7 +48420,14 @@ function calcSalary(emp, ptDone, groupHeads, dutyHours, leave, classOverlap, ext
   const leaveDeduct = baseLeaveDeduct;
   const netPay   = Math.max(grossPay - leaveDeduct - insEmpDeduct, 0);         // 實發
 
-  return { base, adjBase, baseLeaveDeduct, baseHourly, schedHours, baseLeavePersonalDed, baseLeaveSickDed, leaveDeductDetail,
+  /* ⚠ baseLeaveMensDed 漏在這裡一次（2026-10-20，Mango 回報「看不了薪資單」）——
+     1019 加生理假時三個常數都算好了，但這份 return 只帶了事假與病假那兩個。
+     教練端薪資單那一列直接 `sal.baseLeaveMensDed.toLocaleString()`，
+     於是**只要有人請過生理假，他的薪資單就整頁打不開**
+     （undefined is not an object）。新增扣款項目時，這三處要一起看：
+     算式 → 這份 return → _zeroSal 的預設物件。 */
+  return { base, adjBase, baseLeaveDeduct, baseHourly, schedHours,
+    baseLeavePersonalDed, baseLeaveSickDed, baseLeaveMensDed, leaveDeductDetail,
     ptPay, ptDetail, ptIncome, ptIsFloor, ptIncomeDetail,
     bonus, bonusDetail, groupPay, groupDetail,
     dutyGross, dutyLeaveDeduct, dutyClassDeduct, classOverlap:co, dutyPay, dutyDetail,
@@ -49880,7 +49887,11 @@ async function computeMonthlyPayroll(month){
      套公式只會生出假的數字。 */
   const _legacy=isLegacyPayMonth(month);
   const _hist=_legacy?await salaryHistoryMap():null;
-  const _zeroSal=n=>({ base:0, adjBase:0, baseLeaveDeduct:0, baseHourly:0, ptPay:0, ptDetail:'', ptIncome:0,
+  /* ⚠ 扣款項目要跟 computeSalary 的 return 一樣齊（2026-10-20 的教訓）——
+     少一個鍵，讀到的地方就是 undefined.toLocaleString()，整頁打不開。 */
+  const _zeroSal=n=>({ base:0, adjBase:0, baseLeaveDeduct:0, baseHourly:0,
+    baseLeavePersonalDed:0, baseLeaveSickDed:0, baseLeaveMensDed:0, leaveDeductDetail:'',
+    ptPay:0, ptDetail:'', ptIncome:0,
     ptIsFloor:false, ptIncomeDetail:'', bonus:0, bonusDetail:'', groupPay:0, groupDetail:'',
     dutyGross:0, dutyLeaveDeduct:0, dutyClassDeduct:0, classOverlap:0, dutyPay:0, dutyDetail:'',
     renewCount:0, renewPay:0, renewDetail:'', isBday:false, bdayPay:0, bdayDetail:'',
