@@ -23,9 +23,16 @@ console.log('① 入口：點僱用別本身，不新增按鈕');
 {
   ok('★★★ 僱用別在可編輯時變成按鈕、不可編輯時維持 <span>',
      /class="shn-type shn-type-act" title="調整僱用別" onclick="event\.stopPropagation\(\);openEmpTypeChange\('\$\{e\.id\}'\)"/.test(src)
-     && /: `<span class="shn-type">\$\{PAY_LABEL\[e\.employment_type\|\|e\.pay_type\]\|\|''\} \$\$\{rate\}<\/span>`/.test(src));
+     && src.indexOf('class="shn-type"${(_canEditShifts&&!isCur)?')>=0);
   ok('★★★ 自己與管理員不給點（與後端同一組條件）',
-     /\(_canEditShifts && String\(e\.id\)!==String\(SESSION\.id\) && e\.role!=='admin'\)/.test(src));
+     /\(_canEditShifts && String\(e\.id\)!==String\(SESSION\.id\) && e\.role!=='admin' && isCur\)/.test(src));
+  /* 2026-10-20 使用者問：「如果 Sandy 這週把 11 月班表排出來，他可以直接在 11 月班表調整嗎」
+     → 不行。RPC 一律當月生效，不吃畫面上的月份。站在 11 月的表上按會落在 10 月，
+     畫面寫 11 月、結果改到 10 月，是最糟的那種錯。所以翻到別的月份就退回純文字。 */
+  ok('★★★ 翻到不是當月的月份就不給點（不然會改到錯的月份）',
+     /isCur\)\s*\n\s*\? `<button type="button" class="shn-type shn-type-act"/.test(src)
+     && /<span class="shn-type"\$\{\(_canEditShifts&&!isCur\)\?' title="調整僱用別只能在當月的班表上做"':''\}>/.test(src)
+     && /畫面寫 11 月、結果落在 10 月，是最糟的那種錯。/.test(src));
   ok('★★ 沒有在那一列多加一顆字鈕（0919 量過會折行）',
      !/shn-etbtn|shn-job|調整職務<\/button>/.test(src)
      && /再塞一顆字鈕一定折行/.test(src));

@@ -100,6 +100,21 @@ console.log('\n⑤ 沒值班的人不畫，但名字還在');
      (src.match(/window\._shiftShowExtra\|\|\[\]\)\.includes\(c\.id\)/g)||[]).length===2);
   ok('★★ 沒人閒著就整行不畫（不要留一個空標題）',
      /\$\{\(window\._shiftIdle\|\|\[\]\)\.length\?`<div class="sh-idle">/.test(src));
+  /* ══ 2026-10-20：還沒開始排的月份變成死路 ═════════════════════════════
+     使用者翻到 2026/11 只看到「目前沒有設定『值班』標籤的員工」，一格都點不到。
+     「沒值班的人不畫」是用 _hasRealDuty 篩的，**還沒排班的月份每個人都 false**
+     → staff 空 → 走空狀態分支，而「本月未排班」那一行畫在表格那條分支裡，
+     於是連加回來的入口都沒了 ＝ 下個月的班表根本開不了頭。 */
+  ok('★★★ staff 空但還有人有值班標籤時，空狀態也要畫出「本月未排班」',
+     /const _idle=\(window\._shiftIdle\|\|\[\]\);/.test(src)
+     && /const _emptyBody = _idle\.length/.test(src)
+     && /還沒有人排班。<br>/.test(src)
+     && /點下面的名字把他加進表格，就可以開始排。/.test(src));
+  ok('★★ 真的沒人有值班標籤時，原本那句話留著（兩種空要分開）',
+     /: `<div style="text-align:center;color:var\(--t2\);padding:34px 20px 14px;">目前沒有設定「值班」標籤的員工。/.test(src));
+  ok('★★ 「沒值班的人不畫」那條規則本身沒被拆掉',
+     /let staff=_pool\.filter\(c=>_hasRealDuty\(c\.id\)/.test(src)
+     && /不改「沒值班的人不畫」那條規則 —— 它解的是歷史月份佔一整列的問題。/.test(src));
 }
 
 console.log('\n⑥ 薪資完全沒被動到（使用者：「要檢查會不會影響到員工薪資喔」）');

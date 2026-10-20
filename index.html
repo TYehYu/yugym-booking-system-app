@@ -14927,8 +14927,8 @@ function tbl(s){return TABLE_ALIAS[s]||s;}
 let sb=null;
 // ── 版本號（日期+時間格式：年後兩碼+月+日.時分，例 26620.1058 = 26年6/20 10:58）──
 // 每次改版手動更新這一行即可，畫面與 title 會一起更新
-const APP_VERSION = '261020.1430';
-const APP_VERSION_LABEL = 'v261020.1430';
+const APP_VERSION = '261020.1530';
+const APP_VERSION_LABEL = 'v261020.1530';
 const CLOUD = !!(window.YUGYM_CONFIG && window.YUGYM_CONFIG.url && window.YUGYM_CONFIG.anonKey);
 if(CLOUD){ sb = supabase.createClient(window.YUGYM_CONFIG.url, window.YUGYM_CONFIG.anonKey); }
 
@@ -48994,6 +48994,26 @@ async function renderShiftsTab(){
   if(!staff.length){
     /* 空狀態也走同一條 toolbar（2026-08-27）—— 兩條分支的上半部長得不一樣的話，
        「這個月沒人排班」看起來會像換了一頁。 */
+    /* ══ 2026-10-20：下個月變成死路的洞 ══════════════════════════════════
+       使用者問「Sandy 這週把 11 月班表排出來，可以嗎」——答案當時是不行：
+       翻到 11 月只看到「目前沒有設定『值班』標籤的員工」，一格都點不到。
+       原因：0930 的「沒值班的人不畫」是用 _hasRealDuty（這個月有沒有排過班）篩的，
+       **還沒開始排的月份每個人都 false** → staff 空 → 走到這條空狀態分支，
+       而「本月未排班」那一行是畫在表格那條分支裡的，於是連加回來的入口都沒了。
+       ⚠ 分成兩種空：
+         ・真的沒人有值班標籤（_pool 空）→ 原本那句話是對的，留著
+         ・有人有標籤、只是這個月還沒排（_pool 有東西）→ 要畫出名字讓人點進去排
+       ⚠ 不改「沒值班的人不畫」那條規則 —— 它解的是歷史月份佔一整列的問題。 */
+    const _idle=(window._shiftIdle||[]);
+    const _emptyBody = _idle.length
+      ? `<div style="text-align:center;color:var(--t2);padding:26px 20px 6px;">
+           ${my} 年 ${mm} 月還沒有人排班。<br>
+           <span style="font-size:12px;color:var(--t3);">點下面的名字把他加進表格，就可以開始排。</span></div>
+         <div class="sh-idle"><b>本月未排班</b>${
+           _idle.map(c=>`<button type="button" onclick="shiftShowIdle('${c.id}')">${
+             escH((typeof coachDisp==='function'?coachDisp(c):c.name)||c.name||'')}</button>`).join('')
+         }</div>`
+      : `<div style="text-align:center;color:var(--t2);padding:34px 20px 14px;">目前沒有設定「值班」標籤的員工。<br><span style="font-size:12px;color:var(--t3);">（在員工管理為員工開啟「🏢值班」標籤後即可排班）</span></div>`;
     body.innerHTML=`<div class="card">
       <div class="sh-toolbar">
         <span class="sh-tb-t">月排班</span>
@@ -49003,7 +49023,7 @@ async function renderShiftsTab(){
           <button type="button" class="sh-mbtn" onclick="shiftMonthMove(1)" title="下個月">›</button>
         </span>
       </div>
-      <div style="text-align:center;color:var(--t2);padding:34px 20px 14px;">目前沒有設定「值班」標籤的員工。<br><span style="font-size:12px;color:var(--t3);">（在員工管理為員工開啟「🏢值班」標籤後即可排班）</span></div>
+      ${_emptyBody}
     </div>`;
     return;
   }
@@ -49073,9 +49093,14 @@ async function renderShiftsTab(){
             2:'<b class="shn-kind sh-code-mid">中</b>',3:'<b class="shn-kind sh-code-pm">晚</b>'})[e._shKind]||''
         }${/* 僱用別：主管與管理員點得動（2026-10-20 使用者：「新增這個功能進主管」）——
              不是自己、也不是管理員才給點，條件與後端 fn_set_employment_type 一致。 */''}${
-          (_canEditShifts && String(e.id)!==String(SESSION.id) && e.role!=='admin')
+          /* ⚠ 只有「看著當月」才給點（2026-10-20 使用者問出來的）——
+             調整僱用別一律是**當月生效**（fn_set_employment_type 自己決定月份，
+             不吃畫面上的月份）。站在 11 月的班表上按，改到的會是 10 月：
+             畫面寫 11 月、結果落在 10 月，是最糟的那種錯。
+             翻到別的月份就退回純文字，並用 title 說清楚要等到那個月。 */
+          (_canEditShifts && String(e.id)!==String(SESSION.id) && e.role!=='admin' && isCur)
             ? `<button type="button" class="shn-type shn-type-act" title="調整僱用別" onclick="event.stopPropagation();openEmpTypeChange('${e.id}')">${PAY_LABEL[e.employment_type||e.pay_type]||''} $${rate}</button>`
-            : `<span class="shn-type">${PAY_LABEL[e.employment_type||e.pay_type]||''} $${rate}</span>`
+            : `<span class="shn-type"${(_canEditShifts&&!isCur)?' title="調整僱用別只能在當月的班表上做"':''}>${PAY_LABEL[e.employment_type||e.pay_type]||''} $${rate}</span>`
         }${_canEditShifts?`<button class="shn-wk" onclick="event.stopPropagation();openWeeklyShift('${e.id}')" title="週期排班">週期</button>`:''}${
           /* 從「本月未排班」點名字加回來的那幾位，給一顆收回鈕
              （2026-10-19 使用者：「我剛剛誤觸下方本月未排班名字，結果就跑上去班表，沒有回頭的按鈕」）。
