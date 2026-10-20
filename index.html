@@ -10873,6 +10873,15 @@ body.wtl-dragging-active *{-webkit-user-select:none!important;user-select:none!i
 .shn-hr i{font-style:normal;color:var(--t3);margin:0 1px;}
 .shn-row2{display:flex;align-items:center;justify-content:space-between;gap:6px;margin-top:2px;}
 .shn-type{font-size:10px;color:var(--t3);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;}
+/* 可點的僱用別（2026-10-20）——「主管也要能調整職務」。
+   ⚠ 不另外加一顆按鈕：這一列已經有班別小章、僱用別＋時薪、〔週期〕與收回鈕，
+     再塞一顆字鈕一定折行（2026-10-19 量過，見 .shn-row1 那段註解）。
+     改成「點僱用別本身就能改僱用別」—— 寬度完全沒變。
+   ⚠ 用虛線底線當提示，不要換顏色：這一列的顏色是班別語意（紅金綠），不能借走。 */
+.shn-type.shn-type-act{cursor:pointer;border-bottom:1px dotted var(--t3);
+  border-radius:0;background:none;border-left:0;border-right:0;border-top:0;padding:0;
+  font:inherit;font-size:10px;color:var(--t3);}
+.shn-type.shn-type-act:hover{color:var(--green);border-bottom-color:var(--green);}
 .shn-wk{flex-shrink:0;font-size:10px;color:var(--green);background:var(--sage-bg);border:none;border-radius:5px;padding:1px 7px;cursor:pointer;font-family:inherit;font-weight:600;}
 .shn-wk:hover{background:var(--green);color:#fff;}
 /* 電腦版：整月所有員工＋日期一次呈現，格子壓縮、不捲動 */
@@ -14918,8 +14927,8 @@ function tbl(s){return TABLE_ALIAS[s]||s;}
 let sb=null;
 // ── 版本號（日期+時間格式：年後兩碼+月+日.時分，例 26620.1058 = 26年6/20 10:58）──
 // 每次改版手動更新這一行即可，畫面與 title 會一起更新
-const APP_VERSION = '261020.1335';
-const APP_VERSION_LABEL = 'v261020.1335';
+const APP_VERSION = '261020.1430';
+const APP_VERSION_LABEL = 'v261020.1430';
 const CLOUD = !!(window.YUGYM_CONFIG && window.YUGYM_CONFIG.url && window.YUGYM_CONFIG.anonKey);
 if(CLOUD){ sb = supabase.createClient(window.YUGYM_CONFIG.url, window.YUGYM_CONFIG.anonKey); }
 
@@ -48639,6 +48648,109 @@ function shiftThisMonthAlt(){ _shiftMonth=ymd(TODAY).slice(0,7); navTo(_shiftBac
 function weeklyOpts(){ return [['off','休'], ...SHIFT_QUICK.map(([c])=>[c,c])]; }
 // 班別代號 → 起迄時間（與 SHIFT_QUICK 一致）
 function codeToTime(code){ const m=SHIFT_QUICK.find(([c])=>c===code); return m?[m[1],m[2]]:null; }
+/* ══ 調整僱用別（2026-10-20 使用者指示：「新增這個功能進主管」）══════════════
+
+   起因：Mango 11/1 轉合作教練，使用者人在國外，要請主管去按。
+   但員工資料的寫入在資料庫層只放行管理員（fn_employees_guard），
+   而且〔員工〕整頁本來就只有管理員進得去 —— 主管連人都點不到。
+
+   所以不是「把員工頁開給主管」，而是在**主管本來就看得到的地方**（班表）
+   開一道窄門：點那個人的僱用別小字就能改，其他一概不動。
+   ⚠ 寫入一律走 fn_set_employment_type（SECURITY DEFINER）——
+     那支會再檢查一次「是主管或管理員、不是自己、對方不是管理員」，
+     而且只放行僱用別那一組欄位。前端這裡只管畫，不是防線。
+   ⚠ 只做「當月生效」。要預先排下個月的，仍然只有管理員能做（薪資規則視窗）。 */
+const EMP_TYPE_PICK=[['full_time','正職'],['part_time','兼職'],
+                     ['contractor','合作教練'],['intern','工讀']];
+async function openEmpTypeChange(empId){
+  if(!isManagerUp()){ showToast('調整僱用別只有管理員或主管可以操作'); return; }
+  if(String(empId)===String(SESSION.id)){ showToast('不能調整自己的僱用別'); return; }
+  const e=await dbGet('coaches',empId);
+  if(!e){ showToast('找不到員工'); return; }
+  if(e.role==='admin' && SESSION.role!=='admin'){ showToast('管理員的僱用別只有管理員能調整'); return; }
+  const cur=normEmp(e.employment_type||e.pay_type);
+  const ym=ymd(TODAY).slice(0,7);
+  /* 這個月已經有快照、而且身分就是要改成的那一種 → 後端會沿用管理員先設好的條件，
+     不會套模板。這件事要寫在畫面上，否則按下去跑出模板數字會以為系統改錯。 */
+  const pre=(payRulesMap(e)||{})[ym];
+  const _money=n=>'$'+Number(n||0).toLocaleString();
+  /* 右邊那欄寫「按下去會變成什麼條件」。
+     已經有這個月的快照（管理員先設好的）就照它寫，否則照該身分的薪資制度模板 ——
+     與後端 fn_set_employment_type 的取捨完全一致，畫面說的才是真的會發生的事。 */
+  const _effOf=(k,snap)=>snap||((window.SALARY_TPL||{})[k]||{});
+  const _tplLine=(k, snap)=>{
+    const t=_effOf(k,snap);
+    const pt=(t.pt_mode==='tier')?'階梯':(_money(t.pt_rate)+' / 堂');
+    return `底薪 ${_money(t.base_salary)}　教練課 ${pt}　值班 ${_money(t.duty_hourly)} / 時`;
+  };
+  /* 列的寫法照定版（.bk-opt／-l／-t／-why／-r，見「選項列定版」）——
+     名字放大在左、條件靠右，不要自己發明第二套。 */
+  const rows=EMP_TYPE_PICK.map(([k,lb])=>{
+    const on=(k===cur);
+    const keep=(pre && normEmp(pre.employment_type)===k);
+    const _base=Number((_effOf(k, keep?pre:null)||{}).base_salary)||0;
+    return `<button type="button" class="bk-opt"${on?' disabled style="opacity:.5;cursor:default;"':''}
+      onclick="${on?'':`empTypeGo('${empId}','${k}',${_base})`}">
+      <span class="bk-opt-l"><b class="bk-opt-t">${lb}</b>${
+        on?'<em class="bk-opt-why">現在就是這個</em>'
+          :(keep?'<em class="bk-opt-why">沿用已經設好的條件</em>':'')}</span>
+      <span class="bk-opt-r">${on?'':escH(_tplLine(k, keep?pre:null))}</span></button>`;
+    /* ⚠ 兩張視窗要講同一件事：確認視窗的「有沒有底薪」也用同一份條件算，
+       不能一張看快照、一張看模板（0930「說明文字定版」：錢的等式留在外面）。 */
+  }).join('');
+  showModal(`<div class="ash-sheetmk"></div><div class="modal-title">調整僱用別</div>
+    <div style="font-size:13px;color:var(--t2);line-height:1.9;margin-bottom:10px;">
+      <b style="color:var(--text);font-size:15px;">${escH(e.name||'')}</b>
+      　現在是 <b>${PAY_LABEL[cur]||'—'}</b></div>
+    <div>${rows}</div>
+    <div style="font-size:12px;color:var(--t2);line-height:1.8;background:var(--card2);border-radius:9px;padding:10px 12px;margin-top:10px;">
+      ${ym.replace('-','/')} 起生效，上個月以前的薪資不受影響。<br>
+      ⚠ 勞保加退保要另外去勞保局辦，系統不會做。</div>
+    <div class="modal-foot"><button class="btn btn-ghost" onclick="closeModal()">取消</button></div>`);
+}
+/* 二次確認 → 呼叫 RPC。改的是錢，不給「按一下就生效」。 */
+function empTypeGo(empId, type, baseSalary){
+  const lb=(EMP_TYPE_PICK.find(x=>x[0]===type)||[])[1]||type;
+  const _base=Number(baseSalary)||0;
+  showModal(`<div class="modal-title">確定改成「${lb}」？</div>
+    <div style="font-size:13px;color:var(--text);line-height:1.9;">
+      <div style="background:var(--warn-bg,#f7efe0);border:1px solid #e8d9b8;color:#8a5e28;
+                  border-radius:9px;padding:9px 12px;margin-bottom:9px;">
+        這個月起的薪資就照新身分算。${_base>0?`底薪 $${_base.toLocaleString()}。`:'<b>沒有底薪</b>。'}</div>
+      <div style="font-size:12px;color:var(--t2);line-height:1.8;">
+        改完會留一筆紀錄給管理員。要改回來再點一次就好。</div>
+    </div>
+    <div class="modal-foot">
+      <button class="btn btn-ghost" onclick="closeModal();openEmpTypeChange('${empId}')">返回</button>
+      <button class="btn btn-green" onclick="empTypeRun('${empId}','${type}')">確定調整</button>
+    </div>`);
+}
+async function empTypeRun(empId, type){
+  return onceAct('emptype:'+empId, async ()=>{
+    try{
+      const r=await sb.rpc('fn_set_employment_type',{p_emp_id:empId, p_type:type});
+      const d=(r&&r.data)||null;
+      if(r&&r.error) throw r.error;
+      if(!d || d.ok!==true){
+        const M={'AUTH.NOT_MANAGER':'只有管理員或主管可以調整',
+                 'AUTH.FORBIDDEN':'請重新登入再試',
+                 'EMP.SELF':'不能調整自己的僱用別',
+                 'EMP.IS_ADMIN':'管理員的僱用別只有管理員能調整',
+                 'EMP.NOT_FOUND':'找不到這位員工',
+                 'TYPE.INVALID':'不認得這個僱用別'};
+        const c=(d&&d.error_code)||'';
+        showToast(M[c]||('調整失敗：'+(c||'未知錯誤')), 7000); return;
+      }
+      /* RPC 繞過 dbPut，快取不會自己失效（見 CLAUDE.md 的「新增 RPC 要記得 dbCacheClear」） */
+      dbCacheClear('coaches');
+      closeModal();
+      showToast(d.unchanged ? '本來就是這個僱用別，沒有變動'
+                            : `已改成${(EMP_TYPE_PICK.find(x=>x[0]===type)||[])[1]||type}`);
+      navTo(CUR_PAGE);
+    }catch(e){ console.error('empTypeRun 失敗',e);
+      showToast('調整失敗：'+((e&&e.message)||e), 7000); }
+  });
+}
 function openWeeklyShift(empId){
   if(!_canEditShifts){ showToast('無排班編輯權限'); return; }
   const c=(window._shiftsStaffCache||[]).find(x=>x.id===empId);
@@ -48959,7 +49071,12 @@ async function renderShiftsTab(){
              ⚠ 顏色沿用格子裡那一套（全紅／早金／晚綠，見 shiftCodeCls），不另訂一組。 */''}${
           ({0:'<b class="shn-kind sh-code-full">全</b>',1:'<b class="shn-kind sh-code-am">早</b>',
             2:'<b class="shn-kind sh-code-mid">中</b>',3:'<b class="shn-kind sh-code-pm">晚</b>'})[e._shKind]||''
-        }<span class="shn-type">${PAY_LABEL[e.employment_type||e.pay_type]||''} $${rate}</span>${_canEditShifts?`<button class="shn-wk" onclick="event.stopPropagation();openWeeklyShift('${e.id}')" title="週期排班">週期</button>`:''}${
+        }${/* 僱用別：主管與管理員點得動（2026-10-20 使用者：「新增這個功能進主管」）——
+             不是自己、也不是管理員才給點，條件與後端 fn_set_employment_type 一致。 */''}${
+          (_canEditShifts && String(e.id)!==String(SESSION.id) && e.role!=='admin')
+            ? `<button type="button" class="shn-type shn-type-act" title="調整僱用別" onclick="event.stopPropagation();openEmpTypeChange('${e.id}')">${PAY_LABEL[e.employment_type||e.pay_type]||''} $${rate}</button>`
+            : `<span class="shn-type">${PAY_LABEL[e.employment_type||e.pay_type]||''} $${rate}</span>`
+        }${_canEditShifts?`<button class="shn-wk" onclick="event.stopPropagation();openWeeklyShift('${e.id}')" title="週期排班">週期</button>`:''}${
           /* 從「本月未排班」點名字加回來的那幾位，給一顆收回鈕
              （2026-10-19 使用者：「我剛剛誤觸下方本月未排班名字，結果就跑上去班表，沒有回頭的按鈕」）。
              ⚠ 只有「這個月真的還沒有班」的人才給 —— 已經排了班的人收回去會讓那些班看不見。
