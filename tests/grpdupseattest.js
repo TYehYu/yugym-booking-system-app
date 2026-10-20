@@ -49,6 +49,20 @@ console.log('\n② 0829 想擋掉的雜訊仍然要擋掉');
      r.ROWS.length===0);
 }
 
+console.log('\n②b 柯麗貞 10/20（2026-10-20 使用者指示「放行」）：只有一張票、還有剩');
+{
+  /* 「因為客人也是用他自己購買的票券去預約」—— 她 #1 團體課還剩 8 堂，
+     第二格照樣是她自己付的錢。舊規則把整列藏掉，櫃檯只能改走明細→管理名單。 */
+  const r=run([row('M1','',[T('TK-A',8)])], {'M1':'TK-A'}, {'M1|':1});
+  ok('★★★ 同一張票還有剩 → 這一列留著（可以加第二格）', r.ROWS.length===1);
+  ok('★★★ 標成 sameTk，副標才會寫「同一張票扣 2 堂」', r.ROWS[0].again===true && r.ROWS[0].sameTk===true);
+  ok('★★ 未列出人數不把它算進去（它沒被藏）', r._inClass===0);
+}
+{
+  const r=run([row('M1','',[T('TK-A',0),T('TK-B',4)])], {'M1':'TK-A'}, {'M1|':1});
+  ok('★★ 另有一張沒用過的 → sameTk 要是 false（副標寫「另一張票」）', r.ROWS[0].sameTk===false);
+}
+
 console.log('\n③ 剛點選的那一列永遠留著（按下去立刻消失會以為沒加到）');
 {
   const r=run([row('M1','',[T('TK-A',0)])], {'M1':'TK-A'}, {'M1|':1}, {mid:'M1',fam:''});
@@ -58,11 +72,14 @@ console.log('\n③ 剛點選的那一列永遠留著（按下去立刻消失會�
 console.log('\n④ 判準用的是課卡記的事實，不是推算');
 ok('★★ 已用票取自 _grpSeatTk（逐名額記的票）',
    /const _usedTk=new Set\(Object\.values\(window\._grpSeatTk\|\|\{\}\)\.map\(String\)\)/.test(FIL));
-ok('★★ 只放行「另有一張沒被這堂用掉、且有剩餘堂數」的票',
-   /_spare=\(r\.tks\|\|\[\]\)\.some\(t=>t && !_usedTk\.has\(String\(t\.id\)\) && \(Number\(t\.left\)\|\|0\)>0\)/.test(FIL));
+ok('★★ 放行條件＝還有扣得到的票（另一張或同一張都算，2026-10-20 放寬）',
+   /_spare=\(r\.tks\|\|\[\]\)\.some\(t=>t && !_usedTk\.has\(String\(t\.id\)\) && \(Number\(t\.left\)\|\|0\)>0\)/.test(FIL)
+   && /const _anyLeft=\(r\.tks\|\|\[\]\)\.some\(t=>t && \(Number\(t\.left\)\|\|0\)>0\);/.test(FIL));
 ok('★  原因寫在原地（含使用者原話與「假資料」那句）',
    /就無法預約在同一堂課/.test(src) && /那是被系統逼出來的假資料/.test(src));
-ok('★  列上的副標會講明白', /已在名單・可用另一張票再加一格/.test(src));
+ok('★  列上的副標會講明白（兩種情況各一句）',
+   /已在名單・可用另一張票再加一格/.test(src)
+   && /已在名單・可再加一格（同一張票扣 2 堂）/.test(src));
 
 console.log(`\n${pass} 過 / ${fail} 敗`);
 process.exit(fail?1:0);

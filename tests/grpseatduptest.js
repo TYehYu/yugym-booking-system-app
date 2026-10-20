@@ -159,9 +159,18 @@ console.log('\n④ 名單視窗：一位使用人一列，挑票用圓形卡');
      /if\(_addMode\)\{\s*\n\s*const _pk=window\._grpPick\|\|\{\};/.test(src)
      && /if\(!_taken\[String\(r\.m\.id\)\+'\|'\+String\(r\.fam\|\|''\)\] \|\| isPicked\) continue;/.test(src)
      && /ROWS\.splice\(i,1\);/.test(src));
-  ok('★★★ 例外只有一種：另有一張沒被這堂用掉、且有剩餘堂數的票',
+  /* 2026-10-20 放寬（使用者：「放行」）：例外從「另有一張票」擴成「還有扣得到的票」。
+     柯麗貞 10/20 只有一張團課票（剩 8 堂），舊規則把整列藏掉，
+     同一張票扣兩格卻是合法的（0827 許佳慈），等於同一件事有兩個答案。
+     要守的是另一半：**沒有 left>0 的票就一定藏掉**（0829 想擋的雜訊）。 */
+  ok('★★★ 放行條件＝手上還有扣得到的票（另一張、或同一張都算）',
      /_spare=\(r\.tks\|\|\[\]\)\.some\(t=>t && !_usedTk\.has\(String\(t\.id\)\) && \(Number\(t\.left\)\|\|0\)>0\)/.test(src)
-     && /if\(_spare\)\{ r\.again=true; continue; \}/.test(src));
+     && /const _anyLeft=\(r\.tks\|\|\[\]\)\.some\(t=>t && \(Number\(t\.left\)\|\|0\)>0\);/.test(src)
+     && /if\(_spare\|\|_anyLeft\)\{ r\.again=true; r\.sameTk=!_spare; continue; \}/.test(src));
+  ok('★★★ 沒票的那一列照舊藏掉（放寬的不是這一半）',
+     /ROWS\.splice\(i,1\);/.test(src));
+  ok('★★ 只剩同一張時副標要寫明會扣 2 堂（不能讓櫃檯以為是另一張）',
+     /r\.sameTk\?'已在名單・可再加一格（同一張票扣 2 堂）/.test(src));
   /* 2026-08-29 二修（使用者：「但是我在28單獨搜媽媽也找不到」）——
      9/28 打「許」整份清單是空的：那一格用的是本人那張（已扣到 0 堂），
      0 堂的票不在候選清單裡，「名額 i 用第 i 張票」的推算就退回候選清單的第 i 張
@@ -212,9 +221,19 @@ console.log('\n④ 名單視窗：一位使用人一列，挑票用圓形卡');
   ok('★ addMode 不顯示人數上限那一列（改人數已改成標題卡上就地加減）',
      /onclick="grpMaxStep\('\$\{b\.id\}',1\)"/.test(src));
   /* 「之前會做成這樣是因為要一次新增多名會員嗎? 不要這個功能了　一次新增一名會員就好」 */
+  /* 2026-10-20：「再點一次＝取消」改看 _grpPick（這一輪點的是不是同一列）。
+     原本看 r.seats.length>0 —— 已在名單的人本來就 >0，於是 0907 放行的
+     「可再加一格」那種列點下去全被當成取消，看得到卻加不進去。 */
   ok('★★★ ［＋新增］是單選：點另一列就換人，不會愈選愈多',
-     /if\(window\._grpAdd\)\{\s*\n\s*const already=r\.seats\.length>0;\s*\n\s*window\._grpSel=\(window\._grpBase\|\|\[\]\)\.slice\(\);/.test(src)
+     /const _pk0=window\._grpPick\|\|\{\};\s*\n\s*const already=\(String\(_pk0\.mid\|\|''\)===String\(r\.mid\) && String\(_pk0\.fam\|\|''\)===String\(r\.fam\|\|''\)\);/.test(src)
+     && /window\._grpSel=\(window\._grpBase\|\|\[\]\)\.slice\(\);/.test(src)
      && /管理名單那條路維持複選（要一次排一整班）。/.test(src));
+  ok('★★★ 已在名單的人點下去是「加第二格」，不是「取消」',
+     !/const already=r\.seats\.length>0;/.test(src));
+  ok('★★ 新那一格優先拿這堂還沒用到的票（兩格不要指同一張）',
+     /const _usedNow=new Set\(Object\.values\(window\._grpSeatTk\|\|\{\}\)\.map\(String\)\);/.test(src)
+     && /const _tk=\(r\.tkIds\|\|\[\]\)\.find\(x=>!_usedNow\.has\(String\(x\)\)\) \|\| \(r\.tkIds\|\|\[\]\)\[0\] \|\| null;/.test(src)
+     && /if\(!grpSeatAdd\(r\.mid, _tk\)\) return;/.test(src));
   ok('★★ 單選模式不出 ＋／−（要再加一位就再按一次［＋新增］）',
      /\$\{\(on&&!_addMode\)\?`<span class="grp-step" onclick="event\.stopPropagation\(\);grpRowAdd/.test(src));
   ok('★★ 重複預約開關：關掉就不問後續場次；管理名單那條路不受影響',
