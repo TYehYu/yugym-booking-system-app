@@ -14927,8 +14927,8 @@ function tbl(s){return TABLE_ALIAS[s]||s;}
 let sb=null;
 // ── 版本號（日期+時間格式：年後兩碼+月+日.時分，例 26620.1058 = 26年6/20 10:58）──
 // 每次改版手動更新這一行即可，畫面與 title 會一起更新
-const APP_VERSION = '261020.1539';
-const APP_VERSION_LABEL = 'v261020.1539';
+const APP_VERSION = '261020.1715';
+const APP_VERSION_LABEL = 'v261020.1715';
 const CLOUD = !!(window.YUGYM_CONFIG && window.YUGYM_CONFIG.url && window.YUGYM_CONFIG.anonKey);
 if(CLOUD){ sb = supabase.createClient(window.YUGYM_CONFIG.url, window.YUGYM_CONFIG.anonKey); }
 
@@ -37527,14 +37527,38 @@ async function _submitBookingInner(){
     if(memNameErr(tname)){showToast(memNameErr(tname));return;}
     if(tphoneRaw && !/^09\d{8}$/.test(tphone)){showToast('手機格式不正確：請填 09 開頭的 10 位數字，或留空');return;}
     let mem=null, memIsNew=false;
+    /* 「用手機找人，沒有就建一個」改走 fn_trial_member（2026-10-20 使用者附截圖）——
+       Barry（一般教練）排 10/22 的體驗課填了手機，跳「建立會員失敗：權限不足」，
+       而且下面是 return，**整堂體驗課都沒建起來**。
+
+       兩個原因疊在一起，只修一個沒有用：
+         ① members 的 INSERT policy 只給管理員／櫃檯／主管，一般教練沒有。
+         ② 就算開了 INSERT，教練的 SELECT 只看得到自己的學員 —— 填到現有客人的手機時
+            這裡查不到、會去新建，然後撞上手機唯一索引，跳一個更難懂的錯。
+       所以不是放寬 policy，而是一支 SECURITY DEFINER 的窄門：它繞過 RLS 查一次，
+       查到就回那一位、查不到才建，而且只回 id 與姓名 ——
+       教練照樣看不到別人的電話、生日、票券。
+       ⚠ 原本那個 `catch(_){}` 正是「空 catch 偽裝成沒資料」那個坑：
+         查詢被 RLS 擋掉時它靜靜回 undefined，於是一路走去新建。 */
     if(tphone){
-      try{ mem=(await sb.from('members').select('id,name').eq('phone',tphone).maybeSingle()).data; }catch(_){}
-      if(!mem){
-        mem={id:uid('m'),name:tname,phone:tphone,status:'active',level:'regular',must_setup:true,tier_epoch:false,
-          default_coach_id:coach_id||null,created_at:new Date().toISOString()};
-        try{ await dbPut('members',mem); memIsNew=true; }
-        catch(e){ showToast('建立會員失敗：'+(e&&e.message?e.message:e)); return; }
+      let _tr=null;
+      try{
+        const r=await sb.rpc('fn_trial_member',{p_name:tname, p_phone:tphone, p_coach_id:coach_id||null});
+        if(r&&r.error) throw r.error;
+        _tr=(r&&r.data)||null;
+      }catch(e){ console.error('fn_trial_member 失敗',e);
+        showToast('建立會員失敗：'+((e&&e.message)||e), 7000); return; }
+      if(!_tr || _tr.ok!==true){
+        const M={'AUTH.FORBIDDEN':'請重新登入再試',
+                 'NAME.REQUIRED':'請填客戶姓名',
+                 'PHONE.INVALID':'手機格式不正確：請填 09 開頭的 10 位數字，或留空',
+                 'PHONE.DUPLICATE':'這支手機已經有別的會員在用，請櫃檯協助'};
+        const c=(_tr&&_tr.error_code)||'';
+        showToast(M[c]||('建立會員失敗：'+(c||'未知錯誤')), 7000); return;
       }
+      mem={id:_tr.id, name:_tr.name||tname};
+      memIsNew=!!_tr.created;
+      dbCacheClear(['members']);   // RPC 繞過 dbPut，快取不會自己失效
     }
     const vbk={id:null,coach_id,category:t.category,ticket_type_id:type_id,venue_pref:bkWizVenue()};
     const verr=await validateBooking(vbk,date,time,60);
