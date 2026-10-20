@@ -101,7 +101,10 @@ function mkWorld(){
      ⚠ 漏掉的症狀不只是 ReferenceError：沙盒會炸在半路、流程繼續往下走，
        讓後面的斷言得到莫名其妙的結果（0917 那次「這時候什麼都還沒寫」卻得到 ["M"]）。
        看到那種「數字對不上」的紅，先確認是不是有東西沒餵進沙盒。 */
-  const code=[grab('_saveGroupMembers'),grab('saveGroupMembers'),grab('grpFollowPre'),
+  /* 2026-10-20 又多一支：_saveGroupMembers 現在會問帳本「這一堂扣過哪幾張票」
+     （grpDeductedTickets，補會員自己報名那條路沒寫 seat_tickets 的洞）。 */
+  const code=[grab('grpDeductedTickets'),
+              grab('_saveGroupMembers'),grab('saveGroupMembers'),grab('grpFollowPre'),
               grab('grpFollowOnce'),grab('grpFollowAsk'),grab('grpFollowBack'),
               grab('gfPickDates'),grab('gfDaysHtml'),
               grab('_grpFollowRun'),grab('grpFollowRun')].join('\n');

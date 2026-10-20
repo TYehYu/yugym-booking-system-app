@@ -14918,8 +14918,8 @@ function tbl(s){return TABLE_ALIAS[s]||s;}
 let sb=null;
 // ── 版本號（日期+時間格式：年後兩碼+月+日.時分，例 26620.1058 = 26年6/20 10:58）──
 // 每次改版手動更新這一行即可，畫面與 title 會一起更新
-const APP_VERSION = '261020.1324';
-const APP_VERSION_LABEL = 'v261020.1324';
+const APP_VERSION = '261020.1335';
+const APP_VERSION_LABEL = 'v261020.1335';
 const CLOUD = !!(window.YUGYM_CONFIG && window.YUGYM_CONFIG.url && window.YUGYM_CONFIG.anonKey);
 if(CLOUD){ sb = supabase.createClient(window.YUGYM_CONFIG.url, window.YUGYM_CONFIG.anonKey); }
 
@@ -22362,6 +22362,34 @@ async function deductTicket(ticket,booking_id,operator,opts){
    同一人兩個名額扣在兩張補課券上，取消兩個名額時原本都退到「最近一筆扣課」那張：
    第一張多退一堂、第二張的帳懸空，之後再預約就兩個名額都扣到同一張。
    改成逐張算淨額（扣−退），只退還有淨扣的那張（多張都有淨扣時退最近扣的）。 */
+/* 這一堂在帳本上已經扣過哪幾張票（2026-10-20）——
+
+   seat_tickets 不是完整的事實：**會員自己報名那條路（fn_member_join_group）
+   只寫 member_ids 與 ticket_logs，不寫 seat_tickets**。
+   柯麗貞 10/20 20:00 就是這樣：10/19 她自己在會員端報了第 1 格，
+   seat_tickets 裡沒有那一格；今天櫃檯要加第 2 格時，_used 是空的 →
+   沒帶 multi → 撞上「這一堂在這張票上已經扣過 1 堂」的護欄 →
+   **名額加上去了，堂數卻沒扣**（帳本留下一筆 delta 0 的「已阻擋」）。
+
+   所以「這張票在這一堂有沒有扣過」要問帳本，不能只問 seat_tickets。
+   回傳的是 Set（只看有沒有，不看幾堂）——護欄是「同一堂同一張票已經有扣課」就擋，
+   所以只要存在就必須明講 multi。
+   ⚠ 查不到／讀失敗時回空 Set，退回原本只看 seat_tickets 的行為（保守，不會多扣）。 */
+async function grpDeductedTickets(bid){
+  const out=new Set();
+  try{
+    const logs=await dbGetAll('ticket_logs');
+    const net={};
+    (logs||[]).filter(l=>String(l.booking_id||'')===String(bid)).forEach(l=>{
+      /* delta 0 的「補連結」與「已阻擋」都不是扣課（同 grpNetDeductTicket 的規矩） */
+      if(Number(l.delta)===0) return;
+      if(l.action==='deduct') net[l.ticket_id]=(net[l.ticket_id]||0)+1;
+      else if(l.action==='refund') net[l.ticket_id]=(net[l.ticket_id]||0)-1;
+    });
+    Object.keys(net).forEach(k=>{ if(net[k]>0) out.add(String(k)); });
+  }catch(_){ /* 讀不到就回空的：寧可不帶 multi（會被護欄擋、看得到），也不要憑空多扣 */ }
+  return out;
+}
 async function grpNetDeductTicket(bid, mid){
   const logs=await dbGetAll('ticket_logs');
   const tks=await dbGetAll('member_tickets');
@@ -42395,7 +42423,10 @@ async function _saveGroupMembers(id){
      ⚠ 但「一張票扣多格」本身是合法的：0827 許佳慈 4 個名額扣同一張 4 堂票就是這樣
        （建立團課那條路一直是 multi:true）。所以這裡不是禁止重複，是**排在最後**：
        沒有別張可用時照樣扣同一張，只是要明講 multi，不能讓護欄默默吃掉。 */
+  /* 2026-10-20：再併上帳本裡「這一堂已經扣過」的票（見 grpDeductedTickets）——
+     會員自己報名的名額不會寫進 seat_tickets，只看 seat_tickets 會漏掉它們。 */
   const _used=new Set(Object.values(b.seat_tickets||{}).map(String));
+  (await grpDeductedTickets(b.id)).forEach(x=>_used.add(x));
   const _free=arr=>(arr||[]).filter(t=>t && !_used.has(String(t.id)));
   for(const mid of added){
     if(_failed.has(String(mid))){ (_noTk[mid]=(_noTk[mid]||0)+1); continue; }

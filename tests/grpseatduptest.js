@@ -43,6 +43,37 @@ console.log('① 挑票四段的順序與「已被這堂用掉」的排除');
      || /三個名額全指到 TK-mte3pejgah8w/.test(src));
 }
 
+console.log('\n①b 帳本也算數：會員自己報名的名額不在 seat_tickets 裡（2026-10-20）');
+{
+  /* 柯麗貞 10/20 20:00：10/19 她在會員端自己報了第 1 格，
+     fn_member_join_group 只寫 member_ids＋ticket_logs、不寫 seat_tickets。
+     櫃檯今天加第 2 格時 _used 是空的 → 沒帶 multi → 撞護欄 →
+     名額加上去了、堂數沒扣（帳本留下 delta 0 的「已阻擋」）。 */
+  ok('★★★ _used 併上帳本裡「這一堂已經扣過」的票，不是只看 seat_tickets',
+     /\(await grpDeductedTickets\(b\.id\)\)\.forEach\(x=>_used\.add\(x\)\);/.test(src)
+     && /async function grpDeductedTickets\(bid\)\{/.test(src));
+  ok('★★ 淨值算法與 grpNetDeductTicket 同一套（delta 0 不算扣課）',
+     /if\(Number\(l\.delta\)===0\) return;/.test(src)
+     && /if\(l\.action==='deduct'\) net\[l\.ticket_id\]=\(net\[l\.ticket_id\]\|\|0\)\+1;/.test(src));
+  ok('★★ 讀失敗回空 Set（寧可被護欄擋，也不要憑空多扣）',
+     /\}catch\(_\)\{ \/\* 讀不到就回空的：寧可不帶 multi/.test(src));
+  ok('★ 根因寫在原地（下一個人不要以為 seat_tickets 是完整的事實）',
+     /只寫 member_ids 與 ticket_logs，不寫 seat_tickets/.test(src));
+  /* 實跑淨值：扣→退→扣 應該仍算「扣過」（柯麗貞今天 05:26 退、05:27 再扣） */
+  const netSet=logs=>{ const net={}; const out=new Set();
+    logs.filter(l=>Number(l.delta)!==0).forEach(l=>{
+      if(l.action==='deduct') net[l.ticket_id]=(net[l.ticket_id]||0)+1;
+      else if(l.action==='refund') net[l.ticket_id]=(net[l.ticket_id]||0)-1; });
+    Object.keys(net).forEach(k=>{ if(net[k]>0) out.add(k); }); return out; };
+  ok('★★ 扣→退→扣 仍算「這一堂扣過這張票」',
+     netSet([{ticket_id:'T1',action:'deduct',delta:-1},{ticket_id:'T1',action:'refund',delta:1},
+             {ticket_id:'T1',action:'deduct',delta:-1}]).has('T1'));
+  ok('★★ 「已阻擋」那筆（delta 0）不算扣課',
+     !netSet([{ticket_id:'T1',action:'adjust',delta:0}]).has('T1'));
+  ok('★★ 扣完又全退 → 不算扣過（下次要照常扣，不能誤帶 multi）',
+     !netSet([{ticket_id:'T1',action:'deduct',delta:-1},{ticket_id:'T1',action:'refund',delta:1}]).has('T1'));
+}
+
 console.log('\n② 重複用同一張時一定要帶 multi:true，否則名額會白站在名單上');
 {
   ok('★★ 只有「這張已經被這堂用過」才帶 multi',
