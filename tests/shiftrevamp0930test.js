@@ -119,13 +119,23 @@ console.log('\n⑤ 沒值班的人不畫，但名字還在');
      他們每個月本來就要排，先從下面那行點上來等於多一步。
      ⚠ 只放這兩種：合作與工讀照舊「有班才排」，0930 的問題沒有整個回來。 */
   ok('★★★ 正職與兼職一律畫一列（不用先從「本月未排班」點上來）',
-     /const _alwaysRow=c=>\['full_time','part_time'\]\.includes\(normEmp\(c\.employment_type\|\|c\.pay_type\)\);/.test(src)
+     /const _alwaysRow=c=>!!c\.need_duty\s*\n\s*&& \['full_time','part_time'\]\.includes\(normEmp\(c\.employment_type\|\|c\.pay_type\)\);/.test(src)
      && /let staff=_pool\.filter\(c=>_hasRealDuty\(c\.id\) \|\| _alwaysRow\(c\)/.test(src));
+  /* 2026-10-23 使用者回報：「余東曄是我，我記得我在設定這邊沒有選值班，不應該出現吧」——
+     1022 我寫「關掉值班標籤的正職不會被這條拉回來」是錯的：
+     _pool 是「need_duty **或** 這個月有排過班」，而他 10 月有幾筆課程請假
+     被 coachLeaveToRoster 補登進 shifts，照樣進得了 _pool，然後被這條撈上去
+     —— 正是 0930 要解掉的那一列。 */
+  ok('★★★ 沒開值班標籤的人不固定佔一列（0930 那一列不能回來）',
+     /const _alwaysRow=c=>!!c\.need_duty/.test(src)
+     && /判準補上 need_duty：沒開值班標籤的人，不管什麼僱用別都不固定佔一列。/.test(src));
   ok('★★★ 而且不會再出現在「本月未排班」那一行（同一個人不能兩邊都有）',
      /window\._shiftIdle=_pool\.filter\(c=>!_hasRealDuty\(c\.id\) && !_alwaysRow\(c\)/.test(src));
-  ok('★★★ 仍然要先過 _pool —— 關掉值班標籤的正職不會被這條拉回來',
+  /* ⚠ _pool 擋不住「關掉值班標籤但有課程請假」的人 —— 它是「或」。
+     真正擋住的是 _alwaysRow 裡的 need_duty（上面那條）。1022 我把這件事寫反了。 */
+  ok('★★ _pool 的條件是「或」，所以它本身不是防線',
      /const _pool=coaches\.filter\(c=>\(c\.need_duty \|\| _monthShifts0\.some\(s=>s\.emp_id===c\.id\)\)/.test(src)
-     && /關掉值班標籤的正職/.test(src));
+     && /_pool 的條件是「need_duty \*\*或\*\* 這個月有排過班」/.test(src));
   ok('★★ 一律畫的人沒有收回鈕（收不掉是對的）',
      /const _canUndo=_canEditShifts && \(window\._shiftShowExtra\|\|\[\]\)\.includes\(e\.id\) && !_hasRealDuty\(e\.id\);/.test(src)
      && /一律畫的人不會有收回鈕/.test(src));

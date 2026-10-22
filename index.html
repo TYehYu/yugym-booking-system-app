@@ -14927,8 +14927,8 @@ function tbl(s){return TABLE_ALIAS[s]||s;}
 let sb=null;
 // ── 版本號（日期+時間格式：年後兩碼+月+日.時分，例 26620.1058 = 26年6/20 10:58）──
 // 每次改版手動更新這一行即可，畫面與 title 會一起更新
-const APP_VERSION = '261022.1817';
-const APP_VERSION_LABEL = 'v261022.1817';
+const APP_VERSION = '261022.1827';
+const APP_VERSION_LABEL = 'v261022.1827';
 const CLOUD = !!(window.YUGYM_CONFIG && window.YUGYM_CONFIG.url && window.YUGYM_CONFIG.anonKey);
 if(CLOUD){ sb = supabase.createClient(window.YUGYM_CONFIG.url, window.YUGYM_CONFIG.anonKey); }
 
@@ -49035,7 +49035,14 @@ async function renderShiftsTab(){
      ⚠ 還是要先過 _pool（need_duty 或這個月有排過班）—— 關掉值班標籤的正職
        （余東曄、劉怡秀兩位管理員）不會因為這條又被拉回來。
      ⚠ 一律畫的人不會有收回鈕（_canUndo 看的是 _shiftShowExtra），收不掉是對的。 */
-  const _alwaysRow=c=>['full_time','part_time'].includes(normEmp(c.employment_type||c.pay_type));
+  /* ⚠ 一定要同時有值班標籤（2026-10-23 使用者回報：「余東曄是我，我記得我在設定這邊
+       沒有選值班，不應該出現吧」）—— 我 10/22 寫「關掉值班標籤的正職不會被這條拉回來」
+       是錯的：_pool 的條件是「need_duty **或** 這個月有排過班」，而他 10 月有幾筆
+       **課程請假**被 coachLeaveToRoster 補登進 shifts，所以照樣進得了 _pool，
+       接著就被「正職一律畫一列」撈上去 —— 正是 0930 要解掉的那一列（0 小時佔一整列）。
+       判準補上 need_duty：沒開值班標籤的人，不管什麼僱用別都不固定佔一列。 */
+  const _alwaysRow=c=>!!c.need_duty
+    && ['full_time','part_time'].includes(normEmp(c.employment_type||c.pay_type));
   window._shiftIdle=_pool.filter(c=>!_hasRealDuty(c.id) && !_alwaysRow(c)
     && !(window._shiftShowExtra||[]).includes(c.id));
   let staff=_pool.filter(c=>_hasRealDuty(c.id) || _alwaysRow(c)
