@@ -139,6 +139,36 @@ console.log('\n\u2465 2026-10-23 颱風假當天踩到的兩個洞');
   ok('★ 成因寫在原地', /這一欄當初抄錯表/.test(src));
 }
 
+
+console.log('\n⑦ 通知那一圈（2026-10-23 同一天查出來的）');
+{
+  /* 使用者問「會員通知有發出去嗎」—— 查正式庫：發了，但發錯也發重複。
+     31 堂裡只通知到 4 位，而且那 4 位各收到兩封。
+     ① mids(b) 只讀 member_ids，那是**團課**放學員的地方；
+        私人教練、體驗、自主訓練的會員在 member_id。20 堂教練課一個都沒收到。
+     ② 重按會再發一次。 */
+  ok('★★★ 名單兩個欄位都要讀（團課用 member_ids、其餘用 member_id）',
+     /const ids=\(Array\.isArray\(b\.member_ids\)&&b\.member_ids\.length\)/.test(src)
+     && /\? b\.member_ids : \(b\.member_id\?\[b\.member_id\]:\[\]\);/.test(src));
+  ok('★★★ 不再用 mids\(b\) 拿通知名單',
+     !/for\(const b of st\.bs\) \(mids\(b\)\|\|\[\]\)\.forEach/.test(src));
+  ok('★★★ 同一天同一位已經發過就跳過',
+     /const _title='課程停課通知', _tag=`\$\{String\(ds\)\.replace\(\/-\/g,'\/'\)\} 的課程已取消`;/.test(src)
+     && /if\(_sent\[list\[i\]\]\)\{ notiSkip\+\+; continue; \}/.test(src)
+     && /_sent\[String\(n\.recipient_id\)\]=1;/.test(src));
+  ok('★★★ 讀不到通知紀錄就整個不發（寧可不發，也不要重複發）',
+     /讀不到通知紀錄，這次先不通知會員（避免重複發）/.test(src)
+     && /for\(let i=0;i<list\.length && _sent;i\+\+\)\{/.test(src));
+  ok('★★ 比對用的尾巴就是寫進內文的那一句（不另記旗標）',
+     /`因天災停課，\$\{_tag\}，堂數沒有扣。`/.test(src));
+  ok('★★ 通知失敗要留痕跡（原本是空 catch）',
+     /console\.error\('通知失敗',list\[i\],e\);/.test(src));
+  ok('★ 結果訊息講出通知幾位、跳過幾位',
+     src.indexOf('(noti?')>=0 && src.indexOf('(notiSkip?')>=0
+     && /位今天已通知過/.test(src));
+  ok('★ 成因寫在原地', /20 堂教練課的會員一個都沒收到/.test(src));
+}
+
 console.log('\n'+(fail?'✗ ':'✓ ')+pass+' 通過 / '+fail+' 失敗');
 process.exit(fail?1:0);
 })();

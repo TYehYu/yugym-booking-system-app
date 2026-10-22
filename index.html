@@ -14927,8 +14927,8 @@ function tbl(s){return TABLE_ALIAS[s]||s;}
 let sb=null;
 // ── 版本號（日期+時間格式：年後兩碼+月+日.時分，例 26620.1058 = 26年6/20 10:58）──
 // 每次改版手動更新這一行即可，畫面與 title 會一起更新
-const APP_VERSION = '261022.1812';
-const APP_VERSION_LABEL = 'v261022.1812';
+const APP_VERSION = '261022.1817';
+const APP_VERSION_LABEL = 'v261022.1817';
 const CLOUD = !!(window.YUGYM_CONFIG && window.YUGYM_CONFIG.url && window.YUGYM_CONFIG.anonKey);
 if(CLOUD){ sb = supabase.createClient(window.YUGYM_CONFIG.url, window.YUGYM_CONFIG.anonKey); }
 
@@ -29452,22 +29452,47 @@ async function _cdayRun(){
       }catch(e){ console.error('展延失敗',st.tk[i].id,e); }
     }
   }
+  let noti=0, notiSkip=0;
   if(doNotify){
+    /* ⚠ 名單不能只讀 member_ids（2026-10-23 踩到）——
+       mids(b) 只看 member_ids，那是**團課**放學員的地方；
+       私人教練、體驗、自主訓練的會員在 member_id。
+       10/22 那次 31 堂裡只通知到 4 位（團課與自主訓練那幾堂），
+       20 堂教練課的會員一個都沒收到。全系統其他地方用的是下面這個寫法。 */
     const seen={};
-    for(const b of st.bs) (mids(b)||[]).forEach(m=>{ if(m) seen[m]=1; });
+    for(const b of st.bs){
+      const ids=(Array.isArray(b.member_ids)&&b.member_ids.length)
+        ? b.member_ids : (b.member_id?[b.member_id]:[]);
+      ids.forEach(m=>{ if(m) seen[String(m)]=1; });
+    }
     const list=Object.keys(seen);
-    for(let i=0;i<list.length;i++){
+    /* ⚠ 重按不要再通知一次（同一個洞，10/22 那 4 位各收到兩封）——
+       同一天同一位已經發過就跳過。判準用已經寫進去的那一封，不另外記旗標。 */
+    const _title='課程停課通知', _tag=`${String(ds).replace(/-/g,'/')} 的課程已取消`;
+    let _sent={};
+    try{
+      (await dbGetAll('notifications')||[]).forEach(n=>{
+        if(n && n.title===_title && typeof n.body==='string' && n.body.indexOf(_tag)>=0)
+          _sent[String(n.recipient_id)]=1;
+      });
+    }catch(e){ console.error('讀通知紀錄失敗，這次不發以免重複',e);
+      showToast('讀不到通知紀錄，這次先不通知會員（避免重複發）', 7000); _sent=null; }
+    for(let i=0;i<list.length && _sent;i++){
       step(`通知會員… ${i+1}/${list.length}`);
-      try{ await pushNotification(list[i],'announce','課程停課通知',
-        `因天災停課，${String(ds).replace(/-/g,'/')} 的課程已取消，堂數沒有扣。`
-        +(doExt&&days>0?`票券效期已延長 ${days} 天。`:'')+'請重新預約，造成不便請見諒。'); }catch(_){}
+      if(_sent[list[i]]){ notiSkip++; continue; }
+      try{ await pushNotification(list[i],'announce',_title,
+        `因天災停課，${_tag}，堂數沒有扣。`
+        +(doExt&&days>0?`票券效期已延長 ${days} 天。`:'')+'請重新預約，造成不便請見諒。');
+        _sent[list[i]]=1; noti++;
+      }catch(e){ console.error('通知失敗',list[i],e); }
     }
   }
   dbCacheClear(['bookings','member_tickets','ticket_logs','notifications']);
   closeModal();
   /* 重按是安全的了（展延會跳過已經延過的），訊息也要講出來 —— 不然沒人敢按第二次。 */
   showToast(`已停課 ${ok} 堂`+(bad?`（${bad} 堂失敗，可以再按一次，已處理的不會重複）`:'')
-    +(ext?`，展延 ${ext} 張票券`:'')+(extSkip?`（${extSkip} 張今天已延過，跳過）`:''), 7000);
+    +(ext?`，展延 ${ext} 張票券`:'')+(extSkip?`（${extSkip} 張今天已延過，跳過）`:'')
+    +(noti?`，通知 ${noti} 位`:'')+(notiSkip?`（${notiSkip} 位今天已通知過）`:''), 7000);
   navTo(CUR_PAGE);
 }
 
