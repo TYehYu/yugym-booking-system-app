@@ -6806,6 +6806,11 @@ body.wp-dragging-on .wp-item{cursor:grabbing;}
 .evc-check.evc-leave,.cal-ev.cal-ev-std .evc-check.evc-leave{background:var(--danger,#b5372e);}
 /* 未到課（2026-08-14 使用者指示）：同一顆角章改金色、字改「未」 */
 .evc-check.evc-noshow,.cal-ev.cal-ev-std .evc-check.evc-noshow{background:var(--gold-d,#9a6a1e);}
+/* 臨時停課（2026-10-23 使用者：「行事曆上的課卡顯示停課」）：同一顆角章、字改「停」。
+   用深墨色不用紅 —— 紅是「請假」那一章的語意（紅>金>綠 的品牌階級），
+   停課不是誰的狀態、是整天的事，給它自己一個顏色才不會跟請假混。
+   ⚠ 卡片本身已經被 bkDarkNoTicket 暗化，章要夠深才看得見。 */
+.evc-check.evc-closed,.cal-ev.cal-ev-std .evc-check.evc-closed{background:#3A362F;}
 /* 簽到：標準卡不整卡填色（保留教練色底），只留右上角勾章；覆蓋舊 .cal-ev-checked 填色 */
 .cal-ev.cal-ev-std.cal-ev-checked{background:transparent !important;}
 /* 7 日窄卡：字級再收一點；極窄卡省略教練 tag */
@@ -14927,8 +14932,8 @@ function tbl(s){return TABLE_ALIAS[s]||s;}
 let sb=null;
 // ── 版本號（日期+時間格式：年後兩碼+月+日.時分，例 26620.1058 = 26年6/20 10:58）──
 // 每次改版手動更新這一行即可，畫面與 title 會一起更新
-const APP_VERSION = '261022.1827';
-const APP_VERSION_LABEL = 'v261022.1827';
+const APP_VERSION = '261022.1847';
+const APP_VERSION_LABEL = 'v261022.1847';
 const CLOUD = !!(window.YUGYM_CONFIG && window.YUGYM_CONFIG.url && window.YUGYM_CONFIG.anonKey);
 if(CLOUD){ sb = supabase.createClient(window.YUGYM_CONFIG.url, window.YUGYM_CONFIG.anonKey); }
 
@@ -15067,11 +15072,11 @@ const DB_CACHE_TTL_BY={ticket_types:300000,course_plans:300000,exercises:300000,
    ⚠ 之後若要開始「讀」其中任何一欄，先把它從這裡移除。 */
 /* ⚠ 名單裡不要寫註解：leanselecttest 用一條 `\[([^\]]*)\]` 把它整段切出來核對，
    夾在中間的註解會被當成欄位名（2026-10-23 踩過）。要說明就寫在這裡。
-   ・cancel_reason（2026-10-23 新增）：臨時停課寫進去留查，列表沒有人讀。
-     寫得進去 —— dbPut 會先補回被精簡掉的欄位再 upsert（見下面那段註解）。 */
+   ・cancel_reason 2026-10-23 進來又馬上出去：當天下午行事曆課卡開始顯示停課原因，
+     列表就讀得到它了。照 CLAUDE.md 的規矩「要開始用就先從 LEAN_DROP 移除」。 */
 const LEAN_DROP={ bookings:['is_substitute','original_coach_id','space_id','resource_id',
   'checkin_source','actor_user_id','operator_employee_id','makeup_status','import_ref',
-  'makeup_date','makeup_time','reward_issued_at','reward_type','cancel_reason'],
+  'makeup_date','makeup_time','reward_issued_at','reward_type'],
   /* installment_signs（2026-09-22 新增欄位：分期第 2 期起的簽名）——
      裡面放的是 base64 簽名圖，與 signature 同一個理由要精簡掉
      （contracts 56 列就有 1.1MB 幾乎全是簽名）。
@@ -28965,6 +28970,9 @@ async function renderCalendar(opts){
         : _venueTag;   // 2026-07-27：教練課排到教室/跑步機時，教練縮寫旁並列場地標籤
       // 課程色 class：共用 course-* token（--course-accent 仍供簽到填色等既有樣式使用）
       const _courseCls = (({'ev-pt':'course-pt','ev-friendly':'course-friendly','ev-group':'course-group','ev-self':'course-self','ev-trial':'course-trial','ev-massage':'course-massage'})[cls]||'course-pt');
+      /* 出席章要跳脫文字，但 _tipEsc 定義在下面幾十行 —— 與其把它往上搬（動到的範圍變大），
+         這裡用同一份規則的小工具。兩支要一致。 */
+      const _tipEscEarly = x=>String(x==null?'':x).replace(/&/g,'&amp;').replace(/"/g,'&quot;').replace(/</g,'&lt;');
       const _densityCls = (nDays===7||nDays===5)?'cal-ev-7d':(nDays===3?'cal-ev-3d':'cal-ev-1d-card');
       // 已簽到（完成/補簽）→ 填滿課程色實色卡；7日拿掉勾勾符號（改用顏色深淺表示，畫面更乾淨）
       const _checkedCls = (_isCheckedIn||_isMakeup) && b.status!=='cancelled' && !hideMember ? 'cal-ev-checked' : '';
@@ -28979,7 +28987,12 @@ async function renderCalendar(opts){
          排在簽到章前面判斷 —— 全員請假時不會有人簽到，兩者不會同時成立。
          ⚠ 這一段要在 _bodyOut 之前算完（2026-08-21 出席章搬進姓名列之後才有這個順序要求）。 */
       const _allLeave = !hideMember && grpAllOnLeave(b);
-      const _stampOut = _allLeave
+      /* 停課章排最前面（2026-10-23）：這堂整個不會發生，比「全員請假」更根本。
+         ⚠ hideMember（遮蔽身分）時也畫 —— 停課不是個人資訊，是全館的事。 */
+      const _closedDay = bkClosedDay(b);
+      const _stampOut = _closedDay
+        ? `<span class="evc-check evc-closed" title="${_tipEscEarly(b.cancel_reason||'停課')}">停</span>`
+        : _allLeave
         ? `<span class="evc-check evc-leave" title="全員請假">假</span>`
         : (bkEatenCancel(b) && !hideMember)   /* 0911：取消・扣課不退也蓋「未」章（票用掉了、人沒上到課） */
         ? `<span class="evc-check evc-noshow" title="取消・扣課不退">未</span>`
@@ -29089,7 +29102,10 @@ async function renderCalendar(opts){
       const _tipVenue = (function(){ const v=selfVenueLabel(b); if(!v) return '';
         const n=Math.max(1, Number(b._units)||1);
         return `場地：${v}${v==='跑步機'?`　·　${n} 人`:''}`; })();
-      const _tipStr = _tipEsc([`${b.start_time}–${_endT}`, _tipMem, _tipCoach, _tipVenue].filter(Boolean).join('\n'));
+      /* 停課原因放第一行（2026-10-23 使用者：「滑鼠指上去顯示原因」）——
+         時間與人名天天都一樣，「為什麼這堂不見了」才是這張卡唯一要回答的事。 */
+      const _tipClosed = _closedDay ? `⚠ ${String(b.cancel_reason||'停課')}` : '';
+      const _tipStr = _tipEsc([_tipClosed, `${b.start_time}–${_endT}`, _tipMem, _tipCoach, _tipVenue].filter(Boolean).join('\n'));
       /* 左色條＝教練色（2026-10-18）。沒有教練（自主訓練、場租）或遮蔽身分時不設，
          var() 會自動退回課程色 —— 不需要另外判斷。 */
       const _coachBarVar = (!hideMember && _coachObj && _cc && _cc.fg) ? `--coach-bar:${_cc.fg};` : '';
@@ -29279,7 +29295,12 @@ async function cdayStat(ds){
   const soon=tk.filter(t=>{ const e=String(t.expire_date||'').slice(0,10); return e && lim && e<=lim; }).length;
   const cat={}; bs.forEach(b=>{ const k=b.category||'其他'; cat[k]=(cat[k]||0)+1; });
   const mem={}, co={};
-  bs.forEach(b=>{ (mids(b)||[]).forEach(m=>{ if(m) mem[m]=1; });
+  /* ⚠ 會員要同時看兩個欄位（2026-10-23）：mids(b) 只讀 member_ids（團課放學員的地方），
+     教練課／體驗／自主訓練的會員在 member_id。只看前者的話，10/22 那天 31 堂
+     算出來只有 4 位 —— 確認視窗因此寫著「4 位會員會收到通知」，整整少講 27 位。 */
+  bs.forEach(b=>{ const _ids=(Array.isArray(b.member_ids)&&b.member_ids.length)
+                    ? b.member_ids : (b.member_id?[b.member_id]:[]);
+                  _ids.forEach(m=>{ if(m) mem[String(m)]=1; });
                   const c=bkCoachId(b); if(c) co[c]=1; });
   return { ds, bs, tk, soon, cat, n:bs.length,
            mem:Object.keys(mem).length, coach:Object.keys(co).length };
@@ -29378,7 +29399,10 @@ async function cdayRun(){
     </div>
     ${odd?`<div style="margin-top:10px;border:1.5px solid var(--danger);background:#FAEDEC;border-radius:8px;padding:10px 14px;font-size:13.5px;color:var(--danger);text-align:center;">⚠ ${odd}，確定嗎？</div>`:''}
     <ul class="mk-pts" style="margin-top:16px;">
-      <li>${doNotify?`<b>${st.mem} 位會員會立刻收到 LINE 通知</b> —— 這個收不回來`:'不發通知'}</li>
+      ${/* 2026-10-23：這一句在今天以前是假的 —— 那顆勾只寫進 App 裡的通知，
+           沒有任何東西會把它推成 LINE。現在真的會發了（line-closeday），
+           但只有綁過 LINE、而且沒關通知的人收得到，所以寫「最多」。 */''}
+      <li>${doNotify?`最多 <b>${st.mem} 位會員會收到 LINE 通知</b>（沒綁 LINE 的收不到）—— 送出去就收不回來`:'不發通知'}</li>
       <li>${doExt&&days>0?`${st.tk.length} 張票券各延 ${days} 天`:'票券不延'}</li>
       <li>取消<b>沒有一鍵復原</b>，要救得一筆一筆重新預約</li>
     </ul>
@@ -29452,7 +29476,7 @@ async function _cdayRun(){
       }catch(e){ console.error('展延失敗',st.tk[i].id,e); }
     }
   }
-  let noti=0, notiSkip=0;
+  let noti=0, notiSkip=0, lineSent=0, lineSkip=0, lineFail=0, lineErr='';
   if(doNotify){
     /* ⚠ 名單不能只讀 member_ids（2026-10-23 踩到）——
        mids(b) 只看 member_ids，那是**團課**放學員的地方；
@@ -29486,13 +29510,34 @@ async function _cdayRun(){
         _sent[list[i]]=1; noti++;
       }catch(e){ console.error('通知失敗',list[i],e); }
     }
+    /* 真的發 LINE（2026-10-23 使用者：「順便把發line功能完善」）——
+       上面那一圈只寫進 App 裡的通知；會員要打開 App 才看得到。
+       勾選寫著「發 LINE 通知會員」，但在今天以前沒有任何東西會把它推成 LINE。
+       ⚠ 名單不從這裡傳過去：那支自己查「那天被臨時停課停掉的課」的會員，
+         文字也在那邊組 —— 外面只能給日期與天數，不能發任意訊息
+         （line-push-test 就是因為能發任意訊息而在 0725 被停掉，不要把洞開回來）。
+       ⚠ 它自己會去重（同一天同一位只發一次），所以重按安全。
+       ⚠ 推播失敗不擋停課本身：課已經停掉了，LINE 沒送到是另一件事，
+         那支會寫櫃檯通知留痕，這裡只把數字講出來。 */
+    try{
+      step('發送 LINE…');
+      const r=await sb.functions.invoke('line-closeday',{body:{date:ds, extDays:(doExt?days:0)}});
+      const d=(r&&r.data)||null;
+      if(r&&r.error) throw r.error;
+      if(d && d.ok){ lineSent=Number(d.sent)||0; lineSkip=(Number(d.skip_no_line)||0)+(Number(d.skip_opt_out)||0); lineFail=Number(d.failed)||0; }
+      else { lineErr=(d&&d.error_code)||'未知錯誤'; }
+    }catch(e){ console.error('LINE 停課通知失敗',e); lineErr=(e&&e.message)||String(e); }
   }
   dbCacheClear(['bookings','member_tickets','ticket_logs','notifications']);
   closeModal();
   /* 重按是安全的了（展延會跳過已經延過的），訊息也要講出來 —— 不然沒人敢按第二次。 */
   showToast(`已停課 ${ok} 堂`+(bad?`（${bad} 堂失敗，可以再按一次，已處理的不會重複）`:'')
     +(ext?`，展延 ${ext} 張票券`:'')+(extSkip?`（${extSkip} 張今天已延過，跳過）`:'')
-    +(noti?`，通知 ${noti} 位`:'')+(notiSkip?`（${notiSkip} 位今天已通知過）`:''), 7000);
+    +(noti?`，通知 ${noti} 位`:'')+(notiSkip?`（${notiSkip} 位今天已通知過）`:'')
+    +(lineSent?`，LINE 送出 ${lineSent} 位`:'')
+    +(lineSkip?`（${lineSkip} 位沒綁 LINE 或關了通知）`:'')
+    +(lineFail?`，${lineFail} 位沒送到（已記在通知裡）`:'')
+    +(lineErr?`　⚠ LINE 沒送成功：${lineErr}`:''), 8000);
   navTo(CUR_PAGE);
 }
 
@@ -39222,6 +39267,15 @@ function bkIsLeaveSelfTrain(b){ return !!b && b.coach_leave===true && bkIsSelf(b
    純顯示旗標，不動 status／票券／效期 —— 退回的堂數與延長的效期是教練請假的補償，
    本來就不該因為「卡片不想看到了」而收回。 */
 function bkShowsCancelled(b){ return !!b && b.status==='cancelled' && b.coach_leave===true && bkIsGroup(b) && !b.card_hidden; }
+/* 臨時停課（天災）取消的那一堂（2026-10-23 使用者：「行事曆上的課卡顯示停課，
+   滑鼠指上去顯示原因」）—— 判準就是 _cdayRun 寫進去的那句理由。
+   ⚠ 課還是 cancelled：不佔位、不衝堂、堂數不計（bkCounts 本來就排除）。
+     只是畫出來，讓人看得出「這天本來有課，是停掉的」而不是憑空消失。
+   ⚠ card_hidden 照舊收得起來（與扣課不退那條同一個出口）。 */
+function bkClosedDay(b){
+  return !!b && b.status==='cancelled' && !b.card_hidden
+    && /^天災停課/.test(String(b.cancel_reason||''));
+}
 /* 行事曆要不要畫這張已取消的卡（2026-09-11 使用者：「扣課不退 一樣要畫在行事曆上 出席章用[未]」）——
    江旻季 9/10：櫃檯開課後 20 分鐘取消、選扣課不退，票券夾出現「扣課 9/10」，行事曆卻找不到那堂。
    票被吃掉了＝那一堂算用掉，行事曆要對得上票券夾。
@@ -39232,7 +39286,8 @@ function bkShowsCancelled(b){ return !!b && b.status==='cancelled' && b.coach_le
      正式庫 229 筆 refund_waived 裡只有 3 筆真的扣過，其餘是刪掉的待簽約卡位（160）、
      沒綁票的課（39）、團課（18）。旗標本身不可靠，所以至少要「綁著票、而且不是卡位」才畫。 */
 function bkCalKeepsCancelled(b){
-  return bkShowsCancelled(b) || (bkEatenCancel(b) && !!b.ticket_id && !b.pending_contract && !b.card_hidden);
+  return bkShowsCancelled(b) || bkClosedDay(b)
+    || (bkEatenCancel(b) && !!b.ticket_id && !b.pending_contract && !b.card_hidden);
 }
 /* 這一堂要不要暗化＝它還會不會產生扣課（2026-08-22 使用者定義「暗化＝沒有有效票券」）——
    這支只判「團課因請假整堂不會發生」那一種；過期與待付款各自有既有判斷（cal-ev-past／cal-ev-pend）。
@@ -39243,6 +39298,7 @@ function bkCalKeepsCancelled(b){
 function bkDarkNoTicket(b){
   if(!b) return false;
   if(bkShowsCancelled(b)) return true;
+  if(bkClosedDay(b)) return true;   /* 天災停課：票已退回，這堂不會發生（2026-10-23） */
   if(typeof bkIsGroup!=='function' || !bkIsGroup(b)) return false;
   if(typeof bkIsCoachLeave==='function' && bkIsCoachLeave(b)) return true;
   if(typeof grpAllOnLeave==='function' && grpAllOnLeave(b)) return true;

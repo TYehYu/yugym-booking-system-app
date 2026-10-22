@@ -42,8 +42,9 @@ ok('★ 一般（顯示會員名）與遮蔽（教練看別人的課）兩種提
 /* 2026-08-01 二修（使用者回報「滑鼠提示也還沒成功」）：課卡有兩種提示 ——
    舊的 .ev-tip 懸浮卡，與真正看得到的、跟著游標跑的白底浮框（data-tip）。
    只加前者等於沒加。 */
+/* 2026-10-23：停課原因插在最前面（_tipClosed），場地仍在同一串的最後 */
 ok('★ 跟著游標的那個浮框（data-tip）也要有場地那一行',
-   /const _tipStr = _tipEsc\(\[`\$\{b\.start_time\}–\$\{_endT\}`, _tipMem, _tipCoach, _tipVenue\]\.filter\(Boolean\)\.join\('\\n'\)\);/.test(src));
+   /const _tipStr = _tipEsc\(\[_tipClosed, `\$\{b\.start_time\}–\$\{_endT\}`, _tipMem, _tipCoach, _tipVenue\]\.filter\(Boolean\)\.join\('\\n'\)\);/.test(src));
 ok('　　它同樣是「教室／跑步機才標、跑步機附人數」',
    /const _tipVenue = \(function\(\)\{ const v=selfVenueLabel\(b\); if\(!v\) return '';[\s\S]{0,160}v==='跑步機'\?`　·　\$\{n\} 人`:''/.test(src));
 ok('　　兩種提示的存在寫在程式裡（下次不會又只改一邊）',

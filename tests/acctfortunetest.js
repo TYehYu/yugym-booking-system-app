@@ -444,9 +444,12 @@ ok('★ 已簽到才填滿課程色（原本是整張淡化）',
    /\.cal-ev\.cag-std\.admcag\.admcag-done\{background:var\(--amc,#1f6f54\) !important;color:#fff;\}/.test(src)
    && !/\.admcag\.admcag-done\{opacity:\.62;\}/.test(src));
 /* 0814 之後多了金色「未」章、0821 出席章搬進姓名列，整段改寫成 _stampOut 三選一 */
-ok('★ 全員請假的紅「假」章排在最前面（全員請假時不會有人簽到，兩者不會同時成立）',
-   /const _stampOut = _allLeave\s*\n\s*\? `<span class="evc-check evc-leave" title="全員請假">假<\/span>`/.test(src)
-   && /排在簽到章前面判斷/.test(src));
+/* 2026-10-23：停課章插到最前面（整堂不會發生，比全員請假更根本），
+   所以假章現在是第二個分支。要守的仍是「它排在簽到章前面」。 */
+ok('★ 全員請假的紅「假」章仍排在簽到章前面（兩者不會同時成立）',
+   /: _allLeave\s*\n\s*\? `<span class="evc-check evc-leave" title="全員請假">假<\/span>`/.test(src)
+   && /排在簽到章前面判斷/.test(src)
+   && src.indexOf('evc-check evc-leave" title="全員請假"') < src.indexOf('title="${(_isMakeup&&!_isCheckedIn)?'));
 ok('　　文字讓開左邊色條', /\.cal-ev\.cag-std\.admcag \.acg-in\{padding-left:7px/.test(src));
 
 console.log('登入頁改版（使用者參考圖）');

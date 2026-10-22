@@ -88,8 +88,10 @@ ok('★★★ 過去或太遠的日期會多一行紅字',
    /const odd = diff<0 \? '這是<b>過去的日期<\/b>（'\+\(-diff\)\+' 天前）'/.test(src)
    && /: diff>14 \? '這是 <b>'\+diff\+' 天後<\/b>的日期'/.test(src));
 /* LINE 通知是唯一真正收不回來的東西，要在最後一關講明白 */
+/* 2026-10-23：這一句改寫成實話 —— 在那之前它根本不會發 LINE（只寫 App 內通知），
+   現在真的會發了，但只有綁過 LINE 的人收得到，所以寫「最多」。語意不變：送出去收不回來。 */
 ok('★★★ 第二關明講通知收不回來',
-   /位會員會立刻收到 LINE 通知<\/b> —— 這個收不回來/.test(src));
+   /位會員會收到 LINE 通知<\/b>（沒綁 LINE 的收不到）—— 送出去就收不回來/.test(src));
 ok('★★★ 第二關明講取消沒有一鍵復原',
    /取消<b>沒有一鍵復原<\/b>，要救得一筆一筆重新預約/.test(src));
 ok('★★ 可以回上一關改，而且勾選會留著',
@@ -117,8 +119,10 @@ console.log('\n\u2465 2026-10-23 颱風假當天踩到的兩個洞');
         每圈都卡在 dbPut 的 PGRST204，連 cancelBooking 都沒走到。
      ② 訊息叫人「請重按一次」，他按了第二次 —— 取消照樣全失敗，
         但展延那一圈又跑了一遍：35 張票各 +7 天兩次 ＝ 實際 +14 天（正式庫查到 70 筆）。 */
-  ok('★★★ cancel_reason 已經列進 LEAN_DROP（欄位真的存在了，而且列表不搬它）',
-     /'makeup_date','makeup_time','reward_issued_at','reward_type','cancel_reason'\]/.test(src));
+  /* ⚠ 1023 下午課卡開始顯示停課原因之後，這一欄已經從 LEAN_DROP 拿出來了
+     （見⑧）。這裡只要守住「欄位真的被寫進去」。 */
+  ok('★★★ 取消前會寫下理由',
+     /cur\.cancel_reason='天災停課（'\+ds\+'）';/.test(src));
   ok('★★★ 展延前先看帳本：這張票這一天延過就跳過',
      /const _mark=`｜\$\{ds\} 全館停課`;/.test(src)
      && /l\.note\.indexOf\('天災停課展延'\)===0/.test(src)
@@ -167,6 +171,66 @@ console.log('\n⑦ 通知那一圈（2026-10-23 同一天查出來的）');
      src.indexOf('(noti?')>=0 && src.indexOf('(notiSkip?')>=0
      && /位今天已通知過/.test(src));
   ok('★ 成因寫在原地', /20 堂教練課的會員一個都沒收到/.test(src));
+}
+
+
+console.log('\n⑧ 行事曆課卡要看得出「停課」（2026-10-23 使用者）');
+{
+  /* 「行事曆上的課卡顯示停課，滑鼠指上去顯示原因」——
+     本來已取消的課行事曆不畫，31 堂停掉之後那一天是空的，
+     看不出「本來有課、是停掉的」。 */
+  ok('★★★ 判準就是 _cdayRun 寫進去的那句理由',
+     /function bkClosedDay\(b\)\{/.test(src)
+     && /\/\^天災停課\/\.test\(String\(b\.cancel_reason\|\|''\)\)/.test(src)
+     && /b\.status==='cancelled' && !b\.card_hidden/.test(src));
+  ok('★★★ 行事曆保留這張卡',
+     /return bkShowsCancelled\(b\) \|\| bkClosedDay\(b\)/.test(src));
+  ok('★★ 而且要暗化（票已退回，這堂不會發生）',
+     /if\(bkClosedDay\(b\)\) return true;   \/\* 天災停課/.test(src));
+  ok('★★★ 角章改「停」，而且排在全員請假前面',
+     /const _stampOut = _closedDay/.test(src)
+     && /class="evc-check evc-closed"/.test(src)
+     && src.indexOf('const _stampOut = _closedDay') < src.indexOf('evc-check evc-leave'));
+  ok('★★ 滑鼠提示把原因放第一行',
+     /const _tipClosed = _closedDay \? `⚠ \$\{String\(b\.cancel_reason\|\|'停課'\)\}` : '';/.test(src)
+     && /_tipEsc\(\[_tipClosed, `\$\{b\.start_time\}/.test(src));
+  ok('★★ 原因有跑跳脫（資料是人寫的）',
+     /const _tipEscEarly = x=>String\(x==null\?'':x\)\.replace/.test(src));
+  ok('★★★ cancel_reason 已經從 LEAN_DROP 拿掉（列表讀得到它）',
+     !/'reward_type','cancel_reason'/.test(src)
+     && /要開始用就先從 LEAN_DROP 移除/.test(src));
+  ok('★ 停課章用自己的顏色（紅是請假的語意）',
+     /\.evc-check\.evc-closed,\.cal-ev\.cal-ev-std \.evc-check\.evc-closed\{background:#3A362F;\}/.test(src));
+  ok('★ 堂數不計（status 仍是 cancelled，bkCounts 本來就排除）',
+     /function bkCounts\(b\)\{ return !!b && b\.status!=='cancelled'/.test(src));
+}
+
+
+console.log('\n⑨ 真的發 LINE（2026-10-23 使用者：「順便把發line功能完善」）');
+{
+  /* 勾選寫著「發 LINE 通知會員」、確認視窗還寫「立刻收到 LINE 通知」，
+     但 pushNotification 只寫 notifications 表，會發 LINE 的那幾支讀的全是別的表
+     —— 兩句都是假的。現在接上 line-closeday。 */
+  ok('★★★ 通知那一圈之後會呼叫 line-closeday',
+     /sb\.functions\.invoke\('line-closeday',\{body:\{date:ds, extDays:\(doExt\?days:0\)\}\}\)/.test(src));
+  ok('★★★ 不把會員名單或文字傳過去（不把 line-push-test 那個洞開回來）',
+     !/invoke\('line-closeday',\{body:\{[^}]*(text|members|list)/.test(src)
+     && /外面只能給日期與天數，不能發任意訊息/.test(src));
+  ok('★★ LINE 失敗不擋停課本身',
+     /推播失敗不擋停課本身/.test(src)
+     && /\}catch\(e\)\{ console\.error\('LINE 停課通知失敗',e\);/.test(src));
+  ok('★★ 結果訊息要講出 LINE 送了幾位、幾位沒送到',
+     src.indexOf('(lineSent?')>=0 && src.indexOf('(lineFail?')>=0 && src.indexOf('(lineErr?')>=0);
+
+  /* 確認視窗的人數也是同一個洞：cdayStat 用 mids(b) 算人，
+     10/22 那天 31 堂只算出 4 位，視窗因此少講了 27 位。 */
+  ok('★★★ cdayStat 算會員也要看兩個欄位',
+     /const _ids=\(Array\.isArray\(b\.member_ids\)&&b\.member_ids\.length\)\s*\n\s*\? b\.member_ids : \(b\.member_id\?\[b\.member_id\]:\[\]\);\s*\n\s*_ids\.forEach/.test(src)
+     && !/bs\.forEach\(b=>\{ \(mids\(b\)\|\|\[\]\)\.forEach/.test(src));
+  ok('★★ 確認視窗改寫實話（「最多」、沒綁 LINE 的收不到）',
+     /最多 <b>\$\{st\.mem\} 位會員會收到 LINE 通知<\/b>（沒綁 LINE 的收不到）/.test(src)
+     && !/位會員會立刻收到 LINE 通知<\/b> —— 這個收不回來/.test(src));
+  ok('★ 成因寫在原地', /這一句在今天以前是假的/.test(src));
 }
 
 console.log('\n'+(fail?'✗ ':'✓ ')+pass+' 通過 / '+fail+' 失敗');

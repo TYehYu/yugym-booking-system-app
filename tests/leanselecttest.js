@@ -30,11 +30,12 @@ console.log('① 被精簡掉的欄位，程式裡真的沒人用');
      （下面 ③ 有實跑驗證），不可能把既有值蓋成 null。 */
   const NEVER=['is_substitute','original_coach_id','space_id','resource_id',
     'checkin_source','actor_user_id','operator_employee_id','makeup_status','import_ref'];
-  /* cancel_reason（2026-10-23）也是只寫不讀：臨時停課寫一句「天災停課（日期）」留查，
-     列表沒有任何地方讀它。⚠ 這一欄 10/23 才補進資料庫 —— 在那之前程式寫得出來、
-     資料庫沒有，整個臨時停課 34 堂全失敗（PGRST204）。 */
-  const WRITE_ONLY=['makeup_date','makeup_time','reward_issued_at','reward_type','cancel_reason'];
-  ok('★ 名單讀得到（14 欄＝9 個沒人用＋5 個只寫不讀）', DROP.length===14, DROP);
+  /* ⚠ cancel_reason 10/23 早上進來、下午又出去：行事曆課卡開始顯示停課原因之後，
+     列表就讀得到它了 —— 照 CLAUDE.md 的規矩「要開始用就先從 LEAN_DROP 移除」。
+     這一條留著是為了記住那個來回：名單只收「列表完全不讀」的欄位。 */
+  const WRITE_ONLY=['makeup_date','makeup_time','reward_issued_at','reward_type'];
+  ok('★ 名單讀得到（13 欄＝9 個沒人用＋4 個只寫不讀）', DROP.length===13, DROP);
+  ok('★★ cancel_reason 不在名單裡（課卡要讀它）', DROP.indexOf('cancel_reason')<0);
   ok('　　兩類加起來就是整份名單（沒有漏掉也沒有多出來）',
      NEVER.concat(WRITE_ONLY).sort().join()===DROP.slice().sort().join());
   /* 把 LEAN_DROP 這一段本身挖掉再掃，否則名單自己會匹配到自己 */
@@ -116,9 +117,7 @@ console.log('\n⑥ 實跑資料層（假 sb）：學欄位 → 精簡讀 → 回
     is_substitute:false,original_coach_id:'C0',actor_user_id:'U1',operator_employee_id:'E1',
     /* 0823 追加的五個「只寫不讀」欄位：護欄要一樣護得住（回寫時不能被寫成 null） */
     makeup_date:'2026-08-01',makeup_time:'10:00',reward_issued_at:'2026-08-01T00:00:00Z',
-    reward_type:'RW-1',
-    /* 1023 追加：臨時停課寫的取消原因 */
-    cancel_reason:'天災停課（2026-10-23）'};
+    reward_type:'RW-1'};
   const DB={'BK-1':Object.assign({},FULL)};
   let lastUpsert=null, selUsed=[];
   const sb={ from:()=>({

@@ -7,8 +7,10 @@ const ok=(n,c)=>{ if(c){pass++;console.log('  ✓ '+n);} else {fail++;console.lo
 const line=name=>{ const i=src.indexOf('function '+name+'('); return src.slice(i, src.indexOf('\n',i)); };
 
 const fnBody=name=>{ const i=src.indexOf('function '+name+'('); return src.slice(i, src.indexOf('\n}\n',i)+2); };
-const env=new Function('bkIsGroup', [line('bkShowsCancelled'), line('bkEatenCancel'), fnBody('bkCalKeepsCancelled')].join('\n')
-  +'\nreturn {bkShowsCancelled,bkEatenCancel,bkCalKeepsCancelled};')(b=>b.category==='小班肌力');
+/* 2026-10-23：bkCalKeepsCancelled 多認一種「天災停課」（bkClosedDay），沙盒要一起餵進來 */
+const env=new Function('bkIsGroup', [line('bkShowsCancelled'), line('bkEatenCancel'),
+  fnBody('bkClosedDay'), fnBody('bkCalKeepsCancelled')].join('\n')
+  +'\nreturn {bkShowsCancelled,bkEatenCancel,bkClosedDay,bkCalKeepsCancelled};')(b=>b.category==='小班肌力');
 const keep=b=>env.bkCalKeepsCancelled(b);
 
 console.log('① 哪些已取消的卡留在行事曆');
@@ -18,6 +20,13 @@ ok('★★★ 刪掉的待簽約卡位（旗標被舊 bug 蓋成 true）→ 不�
    keep({status:'cancelled',refund_waived:true,pending_contract:true,category:'私人教練'})===false);
 ok('★★★ 沒綁票的取消課（旗標被舊 bug 蓋成 true）→ 不畫', keep({status:'cancelled',refund_waived:true,category:'私人教練'})===false);
 ok('★★★ 一般取消（有退票）→ 照舊不畫', keep({status:'cancelled',category:'私人教練'})===false);
+/* 2026-10-23 使用者：「行事曆上的課卡顯示停課」——臨時停課取消的那一批要留著 */
+ok('★★★ 天災停課 → 留著（看得出這天本來有課）',
+   keep({status:'cancelled',category:'私人教練',cancel_reason:'天災停課（2026-10-23）'})===true);
+ok('★★ 收起來的（card_hidden）照舊不畫',
+   keep({status:'cancelled',category:'私人教練',cancel_reason:'天災停課（2026-10-23）',card_hidden:true})===false);
+ok('★★ 別的理由不算（只認臨時停課寫的那一句）',
+   keep({status:'cancelled',category:'私人教練',cancel_reason:'客人臨時有事'})===false);
 ok('★★ 教練請假整堂取消的團課 → 照舊留著', keep({status:'cancelled',coach_leave:true,category:'小班肌力'})===true);
 ok('★★ 櫃檯收起來（card_hidden）的扣課不退 → 不畫', keep({status:'cancelled',refund_waived:true,card_hidden:true,ticket_id:'T1'})===false);
 ok('★ 扣課不退不併進 bkShowsCancelled（那支也管暗化）', env.bkShowsCancelled({status:'cancelled',refund_waived:true,category:'私人教練',ticket_id:'T1'})===false);
