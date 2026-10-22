@@ -47,9 +47,6 @@ Deno.serve(async (req) => {
     new Response(JSON.stringify(o), { status: s, headers: { ...CORS, 'Content-Type': 'application/json' } });
   try {
     const b = await req.json().catch(() => ({} as any));
-    const date = String(b.date || '');
-    if (!/^\d{4}-\d{2}-\d{2}$/.test(date)) return J({ ok: false, error_code: 'DATE.INVALID' }, 400);
-    const extDays = Math.max(0, Math.min(60, Number(b.extDays) || 0));
     const dryRun = !!b.dryRun;
 
     const url = Deno.env.get('SUPABASE_URL') || '';
@@ -58,19 +55,45 @@ Deno.serve(async (req) => {
     if (!url || !skey) return J({ ok: false, error_code: 'NO_KEYS' }, 500);
     const admin = createClient(url, skey);
 
-    /* ── 誰在呼叫：只有管理員或主管（與前端 isManagerUp／fn_set_employment_type 同一條）── */
-    const auth = req.headers.get('Authorization') || '';
-    const jwt = auth.replace(/^Bearer\s+/i, '');
-    if (!jwt) return J({ ok: false, error_code: 'AUTH.FORBIDDEN' }, 401);
-    const { data: u } = await admin.auth.getUser(jwt);
-    const uid = u && u.user && u.user.id;
-    if (!uid) return J({ ok: false, error_code: 'AUTH.FORBIDDEN' }, 401);
-    const { data: me } = await admin.from('employees')
-      .select('id,name,role,is_manager,status').eq('auth_id', uid).maybeSingle();
-    if (!me || (me as any).status === 'inactive') return J({ ok: false, error_code: 'AUTH.FORBIDDEN' }, 403);
-    if ((me as any).role !== 'admin' && !(me as any).is_manager) {
-      return J({ ok: false, error_code: 'AUTH.NOT_MANAGER' }, 403);
+    /* ── 誰在呼叫 ──────────────────────────────────────────────────────
+       兩條路：
+       ① 人按按鈕 → JWT 對得到一位在職的管理員或主管
+          （與前端 isManagerUp／fn_set_employment_type 同一條）
+       ② pg_cron 排程 → 沒有人的身分，授權存在 cday_line_jobs 那一列上
+          （只有管理員寫得進去）。不把 service_role 金鑰塞進 cron.job。
+       ⚠ 排程這條只認「到期、還沒做、日期與參數都照資料庫那一列」的任務，
+         body 給的 date／extDays 一律被那一列覆蓋 —— 排程不能自己決定發什麼。 */
+    let who = '';
+    let job: any = null;
+    const scheduled = !!b.scheduled;
+    if (scheduled) {
+      const { data: jobs, error: jErr } = await admin.from('cday_line_jobs')
+        .select('*').is('done_at', null).lte('run_after', new Date().toISOString())
+        .order('run_after', { ascending: true }).limit(1);
+      if (jErr) return J({ ok: false, error_code: 'JOB_QUERY', detail: jErr.message }, 500);
+      job = (jobs || [])[0] || null;
+      if (!job) return J({ ok: true, scheduled: true, skipped: 'no_due_job' });
+      who = 'cron(' + String(job.created_by || '') + ')';
+    } else {
+      const auth = req.headers.get('Authorization') || '';
+      const jwt = auth.replace(/^Bearer\s+/i, '');
+      if (!jwt) return J({ ok: false, error_code: 'AUTH.FORBIDDEN' }, 401);
+      const { data: u } = await admin.auth.getUser(jwt);
+      const uid = u && u.user && u.user.id;
+      if (!uid) return J({ ok: false, error_code: 'AUTH.FORBIDDEN' }, 401);
+      const { data: me } = await admin.from('employees')
+        .select('id,name,role,is_manager,status').eq('auth_id', uid).maybeSingle();
+      if (!me || (me as any).status === 'inactive') return J({ ok: false, error_code: 'AUTH.FORBIDDEN' }, 403);
+      if ((me as any).role !== 'admin' && !(me as any).is_manager) {
+        return J({ ok: false, error_code: 'AUTH.NOT_MANAGER' }, 403);
+      }
+      who = (me as any).name || (me as any).id;
     }
+
+    /* 排程的參數一律以資料庫那一列為準（body 只是觸發） */
+    const date = String(job ? job.close_date : (b.date || '')).slice(0, 10);
+    if (!/^\d{4}-\d{2}-\d{2}$/.test(date)) return J({ ok: false, error_code: 'DATE.INVALID' }, 400);
+    const extDays = Math.max(0, Math.min(60, Number(job ? job.ext_days : b.extDays) || 0));
 
     /* ── 名單：那天真的被臨時停課停掉的課（不吃前端給的清單）── */
     const { data: bks, error: bkErr } = await admin.from('bookings')
@@ -83,7 +106,12 @@ Deno.serve(async (req) => {
       const arr = (x as any).member_ids;
       if (Array.isArray(arr)) for (const m of arr) if (m) ids.add(String(m));
     }
-    if (!ids.size) return J({ ok: true, date, bookings: (bks || []).length, members: 0, sent: 0 });
+    if (!ids.size) {
+      /* 那天沒有被停課的課 → 沒事可做，但任務也算結束（不要每小時重試） */
+      if (job) { try{ await admin.from('cday_line_jobs').update({ done_at:new Date().toISOString(),
+        result:{ ok:true, members:0, note:'那天沒有被臨時停課停掉的課' } }).eq('id', job.id); }catch(_){} }
+      return J({ ok: true, date, bookings: (bks || []).length, members: 0, sent: 0 });
+    }
 
     /* ── 已經發過的不重發 ── */
     const { data: done, error: dErr } = await admin.from('notifications')
@@ -155,11 +183,19 @@ Deno.serve(async (req) => {
         });
       } catch (_) { /* 記錄失敗不影響其他人 */ }
     }
-    return J({
+    const out = {
       ok: true, date, bookings: (bks || []).length, members: ids.size,
       sent, skip_already_sent: skipSent, skip_no_line: skipNoLine, skip_opt_out: skipOptOut,
-      failed, fail_detail: failDetail, by: (me as any).name || (me as any).id,
-    });
+      failed, fail_detail: failDetail, by: who,
+    };
+    /* 一次性：做完就封印那一列，排程再跑也不會重來（函式自己的去重是第二道） */
+    if (job) {
+      try {
+        await admin.from('cday_line_jobs')
+          .update({ done_at: new Date().toISOString(), result: out }).eq('id', job.id);
+      } catch (_) { /* 寫不回去就讓它留著；下一輪會再跑，但人不會收到第二封（已去重） */ }
+    }
+    return J(out);
   } catch (e) {
     return J({ ok: false, error_code: String((e as Error)?.message || e) }, 500);
   }
