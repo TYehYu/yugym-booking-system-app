@@ -33,8 +33,10 @@ console.log('① 清單讀取不搬合約全文與簽名圖');
      /contracts:\['body_snapshot','fill_snapshot','signature','installment_signs'\] \};/.test(src));
   ok('★★ 新欄位一加就要進來（簽名圖不進列表讀取）',
      /installment_signs（2026-09-22 新增欄位：分期第 2 期起的簽名）/.test(src));
-  ok('　　bookings 那一組維持原本九欄＋0823 追加的四個只寫不讀',
-     /bookings:\['is_substitute','original_coach_id','space_id','resource_id',\n\s*'checkin_source','actor_user_id','operator_employee_id','makeup_status','import_ref',\n\s*'makeup_date','makeup_time','reward_issued_at','reward_type'\]/.test(src));
+  /* 1023 再加一個 cancel_reason（臨時停課寫的取消原因，只寫不讀）——
+     這一條守的是「contracts 那組沒被波及」，bookings 這邊只要確認仍是同一串即可。 */
+  ok('　　bookings 那一組維持原本九欄＋後來追加的五個只寫不讀',
+     /bookings:\['is_substitute','original_coach_id','space_id','resource_id',\n\s*'checkin_source','actor_user_id','operator_employee_id','makeup_status','import_ref',\n\s*'makeup_date','makeup_time','reward_issued_at','reward_type','cancel_reason'\]/.test(src));
   ok('★★ 為什麼與 bookings 那組理由不同，寫在原地',
      /\*\*是有人用的\*\*，但只在「打開某一份合約」時用，而那條路徑走的是 dbGet 單筆（全欄位）。/.test(src));
   ok('★ 數字有記下來（日後回頭看知道當初多大）',

@@ -14927,8 +14927,8 @@ function tbl(s){return TABLE_ALIAS[s]||s;}
 let sb=null;
 // ── 版本號（日期+時間格式：年後兩碼+月+日.時分，例 26620.1058 = 26年6/20 10:58）──
 // 每次改版手動更新這一行即可，畫面與 title 會一起更新
-const APP_VERSION = '261020.1909';
-const APP_VERSION_LABEL = 'v261020.1909';
+const APP_VERSION = '261022.1812';
+const APP_VERSION_LABEL = 'v261022.1812';
 const CLOUD = !!(window.YUGYM_CONFIG && window.YUGYM_CONFIG.url && window.YUGYM_CONFIG.anonKey);
 if(CLOUD){ sb = supabase.createClient(window.YUGYM_CONFIG.url, window.YUGYM_CONFIG.anonKey); }
 
@@ -15065,9 +15065,13 @@ const DB_CACHE_TTL_BY={ticket_types:300000,course_plans:300000,exercises:300000,
    「物件是不是缺了任何一個被精簡的欄位」，缺就先 dbGet 撈完整單筆合併再寫 ——
    所以不可能因為讀的時候沒帶而把既有值蓋成 null；寫入端自己設的值也照樣蓋得過去。
    ⚠ 之後若要開始「讀」其中任何一欄，先把它從這裡移除。 */
+/* ⚠ 名單裡不要寫註解：leanselecttest 用一條 `\[([^\]]*)\]` 把它整段切出來核對，
+   夾在中間的註解會被當成欄位名（2026-10-23 踩過）。要說明就寫在這裡。
+   ・cancel_reason（2026-10-23 新增）：臨時停課寫進去留查，列表沒有人讀。
+     寫得進去 —— dbPut 會先補回被精簡掉的欄位再 upsert（見下面那段註解）。 */
 const LEAN_DROP={ bookings:['is_substitute','original_coach_id','space_id','resource_id',
   'checkin_source','actor_user_id','operator_employee_id','makeup_status','import_ref',
-  'makeup_date','makeup_time','reward_issued_at','reward_type'],
+  'makeup_date','makeup_time','reward_issued_at','reward_type','cancel_reason'],
   /* installment_signs（2026-09-22 新增欄位：分期第 2 期起的簽名）——
      裡面放的是 base64 簽名圖，與 signature 同一個理由要精簡掉
      （contracts 56 列就有 1.1MB 幾乎全是簽名）。
@@ -29400,7 +29404,11 @@ async function _cdayRun(){
     const b=st.bs[i];
     step(`停課中… ${i+1}/${st.bs.length}`);
     try{
-      /* 先寫理由再取消：cancelBooking 會重讀這一筆，所以這欄留得住。 */
+      /* 先寫理由再取消：cancelBooking 會重讀這一筆，所以這欄留得住。
+         ⚠ 2026-10-23：這一欄當初抄錯表 —— cancel_reason 是 ticket_grant_requests 的，
+           bookings 上**根本沒有**（欄位名前面不要加點號，leanselecttest 的反面斷言會命中註解）。
+           於是每一圈都在 dbPut 就丟出 PGRST204，連 cancelBooking 都沒走到，
+           使用者看到「已停課 0 堂（34 堂失敗）」。欄位已補（20261023 migration）。 */
       const cur=await dbGet('bookings',b.id);
       if(!cur || cur.status!=='booked') continue;
       cur.cancel_reason='天災停課（'+ds+'）';
@@ -29409,11 +29417,28 @@ async function _cdayRun(){
       ok++;
     }catch(e){ bad++; console.error('停課失敗',b.id,e); }
   }
-  let ext=0;
+  let ext=0, extSkip=0;
   if(doExt && days>0){
-    for(let i=0;i<st.tk.length;i++){
+    /* ⚠ 同一天只展延一次（2026-10-23 使用者踩到）——
+       訊息寫著「請重按一次」，他按了第二次，取消照樣全失敗（欄位不存在），
+       但展延那一圈**又跑了一遍**：35 張票各 +7 天兩次 ＝ 實際 +14 天。
+       這一步沒有「做過了沒」的判斷，而且錯誤訊息還主動叫人重按 ——
+       兩件事加起來就是重複展延。
+       判準用帳本：這張票在這一天已經有一筆天災停課展延就跳過。
+       帳本是唯一可靠的事實（效期本身看不出來是誰延的、延過幾次）。 */
+    const _mark=`｜${ds} 全館停課`;
+    let _done={};
+    try{
+      (await dbGetAll('ticket_logs')||[]).forEach(l=>{
+        if(l && typeof l.note==='string' && l.note.indexOf('天災停課展延')===0
+           && l.note.indexOf(_mark)>=0) _done[String(l.ticket_id)]=1;
+      });
+    }catch(e){ console.error('讀展延紀錄失敗，這次不展延以免重複',e);
+      showToast('讀不到展延紀錄，這次先不展延票券（避免重複延）', 7000); _done=null; }
+    for(let i=0;i<st.tk.length && _done;i++){
       step(`展延票券… ${i+1}/${st.tk.length}`);
       try{
+        if(_done[String(st.tk[i].id)]){ extSkip++; continue; }   // 這張今天已經延過
         const t=await dbGet('member_tickets',st.tk[i].id); if(!t) continue;
         const from=String(t.expire_date||'').slice(0,10)||ymd(TODAY);
         const to=tkMgrExtTo(t,days); if(!to) continue;
@@ -29421,7 +29446,8 @@ async function _cdayRun(){
         if(t.status==='expired') t.status='usable';
         await dbPut('member_tickets',t);
         await logTicket(t.id,'adjust',0,null,(SESSION&&SESSION.name)||'',
-          `天災停課展延：${from} → ${to}（${days} 天）｜${ds} 全館停課`);
+          `天災停課展延：${from} → ${to}（${days} 天）${_mark}`);
+        _done[String(t.id)]=1;   // 同一圈內也不會重複
         ext++;
       }catch(e){ console.error('展延失敗',st.tk[i].id,e); }
     }
@@ -29439,7 +29465,9 @@ async function _cdayRun(){
   }
   dbCacheClear(['bookings','member_tickets','ticket_logs','notifications']);
   closeModal();
-  showToast(`已停課 ${ok} 堂`+(bad?`（${bad} 堂失敗，請重按一次）`:'')+(ext?`，展延 ${ext} 張票券`:''), 6000);
+  /* 重按是安全的了（展延會跳過已經延過的），訊息也要講出來 —— 不然沒人敢按第二次。 */
+  showToast(`已停課 ${ok} 堂`+(bad?`（${bad} 堂失敗，可以再按一次，已處理的不會重複）`:'')
+    +(ext?`，展延 ${ext} 張票券`:'')+(extSkip?`（${extSkip} 張今天已延過，跳過）`:''), 7000);
   navTo(CUR_PAGE);
 }
 

@@ -108,6 +108,37 @@ ok('★★★ 按鈕在行事曆列 2，且只有管理員／主管看得到',
 ok('★★ 按鈕有說明用途（這顆會一次取消一整天）',
    /title="颱風、政府宣布停班時，把整天的課一次停掉"/.test(src));
 
+
+console.log('\n\u2465 2026-10-23 颱風假當天踩到的兩個洞');
+{
+  /* 使用者截圖：「已停課 0 堂（34 堂失敗，請重按一次），展延 35 張票券」
+     ① 取消那一圈每一堂都丟例外 —— 寫的是 bookings 的 cancel_reason，
+        但那一欄當初抄錯表（它是 ticket_grant_requests 的），bookings 上根本沒有，
+        每圈都卡在 dbPut 的 PGRST204，連 cancelBooking 都沒走到。
+     ② 訊息叫人「請重按一次」，他按了第二次 —— 取消照樣全失敗，
+        但展延那一圈又跑了一遍：35 張票各 +7 天兩次 ＝ 實際 +14 天（正式庫查到 70 筆）。 */
+  ok('★★★ cancel_reason 已經列進 LEAN_DROP（欄位真的存在了，而且列表不搬它）',
+     /'makeup_date','makeup_time','reward_issued_at','reward_type','cancel_reason'\]/.test(src));
+  ok('★★★ 展延前先看帳本：這張票這一天延過就跳過',
+     /const _mark=`｜\$\{ds\} 全館停課`;/.test(src)
+     && /l\.note\.indexOf\('天災停課展延'\)===0/.test(src)
+     && /_done\[String\(l\.ticket_id\)\]=1;/.test(src)
+     && /if\(_done\[String\(st\.tk\[i\]\.id\)\]\)\{ extSkip\+\+; continue; \}/.test(src));
+  ok('★★★ 帳本讀不到就整個不展延（寧可不延，也不要重複延）',
+     /讀不到展延紀錄，這次先不展延票券（避免重複延）/.test(src)
+     && /for\(let i=0;i<st\.tk\.length && _done;i\+\+\)\{/.test(src));
+  ok('★★ 同一圈內也不會重複（成功後立刻記起來）',
+     /_done\[String\(t\.id\)\]=1;/.test(src));
+  ok('★★ 紀錄的尾巴用同一個 _mark，下次才比對得到',
+     /天災停課展延：\$\{from\} → \$\{to\}（\$\{days\} 天）\$\{_mark\}/.test(src));
+  ok('★★★ 訊息改成「可以再按一次，已處理的不會重複」',
+     /可以再按一次，已處理的不會重複/.test(src)
+     && !/堂失敗，請重按一次/.test(src));
+  ok('★★ 跳過幾張要講出來（不然會以為沒延到）',
+     src.indexOf('(extSkip?')>=0 && /張今天已延過，跳過/.test(src));
+  ok('★ 成因寫在原地', /這一欄當初抄錯表/.test(src));
+}
+
 console.log('\n'+(fail?'✗ ':'✓ ')+pass+' 通過 / '+fail+' 失敗');
 process.exit(fail?1:0);
 })();
