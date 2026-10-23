@@ -63,10 +63,10 @@ console.log('\n③ 接線');
 ok('★★★ 取消走既有的 cancelBooking，force＋silent',
    /await cancelBooking\(b\.id,'force',\{silent:true\}\);/.test(src));
 ok('★★★ 取消理由先寫進 booking（cancelBooking 會重讀，所以留得住）',
-   /cur\.cancel_reason='天災停課（'\+ds\+'）';\s*\n\s*await dbPut\('bookings',cur\);/.test(src));
+   /cur\.cancel_reason=reasonTxt;\s*\n\s*await dbPut\('bookings',cur\);/.test(src));
 ok('★★★ 動手前重算一次（視窗可能開很久）',
    /const st=await cdayStat\(ds\);\s+\/\/ 重新算一次/.test(src));
-ok('★★★ 展延有寫進票券帳本', /天災停課展延：\$\{from\} → \$\{to\}/.test(src));
+ok('★★★ 展延有寫進票券帳本', /臨時停課展延：\$\{from\} → \$\{to\}/.test(src));
 ok('★★ 做完清掉動到的那幾張表的快取',
    /dbCacheClear\(\['bookings','member_tickets','ticket_logs','notifications'\]\);[\s\S]{0,80}closeModal\(\);/.test(src));
 ok('★★ 防連點（onceAct）', /async function cdayGo\(\)\{ return onceAct\('cday', \(\)=>_cdayRun\(\)\); \}/.test(src));
@@ -102,7 +102,7 @@ ok('★★ 可以回上一關改，而且勾選會留著',
    這一條防的是「哪天有人把 onclick 改回去直接呼叫 _cdayRun，第二關就被跳過了」。 */
 ok('★★★ 第一關的按鈕呼叫 cdayRun（收集選項），不是直接動手',
    /onclick="cdayRun\(\)">確認停課<\/button>/.test(src)
-   && /window\._cdayGo=\{ds, doExt, days, doNotify\};/.test(src));
+   && /window\._cdayGo=\{ds, doExt, days, doNotify, why, free\};/.test(src));
 /* ⚠ 0903 量過「三樣擠一列在 1440 一定 wrap」，所以放列 2 不放列 1。 */
 ok('★★★ 按鈕在行事曆列 2，且只有管理員／主管看得到',
    /const _cdayBtn=\(typeof isManagerUp==='function' && isManagerUp\(\)\)/.test(src)
@@ -122,10 +122,10 @@ console.log('\n\u2465 2026-10-23 颱風假當天踩到的兩個洞');
   /* ⚠ 1023 下午課卡開始顯示停課原因之後，這一欄已經從 LEAN_DROP 拿出來了
      （見⑧）。這裡只要守住「欄位真的被寫進去」。 */
   ok('★★★ 取消前會寫下理由',
-     /cur\.cancel_reason='天災停課（'\+ds\+'）';/.test(src));
+     /cur\.cancel_reason=reasonTxt;/.test(src));
   ok('★★★ 展延前先看帳本：這張票這一天延過就跳過',
      /const _mark=`｜\$\{ds\} 全館停課`;/.test(src)
-     && /l\.note\.indexOf\('天災停課展延'\)===0/.test(src)
+     && /\/\^\(臨時停課\|天災停課\)展延\/\.test\(l\.note\)/.test(src)
      && /_done\[String\(l\.ticket_id\)\]=1;/.test(src)
      && /if\(_done\[String\(st\.tk\[i\]\.id\)\]\)\{ extSkip\+\+; continue; \}/.test(src));
   ok('★★★ 帳本讀不到就整個不展延（寧可不延，也不要重複延）',
@@ -134,7 +134,7 @@ console.log('\n\u2465 2026-10-23 颱風假當天踩到的兩個洞');
   ok('★★ 同一圈內也不會重複（成功後立刻記起來）',
      /_done\[String\(t\.id\)\]=1;/.test(src));
   ok('★★ 紀錄的尾巴用同一個 _mark，下次才比對得到',
-     /天災停課展延：\$\{from\} → \$\{to\}（\$\{days\} 天）\$\{_mark\}/.test(src));
+     /臨時停課展延：\$\{from\} → \$\{to\}（\$\{days\} 天）\$\{_mark\}/.test(src));
   ok('★★★ 訊息改成「可以再按一次，已處理的不會重複」',
      /可以再按一次，已處理的不會重複/.test(src)
      && !/堂失敗，請重按一次/.test(src));
@@ -164,7 +164,7 @@ console.log('\n⑦ 通知那一圈（2026-10-23 同一天查出來的）');
      /讀不到通知紀錄，這次先不通知會員（避免重複發）/.test(src)
      && /for\(let i=0;i<list\.length && _sent;i\+\+\)\{/.test(src));
   ok('★★ 比對用的尾巴就是寫進內文的那一句（不另記旗標）',
-     /`因天災停課，\$\{_tag\}，堂數沒有扣。`/.test(src));
+     /`\$\{cdayReasonOf\(why\)\.line\}，\$\{_tag\}，堂數沒有扣。`/.test(src));
   ok('★★ 通知失敗要留痕跡（原本是空 catch）',
      /console\.error\('通知失敗',list\[i\],e\);/.test(src));
   ok('★ 結果訊息講出通知幾位、跳過幾位',
@@ -181,7 +181,7 @@ console.log('\n⑧ 行事曆課卡要看得出「停課」（2026-10-23 使用�
      看不出「本來有課、是停掉的」。 */
   ok('★★★ 判準就是 _cdayRun 寫進去的那句理由',
      /function bkClosedDay\(b\)\{/.test(src)
-     && /\/\^天災停課\/\.test\(String\(b\.cancel_reason\|\|''\)\)/.test(src)
+     && /\/\^\(臨時停課\|天災停課\)\/\.test\(String\(b\.cancel_reason\|\|''\)\)/.test(src)
      && /b\.status==='cancelled' && !b\.card_hidden/.test(src));
   ok('★★★ 行事曆保留這張卡',
      /return bkShowsCancelled\(b\) \|\| bkClosedDay\(b\)/.test(src));
@@ -192,7 +192,7 @@ console.log('\n⑧ 行事曆課卡要看得出「停課」（2026-10-23 使用�
      && /class="evc-check evc-closed"/.test(src)
      && src.indexOf('const _stampOut = _closedDay') < src.indexOf('evc-check evc-leave'));
   ok('★★ 滑鼠提示把原因放第一行',
-     /const _tipClosed = _closedDay \? `⚠ \$\{String\(b\.cancel_reason\|\|'停課'\)\}` : '';/.test(src)
+     /const _tipClosed = _closedDay \? `⚠ \$\{bkClosedWhy\(b\)\}` : '';/.test(src)
      && /_tipEsc\(\[_tipClosed, `\$\{b\.start_time\}/.test(src));
   ok('★★ 原因有跑跳脫（資料是人寫的）',
      /const _tipEscEarly = x=>String\(x==null\?'':x\)\.replace/.test(src));
@@ -212,7 +212,7 @@ console.log('\n⑨ 真的發 LINE（2026-10-23 使用者：「順便把發line�
      但 pushNotification 只寫 notifications 表，會發 LINE 的那幾支讀的全是別的表
      —— 兩句都是假的。現在接上 line-closeday。 */
   ok('★★★ 通知那一圈之後會呼叫 line-closeday',
-     /sb\.functions\.invoke\('line-closeday',\{body:\{date:ds, extDays:\(doExt\?days:0\)\}\}\)/.test(src));
+     /sb\.functions\.invoke\('line-closeday',\s*\n?\s*\{body:\{date:ds, extDays:\(doExt\?days:0\), reasonKey:why\}\}\)/.test(src));
   ok('★★★ 不把會員名單或文字傳過去（不把 line-push-test 那個洞開回來）',
      !/invoke\('line-closeday',\{body:\{[^}]*(text|members|list)/.test(src)
      && /外面只能給日期與天數，不能發任意訊息/.test(src));

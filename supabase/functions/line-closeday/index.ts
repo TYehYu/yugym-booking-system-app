@@ -12,7 +12,8 @@
      文字在這裡組，而且只發給**那一天真的被臨時停課停掉的課**的會員。
 
    ⚠ 名單從資料庫自己查，不吃前端給的會員清單：
-     判準＝那天 status='cancelled' 且 cancel_reason 以「天災停課」開頭的預約。
+     判準＝那天 status='cancelled' 且 cancel_reason 以「臨時停課」或「天災停課」開頭的預約
+     （1023 起理由可以自己打，但前綴固定 —— 只認前綴，不認理由本身）。
      會員同時看 member_id（教練課／體驗／自主訓練）與 member_ids（團課）——
      只看後者是 10/22 那次 31 堂只通知到 4 位的原因。
 
@@ -21,7 +22,7 @@
 
    ⚠ LINE 純文字不吃 Markdown：不要寫 ** 與 _。
 
-   body: { date:'YYYY-MM-DD', extDays?:7, dryRun?:true } */
+   body: { date:'YYYY-MM-DD', extDays?:7, reasonKey?:'typhoon|power|maintenance|closed|other', dryRun?:true } */
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2';
 
 const CORS = {
@@ -94,11 +95,23 @@ Deno.serve(async (req) => {
     const date = String(job ? job.close_date : (b.date || '')).slice(0, 10);
     if (!/^\d{4}-\d{2}-\d{2}$/.test(date)) return J({ ok: false, error_code: 'DATE.INVALID' }, 400);
     const extDays = Math.max(0, Math.min(60, Number(job ? job.ext_days : b.extDays) || 0));
+    /* 發給會員的那一句只能從這張白名單來（2026-10-23）——
+       使用者在視窗裡可以自己打理由，但那句只進系統與課卡，不會跑到 LINE。
+       外面傳的是 key，對不上就退回「因故停課」。 */
+    const LINE_REASON: Record<string,string> = {
+      typhoon:'因颱風停課', power:'因停電停課', maintenance:'因設備維修停課',
+      closed:'因臨時停業停課', other:'因故停課',
+    };
+    const reasonLine = LINE_REASON[String((job ? job.reason_key : b.reasonKey) || '')] || '因故停課';
 
     /* ── 名單：那天真的被臨時停課停掉的課（不吃前端給的清單）── */
+    /* ⚠ 兩種前綴都要認（2026-10-23）：10/23 以前寫死「天災停課」，
+       之後改成「臨時停課・<理由>」—— 使用者可以自己打理由，前綴固定。
+       只認前綴、不認理由本身，所以使用者打什麼都不影響這裡找得到課。 */
     const { data: bks, error: bkErr } = await admin.from('bookings')
       .select('id,member_id,member_ids,cancel_reason,status')
-      .eq('date', date).eq('status', 'cancelled').like('cancel_reason', '天災停課%');
+      .eq('date', date).eq('status', 'cancelled')
+      .or('cancel_reason.like.臨時停課*,cancel_reason.like.天災停課*');
     if (bkErr) return J({ ok: false, error_code: 'BOOKINGS_QUERY', detail: bkErr.message }, 500);
     const ids = new Set<string>();
     for (const x of (bks || [])) {
@@ -127,7 +140,7 @@ Deno.serve(async (req) => {
     /* 沒有展延時那一行要整行消失，不能留一個空行（與 line-push-daily 的場地那一行同一個做法）。
        ⚠ 空字串在這裡是「真的要一個空行」，所以不能用 filter(Boolean) 整串清掉 —— 分段組。 */
     const text = ['【有肌訓練 貼心提醒】', '停課通知', '']
-      .concat([`因天災停課，${md} 的課程已取消。`, '這一堂沒有扣堂數。'])
+      .concat([`${reasonLine}，${md} 的課程已取消。`, '這一堂沒有扣堂數。'])
       .concat(extDays > 0 ? [`票券效期已延長 ${extDays} 天。`] : [])
       .concat(['', '請重新預約，造成不便請見諒。', '',
         '（這是系統自動發送的訊息，直接回覆不會有人看到；需要協助請聯繫櫃檯）'])

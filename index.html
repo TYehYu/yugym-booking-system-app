@@ -14932,8 +14932,8 @@ function tbl(s){return TABLE_ALIAS[s]||s;}
 let sb=null;
 // ── 版本號（日期+時間格式：年後兩碼+月+日.時分，例 26620.1058 = 26年6/20 10:58）──
 // 每次改版手動更新這一行即可，畫面與 title 會一起更新
-const APP_VERSION = '261022.1847';
-const APP_VERSION_LABEL = 'v261022.1847';
+const APP_VERSION = '261023.0701';
+const APP_VERSION_LABEL = 'v261023.0701';
 const CLOUD = !!(window.YUGYM_CONFIG && window.YUGYM_CONFIG.url && window.YUGYM_CONFIG.anonKey);
 if(CLOUD){ sb = supabase.createClient(window.YUGYM_CONFIG.url, window.YUGYM_CONFIG.anonKey); }
 
@@ -28991,7 +28991,7 @@ async function renderCalendar(opts){
          ⚠ hideMember（遮蔽身分）時也畫 —— 停課不是個人資訊，是全館的事。 */
       const _closedDay = bkClosedDay(b);
       const _stampOut = _closedDay
-        ? `<span class="evc-check evc-closed" title="${_tipEscEarly(b.cancel_reason||'停課')}">停</span>`
+        ? `<span class="evc-check evc-closed" title="${_tipEscEarly(bkClosedWhy(b))}">停</span>`
         : _allLeave
         ? `<span class="evc-check evc-leave" title="全員請假">假</span>`
         : (bkEatenCancel(b) && !hideMember)   /* 0911：取消・扣課不退也蓋「未」章（票用掉了、人沒上到課） */
@@ -29104,7 +29104,7 @@ async function renderCalendar(opts){
         return `場地：${v}${v==='跑步機'?`　·　${n} 人`:''}`; })();
       /* 停課原因放第一行（2026-10-23 使用者：「滑鼠指上去顯示原因」）——
          時間與人名天天都一樣，「為什麼這堂不見了」才是這張卡唯一要回答的事。 */
-      const _tipClosed = _closedDay ? `⚠ ${String(b.cancel_reason||'停課')}` : '';
+      const _tipClosed = _closedDay ? `⚠ ${bkClosedWhy(b)}` : '';
       const _tipStr = _tipEsc([_tipClosed, `${b.start_time}–${_endT}`, _tipMem, _tipCoach, _tipVenue].filter(Boolean).join('\n'));
       /* 左色條＝教練色（2026-10-18）。沒有教練（自主訓練、場租）或遮蔽身分時不設，
          var() 會自動退回課程色 —— 不需要另外判斷。 */
@@ -29305,6 +29305,36 @@ async function cdayStat(ds){
   return { ds, bs, tk, soon, cat, n:bs.length,
            mem:Object.keys(mem).length, coach:Object.keys(co).length };
 }
+/* 停課原因（2026-10-23 使用者：「可以自己輸入原因嗎？不要統一都發送天災停課，
+   這樣看起來好像很嚴重」）——
+
+   分成兩層，理由是 LINE 那支**故意不收任意文字**（line-push-test 0725 就是因為
+   能發任意訊息而被停掉）：
+     ・系統裡的理由：可以自己打，進 bookings.cancel_reason、課卡、帳本
+     ・發給會員的 LINE：只能從這張白名單來，key 傳過去、文字在 Edge Function 組
+   選「其他」時 LINE 寫「因故停課」，自己打的那句只留在系統裡。
+
+   ⚠ cancel_reason 一律以「臨時停課」開頭 —— 那是 bkClosedDay 認卡片的依據，
+     不能跟著使用者打的字跑掉。10/23 以前寫的是「天災停課」，兩種都要認。 */
+const CDAY_REASONS=[
+  {key:'typhoon',    label:'颱風停課',   line:'因颱風停課'},
+  {key:'power',      label:'停電',       line:'因停電停課'},
+  {key:'maintenance',label:'設備維修',   line:'因設備維修停課'},
+  {key:'closed',     label:'臨時停業',   line:'因臨時停業停課'},
+  {key:'other',      label:'其他（自己打）', line:'因故停課'},
+];
+function cdayReasonOf(key){ return CDAY_REASONS.find(x=>x.key===key)||CDAY_REASONS[0]; }
+/* 寫進 bookings.cancel_reason 的那一句。前綴固定，後面才是人看的理由。 */
+function cdayReasonText(key, free, ds){
+  const r=cdayReasonOf(key);
+  const why=(key==='other' ? String(free||'').trim() : r.label) || '臨時停課';
+  return `臨時停課・${why}（${ds}）`;
+}
+function cdayReasonPick(key){
+  window._cdayReason=key;
+  const box=document.getElementById('cday-why-free');
+  if(box) box.style.display=(key==='other')?'block':'none';
+}
 function cdayCatLine(cat){
   const nm={'私人教練':'教練課','小班肌力':'團體課','自主訓練':'自主訓練','體驗':'體驗課','運動按摩':'按摩','場租':'場租'};
   return Object.keys(cat).map(k=>`${nm[k]||k} ${cat[k]}`).join('　·　')||'—';
@@ -29321,6 +29351,20 @@ async function openCloseDayModal(){
       <input type="date" id="cday-date" value="${ds}" onchange="cdayPick(this.value)"
              style="font:inherit;font-size:14px;padding:7px 10px;border:1px solid var(--bd);border-radius:7px;background:#fff;color:var(--text);">
     </div>
+    ${/* 停課原因（2026-10-23）：下拉是白名單（LINE 只能用這幾句），選「其他」才開放自己打。 */''}
+    <div style="display:flex;align-items:center;gap:12px;margin-top:10px;">
+      <span style="font-size:13px;font-weight:700;min-width:68px;">停課原因</span>
+      <select id="cday-why" onchange="cdayReasonPick(this.value)"
+              style="font:inherit;font-size:14px;padding:7px 10px;border:1px solid var(--bd);border-radius:7px;background:#fff;color:var(--text);">
+        ${CDAY_REASONS.map(r=>`<option value="${r.key}"${(window._cdayReason||'typhoon')===r.key?' selected':''}>${r.label}</option>`).join('')}
+      </select>
+    </div>
+    <div id="cday-why-free" style="display:${(window._cdayReason==='other')?'block':'none'};margin:8px 0 0 80px;">
+      <input id="cday-why-txt" class="ms-search" style="margin:0;" maxlength="20" autocomplete="off"
+             placeholder="自己打（例：水管漏水）" value="${escH(window._cdayWhyFree||'')}">
+      <div style="font-size:11.5px;color:var(--t3);line-height:1.7;margin-top:4px;">
+        這句只進系統與課卡；會員的 LINE 會寫「因故停課」。</div>
+    </div>
     <div id="cday-stat" style="margin-top:14px;font-size:13px;color:var(--t3);">計算中…</div>
     <label style="display:flex;align-items:center;gap:9px;margin-top:14px;font-size:14px;font-weight:700;">
       <input type="checkbox" id="cday-ext"${_g.doExt===false?'':' checked'}><span>票券效期順延
@@ -29333,7 +29377,7 @@ async function openCloseDayModal(){
     <div style="margin-top:16px;border:1.5px solid var(--danger);background:#FAEDEC;border-radius:8px;padding:12px 15px;">
       <b style="color:var(--danger);font-size:13.5px;">按下去會發生什麼</b>
       <ul class="mk-pts" style="margin:7px 0 0;">
-        <li>這天的課會變成<b>已取消</b>，理由寫「天災停課」</li>
+        <li>這天的課會變成<b>已取消</b>，理由寫「${escH(cdayReasonText(why, free, ds).replace(/（.*$/,''))}」</li>
         <li>會員的<b>堂數不會被扣</b></li>
         <li>那天用到的票各延長效期（上面那格的天數），每一張都會寫進帳本</li>
         <li>教練的薪資堂數<b>不計</b>這天</li>
@@ -29383,7 +29427,12 @@ async function cdayRun(){
   const doNotify=!!(document.getElementById('cday-notify')||{}).checked;
   const st=await cdayStat(ds);
   if(!st.n){ showToast('這天沒有可以停的課'); return; }
-  window._cdayGo={ds, doExt, days, doNotify};
+  /* 停課原因（2026-10-23）：key 進白名單、free 是自己打的那句 */
+  const why=((document.getElementById('cday-why')||{}).value)||'typhoon';
+  const free=String(((document.getElementById('cday-why-txt')||{}).value)||'').trim();
+  window._cdayReason=why; window._cdayWhyFree=free;
+  if(why==='other' && !free){ showToast('選了「其他」就要填停課原因'); return; }
+  window._cdayGo={ds, doExt, days, doNotify, why, free};
   const d=parseYmd(ds);
   const wd=d?('週'+WD[d.getDay()]):'';
   const md=d?((d.getMonth()+1)+'/'+d.getDate()):ds;
@@ -29417,6 +29466,9 @@ async function _cdayRun(){
   if(!isManagerUp()){ showToast('臨時停課只有管理員或主管可以操作'); return; }
   const g=window._cdayGo||{};
   const ds=g.ds, doExt=!!g.doExt, days=Math.max(0,Math.min(60,Number(g.days)||0)), doNotify=!!g.doNotify;
+  const why=g.why||'typhoon', free=g.free||'';
+  const reasonTxt=cdayReasonText(why, free, ds);          // 寫進 cancel_reason 的那一句
+  const reasonShort=reasonTxt.replace(/^臨時停課・/,'').replace(/（.*$/,'');   // 給畫面與帳本用
   if(!ds){ showToast('沒有選到日期'); return; }
   const st=await cdayStat(ds);          // 重新算一次：視窗可能開很久
   if(!st.n){ showToast('這天沒有可以停的課'); return; }
@@ -29435,7 +29487,7 @@ async function _cdayRun(){
            使用者看到「已停課 0 堂（34 堂失敗）」。欄位已補（20261023 migration）。 */
       const cur=await dbGet('bookings',b.id);
       if(!cur || cur.status!=='booked') continue;
-      cur.cancel_reason='天災停課（'+ds+'）';
+      cur.cancel_reason=reasonTxt;
       await dbPut('bookings',cur);
       await cancelBooking(b.id,'force',{silent:true});
       ok++;
@@ -29454,7 +29506,8 @@ async function _cdayRun(){
     let _done={};
     try{
       (await dbGetAll('ticket_logs')||[]).forEach(l=>{
-        if(l && typeof l.note==='string' && l.note.indexOf('天災停課展延')===0
+        /* 兩種前綴都認（1023 改名）：舊資料是「天災停課展延」 */
+        if(l && typeof l.note==='string' && /^(臨時停課|天災停課)展延/.test(l.note)
            && l.note.indexOf(_mark)>=0) _done[String(l.ticket_id)]=1;
       });
     }catch(e){ console.error('讀展延紀錄失敗，這次不展延以免重複',e);
@@ -29470,7 +29523,7 @@ async function _cdayRun(){
         if(t.status==='expired') t.status='usable';
         await dbPut('member_tickets',t);
         await logTicket(t.id,'adjust',0,null,(SESSION&&SESSION.name)||'',
-          `天災停課展延：${from} → ${to}（${days} 天）${_mark}`);
+          `臨時停課展延：${from} → ${to}（${days} 天）${_mark}　${reasonShort}`);
         _done[String(t.id)]=1;   // 同一圈內也不會重複
         ext++;
       }catch(e){ console.error('展延失敗',st.tk[i].id,e); }
@@ -29505,7 +29558,7 @@ async function _cdayRun(){
       step(`通知會員… ${i+1}/${list.length}`);
       if(_sent[list[i]]){ notiSkip++; continue; }
       try{ await pushNotification(list[i],'announce',_title,
-        `因天災停課，${_tag}，堂數沒有扣。`
+        `${cdayReasonOf(why).line}，${_tag}，堂數沒有扣。`
         +(doExt&&days>0?`票券效期已延長 ${days} 天。`:'')+'請重新預約，造成不便請見諒。');
         _sent[list[i]]=1; noti++;
       }catch(e){ console.error('通知失敗',list[i],e); }
@@ -29521,7 +29574,8 @@ async function _cdayRun(){
          那支會寫櫃檯通知留痕，這裡只把數字講出來。 */
     try{
       step('發送 LINE…');
-      const r=await sb.functions.invoke('line-closeday',{body:{date:ds, extDays:(doExt?days:0)}});
+      const r=await sb.functions.invoke('line-closeday',
+        {body:{date:ds, extDays:(doExt?days:0), reasonKey:why}});
       const d=(r&&r.data)||null;
       if(r&&r.error) throw r.error;
       if(d && d.ok){ lineSent=Number(d.sent)||0; lineSkip=(Number(d.skip_no_line)||0)+(Number(d.skip_opt_out)||0); lineFail=Number(d.failed)||0; }
@@ -39273,8 +39327,16 @@ function bkShowsCancelled(b){ return !!b && b.status==='cancelled' && b.coach_le
      只是畫出來，讓人看得出「這天本來有課，是停掉的」而不是憑空消失。
    ⚠ card_hidden 照舊收得起來（與扣課不退那條同一個出口）。 */
 function bkClosedDay(b){
+  /* ⚠ 兩種前綴都要認（2026-10-23）：10/23 以前寫死「天災停課」，
+     之後改成「臨時停課・<理由>」——使用者可以自己打理由，但前綴固定，
+     因為那是這支認卡片的唯一依據，不能跟著使用者打的字跑掉。 */
   return !!b && b.status==='cancelled' && !b.card_hidden
-    && /^天災停課/.test(String(b.cancel_reason||''));
+    && /^(臨時停課|天災停課)/.test(String(b.cancel_reason||''));
+}
+/* 課卡要顯示的那一句（去掉機器用的前綴與日期）。 */
+function bkClosedWhy(b){
+  const r=String((b&&b.cancel_reason)||'');
+  return r.replace(/^臨時停課・/,'').replace(/^天災停課/,'天災停課').replace(/（[^（）]*）\s*$/,'') || '停課';
 }
 /* 行事曆要不要畫這張已取消的卡（2026-09-11 使用者：「扣課不退 一樣要畫在行事曆上 出席章用[未]」）——
    江旻季 9/10：櫃檯開課後 20 分鐘取消、選扣課不退，票券夾出現「扣課 9/10」，行事曆卻找不到那堂。
