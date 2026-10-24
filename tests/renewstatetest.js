@@ -17,8 +17,12 @@ const badge=new Function(src.slice(i,j)+'\nreturn bkRenewBadge;')();
 console.log('課卡右上角徽章');
 ok('★ 已續約 → 綠勾', /ev-pa-ok/.test(badge({done:true})) && badge({done:true}).includes('✓'));
 ok('★ 不續約 → 紅叉', /ev-pa-no/.test(badge({no:true})) && badge({no:true}).includes('✕'));
-ok('★ 待續約 → 紅字提醒', /ev-pa-warn/.test(badge({renew:true})));
-ok('★ 待分期繳費 → 紅字提醒', /ev-pa-warn/.test(badge({pay:true})));
+/* 2026-10-25：驚嘆號改成三角形，而且兩種分色（續約＝紅、分期＝金）。
+   在這之前兩種都是紅圓點，畫面上分不出「要續約」與「要收下一期的錢」。 */
+ok('★ 待續約 → 紅三角', /ev-pa-tri/.test(badge({renew:true})) && !/ev-pa-inst/.test(badge({renew:true})));
+ok('★ 待分期繳費 → 金三角', /ev-pa-tri ev-pa-inst/.test(badge({pay:true})));
+ok('★★ 兩種分得出來（以前都是 ev-pa-warn，一模一樣）',
+   badge({renew:true})!==badge({pay:true}) && !/ev-pa-warn/.test(badge({renew:true})));
 eq('沒有狀態就不畫徽章', badge({}), '');
 eq('null 不炸', badge(null), '');
 ok('已續約優先於其他狀態（不會又綠又紅）',
@@ -36,7 +40,7 @@ ok('★ 只有未繳費才反紅（2026-07-30 定案）',
    /const _alertCls = _isUnpaid \? ' cal-ev-renew'/.test(src));
 ok('★ 最後一堂／分期繳費只留右上角驚嘆號，不整張反紅',
    !/_renewAlert\|\|_payAlert\) \? ' cal-ev-renew'/.test(src)
-   && /if\(o\.renew\)return '<span class="ev-payalert ev-pa-warn"/.test(src));
+   && /if\(o\.renew\)return '<span class="ev-payalert ev-pa-tri"/.test(src));
 ok('　　手機端同一套', /const _mkAlert = _unpaidM \? ' cal-ev-renew' : \(_newM \? ' cal-ev-newtoday' : ''\);/.test(src));
 
 console.log('\n判定邏輯');

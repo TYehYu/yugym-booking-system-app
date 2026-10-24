@@ -45,7 +45,8 @@ eq('★ 只有第一個名額請假 → 不蓋',
 console.log('\n三處課卡都蓋');
 ok('★ 桌機行事曆的標準卡（右下角角章，紅底「假」）',
    /const _allLeave = !hideMember && grpAllOnLeave\(b\);/.test(src)
-   && /<span class="evc-check evc-leave" title="全員請假">假<\/span>/.test(src));
+   && /_allLeave \? 'leave'/.test(src)
+   && /\{stop:'停', leave:'假', noshow:'未', ok:'簽'\}/.test(src));
 ok('★ 桌機行事曆的三態小徽章（右上角）也改成紅色「假」',
    /: grpAllOnLeave\(b\) \? '<span class="ev-stamp ev-stamp-leave" title="全員請假">假<\/span>'/.test(src));
 /* 2026-07-31 重構：狀態章改走共用的 bkStampKind（取消 → 全員請假 → 已簽到／補簽） */
@@ -60,7 +61,7 @@ ok('★ 三種角章都是紅底（沿用既有角章的形狀與位置，只換
    && /\.tcard-chk\.tcard-chk-leave\{background:var\(--danger,#b5372e\);\}/.test(src)
    && /\.ev-stamp-leave\{background:var\(--danger,#b5372e\);color:#fff;/.test(src));
 ok('★ 全員請假排在「已簽到」前面判斷（兩者不會同時成立）',
-   src.indexOf("const _allLeave = !hideMember && grpAllOnLeave(b);")<src.indexOf("? `<span class=\"evc-check evc-leave\""));
+   src.indexOf("const _allLeave = !hideMember && grpAllOnLeave(b);")<src.indexOf("_allLeave ? 'leave'"));
 
 console.log('\n簽到章要等全部名額都處理完（2026-07-31 使用者回報）');
 {
