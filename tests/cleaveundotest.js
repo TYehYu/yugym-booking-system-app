@@ -188,8 +188,8 @@ ok('★★ 教練請假未到場結課也記 no_show 旗標', (()=>{ const i2=sr
      const F=src.slice(i2, src.indexOf('\n/* 客人沒來', i2));
      return i2>=0 && /b\.no_show=true;/.test(F); })());
 ok('★★ 課卡右下角金色「未」章（優先於綠色簽章）',
-   /b\.no_show===true && b\.status!=='cancelled' && !hideMember\) \? 'noshow'/.test(src)
-   && /\.cal-ev\.cal-ev-std \.evc-wm\.wm-noshow\{color:var\(--gold-d,#9a6a1e\);opacity:\.16;\}/.test(src));
+   /b\.no_show===true && b\.status!=='cancelled' && !hideMember\)\n\s*\? `<span class="evc-check evc-noshow" title="未到課">未<\/span>`/.test(src)
+   && /\.evc-check\.evc-noshow,\.cal-ev\.cal-ev-std \.evc-check\.evc-noshow\{background:var\(--gold-d,#9a6a1e\);\}/.test(src));
 
 console.log('\n'+(fail?'✗ ':'✓ ')+pass+' 通過 / '+fail+' 失敗');
 process.exit(fail?1:0);

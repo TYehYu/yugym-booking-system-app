@@ -38,11 +38,9 @@ ok('★ 兩道都不再直接問 bkShowsCancelled', !src.includes("if(b.status==
 
 console.log('\n③ 出席章');
 ok('★★★ 扣課不退蓋金色「未」章（跟未到課同一個章）',
-   /\(bkEatenCancel\(b\) && !hideMember\) \? 'noshow'/.test(src)
-   && /_wmTitle = _closedDay \? bkClosedWhy\(b\)/.test(src));
+   /: \(bkEatenCancel\(b\) && !hideMember\)[^\n]*\n\s*\? `<span class="evc-check evc-noshow" title="取消・扣課不退">未<\/span>`/.test(src));
 ok('★★ 排在未到課之前（取消的課 no_show 判斷會被 status 擋掉）',
-   src.indexOf("(bkEatenCancel(b) && !hideMember) ? 'noshow'")
-     < src.indexOf("b.no_show===true && b.status!=='cancelled' && !hideMember) ? 'noshow'"));
+   src.indexOf('title="取消・扣課不退">未') < src.indexOf('title="未到課">未'));
 
 console.log('\n'+pass+' 通過 / '+fail+' 失敗');
 process.exit(fail?1:0);
