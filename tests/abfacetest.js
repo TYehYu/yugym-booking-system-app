@@ -84,6 +84,19 @@ ok('★★★ 繳費是標籤不是字色：紅〔最後一堂〕／金〔分期
    && /'<span class="bk-pay bk-pay-inst">分期<\/span>'/.test(src)
    && /\.evc-back \.bk-pay\{display:inline-block;flex:none;\s*\n?\s*background:#B3261E;color:#fff;/.test(css)
    && /\.evc-back \.bk-pay\.bk-pay-inst\{background:#9A6A1E;\}/.test(css));
+/* ══ 標籤不可以被切掉（2026-10-26 使用者：「這一堂分期沒有顯示」）══════════
+   原本進度與標籤同在一個 .bk-v 裡，而 .bk-v 是 nowrap + ellipsis ——
+   放不下時被切的是排在後面的標籤，正好是最重要的那一項。
+   改成 flex：標籤 flex:none 永遠完整，要縮的是前面的進度文字；
+   再窄一點就把進度換成壓縮版「4/12」（量過 112px：完整版 62＋標籤 28 ＝ 95 > 94）。 */
+ok('★★★ 進度與標籤分成兩個元素（標籤 flex:none 不會被 ellipsis 吃掉）',
+   /<span class="bk-pv">/.test(src)
+   && /\.evc-back \.bk-pv\{min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;\}/.test(css)
+   && /\.evc-back \.bk-pay\{display:inline-block;flex:none;/.test(css));
+ok('★★★ 有標籤的窄卡換成壓縮版的進度（沒有標籤的照樣寫完整句）',
+   /@container \(max-width:150px\)\{\s*\n\s*\.cal-ev\.cal-ev-std \.evc-back \.bk-r:has\(\.bk-pay\) \.pv-fl\{display:none;\}/.test(css)
+   && /\.bk-r:has\(\.bk-pay\) \.pv-ab\{display:inline;\}/.test(css));
+ok('　　量到的數字寫在原地', /完整版「第 4 \/ 12 堂」62px ＋ 標籤 28px ＝ 95px，可用寬只有 94px/.test(src));
 ok('　　為什麼要標籤不是改字色（深底教練上紅字會變白字）',
    /標籤自己帶底色，所以淡底深底都讀得到/.test(css));
 ok('★★★ 底色＝教練色、字色成對（深底的兩位要白字）',
@@ -96,7 +109,19 @@ ok('★★ 180px 以下收欄位名、150px 以下縮字',
    /@container \(max-width:180px\)\{\s*\n\s*\.cal-ev\.cal-ev-std \.evc-back \.bk-k\{display:none;\}/.test(css));
 /* ══ 門檻 1026 從 111px 下修到 80px（使用者看線上畫面：「這張卡的Ｂ面是不是其實
    塞得下課堂 n/n 跟繳費資訊」）—— 量出來 80px 剛好放得下最長的那兩串。 */
-ok('★★★ 79px 以下才走兩行版（80px 起三列全給）',
+/* ══ 2026-10-26 三修：窄卡那一版從「縮寫＋場地」改成「全名＋n/n＋場地」三行 ══
+   使用者：「這個大小是不是也可以完整顯示教練名稱　另外補上 n/n」。
+   量過 45／56／70／79px 配九個真實教練名（含 SANDY／MANGO／余東翰／曾邦宏），
+   一個都沒被切、也沒有超出卡片高度。 */
+ok('★★★ 窄卡寫教練全名，不是縮寫',
+   /_tipEscEarly\(_coFull\|\|_coAbbr\|\|'—'\)/.test(src));
+ok('★★★ 窄卡補上壓縮版的 n/n（完整的「第 2 / 12 堂」放不下）',
+   /const _nnShort = \(!_grpCard && _seq\)\s*\n?\s*\? \(_seq\.n>=999 \? String\(_seq\.i\) : `\$\{_seq\.i\}\/\$\{_seq\.n\}`\) : '';/.test(src)
+   && /class="bk-v bk-nn"/.test(src)
+   && /\.evc-back \.bk-nn\{font-size:9\.5px/.test(css));
+ok('★★ 團課不給 n/n（A 面主行本來就是人數）',
+   /團課不給 n\/n —— A 面的主行本來就是人數/.test(src));
+ok('★★★ 79px 以下才走窄卡版（80px 起三列全給）',
    /<div class="bk-r bk-only"><span class="bk-v bk-ab">/.test(src)
    && /@container \(max-width:79px\)\{[\s\S]{0,420}\.bk-r:not\(\.bk-only\)\{display:none;\}/.test(css));
 ok('★★★ 舊的 111px 門檻不在了', !/@container \(max-width:111px\)\{[\s\S]{0,200}bk-only/.test(css));
@@ -140,10 +165,16 @@ ok('★★ 尊重「減少動態效果」的系統設定',
 
 console.log('\n⑥ 教練膠囊與顏色');
 ok('★★★ 150px 以上才顯示（跟 B 面收欄位名同一條線）',
-   /@container \(min-width:150px\)\{\s*\n\s*\.cal-ev\.cal-ev-std:not\(\.cag-std\) \.evc-coach:not\(\.evc-leavetag\)\{display:inline-flex;position:absolute;/.test(css));
-ok('★★★ 顏色走 CSS 變數（inline 會被 !important 洗掉）',
-   /background:var\(--co-bg,#EAE6DE\) !important;color:var\(--co-fg,#6a655c\) !important;/.test(css)
+   /@container \(min-width:150px\)\{[\s\S]{0,900}\.cal-ev\.cal-ev-std:not\(\.cag-std\) \.evc-coach:not\(\.evc-leavetag\)\{display:inline-flex;position:absolute;/.test(css));
+/* ══ 2026-10-26 三修：A 面的教練名改成黑字、不要膠囊（使用者：「A面的教練名稱
+   也用黑色文字就好」，跟首頁同一個講法）。深底的那兩位拿掉底色會變白字看不見，
+   所以底色與字色一起改：背景透明＋墨色字。教練色留在左色條與 B 面底色上。 */
+ok('★★★ A 面教練名是黑字、沒有膠囊底色',
+   /background:transparent !important;color:var\(--text,#1D1813\) !important;\}/.test(css)
+   && !/background:var\(--co-bg,#EAE6DE\) !important/.test(css)
    && /`<span class="evc-coach"><span class="co-fl">\$\{_coFull\}/.test(src));
+ok('　　教練色沒有消失（在左色條與 B 面底色上）',
+   /教練色沒有消失 —— 它在\*\*左邊那條色條\*\*與 B 面底色上/.test(css));
 /* ⚠ 教練工作台週曆用的是同一組 class（.cal-ev.cal-ev-std.cag-std），但它的膠囊顏色
    寫在 inline、沒有 --co-bg。上面那條要是沒排除它，那一頁的膠囊會全部變灰底。 */
 ok('★★★ 排除教練工作台週曆（.cag-std）',
@@ -153,6 +184,16 @@ ok('　　那個坑寫在原地', /會把 inline 的 background／color 整個�
 ok('★★★ 教練色換成使用者的 Excel 配色（MANGO／BARRY 是深底白字）',
    /'c-mqueqc9uxp3k':\{bg:'#2452A2',fg:'#FFFFFF'\}/.test(src)
    && /'c-mqk98n91x2tf':\{bg:'#35714E',fg:'#FFFFFF'\}/.test(src));
+/* 石頭（翁立安）原本不在表裡 → 落到雜湊備援的淡紫，跟 Rocky 幾乎一樣
+   （使用者 1026：「石頭跟 Rocky 顏色相撞了」）。補成「深紫底白字」，與 Rocky 對調。 */
+ok('★★★ 石頭補進固定配色表（深紫底白字，與 Rocky 對調）',
+   /'c-mrt6u1iy5wxh':\{bg:'#553481',fg:'#FFFFFF'\}/.test(src));
+ok('★★★ 十位教練沒有任何兩位同一組 bg/fg', (()=>{
+  const m=src.slice(src.indexOf('const COACH_TAG_COLORS={'), src.indexOf('const _COACH_TAG_PALETTE'));
+  const pairs=[...m.matchAll(/bg:'(#[0-9A-Fa-f]{6})',fg:'(#[0-9A-Fa-f]{6})'/g)].map(x=>x[1]+'/'+x[2]);
+  const dup=pairs.filter((v,i)=>pairs.indexOf(v)!==i);
+  return dup.length===0 ? true : dup;
+})(), 'dup');
 ok('★★★ 同色相的兩對靠深淺分，所以色條吃 bg',
    /RANDY 與 MANGO 共用同一個藍（#2452A2）/.test(src)
    && /--coach-bar:\$\{_cc\.bg\}/.test(src));
