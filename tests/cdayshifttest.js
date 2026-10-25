@@ -33,18 +33,20 @@ ok('　　只認已取消的那些', /\.eq\('status','cancelled'\)/.test(fnSrc))
 const mk=(data,err)=>({ from:()=>({ select:()=>{ const q={ gte:()=>q, lte:()=>q, eq:()=>q,
   or:()=>Promise.resolve(err?{error:err}:{data,error:null}) }; return q; } }) });
 const run=async(data,err)=>{
+  /* 2026-10-25：員工端講「停班」，理由尾巴的「停課」兩字會被 cdayStaffWhy 去掉。 */
   const g={ window:{_closedDayCache:{}}, console:{warn(){}}, sb:mk(data,err),
-            bkClosedWhy:b=>String(b.cancel_reason||'').replace(/^臨時停課・/,'').replace(/（[^（）]*）\s*$/,'')||'停課' };
-  const f=new Function('window','sb','bkClosedWhy','console', fnSrc+';return closedDaysOfMonth;')
-    (g.window,g.sb,g.bkClosedWhy,g.console);
+            cdayStaffWhy:b=>String(b.cancel_reason||'').replace(/^臨時停課・/,'')
+              .replace(/（[^（）]*）\s*$/,'').replace(/停課$/,'')||'停班' };
+  const f=new Function('window','sb','cdayStaffWhy','console', fnSrc+';return closedDaysOfMonth;')
+    (g.window,g.sb,g.cdayStaffWhy,g.console);
   return await f('2026-10');
 };
 (async()=>{
   const r1=await run([{date:'2026-10-23',cancel_reason:'天災停課（2026-10-23）'},
                       {date:'2026-10-23',cancel_reason:'天災停課（2026-10-23）'},
                       {date:'2026-10-24',cancel_reason:'臨時停課・設備維修（2026-10-24）'}]);
-  ok('★ 實跑：同一天多筆只留一個，理由取人看的那一段',
-     r1 && r1['2026-10-23']==='天災停課' && r1['2026-10-24']==='設備維修', r1);
+  ok('★ 實跑：同一天多筆只留一個，理由取人看的那一段（員工端去掉尾巴的「停課」）',
+     r1 && r1['2026-10-23']==='天災' && r1['2026-10-24']==='設備維修', r1);
 
   console.log('\n② 查失敗不可以假裝沒停課');
   const r2=await run(null,{message:'boom'});
@@ -66,7 +68,7 @@ const run=async(data,err)=>{
      && /sh-closed[\s\S]{0,400}\$\{inner\|\|\(_canEditShifts\?'<span class="sh-plus">＋<\/span>':''\)\}/.test(sh));
   ok('　　支援班那一列也標', /支援班那一列也要跟著標/.test(sh));
   ok('　　請假那一列也標', /\$\{_closedMap\[dateStr\]\?' sh-closed':''\} sh-cell-ro/.test(sh));
-  ok('　　滑過去看得到原因與日期', /全館停課・\$\{_cwc\}/.test(sh) || /全館停課・\$\{_cw\}/.test(sh));
+  ok('　　滑過去看得到原因與日期', /全館停班・\$\{_cwc\}/.test(sh) && /全館停班・\$\{_cw\}/.test(sh));
 
   console.log('\n④ 停課日不算空班');
   ok('★ 表頭的空班紅點集合濾掉停課日',
@@ -80,8 +82,8 @@ const run=async(data,err)=>{
   ok('★ 多收一個 closedWhy', /function dutyRingHTML\(name, att, shift, nowMinV, isToday, closedWhy\)/.test(dr));
   ok('★★ 停課的日子不算遲到（紅色未打卡要讓位）',
      /const late=!_cw && !!\(isToday/.test(dr));
-  ok('★ 停課畫中性灰圈、寫「停課」',
-     /dr-closed/.test(dr) && />停</.test(dr) && />停課</.test(dr));
+  ok('★ 停班畫中性灰圈、寫「停班」（員工端的講法）',
+     /dr-closed/.test(dr) && />停</.test(dr) && />停班</.test(dr) && !/>停課</.test(dr));
   ok('★★ 只影響沒打卡的那一支 —— 有來打卡的照原樣畫圈',
      dr.indexOf('dr-closed') < dr.indexOf('const _rawIn=timeToMin(att.clock_in)'));
   /* 這一段註解寫在 function 那一行的上面，grab 抓不到，所以比 src */
@@ -89,12 +91,45 @@ const run=async(data,err)=>{
      /颱風天有人進來顧店/.test(src));
 
   console.log('\n　首頁傳得進去');
-  ok('★ 停課原因由當天的預約推出來，不另外查一次',
-     /const _dayClosedWhy=\(\(\)=>\{ const b=\(dayBkAll\|\|\[\]\)\.find\(bkClosedDay\); return b\?bkClosedWhy\(b\):''; \}\)\(\);/.test(src));
+  ok('★ 停班原因由當天的預約推出來，不另外查一次',
+     /const _dayClosedWhy=\(\(\)=>\{ const b=\(dayBkAll\|\|\[\]\)\.find\(bkClosedDay\); return b\?cdayStaffWhy\(b\):''; \}\)\(\);/.test(src));
   ok('★ 傳進每一顆圈', /nowMin, isTodayView, _dayClosedWhy\)/.test(src));
-  ok('★ 卡片標題也掛一枚停課章', /mc-closed-chip[\s\S]{0,80}>停課・\$\{escH\(_dayClosedWhy\)\}/.test(src));
+  ok('★ 卡片上掛一條停班橫標', /mc-closed-bar">全館停班・\$\{escH\(_dayClosedWhy\)\}/.test(src));
+/* ⚠ 桌機的卡片標題是 display:none（.mc-hide-h），櫃檯看的正是桌機 ——
+   掛在標題裡等於只有手機看得到。第一版就是這樣寫的，mock 上才發現。 */
+  ok('★★★ 停班橫標不可以掛在 .mc-hide-h 的標題裡（桌機看不到）',
+     !/mc-card-h mc-hide-h">今日值班\$\{_dayClosedWhy/.test(src)
+     && /\.mc-hide-h 在桌機是 display:none/.test(src));
   ok('　　打卡紀錄／時數／值班費一律不動（要不要照給是老闆的決定）',
      /只改顯示：打卡紀錄、時數、值班費一律不動/.test(src));
+
+  console.log('\n　教練自己那頁（2026-10-25 使用者：「教練那頁要改」）');
+  ok('★ 停課的判斷用手上的 bookings，不另外查',
+     /const _closedWhyToday=\(\(\)=>\{ const b=\(bookings\|\|\[\]\)\.find\(x=>x && x\.date===today && bkClosedDay\(x\)\);/.test(src));
+  ok('★★ 看 today 不是 viewDate（週曆翻到別天不影響這張卡）',
+     /看 today 不是 viewDate：這張卡講的是今天的打卡/.test(src));
+  ok('★★★ 停班日不再叫人打卡（原本寫「排班 6h・點圓圈打卡」）',
+     /if\(_closedWhyToday && !punched\)\{[\s\S]{0,260}全館停班・\$\{escH\(_closedWhyToday\)\}/.test(src));
+  ok('★★ 已經打卡的人不走這條（颱風天進來顧店就是真的值班）',
+     /if\(_closedWhyToday && !punched\)/.test(src)
+     && /已經打卡的人不走這條/.test(src));
+  ok('★★ 免打卡的也擋掉（那一支會拿班表冒充打卡、畫出上滿班的圈）',
+     /停課日照推會畫出一個「上滿班」的圈/.test(src));
+  ok('★★★ 小管家不再說「記得先打卡上班」',
+     /const _punchHint = _closedWhyToday\s*\n?\s*\? `<span style="color:#8E1A14;">今天全館停班/.test(src));
+  ok('★★ 但堂數照講 —— 停課日來上課的那幾堂，課堂薪資照算',
+     /那幾堂的課堂薪資照算，所以堂數不能藏起來/.test(src));
+
+  console.log('\n⑥ 員工講「停班」、會員講「停課」（使用者：「停課是學生在用的」）');
+  ok('★★★ 有一支專門換講法的（而且只動畫面字）',
+     /function cdayStaffWhy\(b\)\{\s*\n\s*return String\(bkClosedWhy\(b\)\|\|''\)\.replace\(\/停課\$\/,''\) \|\| '停班';/.test(src));
+  ok('★★★ 員工端三個畫面都改了（班表／首頁值班／教練首頁）',
+     (src.match(/全館停班/g)||[]).length>=5 && (src.match(/cdayStaffWhy\(/g)||[]).length>=4);
+  ok('★★★ 會員那一邊一個字都沒動 —— cancel_reason 的前綴仍是「臨時停課」',
+     /return `臨時停課・\$\{why\}（\$\{ds\}）`;/.test(src)
+     && /\{key:'typhoon',\s*label:'颱風停課'/.test(src));
+  ok('　　理由寫在原地（為什麼要去掉尾巴那兩個字）',
+     /直接拿來接在「停班」後面會變成/.test(src));
 
   console.log('\n　樣式');
   ok('★★ 斜線底要 !important —— .sh-cell.has 用 background 簡寫，會把它洗掉',

@@ -11785,8 +11785,8 @@ body{background:linear-gradient(155deg,#F7F4EC 0%,#F1F2E7 42%,#E6EDE1 100%);back
 .dr-closed .dr-cup-rim{stroke:rgba(29,24,19,.22);stroke-dasharray:5 4;}
 .dr-closed .dr-center-wait{color:var(--t3);font-size:14px;}
 .dr-closed .dr-time{color:var(--t3);font-weight:600;}
-.mc-closed-chip{margin-left:8px;font-size:11px;font-weight:800;color:#fff;background:#8E1A14;
-  border-radius:4px;padding:1px 6px;letter-spacing:.03em;vertical-align:1px;}
+.mc-closed-bar{font-size:11.5px;font-weight:800;color:#fff;background:#8E1A14;
+  border-radius:5px;padding:3px 9px;letter-spacing:.03em;margin:0 0 8px;align-self:flex-start;}
 .dr-late .dr-cup-rim{stroke:var(--danger,#b5372e);stroke-dasharray:4 3;}
 .dr-late .dr-cup-track{fill:rgba(181,55,46,.06);}
 .dr-late .dr-center-wait{color:var(--danger,#b5372e);}
@@ -14956,8 +14956,8 @@ function tbl(s){return TABLE_ALIAS[s]||s;}
 let sb=null;
 // ── 版本號（日期+時間格式：年後兩碼+月+日.時分，例 26620.1058 = 26年6/20 10:58）──
 // 每次改版手動更新這一行即可，畫面與 title 會一起更新
-const APP_VERSION = '261025.1459';
-const APP_VERSION_LABEL = 'v261025.1459';
+const APP_VERSION = '261026.0052';
+const APP_VERSION_LABEL = 'v261026.0052';
 const CLOUD = !!(window.YUGYM_CONFIG && window.YUGYM_CONFIG.url && window.YUGYM_CONFIG.anonKey);
 if(CLOUD){ sb = supabase.createClient(window.YUGYM_CONFIG.url, window.YUGYM_CONFIG.anonKey); }
 
@@ -24936,11 +24936,14 @@ PAGES.g_dashboard=async function(){
        用同一個 cancel_reason 取消掉，bkClosedDay 認得出來。不必多查一次。
      ⚠ 只改顯示：打卡紀錄、時數、值班費一律不動（沒打卡本來就是 0 小時，
        要不要照給是老闆的決定，不是畫面的事）。 */
-  const _dayClosedWhy=(()=>{ const b=(dayBkAll||[]).find(bkClosedDay); return b?bkClosedWhy(b):''; })();
+  const _dayClosedWhy=(()=>{ const b=(dayBkAll||[]).find(bkClosedDay); return b?cdayStaffWhy(b):''; })();
   const _punchedRings=_dutyPeople
     .map(x=>dutyRingHTML(coachDisp(x.c)||x.c.name||'—', x.att, x.sh, nowMin, isTodayView, _dayClosedWhy)).join('');
   const dutyRingCard=`<div class="card mc-card mc-dutyring-card">
-    <div class="mc-card-h mc-hide-h">今日值班${_dayClosedWhy?`<span class="mc-closed-chip" title="這一天全館停課">停課・${escH(_dayClosedWhy)}</span>`:''}</div>
+    <div class="mc-card-h mc-hide-h">今日值班</div>
+    ${/* ⚠ 這一條**不能**掛在上面那行標題裡：.mc-hide-h 在桌機是 display:none，
+         櫃檯看的正是桌機，掛上去等於只有手機看得到（第一版就是這樣寫的）。 */''}${
+      _dayClosedWhy?`<div class="mc-closed-bar">全館停班・${escH(_dayClosedWhy)}</div>`:''}
     <div class="dr-row">${_punchedRings||'<div class="mc-duty-empty">今日尚無上班打卡</div>'}</div>
   </div>`;
 
@@ -26969,7 +26972,7 @@ function dutyRingHTML(name, att, shift, nowMinV, isToday, closedWhy){
     const rng=(shift&&shift.start_time&&shift.end_time)?`${shift.start_time} – ${shift.end_time}`:'今日排班';
     const _cw=String(closedWhy||'');
     const late=!_cw && !!(isToday && shift && shift.start_time && nowMinV>=timeToMin(shift.start_time));
-    if(_cw) return `<div class="duty-ring dr-cup dr-empty dr-closed" title="${escH(`${name}｜${rng}｜全館停課・${_cw}`)}">
+    if(_cw) return `<div class="duty-ring dr-cup dr-empty dr-closed" title="${escH(`${name}｜${rng}｜全館停班・${_cw}`)}">
       <div class="dr-wrap">
         <svg viewBox="0 0 64 64">
           <circle class="dr-cup-track" cx="32" cy="32" r="26"/>
@@ -26979,7 +26982,7 @@ function dutyRingHTML(name, att, shift, nowMinV, isToday, closedWhy){
         <div class="dr-center dr-center-wait">停</div>
       </div>
       <div class="dr-name">${name}</div>
-      <div class="dr-time">停課</div>
+      <div class="dr-time">停班</div>
     </div>`;
     return `<div class="duty-ring dr-cup dr-empty${late?' dr-late':''}" title="${name}｜${rng}｜${late?'已過上班時間仍未打卡':'尚未打卡'}">
       <div class="dr-wrap">
@@ -39387,6 +39390,16 @@ function bkClosedWhy(b){
   const r=String((b&&b.cancel_reason)||'');
   return r.replace(/^臨時停課・/,'').replace(/^天災停課/,'天災停課').replace(/（[^（）]*）\s*$/,'') || '停課';
 }
+/* 員工看到的講法是「停班」不是「停課」（2026-10-25 使用者：
+   「停課應該要改成停班　停課是學生在用的」）——
+   同一天同一件事，對會員是停課、對員工是停班。理由字串本身是寫給會員的
+   （「天災停課」「颱風停課」），直接拿來接在「停班」後面會變成
+   「全館停班・天災停課」，所以把尾巴那兩個字去掉：天災／颱風／設備維修。
+   ⚠ 只改**員工端畫面**的字。cancel_reason、課卡、會員的 LINE 一律不動 ——
+     那些是會員在看的，而且 bkClosedDay 認的就是「臨時停課／天災停課」這個前綴。 */
+function cdayStaffWhy(b){
+  return String(bkClosedWhy(b)||'').replace(/停課$/,'') || '停班';
+}
 /* ══ 哪幾天全館停課（2026-10-25 使用者：「這個月有兩天因為颱風停課，
      員工值班也要標注一下」）════════════════════════════════════════════
    停課沒有自己的資料表，真相在**那天被取消的預約**身上：臨時停課會把整天的課
@@ -39410,7 +39423,8 @@ async function closedDaysOfMonth(month){
       .or('cancel_reason.like.臨時停課%,cancel_reason.like.天災停課%');
     if(q.error) throw q.error;
     const m={};
-    (q.data||[]).forEach(r=>{ if(r && r.date && !m[r.date]) m[r.date]=bkClosedWhy(r); });
+    /* 存員工端的講法（見 cdayStaffWhy）：這支只有班表在用，而班表是員工在看的 */
+    (q.data||[]).forEach(r=>{ if(r && r.date && !m[r.date]) m[r.date]=cdayStaffWhy(r); });
     window._closedDayCache[key]=m;
     return m;
   }catch(e){
@@ -49366,7 +49380,7 @@ async function renderShiftsTab(){
        ⚠ 空班的紅點不畫了：全館停課的日子沒有「空班」這回事，兩個紅記號疊在
          同一格只會互相干擾。 */
     const _cw=_closedMap[ds]||'';
-    const closedMark=_cw?`<span class="sh-closed-tag" title="${escH(`${Number(mm)}/${i+1} 全館停課・${_cw}`)}">停</span>`:'';
+    const closedMark=_cw?`<span class="sh-closed-tag" title="${escH(`${Number(mm)}/${i+1} 全館停班・${_cw}`)}">停</span>`:'';
     return `<th class="sh-dayhead${wk?' sh-wk':''}${_cw?' sh-closed-h':(_isPast(ds)?' sh-past-h':'')}">${i+1}<br><span>${dow}</span>${_cw?closedMark:gapMark}</th>`;
   }).join('');
 
@@ -49395,7 +49409,7 @@ async function renderShiftsTab(){
          只是店沒開。斜線底讓整欄一眼看出是停課，滑過去看原因。
          ⚠ 不淡化：淡化是「已經過去的班」的語彙，停課是另一件事，兩個都淡就分不出來。 */
       const _cwc=_closedMap[dateStr]||'';
-      const _ttl=_cwc?` title="${escH(`${Number(mm)}/${i+1} 全館停課・${_cwc}`)}"`:'';
+      const _ttl=_cwc?` title="${escH(`${Number(mm)}/${i+1} 全館停班・${_cwc}`)}"`:'';
       return `<td class="sh-cell${list.length?' has':''}${hasLeave?' has-leave':''}${isWk?' sh-cell-wk':''}${_cwc?' sh-closed':(_past?' sh-past':'')}${_canEditShifts?'':' sh-cell-ro'}"${_ttl}${cellClick}>${inner||(_canEditShifts?'<span class="sh-plus">＋</span>':'')}</td>`;
     }).join('');
     const tplDuty=(window.SALARY_TPL||{})[normEmp(e.employment_type||e.pay_type)]||{};
@@ -62579,6 +62593,13 @@ PAGES.coach_today=async function(){
   const leftCnt=myToday.length-doneCnt;
   const firstUndone=myToday.find(b=>b.status!=='completed'&&b.status!=='checked_in');
 
+  /* 今天是不是全館停課（2026-10-25 使用者：「教練那頁要改」）——
+     停課那天沒打卡不是漏打卡，是店沒開。沒有這一條的話，教練打開首頁看到的是
+     「排班 6h・點圓圈打卡」，那是叫他去打一個不該打的卡。
+     ⚠ 看 today 不是 viewDate：這張卡講的是今天的打卡，週曆翻到別天不影響。
+     ⚠ 資料就在手上（bookings 已經載了），不另外查。 */
+  const _closedWhyToday=(()=>{ const b=(bookings||[]).find(x=>x && x.date===today && bkClosedDay(x));
+                               return b?cdayStaffWhy(b):''; })();
   // 打卡狀態與今日工時
   const att=attendance.find(a=>a.emp_id===SESSION.id&&a.date===today)||null;
   const punched=!!(att&&att.clock_in);
@@ -62616,11 +62637,17 @@ PAGES.coach_today=async function(){
     }
   }else{
     // 上班前（尚未打卡）
+    /* 停課日把「記得先打卡上班」換掉（2026-10-25）—— 店沒開，那句話是錯的指示。
+       ⚠ 課還是照講：停課日仍然可能有教練來上課（10/24 就有兩位、共 7 堂），
+         那幾堂的課堂薪資照算，所以堂數不能藏起來。 */
     butlerIcon='👋';
+    const _punchHint = _closedWhyToday
+      ? `<span style="color:#8E1A14;">今天全館停班（${escH(_closedWhyToday)}）</span>`
+      : (needPunch?'<span style="color:#a86b1a;">記得先打卡上班</span>':'');
     if(firstUndone){
-      butlerLine=`今天共 <b>${myToday.length}</b> 堂課，第一堂 <b>${firstUndone.start_time}</b> 開始。${needPunch?'<span style="color:#a86b1a;">記得先打卡上班</span>':''}`;
+      butlerLine=`今天共 <b>${myToday.length}</b> 堂課，第一堂 <b>${firstUndone.start_time}</b> 開始。${_punchHint}`;
     }else{
-      butlerLine=`今天共 <b>${myToday.length}</b> 堂課。${needPunch?'<span style="color:#a86b1a;">記得先打卡上班</span>':''}`;
+      butlerLine=`今天共 <b>${myToday.length}</b> 堂課。${_punchHint}`;
     }
   }
 
@@ -62975,7 +63002,17 @@ PAGES.coach_today=async function(){
   const _cGrpN=myToday.filter(b=>bkIsGroup(b)).length;
   const _schedH=(Math.floor(dutyToday*2)/2).toFixed(1);
   let _dutyInner;
-  if(punched){
+  /* 全館停課（2026-10-25 使用者：「教練那頁要改」）——
+     這一張卡原本只有三種狀態：打卡了／免打卡／沒打卡（給一個掃描打卡的圈）。
+     停課那天第三種是錯的：它叫教練去打一個不該打的卡。
+     ⚠ 已經打卡的人不走這條：颱風天有人進來顧店就是真的值班，照原樣畫圈。
+     ⚠ 免打卡的也要擋：那一支是拿班表時段冒充打卡時間推算進度，
+       停課日照推會畫出一個「上滿班」的圈。 */
+  if(_closedWhyToday && !punched){
+    _dutyInner=`<div class="mc-k2-l">今日值班</div>
+      ${dutyRingHTML(dispName, null, _myShift, _nowMin2, true, _closedWhyToday)}
+      <div class="mc-kpi-rev-sub">全館停班・${escH(_closedWhyToday)}</div>`;
+  }else if(punched){
     _dutyInner=`<div class="mc-k2-l">今日值班</div>
       ${dutyRingHTML(dispName, att, _myShift, _nowMin2, true)}
       ${(!clockedOut && needPunch)?`<button class="btn btn-ghost btn-sm cds-punch" onclick="confirmPunchOut()">下班打卡</button>`:''}`;
