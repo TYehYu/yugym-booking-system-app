@@ -45,9 +45,13 @@ ok('　　為什麼可以不靠右了，寫在原地（章搬到左上，右下�
 /* 2026-08-21 五修：行事曆也改成「不填滿＋姓名右邊的章」，與首頁統一。
    這一段原本驗的是「行事曆維持角標隱藏＋整卡填滿」，整組換掉；
    現在的行為驗在下方「桌機行事曆也不填滿了」。 */
-ok('★ ③ 行事曆課卡改成畫出席章（不再隱藏）',
+/* 2026-10-25：出席章改成卡片中央的浮水印（.evc-wm），不再是姓名旁的圓章。
+   要守的仍是「有畫出來」，只是畫的是浮水印。 */
+/* 1025 改浮水印、1026 又改回圓章（進第一列最左邊）。不管哪一版，重點都是
+   「行事曆課卡**有**出席章」—— 曾經有人把它整個關掉過。 */
+ok('★ ③ 行事曆課卡有畫出席章（1026 起是第一列的圓章）',
    !/\.cal-ev\.cal-ev-std \.evc-check\{ display:none !important; \}/.test(blk)
-   && /<span class="evc-check"/.test(src));
+   && /<i class="evc-check\$\{_chkCls\}"/.test(src));
 ok('★ ④ 行事曆已簽到 → 不填滿了（那一組規則已刪除）',
    !/\.cal-ev\.cal-ev-std\.cal-ev-checked \.evc-body\{/.test(blk)
    && /已簽到不再填滿 —— 那一組規則直接刪掉了/.test(blk));
@@ -82,9 +86,10 @@ ok('　　空堂也吃得到（bkIsOpenHold 的前提就是 pending_contract）'
    /pending_contract=true ＋ 沒有 member_id ＋ 沒有 trial_name/.test(src));
 
 console.log('\n出席章的 DOM 只放一份');
-ok('★ 行事曆：章排在姓名之後、自成一列，外層不再重複輸出',
-   /<span class="evc-nmrow"><span class="evc-name\$\{bkNameBlankCls\(b\)\}\$\{_nmVCls\}">\$\{_stdName\}<\/span>\$\{_stampOut\}<\/span>\$\{_stdTag\}/.test(src)
-   && /繳費／續約徽章已移進 _bodyOut 的第一列（2026-09-04，見下方 _alertOut）/.test(src));
+/* 2026-10-25：章搬出姓名列、變成浮水印；姓名列（.evc-r2）現在是姓名＋時間。 */
+ok('★ 行事曆：姓名列只剩姓名與時間，章畫在第一列最前面',
+   /<span class="evc-r2"><span class="evc-name\$\{bkNameBlankCls\(b\)\}\$\{_nmVCls\}\$\{_nmSCls\}">\$\{_stdName\}<\/span><b class="evc-hm">\$\{b\.start_time\}<\/b><\/span>\$\{_stdTag\}/.test(src)
+   && /<span class="evc-r1">\$\{_wmOut\}/.test(src));
 ok('★ _stampOut 必須先於 _bodyOut 算完（否則 const TDZ 直接爆）',
    src.indexOf('const _stampOut =') < src.indexOf('const _bodyOut ='),
    {stamp:src.indexOf('const _stampOut ='), body:src.indexOf('const _bodyOut =')});
@@ -180,9 +185,15 @@ ok('★ 刪除會員從整列大按鈕收成右側小按鈕',
 ok('　　欄位一個都沒拿掉，只是不再那麼鬆', /欄位本身一個都沒拿掉，只是不再那麼鬆/.test(css));
 
 console.log('\n教練標籤改回全名（2026-08-21 使用者指示：太小才簡寫）');
-ok('★ 兩種都畫出來，由 CSS 依卡片寬度挑一個',
-   /const _coSw=\(f,a\)=>`<span class="co-fl">\$\{f\}<\/span><span class="co-ab">\$\{a\}<\/span>`;/.test(src)
-   && /\$\{_coSw\(_coFull,_coAbbr\)\}/.test(src));
+/* 2026-10-25（使用者選①「留場地、拿掉教練文字」）：行事曆 A 面不再寫教練名 ——
+   左邊那條色條已經代表教練，寫兩次是重複的；全名改由 B 面（翻牌）顯示。
+   _coSw／_coFull／_coAbbr 三支**留著**，B 面要用同一套兩版本寫法，所以這裡
+   斷言的是「工具還在，但 A 面的 _bodyOut 不再呼叫它」。 */
+ok('★ 兩版本的工具留著（B 面要用）',
+   /const _coSw=\(f,a\)=>`<span class="co-fl">\$\{f\}<\/span><span class="co-ab">\$\{a\}<\/span>`;/.test(src));
+ok('★ A 面已經不寫教練名了（_bodyOut 不再帶 _coSw）',
+   !/\$\{_coSw\(_coFull,_coAbbr\)\}/.test(src)
+   && /A 面不再寫教練名/.test(src));
 ok('★ 首頁卡也是同一套（兩種都畫，由 CSS 挑）',
    /<span class="co-fl">\$\{coachDisp\(c\)\}<\/span><span class="co-ab">\$\{coachAbbr\(c\)\}<\/span>/.test(src));
 /* 2026-08-21 二修（使用者：「首頁課卡右下角應該可以顯示完整教練標籤」）——
@@ -203,9 +214,15 @@ ok('　　太長的名字折行、不切成「…」（0821 已有的規則接�
 /* 2026-08-26：兩支請假標籤各多掛一個 class（evc-leavetag／tcard-leavetag）——
    Ink 視覺層把教練標籤的底色整個拿掉「只留文字色」，而請假是白字紅底，
    得靠這個 class 例外保留底色。文案與顏色都沒動。 */
+/* 2026-10-25：教練名拿掉之後，請假的紅標是 _abbrOut 唯一剩下的內容
+   （後面不再接 _venueTag —— 那支 0821 就是空字串了）。紅標本身一定要留：
+   它不是教練名，是 0814 定的「教練請假的卡要一眼分得出來」。 */
 ok('★ 請假標籤縮成「請假」（使用者：其實改成請假就好）',
-   /color:#F4F1E8;">請假<\/span>`\+_venueTag/.test(src)
+   /color:#F4F1E8;">請假<\/span>`/.test(src)
    && /<span class="tcard-co tcard-leavetag" style="background:#7A2E28;color:#F4F1E8;">請假<\/span>/.test(src));
+ok('　　請假紅標沒被一起拿掉（浮水印的「假」只有 13% 不透明度，撐不起這件事）',
+   /const _abbrOut = bkIsCoachLeave\(b\)/.test(src)
+   && /請假的紅標留著/.test(src));
 
 console.log('\n場地移到會員姓名下方（教室／跑步機）');
 ok('★ 不再是右下角跟教練並列的膠囊',
@@ -214,8 +231,10 @@ ok('★ 不再是右下角跟教練並列的膠囊',
 /* 2026-09-04 使用者：「使用場地 跑步機跟教室 調整到課卡底部適合嗎?」——
    場地移到**最後一列**。原本夾在姓名與教練之間，有場地的卡教練就被往下推一行，
    一整排看過去教練名對不齊（A/B 對照：不一致的組合 1162 → 434）。 */
-ok('★ 場地改排在最後（教練之後）',
-   /<\/span>\$\{_stdTag\}\$\{_abbrOut\}\$\{_venueSub\}\$\{_moreHtml\}<\/div>/.test(src));
+/* 2026-10-26：教練改成絕對定位的右下角膠囊，不再參與流排版 ——
+   場地仍然是流排版的最後一列，教練在 DOM 裡排它後面（位置由 CSS 決定）。 */
+ok('★ 場地是流排版的最後一列，教練膠囊排在它後面',
+   /<\/span>\$\{_stdTag\}\$\{_venueSub\}\$\{_abbrOut\}\$\{_moreHtml\}<\/div>/.test(src));
 ok('　　只有教室／跑步機會有值（多功能是預設場地、不標）',
    /selfVenueLabel 本來就只在教室／跑步機才有值/.test(src));
 
@@ -356,11 +375,13 @@ ok('★ 越窄越少東西：窄卡先讓場地，極窄卡連教練也讓',
    && /\.cal-ev\.cal-ev-std\.ev-w-tiny   \.evc-vsub\{display:none;\}/.test(css)
    && /@container \(max-width:41px\)\{\s*\n\s*\.cal-ev\.cal-ev-std \.evc-coach\{display:none;\}/.test(css));
 /* 2026-09-04 新增的第五樣「讓位」：第一列放不下時讓掉**時間**（章與驚嘆號留著）。 */
-ok('★★ 第一列擠不下時讓掉時間，不讓章也不讓驚嘆號；而且那一列一律保留',
-   /* 0904 三修：❗ 排進流裡之後組合變 6 種，門檻全部重量（見 evwidthtest ⑪） */
-   /@container \(max-width:47px\)\{\s*\n\s*\.cal-ev\.cal-ev-std \.evc-hm\{display:none;\}/.test(css)
-   && /@container \(max-width:85px\)\{\s*\n\s*\.cal-ev\.cal-ev-std:has\(\.evc-check\):has\(\.ev-payalert\) \.evc-hm\{display:none;\}/.test(css)
-   && /讓位的是時間，不是章也不是驚嘆號/.test(css));
+/* 2026-10-25：時間搬去跟姓名同一列，舊的六條門檻退場，改成一條 150px。
+   讓位的順序不變：時間先退，姓名留到最後。 */
+/* 2026-10-26：門檻從「150px 一律收」改成依名字長度（2 字 84px／3 字 98px／4 字以上 112px）。
+   使用者：「Ａ面還有一個重要資訊是時間」—— 原本收得太早。 */
+ok('★★ 擠不下才讓掉時間，而且依名字長度各自算',
+   /@container \(max-width:111px\)\{\s*\n\s*\.cal-ev\.cal-ev-std \.evc-hm\{display:none;\}/.test(css)
+   && /留時間的條件是「扣掉時間之後名字每個字還有 14px」/.test(css));
 ok('　　原則寫在程式裡（寧可少一項，也不要每一項都殘缺）',
    /寧可少一項，也不要每一項都殘缺/.test(css));
 
@@ -824,9 +845,9 @@ ok('★ 填滿那一組規則整組刪掉（不是用覆蓋蓋掉）',
    !/\.cal-ev\.cal-ev-day\.cal-ev-checked\{background:color-mix/.test(src)
    && !/\.cal-ev\.cal-ev-day\.cal-ev-checked \.evd-name\{color:#fff;\}/.test(src)
    && /用覆蓋的方式蓋不乾淨（底色、邊框、左色條、三種文字色各有 !important/.test(src));
-ok('★ DOM 仍在姓名列裡（絕對定位是相對整張卡，擺哪裡都不影響姓名列寬度）',
-   /<span class="evc-nmrow"><span class="evc-name\$\{bkNameBlankCls\(b\)\}\$\{_nmVCls\}">\$\{_stdName\}<\/span>\$\{_stampOut\}<\/span>/.test(src)
-   && /\.cal-ev\.cal-ev-std \.evc-nmrow\{display:flex;align-items:center;justify-content:center;/.test(src));
+ok('★ 章不在姓名列裡（1025 進浮水印、1026 進第一列最左邊）',
+   /\.cal-ev\.cal-ev-std \.evc-r1 \.evc-check\{/.test(src)
+   && !/\$\{_stampOut\}<\/span>/.test(src));
 /* 2026-08-23 使用者回報「縮小的課卡 出席章變到左邊色條上了」：left 4px→9px。
    左緣課程色條寬 5px，章從 4px 起算會壓在色條上，兩個又都是深色。5px＋4px 間距＝9px。 */
 /* 2026-09-04 使用者指示：「出席章放課卡左上 時間放右上」—— 章從左下搬到左上。
@@ -984,8 +1005,10 @@ console.log('\n⑨ 手機下限 11px：課卡與行事曆卡的查證結論（20
   ok('★★★ .tcard-co 仍是 9.5px（膠囊＋line-height:1，拉到 10 就被切）',
      /\.tcard-co\{font-size:9\.5px/.test(S));
   /* ⚠ 行事曆卡：0903 那整套 @container 讓位門檻就是照這些字級量出來的。 */
-  ok('★★★ 行事曆卡一條都沒動（門檻是照這些字級量的）',
-     under('cal-ev|evc-').length===32
+  /* 2026-10-25：版面改兩列、章變浮水印，這一區多了 .evc-wm／.evc-r1／.evc-r2／.evc-fri
+     的規則，數字從 32 變動。要守的是「別人沒跟著亂動」，所以改成下限。 */
+  ok('★★★ 行事曆卡那一區還在（1025 因為兩列版面增加了幾條）',
+     under('cal-ev|evc-').length>=32
      && /行事曆卡\*\*一條都不能動\*\*/.test(S));
   ok('★★ 為什麼不能動，逐項寫在原地（寬度變體／固定框／Ink 覆寫／基準值）',
      /動了基準值，那 24 條門檻全部失效/.test(S));

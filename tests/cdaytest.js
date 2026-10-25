@@ -188,19 +188,22 @@ console.log('\n⑧ 行事曆課卡要看得出「停課」（2026-10-23 使用�
   ok('★★ 而且要暗化（票已退回，這堂不會發生）',
      /if\(bkClosedDay\(b\)\) return true;   \/\* 天災停課/.test(src));
   ok('★★★ 角章改「停」，而且排在全員請假前面',
-     /const _stampOut = _closedDay/.test(src)
-     && /class="evc-check evc-closed"/.test(src)
-     && src.indexOf('const _stampOut = _closedDay') < src.indexOf('evc-check evc-leave'));
+     /const _wmKind = _closedDay \? 'stop'/.test(src)
+     && /\{stop:'停', leave:'假', noshow:'未', ok:'簽'\}/.test(src)
+     && src.indexOf("_closedDay ? 'stop'") < src.indexOf("_allLeave ? 'leave'"));
   ok('★★ 滑鼠提示把原因放第一行',
      /const _tipClosed = _closedDay \? `⚠ \$\{bkClosedWhy\(b\)\}` : '';/.test(src)
-     && /_tipEsc\(\[_tipClosed, `\$\{b\.start_time\}/.test(src));
+     && /_tipEsc\(\[_tipClosed, _tipMem/.test(src));
+  /* 2026-10-26：白框從五項收成三項（會員／教練／場地）—— 時間區間與進度都上卡了。
+     停課原因仍然排第一行，那是整張卡唯一要回答的事。 */
   ok('★★ 原因有跑跳脫（資料是人寫的）',
      /const _tipEscEarly = x=>String\(x==null\?'':x\)\.replace/.test(src));
   ok('★★★ cancel_reason 已經從 LEAN_DROP 拿掉（列表讀得到它）',
      !/'reward_type','cancel_reason'/.test(src)
      && /要開始用就先從 LEAN_DROP 移除/.test(src));
+  /* 2026-10-26：浮水印退場，章回到第一列最左邊。顏色語意不變（停＝墨黑，不用紅）。 */
   ok('★ 停課章用自己的顏色（紅是請假的語意）',
-     /\.evc-check\.evc-closed,\.cal-ev\.cal-ev-std \.evc-check\.evc-closed\{background:#3A362F;\}/.test(src));
+     /\.cal-ev\.cal-ev-std \.evc-r1 \.evc-check\.evc-stop\{background:#3A362F;\}/.test(src));
   ok('★ 堂數不計（status 仍是 cancelled，bkCounts 本來就排除）',
      /function bkCounts\(b\)\{ return !!b && b\.status!=='cancelled'/.test(src));
 }

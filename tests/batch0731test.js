@@ -177,7 +177,10 @@ console.log('\n課卡：體驗／待簽約另起一列放在姓名下面（2026-
      /const _stdTag = \(!hideMember && !_grpCard && _nameTag\) \? `<span class="evc-sub">\$\{_nameTag\}<\/span>` : '';/.test(src)
      /* 2026-08-21：姓名與出席章包成 .evc-nmrow 一列，標籤仍接在那一列後面。
         2026-09-04：場地移到最後一列，標籤變成緊接在姓名列之後的那一項。 */
-     && /<span class="evc-nmrow"><span class="evc-name\$\{bkNameBlankCls\(b\)\}\$\{_nmVCls\}">\$\{_stdName\}<\/span>\$\{_stampOut\}<\/span>\$\{_stdTag\}/.test(src));
+     /* 2026-10-25：出席章變成浮水印、版面改兩列，姓名列的 class 由 .evc-nmrow 換成 .evc-r2；
+        標籤仍然緊接在姓名列之後。 */
+     /* 2026-10-26：姓名多掛一個字級用的長度 class（nm-s2…nm-s6），標籤位置沒動。 */
+     && /<span class="evc-r2"><span class="evc-name\$\{bkNameBlankCls\(b\)\}\$\{_nmVCls\}\$\{_nmSCls\}">\$\{_stdName\}<\/span><b class="evc-hm">\$\{b\.start_time\}<\/b><\/span>\$\{_stdTag\}/.test(src));
   ok('　　遮蔽卡與團課卡不掛（那兩種主行不是姓名）',
      /!hideMember && !_grpCard && _nameTag/.test(src));
   ok('　　小字樣式有定義，窄卡再縮一級',

@@ -77,7 +77,12 @@ console.log('\n⑨ 手機下限 11px（2026-09-05：可讀性 2/6）');
   const small=[];
   (css.match(/[^{}]+\{[^{}]*\}/g)||[]).forEach(r=>{
     const i=r.indexOf('{'); const sel=r.slice(0,i), body=r.slice(i);
-    if(!/\.(cag|coachhome|chome)/.test(sel)) return;
+    /* ⚠ 先把 :not(...) 剝掉再比（2026-10-26）——
+       行事曆那邊有一條 `.cal-ev.cal-ev-std:not(.cag-std) .evc-coach`，
+       它是**刻意排除**工作台的，卻因為字面上含 .cag-std 被這支當成工作台的規則抓進來。
+       反面比對要認「選擇器真的選到誰」，不是認字串長相。 */
+    const selN=sel.replace(/:not\([^)]*\)/g,'');
+    if(!/\.(cag|coachhome|chome)/.test(selN)) return;
     const m=body.match(/font-size:\s*([0-9.]+)px/);
     if(m && parseFloat(m[1])<11) small.push(sel.trim().slice(0,44)+' '+m[1]+'px');
   });

@@ -108,21 +108,46 @@ ok('★★★ 時間靠右，自己讓開章的位置',
    排列（靠右）：❗ → NEW → 時間。章是絕對定位在左上，不參與這一列。 */
 ok('★★★ 徽章排進第一列的流裡（原本 absolute right:3px，時間永遠排不到它右邊）',
    /\.cal-ev\.cal-ev-std \.evc-time \.ev-payalert\{\s*\n\s*position:static; top:auto; right:auto; left:auto; flex:0 0 auto;\}/.test(src));
-ok('★★★ DOM 順序就是 ❗ → NEW → 時間',
-   /<span class="evc-time">\$\{_alertOut\}\$\{_newOut\}<b class="evc-hm">\$\{b\.start_time\}<\/b><\/span>/.test(src));
+/* 2026-10-25 版面改兩列：第一列只剩〔友善〕〔警示〕〔NEW〕，時間搬去跟姓名同一列。
+   所以「❗ → NEW → 時間」那個順序不再成立 —— 現在是「友善 → ❗ → NEW」。 */
+/* 2026-10-26：出席章回到第一列**最前面**（使用者：「出席章可以改回第一列左邊第一格嗎」）。
+   順序因此變成：章 → 友善 → ❗ → NEW，警示那一組靠 margin-left:auto 推到最右。 */
+ok('★★★ 第一列的順序：章 → 友善靠左，❗ 與 NEW 靠右',
+   /<span class="evc-r1">\$\{_wmOut\}\$\{_friOut\}\$\{_alertOut\}\$\{_newOut\}<\/span>/.test(src));
+ok('★★★ 時間跟姓名同一列（第二列）',
+   /<span class="evc-r2"><span class="evc-name[^>]*>\$\{_stdName\}<\/span><b class="evc-hm">\$\{b\.start_time\}<\/b><\/span>/.test(src));
 ok('★★★ 有出席章就不出 NEW（使用者：新跟簽不用同時出現）',
    /const _newOut = \(_isNewToday && !_stampOut\)/.test(src));
 ok('★★ 為什麼章與 NEW 互斥，寫在原地',
    /課已經上完（或確定沒上）之後，「今天剛排的」就不再是需要覆核的事/.test(src));
 /* 六種組合的下限（離線量、取較嚴的非 Ink）：
      什麼都沒有 48／＋章 64／＋❗ 67／＋章＋❗ 86／＋NEW 84／＋NEW＋❗ 106 */
-ok('★★★ 時間的六條讓位規則都在',
-   /@container \(max-width:47px\)\{\s*\n\s*\.cal-ev\.cal-ev-std \.evc-hm\{display:none;\}/.test(src)
-   && /@container \(max-width:63px\)\{\s*\n\s*\.cal-ev\.cal-ev-std:has\(\.evc-check\) \.evc-hm\{display:none;\}/.test(src)
-   && /@container \(max-width:66px\)\{\s*\n\s*\.cal-ev\.cal-ev-std:has\(\.ev-payalert\) \.evc-hm\{display:none;\}/.test(src)
-   && /@container \(max-width:85px\)\{\s*\n\s*\.cal-ev\.cal-ev-std:has\(\.evc-check\):has\(\.ev-payalert\) \.evc-hm\{display:none;\}/.test(src)
-   && /@container \(max-width:83px\)\{\s*\n\s*\.cal-ev\.cal-ev-std:has\(\.evc-new\) \.evc-hm\{display:none;\}/.test(src)
-   && /@container \(max-width:105px\)\{\s*\n\s*\.cal-ev\.cal-ev-std:has\(\.evc-new\):has\(\.ev-payalert\) \.evc-hm\{display:none;\}/.test(src));
+/* ⚠⚠ 那六條在 2026-10-25 退場。它們量的是「第一列擠不擠得下 ❗＋NEW＋時間」，
+   而時間已經不在第一列了，前提整個不成立。重量之後只剩一條。
+   舊的數字留在 index.html 的註解裡（48/64/67/86/84/106），要還原找得回來。 */
+ok('★★★ 舊的六條退場，而且退場理由寫在原地',
+   !/:has\(\.evc-check\) \.evc-hm\{display:none;\}/.test(src)
+   && /這六條在 2026-10-25 退場/.test(src)
+   && /什麼都沒有 48 \/ ＋章 64 \/ ＋❗ 67 \/ ＋章＋❗ 86 \/ ＋NEW 84 \/ ＋NEW＋❗ 106/.test(src));
+/* ══ 2026-10-26 再修：150px 太早了（使用者：「Ａ面還有一個重要資訊是時間」）════
+   改成依名字長度各自算，留時間的條件是「扣掉時間之後名字每個字還有 14px」：
+     2 字 84px 起　｜　3 字 98px 起　｜　4 字以上 112px 起。
+   ⚠ 這三段與「字級」那三個 @container 完全互補，改門檻要兩邊一起改。 */
+ok('★★★ 時間的門檻改成依名字長度（112／98／84px 三段）',
+   /@container \(max-width:111px\)\{\s*\n\s*\.cal-ev\.cal-ev-std \.evc-hm\{display:none;\}/.test(src)
+   && /@container \(min-width:98px\) and \(max-width:111px\)\{[\s\S]{0,200}nm-s3\) \.evc-hm\{display:inline;\}/.test(src)
+   && /@container \(min-width:84px\) and \(max-width:97px\)\{[\s\S]{0,160}nm-s2\) \.evc-hm\{display:inline;\}/.test(src));
+ok('★★★ 舊的單一門檻（150px 一律收）已經不在',
+   !/@container \(max-width:150px\)\{\s*\n\s*\.cal-ev\.cal-ev-std \.evc-hm\{display:none;\}/.test(src));
+ok('　　理由寫在原地（同樣 84px，「嚴晴」放得下、「蔡美芬吳」放不下）',
+   /同樣 84px 的卡，「嚴晴」放得下時間、「蔡美芬吳」放不下/.test(src));
+ok('★★ 友善的三階（兩字 → 一字 → 收起來），而且比警示先退',
+   /@container \(max-width:120px\)\{\s*\n\s*\.cal-ev\.cal-ev-std \.fri-fl\{display:none;\}/.test(src)
+   && /@container \(max-width:88px\)\{\s*\n\s*\.cal-ev\.cal-ev-std \.evc-fri\{display:none;\}/.test(src)
+   && /它是「限制」不是待辦，比警示先退/.test(src));
+ok('★★ 警示留到最後，縮成小圓點也不消失',
+   /@container \(max-width:52px\)\{[\s\S]{0,260}?border-radius:999px;background:var\(--danger,#b5372e\);\}/.test(src)
+   && /它是「這張要處理」的唯一線索，縮成小圓點就好/.test(src));
 /* Ink 的放寬規則整組拿掉了：組合從 2 種變 6 種，再乘 2 套主題就是 12 條，
    而 Ink 只鬆 2～4px。多那 4px 不值得十幾條規則與隨之而來的權重坑。 */
 ok('★★★ body.ink 的時間放寬規則已整組移除（兩套主題共用嚴的那組）',
@@ -139,8 +164,11 @@ ok('★★★ 最後手段才藏 NEW（44／28）',
 /* 41px 以下章（x7..21）與流排版最左邊的 ❗（x=w-16）一定會撞；
    照紅>金>綠，讓最輕的章退。 */
 /* ⚠ 2026-10-09：未簽到的空心圈（.evc-todo）跟著章一起退 —— 它比章更輕。 */
-ok('★★★ 41px 以下有 ❗ 時讓章與空心圈都退（紅>金>綠）',
-   /@container \(max-width:40px\)\{[\s\S]{0,220}?\.cal-ev\.cal-ev-std:has\(\.ev-payalert\) \.evc-check,\s*\n\s*\.cal-ev\.cal-ev-std:has\(\.ev-payalert\) \.evc-todo\{display:none;\}/.test(src));
+/* 2026-10-25：這一條也退場 —— 章變成浮水印（絕對定位、壓在中央），
+   不再跟 ❗ 搶同一塊位子，撞不到了。 */
+ok('★★★ 「章與 ❗ 會撞」那條退場，理由寫在原地',
+   !/:has\(\.ev-payalert\) \.evc-todo\{display:none;\}/.test(src)
+   && /章已經變成浮水印（絕對定位、壓在中央、z-index 0），不再跟 ❗ 搶同一塊位子/.test(src));
 /* ⚠ 這兩段 @container 必須寫在 .evc-check 的基本規則**之後** —— 兩者都是 (0,3,0)。
    第一版寫在前面，結果章完全沒縮，而同一個 @container 裡的驚嘆號卻縮了，
    看起來像「規則只生效一半」。 */
@@ -153,13 +181,17 @@ ok('★★ 關掉 Ink 的人不能被切字（為什麼底線要用嚴的那組�
    /不能只寫 Ink 那組 —— 有人把 Ink 關掉（localStorage yugym_ink=0）就會被切字/.test(src));
 
 console.log('\n④ 四列的順序（DOM 由上而下：時間 → 姓名 → 場地 → 教練）');
-ok('★★★ _bodyOut 的順序（時間列 → 姓名 → 體驗/待簽約 → 教練 → 場地）',
-   /<span class="evc-time">\$\{_alertOut\}\$\{_newOut\}<b class="evc-hm">\$\{b\.start_time\}<\/b><\/span><span class="evc-nmrow">.*?<\/span>\$\{_stdTag\}\$\{_abbrOut\}\$\{_venueSub\}/.test(src));
+/* 2026-10-26：整包內容包進 .evc-flip（翻牌轉的是內容層，不是整張卡），
+   章回到第一列，場地與教練對調 —— 教練改成絕對定位的右下角膠囊，
+   所以它在 DOM 裡排最後，場地維持在流排版的最後一列。 */
+ok('★★★ _bodyOut 的順序（第一列 → 姓名列 → 體驗/待簽約 → 場地 → 教練膠囊）',
+   /<div class="evc-flip"><div class="evc-body"><\/div><div class="evc-txt"><span class="evc-r1">.*?<\/span><span class="evc-r2">.*?<\/span>\$\{_stdTag\}\$\{_venueSub\}\$\{_abbrOut\}/.test(src));
 ok('★★★ 教練不再推到右下角（那是首頁課卡才留著的位置）',
    /\.cal-ev\.cal-ev-std \.evc-coach\{ margin-top:0 !important; align-self:flex-start !important; \}/.test(src)
    && /\.tcard\.tcard-std \.tcard-co\{ margin-top:auto !important; align-self:flex-end !important; \}/.test(src));
-ok('★★ 出席章的 DOM 位置沒動（仍在 .evc-nmrow 裡，手機那套靠它）',
-   /<span class="evc-nmrow"><span class="evc-name\$\{bkNameBlankCls\(b\)\}\$\{_nmVCls\}">\$\{_stdName\}<\/span>\$\{_stampOut\}<\/span>/.test(src));
+ok('★★ 出席章搬出姓名列（1025 進浮水印、1026 進第一列，兩次都不在姓名列）',
+   /<span class="evc-r1">\$\{_wmOut\}/.test(src)
+   && !/\$\{_stampOut\}<\/span>/.test(src));
 
 console.log('\n⑤ 離線量法要留著（下次改門檻照這個跑）');
 ok('★★★ 量法寫在這支測試的開頭', /量法（2026-09-04 實際跑過，1824 張卡 × 2 主題）/.test(
@@ -245,8 +277,8 @@ ok('★★★ 金框與 [NEW] 只留一個（_alertCls 不再產生 cal-ev-newto
 ok('★★ 手機版仍用金框，CSS 不能刪（理由寫在原地）',
    /手機版（cag）那條 27700 行的 _mkAlert 仍用金框，沒有跟著改/.test(src)
    && /_mkAlert = _unpaidM \? ' cal-ev-renew' : \(_newM \? ' cal-ev-newtoday' : ''\)/.test(src));
-ok('★★★ 時間包進 <b class="evc-hm">，.evc-time 變成第一列的容器',
-   /<span class="evc-time">\$\{_alertOut\}\$\{_newOut\}<b class="evc-hm">\$\{b\.start_time\}<\/b><\/span>/.test(src));
+ok('★★★ 時間仍然包在 <b class="evc-hm">（.evc-time 1025 由 .evc-r1／.evc-r2 取代）',
+   /<b class="evc-hm">\$\{b\.start_time\}<\/b>/.test(src));
 /* <b> 預設粗體：同樣的「09:00」在 11px 下從 28px 變 33px，剛好頂到左上角那顆章。 */
 ok('★★★ <b> 的預設粗體要拿掉（不然時間變寬 5px 會頂到章）',
    /\.cal-ev\.cal-ev-std \.evc-hm\{font-weight:inherit;font-size:inherit;color:inherit;\}/.test(src));
@@ -292,10 +324,12 @@ console.log('\n⑫ 場地移到最後一列（2026-09-04）');
 /* 使用者：「使用場地 跑步機跟教室 調整到課卡底部適合嗎?」
    適合，理由跟同一天的靠左／姓名對齊同一條：場地原本夾在姓名與教練之間，
    有場地的卡教練就被往下推一行，一整排看過去教練名對不齊。 */
-ok('★★★ DOM 順序：姓名 → 體驗/待簽約 → 教練 → 場地',
-   /<\/span>\$\{_stdTag\}\$\{_abbrOut\}\$\{_venueSub\}\$\{_moreHtml\}<\/div>/.test(src));
-ok('★★★ 舊順序（場地在教練前）已經不在',
-   !/\$\{_venueSub\}\$\{_stdTag\}\$\{_abbrOut\}/.test(src));
+/* 2026-10-26：教練改成絕對定位的右下角膠囊（@container 150px 以上才顯示），
+   不再參與流排版，所以它排在最後面；場地仍是流排版的最後一列。 */
+ok('★★★ DOM 順序：姓名 → 體驗/待簽約 → 場地 → 教練膠囊',
+   /<\/span>\$\{_stdTag\}\$\{_venueSub\}\$\{_abbrOut\}\$\{_moreHtml\}<\/div>/.test(src));
+ok('★★★ 舊順序（場地排在 _stdTag 前）已經不在',
+   !/\$\{_venueSub\}\$\{_stdTag\}/.test(src));
 ok('★★ 為什麼教練排在場地前面，寫在原地',
    /場地是「這一堂在哪裡上」，屬於補充資訊；教練是「誰上的」，比場地重要/.test(src));
 ok('★★ 體驗／待簽約仍緊貼姓名（那是狀態不是補充），寫在原地',
