@@ -14956,8 +14956,8 @@ function tbl(s){return TABLE_ALIAS[s]||s;}
 let sb=null;
 // ── 版本號（日期+時間格式：年後兩碼+月+日.時分，例 26620.1058 = 26年6/20 10:58）──
 // 每次改版手動更新這一行即可，畫面與 title 會一起更新
-const APP_VERSION = '261026.0058';
-const APP_VERSION_LABEL = 'v261026.0058';
+const APP_VERSION = '261026.0119';
+const APP_VERSION_LABEL = 'v261026.0119';
 const CLOUD = !!(window.YUGYM_CONFIG && window.YUGYM_CONFIG.url && window.YUGYM_CONFIG.anonKey);
 if(CLOUD){ sb = supabase.createClient(window.YUGYM_CONFIG.url, window.YUGYM_CONFIG.anonKey); }
 
@@ -48509,7 +48509,7 @@ function calcSalary(emp, ptDone, groupHeads, dutyHours, leave, classOverlap, ext
     const insEmpC=insLaborEmpC+insHealthEmpC;
     const insCoC=(lvlC?(Number(lvlC.co_total)>0?Number(lvlC.co_total):((Number(lvlC.labor_co)||0)+(Number(lvlC.health_co)||0))):0);
     const grossC=ptPay+groupPay+dutyPay+renewPayC+mgmtPayC;
-    return { base:0, adjBase:0, baseLeaveDeduct:0, ptPay, ptDetail:`${ptDone} 堂 × $${emp.pt_rate||0}`, ptIncome:ptPay, ptIsFloor:false, ptIncomeDetail:`${ptDone} 堂 × $${emp.pt_rate||0}`,
+    return { base:0, adjBase:0, baseLeaveDeduct:0, ptPay, ptDetail:`${ptDone} 堂 × $${emp.pt_rate||0}`, ptParts:[], ptIncome:ptPay, ptIsFloor:false, ptIncomeDetail:`${ptDone} 堂 × $${emp.pt_rate||0}`,
       bonus:0, bonusDetail:'—', groupPay, groupDetail:`${groupHeads} 人 × $${emp.group_rate||0}`,
       dutyGross, dutyLeaveDeduct, dutyClassDeduct, classOverlap:coC, dutyPay, dutyDetail:`${dutyHours.toFixed(1)} hr × $${dhrC}`,
       renewCount:renewCountC, renewPay:renewPayC, renewDetail:renewCountC>0?`${renewCountC} 張 × $${renewEachC}`:'—',
@@ -48524,7 +48524,7 @@ function calcSalary(emp, ptDone, groupHeads, dutyHours, leave, classOverlap, ext
   const base=tpl.base_salary||0;
 
   // ① 教練課費（固定 or 階梯）
-  let ptPay=0, ptDetail='';
+  let ptPay=0, ptDetail='', ptParts=[];
   if(tpl.pt_mode==='tier' && Array.isArray(tpl.pt_tiers) && tpl.pt_tiers.length){
     // 累進：級距 {min,max} 代表「第 min..max 堂」（含兩端，1-based）。
     //  例 {0,59}=第1~59堂、{60,79}=第60~79堂…。逐階取該區間落在已完成堂數內的堂數。
@@ -48535,7 +48535,15 @@ function calcSalary(emp, ptDone, groupHeads, dutyHours, leave, classOverlap, ext
       const lo=(i===0)?1:(t.min||0);
       const hi=(t.max==null?Infinity:t.max);
       const cntInTier=Math.max(0, Math.min(ptDone, hi) - lo + 1);
-      if(cntInTier>0){ ptPay+=cntInTier*(t.rate||0); parts.push(`${cntInTier}堂×$${t.rate||0}`); }
+      if(cntInTier>0){
+        const _amt=cntInTier*(t.rate||0);
+        ptPay+=_amt; parts.push(`${cntInTier}堂×$${t.rate||0}`);
+        /* 逐階也留一份結構化的（2026-10-26 使用者：「教練課費 86 堂這邊　可以用級距
+           顯示給教練看」）—— ptDetail 是一行字串，級距多了就擠成一長條，
+           而教練要看的是「哪幾堂算哪個價」。畫面用 ptTierListHTML 攤開。
+           ⚠ 金額在這裡算好帶出去，不要讓畫面自己再乘一次（兩邊會對不上）。 */
+        ptParts.push({lo, hi:(hi===Infinity?null:hi), n:cntInTier, rate:(t.rate||0), amount:_amt});
+      }
     });
     ptDetail = ptDone>0 ? parts.join(' + ') : '0 堂';
   }else{
@@ -48711,7 +48719,7 @@ function calcSalary(emp, ptDone, groupHeads, dutyHours, leave, classOverlap, ext
      算式 → 這份 return → _zeroSal 的預設物件。 */
   return { base, adjBase, baseLeaveDeduct, baseHourly, schedHours,
     baseLeavePersonalDed, baseLeaveSickDed, baseLeaveMensDed, leaveDeductDetail,
-    ptPay, ptDetail, ptIncome, ptIsFloor, ptIncomeDetail,
+    ptPay, ptDetail, ptParts, ptIncome, ptIsFloor, ptIncomeDetail,
     bonus, bonusDetail, groupPay, groupDetail,
     dutyGross, dutyLeaveDeduct, dutyClassDeduct, classOverlap:co, dutyPay, dutyDetail,
     dutyOvRows, dutyOvHr, dutyOvPay, dutyOvGross,   // 值班時段內上課的說明（不參與計算）
@@ -49968,10 +49976,16 @@ async function openPerfDetail(empId, month){
       const _floor=!!sal.ptIsFloor;
       rows+=row('保障底薪', sal.schedHours>0?`月薪制・當月排班 ${fmtHours(sal.schedHours)} 小時`:'月薪制',
         money(sal.base), {dim:!_floor, pick:_floor, tag:_floor?'採用':'未採用'});
-      rows+=row('教練課費', sal.ptDetail||`${ptDone} 堂`,
+      /* 級距攤開時上面那一列只寫堂數：同一串「59堂×$600 + 20堂×$650…」
+         寫兩次是多的（2026-10-26）。 */
+      const _hasTier=((sal.ptParts||[]).length>1);
+      rows+=row('教練課費', _hasTier?`${ptDone} 堂`:(sal.ptDetail||`${ptDone} 堂`),
         money(sal.ptPay), {dim:_floor, pick:!_floor, tag:_floor?'未採用':'採用'});
+      rows+=ptTierListHTML(sal);
     }else{
-      rows+=row('教練課費', sal.ptDetail||`${ptDone} 堂`, money(sal.ptPay));
+      const _hasTier=((sal.ptParts||[]).length>1);
+      rows+=row('教練課費', _hasTier?`${ptDone} 堂`:(sal.ptDetail||`${ptDone} 堂`), money(sal.ptPay));
+      rows+=ptTierListHTML(sal);
     }
     if(sal.bonus>0)    rows+=row('達標獎金', sal.bonusDetail||'', money(sal.bonus));
     if(sal.groupPay>0) rows+=row('團體課費', sal.groupDetail||`${groupHeads} 人次`, money(sal.groupPay));
@@ -50075,6 +50089,33 @@ function dutyOverlapListHTML(sal){
       <span class="nl-amt" style="color:var(--t3);">${fmtHours(r.hr)} 小時</span>
     </div>`).join('')}
     <div class="nl-sum"><span>這幾段時間改領課堂費用，不重複計值班費</span><b>−${fmtHours(sal.dutyOvHr)} 小時</b></div>
+  </div>`;
+}
+/* ══ 教練課費的級距明細（2026-10-26 使用者：「教練課費 86 堂這邊　可以用級距
+     顯示給教練看」）════════════════════════════════════════════════════
+   原本只寫「86 堂」，教練看不出 $53,125 是怎麼來的 —— 而累進級距正是最容易
+   被問「為什麼這個月每堂變貴了」的地方。
+   ⚠ 只有真的跨到第二階才攤開：一階的人攤開是多一行廢話（右邊那一列已經寫了
+     「n 堂 × $x」）。
+   ⚠ 金額直接用 calcSalary 算好的 amount，畫面不自己乘。
+   ⚠ 版型沿用 .pfd-nl（值班重疊、店長名單都是這一組），管理員與教練兩份薪資單
+     都吃得到，不另外做一套。 */
+function ptTierListHTML(sal){
+  const ps=(sal&&sal.ptParts)||[];
+  if(ps.length<2) return '';
+  const _m=n=>'$'+Math.round(Number(n)||0).toLocaleString();
+  /* 堂數用逐階加總，不去讀那個「已完成堂數」的鍵 —— calcSalary 根本沒有回傳它
+     （salkeystest 的「算了卻沒回傳」那一條會擋下來；註解裡也不要寫出那個名字，
+     那條斷言是掃整份原始碼的，會連註解一起命中）。
+     而且萬一級距設定有缺口，加總才是跟右邊金額對得上的那個數字。 */
+  const _n=ps.reduce((a,p)=>a+(Number(p.n)||0),0);
+  return `<div class="pfd-nl open" style="margin:2px 0 8px;">
+    ${ps.map(p=>`<div class="nl-row">
+      <span class="nl-nm">第 ${p.lo}${p.hi==null?' 堂起':`–${p.hi} 堂`}</span>
+      <span class="nl-plan">${p.n} 堂 × ${_m(p.rate)}</span>
+      <span class="nl-amt">${_m(p.amount)}</span>
+    </div>`).join('')}
+    <div class="nl-sum"><span>累進計算・共 ${_n} 堂</span><b>${_m(sal.ptPay)}</b></div>
   </div>`;
 }
 function leaderListHTML(sal){
@@ -50201,7 +50242,7 @@ async function computeMonthlyPayroll(month){
      少一個鍵，讀到的地方就是 undefined.toLocaleString()，整頁打不開。 */
   const _zeroSal=n=>({ base:0, adjBase:0, baseLeaveDeduct:0, baseHourly:0,
     baseLeavePersonalDed:0, baseLeaveSickDed:0, baseLeaveMensDed:0, leaveDeductDetail:'',
-    ptPay:0, ptDetail:'', ptIncome:0,
+    ptPay:0, ptDetail:'', ptParts:[], ptIncome:0,
     ptIsFloor:false, ptIncomeDetail:'', bonus:0, bonusDetail:'', groupPay:0, groupDetail:'',
     dutyGross:0, dutyLeaveDeduct:0, dutyClassDeduct:0, classOverlap:0, dutyPay:0, dutyDetail:'',
     renewCount:0, renewPay:0, renewDetail:'', isBday:false, bdayPay:0, bdayDetail:'',
@@ -78143,9 +78184,11 @@ async function renderSalaryContent(TARGET, withHead){
              0801 起請假是算完總薪資才扣的，列在底薪旁邊會讓人以為底薪被扣過了，
              底下又冒出一列數字沒變的「調整後底薪」（adjBase 自 0801 就＝base，整列已移除）。 */
           h+=row('教練課費',`$${sal.ptPay.toLocaleString()}`,`${ptDone} 堂`);
+          h+=ptTierListHTML(sal);
           h+=row('教練課收入',`<b>$${sal.ptIncome.toLocaleString()}</b>`, sal.ptIsFloor?'取底薪':'取課費');
         }else{
           h+=row('教練課費',`$${sal.ptPay.toLocaleString()}`,`${ptDone} 堂`);
+          h+=ptTierListHTML(sal);
         }
         if(sal.bonus>0) h+=row('達標獎金',`$${sal.bonus.toLocaleString()}`, sal.bonusDetail);
         if(sal.groupPay>0) h+=row('團課費',`$${sal.groupPay.toLocaleString()}`, sal.groupDetail);
