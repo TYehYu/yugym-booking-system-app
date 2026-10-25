@@ -233,6 +233,44 @@ console.log('\n⑨ 真的發 LINE（2026-10-23 使用者：「順便把發line�
   ok('★ 成因寫在原地', /這一句在今天以前是假的/.test(src));
 }
 
+
+/* ══ 2026-10-26 事故：一按〔臨時停課〕就「操作沒有完成：Can't find variable: why」══
+   openCloseDayModal 的紅框裡寫 cdayReasonText(why, free, ds)，但 why／free 是
+   cdayRun 的區域變數，這支裡面沒有 → ReferenceError，視窗連畫都沒畫出來。
+   10/23 加「可以自己填原因」時寫進去的，那天的停課已經做完，所以一直沒被按到。
+   ⚠ 這種錯用 regex 抓不到（長得跟正常的字串內插一模一樣），所以這裡**真的把它跑一次**。 */
+console.log('\n⑦ 開啟視窗不可以丟錯（實跑）');
+(function(){
+  const fn=grab('openCloseDayModal');
+  let html='', threw=null;
+  const el=()=>({value:'', style:{}, textContent:'', checked:true});
+  const doc={ getElementById:()=>el() };
+  const win={ _cdayDate:'2026-10-26' };
+  const api=new Function('isManagerUp','showToast','ymd','TODAY','escH','showModal',
+    'CDAY_REASONS','cdayReasonText','CDAY_EXT_DAYS','cdayRefresh','window','document',
+    fn+';return openCloseDayModal;')(
+      ()=>true, ()=>{}, ()=>'2026-10-26', new Date(), x=>String(x==null?'':x),
+      h=>{ html=h; },
+      [{key:'typhoon',label:'颱風停課'},{key:'other',label:'其他（自己打）'}],
+      (k,f)=>`臨時停課・${k==='other'?(f||''):'颱風停課'}（x）`,
+      7, ()=>{}, win, doc);
+  /* ⚠ 這支是 async：裡面丟出來的例外是**非同步**的 rejection，try/catch 當場接不到
+     （正式環境也是這樣，所以才會變成全域攔截器的那一則 toast）。
+     判準因此只能看「有沒有真的把視窗畫出來」—— 丟錯時 showModal 根本沒被呼叫。 */
+  try{ const r=api(); if(r&&r.catch) r.catch(e=>{ threw=e; }); }catch(e){ threw=e; }
+  ok('★★★ 實跑 openCloseDayModal：視窗真的畫出來了（丟錯的話這裡會是空的）',
+     html.indexOf('臨時停課')>=0 && html.indexOf('cday-go')>=0, {threw:threw&&String(threw.message||threw), html:html.slice(0,80)});
+  ok('★★ 紅框裡的理由是「目前選的」那個，不是寫死的',
+     /id="cday-why-echo"/.test(fn) && /cdayReasonText\(_why0, _free0, ds\)/.test(fn));
+})();
+console.log('\n　換原因時紅框要跟著變');
+ok('★★ 下拉與自己打的字都會重畫那一句',
+   /function cdayWhyEcho\(\)\{/.test(src)
+   && /cdayReasonPick\(key\)\{[\s\S]{0,220}cdayWhyEcho\(\);/.test(src)
+   && /oninput="cdayWhyEcho\(\)"/.test(src));
+ok('　　理由寫在原地（紅框正是要人看清楚後果的地方）',
+   /選了「設備維修」紅框還寫著「颱風停課」/.test(src));
+
 console.log('\n'+(fail?'✗ ':'✓ ')+pass+' 通過 / '+fail+' 失敗');
 process.exit(fail?1:0);
 })();

@@ -14956,8 +14956,8 @@ function tbl(s){return TABLE_ALIAS[s]||s;}
 let sb=null;
 // ── 版本號（日期+時間格式：年後兩碼+月+日.時分，例 26620.1058 = 26年6/20 10:58）──
 // 每次改版手動更新這一行即可，畫面與 title 會一起更新
-const APP_VERSION = '261026.0052';
-const APP_VERSION_LABEL = 'v261026.0052';
+const APP_VERSION = '261026.0058';
+const APP_VERSION_LABEL = 'v261026.0058';
 const CLOUD = !!(window.YUGYM_CONFIG && window.YUGYM_CONFIG.url && window.YUGYM_CONFIG.anonKey);
 if(CLOUD){ sb = supabase.createClient(window.YUGYM_CONFIG.url, window.YUGYM_CONFIG.anonKey); }
 
@@ -29386,6 +29386,16 @@ function cdayReasonPick(key){
   window._cdayReason=key;
   const box=document.getElementById('cday-why-free');
   if(box) box.style.display=(key==='other')?'block':'none';
+  cdayWhyEcho();
+}
+/* 紅框裡那句「理由寫『…』」跟著下拉與自己打的字走（2026-10-26）——
+   不更新的話，選了「設備維修」紅框還寫著「颱風停課」，而紅框正是要人看清楚
+   「按下去會發生什麼」的地方。 */
+function cdayWhyEcho(){
+  const el=document.getElementById('cday-why-echo'); if(!el) return;
+  const key=((document.getElementById('cday-why')||{}).value)||window._cdayReason||'typhoon';
+  const free=String(((document.getElementById('cday-why-txt')||{}).value)||'').trim();
+  el.textContent=cdayReasonText(key, free, window._cdayDate||'').replace(/（.*$/,'');
 }
 function cdayCatLine(cat){
   const nm={'私人教練':'教練課','小班肌力':'團體課','自主訓練':'自主訓練','體驗':'體驗課','運動按摩':'按摩','場租':'場租'};
@@ -29396,6 +29406,14 @@ async function openCloseDayModal(){
   const ds=(window._cdayDate)||ymd(TODAY);
   window._cdayDate=ds;
   const _g=window._cdayGo||{};   /* 從第二關按「回去改」回來時，沿用剛剛的勾選 */
+  /* ⚠ 2026-10-26：下面那句「理由寫『…』」原本直接寫 cdayReasonText(why, free, ds)，
+     但 why／free 是 cdayRun 的區域變數，**這支裡面根本沒有** ——
+     於是一按〔臨時停課〕就丟 ReferenceError，視窗連畫都沒畫出來
+     （async 函式，例外只進全域攔截器 → 「操作沒有完成：Can't find variable: why」）。
+     10/23 加「可以自己填原因」時寫進去的，那天的停課已經做完了，所以一直沒被按到。
+     現在吃的是**目前選的**原因（window._cdayReason／_cdayWhyFree），
+     而且換下拉時要跟著更新 —— 見 cdayReasonPick。 */
+  const _why0=window._cdayReason||'typhoon', _free0=window._cdayWhyFree||'';
   showModal(`<div class="modal-title">臨時停課</div>
     <div style="font-size:12px;color:var(--t3);margin:-4px 0 14px;">颱風、政府宣布停班或臨時停業時，把整天的課一次停掉。</div>
     <div style="display:flex;align-items:center;gap:12px;">
@@ -29413,7 +29431,7 @@ async function openCloseDayModal(){
     </div>
     <div id="cday-why-free" style="display:${(window._cdayReason==='other')?'block':'none'};margin:8px 0 0 80px;">
       <input id="cday-why-txt" class="ms-search" style="margin:0;" maxlength="20" autocomplete="off"
-             placeholder="自己打（例：水管漏水）" value="${escH(window._cdayWhyFree||'')}">
+             oninput="cdayWhyEcho()" placeholder="自己打（例：水管漏水）" value="${escH(window._cdayWhyFree||'')}">
       <div style="font-size:11.5px;color:var(--t3);line-height:1.7;margin-top:4px;">
         這句只進系統與課卡；會員的 LINE 會寫「因故停課」。</div>
     </div>
@@ -29429,7 +29447,7 @@ async function openCloseDayModal(){
     <div style="margin-top:16px;border:1.5px solid var(--danger);background:#FAEDEC;border-radius:8px;padding:12px 15px;">
       <b style="color:var(--danger);font-size:13.5px;">按下去會發生什麼</b>
       <ul class="mk-pts" style="margin:7px 0 0;">
-        <li>這天的課會變成<b>已取消</b>，理由寫「${escH(cdayReasonText(why, free, ds).replace(/（.*$/,''))}」</li>
+        <li>這天的課會變成<b>已取消</b>，理由寫「<span id="cday-why-echo">${escH(cdayReasonText(_why0, _free0, ds).replace(/（.*$/,''))}</span>」</li>
         <li>會員的<b>堂數不會被扣</b></li>
         <li>那天用到的票各延長效期（上面那格的天數），每一張都會寫進帳本</li>
         <li>教練的薪資堂數<b>不計</b>這天</li>
