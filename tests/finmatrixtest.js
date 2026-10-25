@@ -57,6 +57,9 @@ console.log('① 矩陣算得對（實跑 finMatrix，假 DB＋假 DOM）');
     TODAY:new Date(2026,7,6),
     bkCoachId:b=>b.substitute_coach_id||b.coach_id||null,
     coachTagColor:id=>({c1:{bg:'#e8eef7',fg:'#1a3a6e'},c2:{bg:'#f5ede0',fg:'#8a5e28'}}[id]||{bg:'#EAE6DE',fg:'#6a655c'}),
+    /* 2026-10-26：分隔線改吃 coachInkColor（bg／fg 挑在白底上看得見的那個）——
+       MANGO 與 BARRY 的 fg 是白色，直接拿 fg 會畫出看不見的線。 */
+    coachInkColor:id=>({c1:'#1a3a6e',c2:'#8a5e28'}[id]||'#6a655c'),
     bkIsGroup:b=>b.category==='小班肌力',
     /* 2026-08-06 使用者定案：「這堂請假不能算該堂教練的人次」——人次改走 grpHeadsNoLeave */
     grpHeadsNoLeave:b=>{ const ids=Array.isArray(b.member_ids)?b.member_ids:[];

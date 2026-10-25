@@ -94,15 +94,36 @@ ok('★★ 圓角跟著卡片（border-radius:inherit）',
    /\.cal-ev\.cal-ev-std \.evc-back\{[\s\S]{0,200}border-radius:inherit;/.test(css));
 ok('★★ 180px 以下收欄位名、150px 以下縮字',
    /@container \(max-width:180px\)\{\s*\n\s*\.cal-ev\.cal-ev-std \.evc-back \.bk-k\{display:none;\}/.test(css));
-ok('★★★ 窄卡只寫「教練縮寫＋場地」兩行置中',
+/* ══ 門檻 1026 從 111px 下修到 80px（使用者看線上畫面：「這張卡的Ｂ面是不是其實
+   塞得下課堂 n/n 跟繳費資訊」）—— 量出來 80px 剛好放得下最長的那兩串。 */
+ok('★★★ 79px 以下才走兩行版（80px 起三列全給）',
    /<div class="bk-r bk-only"><span class="bk-v bk-ab">/.test(src)
-   && /@container \(max-width:111px\)\{[\s\S]{0,420}\.bk-r:not\(\.bk-only\)\{display:none;\}/.test(css));
-ok('　　理由寫在原地（窄卡要問的是誰的課、在哪上）',
-   /而窄卡要問的是「誰的課、在哪上」/.test(css));
+   && /@container \(max-width:79px\)\{[\s\S]{0,420}\.bk-r:not\(\.bk-only\)\{display:none;\}/.test(css));
+ok('★★★ 舊的 111px 門檻不在了', !/@container \(max-width:111px\)\{[\s\S]{0,200}bk-only/.test(css));
+ok('★★ 量出來的三個寬度寫在原地（84 可以／70 被切／56 只能兩行）',
+   /70px　可用寬 56px　「史密斯訓練架」被切/.test(css));
+/* 窄卡那一行的場地要縮：venueDisplay 回的是完整名稱「史密斯訓練架」（0903 定版），
+   56px 的卡可用寬只有 42px 一定被切。縮法是砍前綴，不是截字串。 */
+ok('★★★ 窄卡的場地用短名（砍前綴，不是截字串）',
+   /const _vnShort = String\(_venueFull\)\.split\('・'\)\[0\]\.replace\(\/\^史密斯\/,''\)\.replace\(\/\^團課\/,''\);/.test(src)
+   && /截出來的「史密斯訓」沒有意義/.test(src));
+ok('★★ 寬一點的卡仍然寫完整名稱（0903 定版沒被推翻）',
+   /只有窄卡那一行縮：寬一點的卡仍然寫完整名稱/.test(src));
+
+console.log('\n⑤b 自主訓練不做 B 面');
+/* 使用者 1026：「自主訓練Ａ面就足夠顯示資訊　就不用使用Ｂ面了」——
+   它沒有教練，場地本來就在 A 面第三列，翻過去只會看到「教練 —」加一行重複的場地。 */
+ok('★★★ 自主訓練與遮蔽卡不畫 B 面',
+   /const _noBack = hideMember \|\| bkIsSelf\(b\);/.test(src)
+   && /const _backOut = _noBack \? '' :/.test(src));
+ok('★★★ 沒有 B 面就不翻（:has(.evc-back) 擋住）',
+   /\.cal-ev\.cal-ev-std:has\(\.evc-back\):hover \.evc-flip\{transform:rotateX\(180deg\)/.test(css));
+ok('　　理由寫在原地（不然會翻到一張空白的背面）',
+   /會翻到一張空白的背面/.test(css) || /翻到一張空白的背面/.test(src));
 
 console.log('\n⑤ 翻牌');
 ok('★★★ 軸是 rotateX（上下翻），不是 rotateY',
-   /\.cal-ev\.cal-ev-std:hover \.evc-flip\{transform:rotateX\(180deg\);/.test(css)
+   /:hover \.evc-flip\{transform:rotateX\(180deg\);/.test(css)
    && !/\.evc-flip\{transform:rotateY/.test(css));
 ok('★★★ 延遲 0.15 秒只加在翻過去，離開立刻回來',
    /transition:transform \.34s cubic-bezier\(\.2,\.7,\.3,1\);transition-delay:0s;/.test(css)
@@ -136,7 +157,29 @@ ok('★★★ 同色相的兩對靠深淺分，所以色條吃 bg',
    /RANDY 與 MANGO 共用同一個藍（#2452A2）/.test(src)
    && /--coach-bar:\$\{_cc\.bg\}/.test(src));
 
-console.log('\n⑦ 白框（跟著游標的提示）');
+console.log('\n⑦ 白底上的教練色（1026 使用者回報 MANGO／BARRY 變白字）');
+/* 教練色是**一對**：bg 是填色、fg 是「配上那個填色」時的字色。
+   MANGO 與 BARRY 是深底白字，把 fg 單獨拿去當白底上的文字就是白的。 */
+ok('★★★ 首頁的教練名統一黑色（使用者指定）',
+   /body\.ink \.tcard-co:not\(\.tcard-leavetag\)\{[\s\S]{0,200}color:var\(--text,#1D1813\) !important;\}/.test(css)
+   && /body\.ink \.tcard-cball \.tcard-cbn\{[\s\S]{0,120}color:var\(--text,#1D1813\) !important;\}/.test(css));
+ok('★★★ 其他「沒有自己底色」的地方走 coachInkColor（挑比較深的那個）',
+   /function coachInkColor\(id\)\{/.test(src)
+   && /_fmCol\[c\.id\]=coachInkColor\(c\.id\);/.test(src)
+   && /--sc:\$\{coachInkColor\(x\.id\)\}/.test(src));
+/* ⚠ 掃整份原始碼：每一處插值用到 `.fg}` 的，同一行必須也有 `.bg}` ——
+   也就是「成對使用」。單獨出現就是把白字放到白底上的那種錯。 */
+ok('★★★ 每一處用到 fg 的地方都成對帶著 bg（沒有落單的）', (()=>{
+  const bad=src.split('\n')
+    .map((l,i)=>({l,i:i+1}))
+    .filter(x=>/\.fg\}/.test(x.l) && !/\.bg\}/.test(x.l))
+    .map(x=>x.i+': '+x.l.trim().slice(0,70));
+  return bad.length===0 ? true : bad;
+})(), 'see above');
+ok('　　理由寫在原地（fg 不是拿來放在白底上的）',
+   /fg 是「配上自己那個底色」時的字色，本來就不是\s*\n?\s*拿來放在白底上的/.test(css));
+
+console.log('\n⑧ 白框（跟著游標的提示）');
 ok('★★★ 固定三項：會員／教練／場地（時間區間與進度都上卡了）',
    /const _tipStr = _tipEsc\(\[_tipClosed, _tipMem, _tipCoach, _tipVenue\]/.test(src));
 ok('★★★ 不再用「名字有沒有被切」當觸發條件（那個比法不可靠）',
