@@ -87,9 +87,9 @@ ok('　　空堂也吃得到（bkIsOpenHold 的前提就是 pending_contract）'
 
 console.log('\n出席章的 DOM 只放一份');
 /* 2026-10-25：章搬出姓名列、變成浮水印；姓名列（.evc-r2）現在是姓名＋時間。 */
-ok('★ 行事曆：姓名列只剩姓名與時間，章畫在第一列最前面',
-   /<span class="evc-r2"><span class="evc-name\$\{bkNameBlankCls\(b\)\}\$\{_nmVCls\}\$\{_nmSCls\}">\$\{_stdName\}<\/span><b class="evc-hm">\$\{b\.start_time\}<\/b><\/span>\$\{_stdTag\}/.test(src)
-   && /<span class="evc-r1">\$\{_wmOut\}/.test(src));
+ok('★ 行事曆：姓名列只剩姓名與時間，章與標籤都在第一列',
+   /<span class="evc-r2"><span class="evc-name\$\{bkNameBlankCls\(b\)\}\$\{_nmVCls\}\$\{_nmSCls\}">\$\{_stdName\}<\/span><b class="evc-hm">\$\{b\.start_time\}<\/b><\/span>/.test(src)
+   && /<span class="evc-r1">\$\{_wmOut\}\$\{_friOut\}\$\{_stdTag\}\$\{_alertOut\}\$\{_newOut\}<\/span>/.test(src));
 ok('★ _stampOut 必須先於 _bodyOut 算完（否則 const TDZ 直接爆）',
    src.indexOf('const _stampOut =') < src.indexOf('const _bodyOut ='),
    {stamp:src.indexOf('const _stampOut ='), body:src.indexOf('const _bodyOut =')});
@@ -227,14 +227,17 @@ ok('　　請假紅標沒被一起拿掉（浮水印的「假」只有 13% 不�
 console.log('\n場地移到會員姓名下方（教室／跑步機）');
 ok('★ 不再是右下角跟教練並列的膠囊',
    /const _venueTag = '';/.test(src)
-   && /const _venueSub = _selfVenue \? `<span class="evc-sub evc-vsub">\$\{_selfVenue\}<\/span>` : '';/.test(src));
+   /* 2026-10-26：場地改成「完整／短名」兩種寫法，窄卡用短名（使用者附圖：「跑步機變成…」）。
+      位置沒動，仍然是姓名下面那一列、不是右下角的膠囊。 */
+   && /<i class="vs-fl">\$\{_selfVenue\}<\/i><i class="vs-ab">\$\{_venueShortA\}<\/i>/.test(src));
 /* 2026-09-04 使用者：「使用場地 跑步機跟教室 調整到課卡底部適合嗎?」——
    場地移到**最後一列**。原本夾在姓名與教練之間，有場地的卡教練就被往下推一行，
    一整排看過去教練名對不齊（A/B 對照：不一致的組合 1162 → 434）。 */
 /* 2026-10-26：教練改成絕對定位的右下角膠囊，不再參與流排版 ——
    場地仍然是流排版的最後一列，教練在 DOM 裡排它後面（位置由 CSS 決定）。 */
+/* 2026-10-26 二修：狀態標籤搬進第一列，所以姓名列後面只剩場地與教練膠囊。 */
 ok('★ 場地是流排版的最後一列，教練膠囊排在它後面',
-   /<\/span>\$\{_stdTag\}\$\{_venueSub\}\$\{_abbrOut\}\$\{_moreHtml\}<\/div>/.test(src));
+   /<\/span>\$\{_venueSub\}\$\{_abbrOut\}\$\{_moreHtml\}<\/div>/.test(src));
 ok('　　只有教室／跑步機會有值（多功能是預設場地、不標）',
    /selfVenueLabel 本來就只在教室／跑步機才有值/.test(src));
 
@@ -370,10 +373,12 @@ ok('★ 標準卡終於有窄卡專屬字級（原本只有舊卡 .ev-time／.ev
    && /\.cal-ev\.cal-ev-std\.ev-w-tiny   \.evc-name\{font-size:11\.5px !important;/.test(css));
 /* 原則不變（越窄越少東西），只是兩項各走各的路：
    場地仍看 wCls（估錯只是多／少一列），教練改看容器真實寬度（估錯會把字蓋掉）。 */
-ok('★ 越窄越少東西：窄卡先讓場地，極窄卡連教練也讓',
+/* 2026-10-26：教練那一階改成「150px 以上才畫」（不是「41px 以下才拿掉」），
+   場地則改成窄卡換短名而不是整個不見。原則還是越窄越少東西，只是梯子重訂了。 */
+ok('★ 越窄越少東西：窄卡先讓場地，150px 以下不畫教練',
    /\.cal-ev\.cal-ev-std\.ev-w-narrow \.evc-vsub\{display:none;\}/.test(css)
    && /\.cal-ev\.cal-ev-std\.ev-w-tiny   \.evc-vsub\{display:none;\}/.test(css)
-   && /@container \(max-width:41px\)\{\s*\n\s*\.cal-ev\.cal-ev-std \.evc-coach\{display:none;\}/.test(css));
+   && /\.cal-ev\.cal-ev-std:not\(\.cag-std\) \.evc-coach\{display:none;\}/.test(css));
 /* 2026-09-04 新增的第五樣「讓位」：第一列放不下時讓掉**時間**（章與驚嘆號留著）。 */
 /* 2026-10-25：時間搬去跟姓名同一列，舊的六條門檻退場，改成一條 150px。
    讓位的順序不變：時間先退，姓名留到最後。 */

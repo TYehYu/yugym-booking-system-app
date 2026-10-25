@@ -29,8 +29,9 @@ ok('★★★ 內容包在 .evc-flip 裡（翻的是內容層，不是整張卡�
    /const _bodyOut = `<div class="evc-flip"><div class="evc-body"><\/div>/.test(src));
 ok('★★★ 轉內容層的理由寫在原地（.cal-ev 要留著當 container）',
    /這樣 \.cal-ev 仍然是 container（container-type:size 掛在它身上）/.test(css));
-ok('★★★ 第一列：章 → 友善 → 警示 → NEW',
-   /<span class="evc-r1">\$\{_wmOut\}\$\{_friOut\}\$\{_alertOut\}\$\{_newOut\}<\/span>/.test(src));
+/* 1026 再加一項：狀態標籤（體驗／待簽約…）插在友善後面、警示前面。 */
+ok('★★★ 第一列：章 → 友善 → 狀態標籤 → 警示 → NEW',
+   /<span class="evc-r1">\$\{_wmOut\}\$\{_friOut\}\$\{_stdTag\}\$\{_alertOut\}\$\{_newOut\}<\/span>/.test(src));
 ok('★★ 第一列靠左排、警示用 margin-left:auto 推到最右',
    /\.cal-ev\.cal-ev-std \.evc-r1\{display:flex;align-items:center;justify-content:flex-start;/.test(css)
    && /\.cal-ev\.cal-ev-std \.evc-r1 \.ev-payalert\{margin-left:auto;\}/.test(css));
@@ -197,6 +198,48 @@ ok('★★★ 十位教練沒有任何兩位同一組 bg/fg', (()=>{
 ok('★★★ 同色相的兩對靠深淺分，所以色條吃 bg',
    /RANDY 與 MANGO 共用同一個藍（#2452A2）/.test(src)
    && /--coach-bar:\$\{_cc\.bg\}/.test(src));
+
+console.log('\n⑥b 1026 線上回報的三件');
+/* ⚠ Ink 有一條 `@container(min-width:30px){body.ink .cal-ev.cal-ev-std .evc-coach{display:inline-flex}}`
+   是 (0,4,1)，比新的 150px 門檻 (0,4,0) 高一階 —— 不退場的話門檻完全沒作用，
+   56px 的卡照樣冒出「SA」而且折行成「SA ／（代）」。見 yugym-ink-override-trap。 */
+ok('★★★ Ink 的「30px 以上一律顯示教練」已退場',
+   !/@container \(min-width:30px\)\{\s*\n\s*body\.ink \.cal-ev\.cal-ev-std \.evc-coach\{display:inline-flex;\}/.test(css)
+   && /〔已退場，2026-10-26〕上面那兩段（41px 以下不顯示／Ink 在 30px 以上一律顯示）/.test(css));
+ok('　　退場理由寫在原地（改樣式前先 grep body.ink）',
+   /改樣式前先 grep body\.ink/.test(css));
+/* A 面的場地在窄卡上被切成「跑步…」（使用者附圖）。兩種寫法由寬度挑，短名是砍台數與前綴。 */
+ok('★★★ A 面場地有完整／短名兩種寫法，90px 以下用短名',
+   /<i class="vs-fl">\$\{_selfVenue\}<\/i><i class="vs-ab">\$\{_venueShortA\}<\/i>/.test(src)
+   && /@container \(max-width:90px\)\{\s*\n\s*\.cal-ev\.cal-ev-std \.vs-fl\{display:none;\}/.test(css));
+/* 窄卡的 B 面原本只有 全名／n-n／場地，最需要被看到的繳費標籤反而沒有。 */
+ok('★★★ 窄卡 B 面也給繳費標籤（自己一行）',
+   /_payTag\?`<span class="bk-v bk-pw">\$\{_payTag\}<\/span>`:''/.test(src)
+   && /\.evc-back \.bk-pw\{display:block;line-height:1\.25;\}/.test(css));
+ok('　　為什麼自己一行（併排放不下的數字寫在原地）',
+   /45px 可用寬 35px，「4\/12」24 ＋標籤 28 ＝ 56/.test(css));
+
+console.log('\n⑥c 狀態標籤搬進第一列');
+/* 使用者 1026：「體驗可以改成標籤跟友善　這樣才不會跟場地相撞　因為體驗跟友善
+   不會同時出現　但是體驗跟其他場地有機會」。 */
+ok('★★★ 體驗／待簽約那一組搬進第一列，跟〔友善〕同一個位子',
+   /<span class="evc-r1">\$\{_wmOut\}\$\{_friOut\}\$\{_stdTag\}\$\{_alertOut\}\$\{_newOut\}<\/span>/.test(src)
+   && !/<\/span>\$\{_stdTag\}\$\{_venueSub\}/.test(src));
+ok('★★★ 換成自己的 class（.evc-sub 還有場地在用）',
+   /<span class="evc-stag">\$\{_nameTag\}<\/span>/.test(src)
+   && /\.cal-ev\.cal-ev-std \.evc-stag\{flex:none;/.test(css));
+ok('★★ 比友善晚一階退場（67px 以下才收）',
+   /@container \(max-width:67px\)\{\s*\n\s*\.cal-ev\.cal-ev-std \.evc-stag\{display:none;\}/.test(css));
+ok('　　共用位子的理由寫在原地', /友善是票券的限制、\s*\n?\s*體驗是課別，同一堂不可能兩者皆是/.test(src));
+/* ⚠ 有場地的卡，寬度預算的三段一定要跟「時間門檻」的三段一致 ——
+   第一版只寫一個 max-width:111px，84px 的兩字名字因此用到「沒有時間」的算式，
+   被放大到剛好多 1px，overflow-wrap:anywhere 就從兩個字中間折行，場地被推出卡外。 */
+ok('★★★ 有場地的卡也分三段（跟時間門檻對齊）',
+   /@container \(min-width:84px\) and \(max-width:97px\)\{\s*\n\s*\.cal-ev\.cal-ev-std:has\(\.evc-vsub\) \.evc-name\.nm-s3/.test(css)
+   && /@container \(min-width:98px\) and \(max-width:111px\)\{\s*\n\s*\.cal-ev\.cal-ev-std:has\(\.evc-vsub\) \.evc-name\.nm-s4/.test(css));
+ok('　　那個 1px 的坑寫在原地', /寬度預算錯一個 px，看起來就是「卡片壞了」/.test(css));
+ok('★★ 61px 以下連場地都不畫（姓名要吃 3–4 行）',
+   /@container \(max-width:61px\)\{\s*\n\s*\.cal-ev\.cal-ev-std \.evc-vsub\{display:none;\}/.test(css));
 
 console.log('\n⑦ 白底上的教練色（1026 使用者回報 MANGO／BARRY 變白字）');
 /* 教練色是**一對**：bg 是填色、fg 是「配上那個填色」時的字色。

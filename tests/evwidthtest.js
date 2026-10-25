@@ -82,10 +82,17 @@ ok('★★★ Ink：52px 起就把全名叫回來（膠囊無底無 padding，�
    ⚠ @container 本身不加權重，只有選擇器算；這是 body.ink 這一整層踩過四次的坑。 */
 ok('★★★ Ink 那條的權重高一階（body.ink 多一個 class），否則 56–67 這一段叫不回來',
    /選擇器多一個 body\.ink（0,4,1 ＞ 上面的 0,3,0）/.test(src));
-ok('★★★ 非 Ink：41px 以下連縮寫都放不下，整個不顯示',
-   /@container \(max-width:41px\)\{\s*\n\s*\.cal-ev\.cal-ev-std \.evc-coach\{display:none;\}\s*\n\s*\}/.test(src));
-ok('★★★ Ink：30px 起縮寫還撐得住',
-   /@container \(min-width:30px\)\{\s*\n\s*body\.ink \.cal-ev\.cal-ev-std \.evc-coach\{display:inline-flex;\}\s*\n\s*\}/.test(src));
+/* ══ 2026-10-26：這兩階整組退場 ══════════════════════════════════════
+   它們是「教練名每張卡都畫」那個時代的梯子（41px 以下不畫／Ink 30px 以上照畫）。
+   1026 定版改成**只有 150px 以上才畫**，窄卡的教練在 B 面。
+   ⚠ 那條 Ink 規則是 (0,4,1)，比新門檻 (0,4,0) 高一階 —— 留著的話門檻完全沒作用，
+     56px 的卡照樣冒出「SA」而且折行成「SA ／（代）」（使用者 1026 附圖回報）。 */
+ok('★★★ 舊的兩階（41px／Ink 30px）已經退場',
+   !/@container \(max-width:41px\)\{\s*\n\s*\.cal-ev\.cal-ev-std \.evc-coach\{display:none;\}/.test(src)
+   && !/body\.ink \.cal-ev\.cal-ev-std \.evc-coach\{display:inline-flex;\}/.test(src));
+ok('★★★ 改成只有 150px 以上才畫教練',
+   /\.cal-ev\.cal-ev-std:not\(\.cag-std\) \.evc-coach\{display:none;\}/.test(src)
+   && /@container \(min-width:150px\)\{[\s\S]{0,900}\.evc-coach:not\(\.evc-leavetag\)\{display:inline-flex;/.test(src));
 /* 門檻只能往「量過的值」改。這幾條擋的是「順手調一下數字」—— 0903→0904 之間
    我自己就憑感覺改壞兩次（36→發現非 Ink 40px 切字；32→發現 Ink 32px 也切字）。 */
 ok('★★ 舊的 90／70 已經不在了（改門檻要連註解一起改，不能只換數字）',
@@ -112,8 +119,9 @@ ok('★★★ 徽章排進第一列的流裡（原本 absolute right:3px，時�
    所以「❗ → NEW → 時間」那個順序不再成立 —— 現在是「友善 → ❗ → NEW」。 */
 /* 2026-10-26：出席章回到第一列**最前面**（使用者：「出席章可以改回第一列左邊第一格嗎」）。
    順序因此變成：章 → 友善 → ❗ → NEW，警示那一組靠 margin-left:auto 推到最右。 */
-ok('★★★ 第一列的順序：章 → 友善靠左，❗ 與 NEW 靠右',
-   /<span class="evc-r1">\$\{_wmOut\}\$\{_friOut\}\$\{_alertOut\}\$\{_newOut\}<\/span>/.test(src));
+/* 1026 二修：狀態標籤（體驗／待簽約…）也進第一列，插在友善與警示之間。 */
+ok('★★★ 第一列的順序：章 → 友善 → 狀態標籤靠左，❗ 與 NEW 靠右',
+   /<span class="evc-r1">\$\{_wmOut\}\$\{_friOut\}\$\{_stdTag\}\$\{_alertOut\}\$\{_newOut\}<\/span>/.test(src));
 ok('★★★ 時間跟姓名同一列（第二列）',
    /<span class="evc-r2"><span class="evc-name[^>]*>\$\{_stdName\}<\/span><b class="evc-hm">\$\{b\.start_time\}<\/b><\/span>/.test(src));
 ok('★★★ 有出席章就不出 NEW（使用者：新跟簽不用同時出現）',
@@ -184,8 +192,8 @@ console.log('\n④ 四列的順序（DOM 由上而下：時間 → 姓名 → �
 /* 2026-10-26：整包內容包進 .evc-flip（翻牌轉的是內容層，不是整張卡），
    章回到第一列，場地與教練對調 —— 教練改成絕對定位的右下角膠囊，
    所以它在 DOM 裡排最後，場地維持在流排版的最後一列。 */
-ok('★★★ _bodyOut 的順序（第一列 → 姓名列 → 體驗/待簽約 → 場地 → 教練膠囊）',
-   /<div class="evc-flip"><div class="evc-body"><\/div><div class="evc-txt"><span class="evc-r1">.*?<\/span><span class="evc-r2">.*?<\/span>\$\{_stdTag\}\$\{_venueSub\}\$\{_abbrOut\}/.test(src));
+ok('★★★ _bodyOut 的順序（第一列 → 姓名列 → 場地 → 教練膠囊）',
+   /<div class="evc-flip"><div class="evc-body"><\/div><div class="evc-txt"><span class="evc-r1">.*?<\/span><span class="evc-r2">.*?<\/span>\$\{_venueSub\}\$\{_abbrOut\}/.test(src));
 ok('★★★ 教練不再推到右下角（那是首頁課卡才留著的位置）',
    /\.cal-ev\.cal-ev-std \.evc-coach\{ margin-top:0 !important; align-self:flex-start !important; \}/.test(src)
    && /\.tcard\.tcard-std \.tcard-co\{ margin-top:auto !important; align-self:flex-end !important; \}/.test(src));
@@ -326,10 +334,9 @@ console.log('\n⑫ 場地移到最後一列（2026-09-04）');
    有場地的卡教練就被往下推一行，一整排看過去教練名對不齊。 */
 /* 2026-10-26：教練改成絕對定位的右下角膠囊（@container 150px 以上才顯示），
    不再參與流排版，所以它排在最後面；場地仍是流排版的最後一列。 */
-ok('★★★ DOM 順序：姓名 → 體驗/待簽約 → 場地 → 教練膠囊',
-   /<\/span>\$\{_stdTag\}\$\{_venueSub\}\$\{_abbrOut\}\$\{_moreHtml\}<\/div>/.test(src));
-ok('★★★ 舊順序（場地排在 _stdTag 前）已經不在',
-   !/\$\{_venueSub\}\$\{_stdTag\}/.test(src));
+ok('★★★ DOM 順序：姓名 → 場地 → 教練膠囊（狀態標籤已搬到第一列）',
+   /<\/span>\$\{_venueSub\}\$\{_abbrOut\}\$\{_moreHtml\}<\/div>/.test(src));
+ok('★★★ 狀態標籤不在姓名列後面了', !/<\/span>\$\{_stdTag\}\$\{_venueSub\}/.test(src));
 ok('★★ 為什麼教練排在場地前面，寫在原地',
    /場地是「這一堂在哪裡上」，屬於補充資訊；教練是「誰上的」，比場地重要/.test(src));
 ok('★★ 體驗／待簽約仍緊貼姓名（那是狀態不是補充），寫在原地',

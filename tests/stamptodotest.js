@@ -43,7 +43,7 @@ ok('★★★ 四種都還在，而且順序沒變（停 → 假 → 未 → 簽
    && /_allLeave \? 'leave'/.test(src)
    && /\{stop:'停', leave:'假', noshow:'未', ok:'簽'\}/.test(src));
 ok('★★★ 章畫在第一列**最前面**（1026：回到第一列左邊第一格）',
-   /<span class="evc-r1">\$\{_wmOut\}\$\{_friOut\}\$\{_alertOut\}\$\{_newOut\}<\/span>/.test(src));
+   /<span class="evc-r1">\$\{_wmOut\}\$\{_friOut\}\$\{_stdTag\}\$\{_alertOut\}\$\{_newOut\}<\/span>/.test(src));
 ok('★★★ 畫出來的是圓章不是浮水印（.evc-wm 整組退場）',
    /<i class="evc-check\$\{_chkCls\}"/.test(src) && !/class="evc-wm/.test(src));
 ok('★★ 15px 圓章（第一列就是 15px 高，再大會把那一列撐高）',

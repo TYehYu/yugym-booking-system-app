@@ -96,7 +96,9 @@ console.log('同行卡建立');
     /* 只看程式，不看註解 —— 註解裡刻意留著「〔已移除〕訓練架・兩台」當紀錄 */
     ok('★★ 台數只剩跑步機這一條路', (()=>{
       const noC=src.replace(/\/\*[\s\S]*?\*\//g,'');
-      return !/訓練架・/.test(noC) && !/venueShort/.test(noC);
+      /* 2026-10-26：A 面窄卡的場地短名叫 _venueShortA（砍台數與前綴），
+         跟 0903 退場的那個「venueShort 縮寫表」不是同一件事 —— 這裡只擋舊的那個。 */
+      return !/訓練架・/.test(noC) && !/venueShort\b(?!A)/.test(noC);
     })());
     eq('　訓練架×1 → 不標（預設場地，照舊）', lbl({category:'自主訓練',venue_unit:'multi_1'}), '');
     eq('　跑步機×2 照舊', lbl({category:'自主訓練',venue_unit:'treadmill_1',_units:2}), '跑步機・兩人');
