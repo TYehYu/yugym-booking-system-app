@@ -10815,6 +10815,24 @@ body.wtl-dragging-active *{-webkit-user-select:none!important;user-select:none!i
 .sh-table .sh-dayhead span{font-size:10px;color:var(--t3);}
 .sh-table .sh-dayhead.sh-wk{color:var(--gold-d);background:#EFE7D6;}
 .sh-gapdot{display:block;color:#c0392b;font-size:8px;line-height:1;margin-top:1px;}
+/* ══ 全館停課的日子（2026-10-25 使用者：「這個月有兩天因為颱風停課，
+     員工值班也要標注一下」）════════════════════════════════════════════
+   班照留、人也照留 —— 他那天確實排了班，只是店沒開。要讓人一眼看出
+   「這一欄不是大家都翹班，是沒營業」。
+   ⚠ 用斜線底，不用淡化：淡化已經是「過去的班」的語彙（.sh-past），
+     兩個都淡就分不出是哪一種。
+   ⚠ 紅色只給表頭那一枚「停」字（品牌色階：重要警示用紅）；格子本身維持中性，
+     不然整欄紅底會比請假還搶眼。 */
+.sh-table .sh-dayhead.sh-closed-h{background:#F6EDEC;color:#8E1A14;opacity:1;}
+.sh-table .sh-dayhead.sh-closed-h span{color:#A6564E;}
+.sh-closed-tag{display:block;width:fit-content;margin:2px auto 0;font-size:8.5px;line-height:1.4;font-weight:800;
+  color:#fff;background:#8E1A14;border-radius:3px;padding:0 3px;letter-spacing:.06em;}
+/* ⚠ 一定要 !important：下面的 .sh-cell.has／.sh-cell-wk 用的是 background 簡寫，
+   同權重又寫在後面，會把這裡的 background-image 整個洗掉（第一版就是這樣，
+   只有空格子看得到斜線）。 */
+.sh-table .sh-cell.sh-closed{
+  background-image:repeating-linear-gradient(135deg,
+    rgba(142,26,20,.13) 0 3px, rgba(0,0,0,0) 3px 7px) !important;}
 .sh-table .sh-name{position:sticky;left:0;z-index:2;background:var(--card);width:124px;min-width:124px;max-width:124px;padding:6px 8px;text-align:left;}
 /* 電腦版：整月所有員工＋日期一次呈現，格子壓縮、不捲動 */
 .sh-table .sh-corner{vertical-align:middle;}
@@ -11763,6 +11781,12 @@ body{background:linear-gradient(155deg,#F7F4EC 0%,#F1F2E7 42%,#E6EDE1 100%);back
 .dr-empty .dr-cup-rim{stroke:rgba(0,61,50,.22);}
 .dr-empty .dr-name,.dr-empty .dr-time{color:var(--t3);}
 .dr-center-wait{font-size:15px;font-weight:800;color:var(--t3);font-family:var(--num),inherit;}
+/* 全館停課（2026-10-25）：不是漏打卡，所以不用紅色虛線圈，中性灰＋「停」字。 */
+.dr-closed .dr-cup-rim{stroke:rgba(29,24,19,.22);stroke-dasharray:5 4;}
+.dr-closed .dr-center-wait{color:var(--t3);font-size:14px;}
+.dr-closed .dr-time{color:var(--t3);font-weight:600;}
+.mc-closed-chip{margin-left:8px;font-size:11px;font-weight:800;color:#fff;background:#8E1A14;
+  border-radius:4px;padding:1px 6px;letter-spacing:.03em;vertical-align:1px;}
 .dr-late .dr-cup-rim{stroke:var(--danger,#b5372e);stroke-dasharray:4 3;}
 .dr-late .dr-cup-track{fill:rgba(181,55,46,.06);}
 .dr-late .dr-center-wait{color:var(--danger,#b5372e);}
@@ -14932,8 +14956,8 @@ function tbl(s){return TABLE_ALIAS[s]||s;}
 let sb=null;
 // ── 版本號（日期+時間格式：年後兩碼+月+日.時分，例 26620.1058 = 26年6/20 10:58）──
 // 每次改版手動更新這一行即可，畫面與 title 會一起更新
-const APP_VERSION = '261025.0541';
-const APP_VERSION_LABEL = 'v261025.0541';
+const APP_VERSION = '261025.1459';
+const APP_VERSION_LABEL = 'v261025.1459';
 const CLOUD = !!(window.YUGYM_CONFIG && window.YUGYM_CONFIG.url && window.YUGYM_CONFIG.anonKey);
 if(CLOUD){ sb = supabase.createClient(window.YUGYM_CONFIG.url, window.YUGYM_CONFIG.anonKey); }
 
@@ -24906,10 +24930,17 @@ PAGES.g_dashboard=async function(){
       const kb=pb? (b.sh?b.sh.start_time:'99:99') : b.att.clock_in;
       return String(ka||'').localeCompare(String(kb||''));
     });
+  /* 全館停課（2026-10-25 使用者：「這邊值班也沒有標示」）——
+     10/24 颱風停課，四個人全掛紅色「未打卡」，看起來像全員翹班。
+     ⚠ 資料就在手上：dayBkAll 是這一天的全部預約（含已取消），停課會把整天的課
+       用同一個 cancel_reason 取消掉，bkClosedDay 認得出來。不必多查一次。
+     ⚠ 只改顯示：打卡紀錄、時數、值班費一律不動（沒打卡本來就是 0 小時，
+       要不要照給是老闆的決定，不是畫面的事）。 */
+  const _dayClosedWhy=(()=>{ const b=(dayBkAll||[]).find(bkClosedDay); return b?bkClosedWhy(b):''; })();
   const _punchedRings=_dutyPeople
-    .map(x=>dutyRingHTML(coachDisp(x.c)||x.c.name||'—', x.att, x.sh, nowMin, isTodayView)).join('');
+    .map(x=>dutyRingHTML(coachDisp(x.c)||x.c.name||'—', x.att, x.sh, nowMin, isTodayView, _dayClosedWhy)).join('');
   const dutyRingCard=`<div class="card mc-card mc-dutyring-card">
-    <div class="mc-card-h mc-hide-h">今日值班</div>
+    <div class="mc-card-h mc-hide-h">今日值班${_dayClosedWhy?`<span class="mc-closed-chip" title="這一天全館停課">停課・${escH(_dayClosedWhy)}</span>`:''}</div>
     <div class="dr-row">${_punchedRings||'<div class="mc-duty-empty">今日尚無上班打卡</div>'}</div>
   </div>`;
 
@@ -26926,12 +26957,30 @@ function dutyClockPath(seg){
   const x=(32+26*Math.sin(a)).toFixed(2), y=(32-26*Math.cos(a)).toFixed(2);
   return `M32 32 L32 6 A26 26 0 ${n*(360/DUTY_SEGS)>180?1:0} 1 ${x} ${y} Z`;
 }
-function dutyRingHTML(name, att, shift, nowMinV, isToday){
+/* closedWhy（2026-10-25 使用者：「這邊值班也沒有標示」）——
+   全館停課那天沒打卡**不是漏打卡**，是店沒開。傳進停課原因就把紅色的
+   「未打卡」換成中性的「停課」。
+   ⚠ 只影響沒打卡的那一支；真的有來打卡的照原樣畫圈（颱風天有人進來顧店，
+     那是真的值班，不能被停課蓋掉）。 */
+function dutyRingHTML(name, att, shift, nowMinV, isToday, closedWhy){
   /* 還沒打卡的也要出現在今日值班（2026-07-30 使用者指示：顯示完整名單，未打卡＝空心未注水）——
      原本只畫「有 clock_in 的人」，沒打卡的完全看不到，得另外去右邊的「今日未打卡名單」找。 */
   if(!att || !att.clock_in){
     const rng=(shift&&shift.start_time&&shift.end_time)?`${shift.start_time} – ${shift.end_time}`:'今日排班';
-    const late=!!(isToday && shift && shift.start_time && nowMinV>=timeToMin(shift.start_time));
+    const _cw=String(closedWhy||'');
+    const late=!_cw && !!(isToday && shift && shift.start_time && nowMinV>=timeToMin(shift.start_time));
+    if(_cw) return `<div class="duty-ring dr-cup dr-empty dr-closed" title="${escH(`${name}｜${rng}｜全館停課・${_cw}`)}">
+      <div class="dr-wrap">
+        <svg viewBox="0 0 64 64">
+          <circle class="dr-cup-track" cx="32" cy="32" r="26"/>
+          <circle class="dr-cup-ticks" cx="32" cy="32" r="24.3" stroke-dasharray="0.85 1.6947" stroke-dashoffset="0.425"/>
+          <circle class="dr-cup-rim" cx="32" cy="32" r="26"/>
+        </svg>
+        <div class="dr-center dr-center-wait">停</div>
+      </div>
+      <div class="dr-name">${name}</div>
+      <div class="dr-time">停課</div>
+    </div>`;
     return `<div class="duty-ring dr-cup dr-empty${late?' dr-late':''}" title="${name}｜${rng}｜${late?'已過上班時間仍未打卡':'尚未打卡'}">
       <div class="dr-wrap">
         <svg viewBox="0 0 64 64">
@@ -39338,6 +39387,37 @@ function bkClosedWhy(b){
   const r=String((b&&b.cancel_reason)||'');
   return r.replace(/^臨時停課・/,'').replace(/^天災停課/,'天災停課').replace(/（[^（）]*）\s*$/,'') || '停課';
 }
+/* ══ 哪幾天全館停課（2026-10-25 使用者：「這個月有兩天因為颱風停課，
+     員工值班也要標注一下」）════════════════════════════════════════════
+   停課沒有自己的資料表，真相在**那天被取消的預約**身上：臨時停課會把整天的課
+   一次取消，並在 cancel_reason 寫下同一句理由。所以「某天有 cancel_reason 以
+   臨時停課／天災停課開頭的預約」＝那天停課。
+   ⚠ 只撈當月、只撈兩個欄位，不經過 dbGetAll（那會把整張 bookings 拉下來）。
+   ⚠ 查失敗**不要回空物件**假裝沒停課（0820 的教訓：空 catch 會偽裝成沒資料）——
+     回 null，呼叫端就整個不標，而不是標成「沒有停課」。
+   ⚠ 那天如果本來就沒有課就查不到。沒有課的日子也沒有停課要宣布，可以接受。
+   ⚠ 快取按月存：翻月份才重查；停課一個月不會發生幾次，不必再細。 */
+window._closedDayCache = window._closedDayCache || {};
+async function closedDaysOfMonth(month){
+  const key=String(month||'');
+  if(!/^\d{4}-\d{2}$/.test(key)) return {};
+  if(window._closedDayCache[key]) return window._closedDayCache[key];
+  try{
+    const last=new Date(Number(key.slice(0,4)), Number(key.slice(5,7)), 0).getDate();
+    const q=await sb.from('bookings').select('date,cancel_reason')
+      .gte('date', key+'-01').lte('date', key+'-'+String(last).padStart(2,'0'))
+      .eq('status','cancelled')
+      .or('cancel_reason.like.臨時停課%,cancel_reason.like.天災停課%');
+    if(q.error) throw q.error;
+    const m={};
+    (q.data||[]).forEach(r=>{ if(r && r.date && !m[r.date]) m[r.date]=bkClosedWhy(r); });
+    window._closedDayCache[key]=m;
+    return m;
+  }catch(e){
+    console.warn('[closedDaysOfMonth] 讀停課日失敗，這個月不標停課：', e);
+    return null;
+  }
+}
 /* 行事曆要不要畫這張已取消的卡（2026-09-11 使用者：「扣課不退 一樣要畫在行事曆上 出席章用[未]」）——
    江旻季 9/10：櫃檯開課後 20 分鐘取消、選扣課不退，票券夾出現「扣課 9/10」，行事曆卻找不到那堂。
    票被吃掉了＝那一堂算用掉，行事曆要對得上票券夾。
@@ -49127,6 +49207,10 @@ async function renderShiftsTab(){
   window._shiftsCache=shifts;
   if(!_shiftMonth) _shiftMonth=ymd(TODAY).slice(0,7);
   const month=_shiftMonth, [my,mm]=month.split('-');
+  /* 全館停課的日子（2026-10-25 使用者：「這個月有兩天因為颱風停課，員工值班也要標注一下」）
+     ⚠ 放在月份決定之後才查 —— 翻月份會重畫整張表，查的是看著的那個月。
+     ⚠ 查失敗回 null，整個月就不標（不要標成「沒有停課」）。 */
+  const _closedMap = await closedDaysOfMonth(month) || {};
   const isCur=month===ymd(TODAY).slice(0,7);
   // 當月每一天／當月排班（名單要用到，所以先算）
   const _daysInMonth0=new Date(Number(my),Number(mm),0).getDate();
@@ -49258,7 +49342,10 @@ async function renderShiftsTab(){
   });
 
   // 先算空班日期集合（供表頭標記）
-  const _gapSet=new Set(monthShiftGaps(monthShifts, month).map(g=>g.date));
+  /* 停課日不算空班（2026-10-25）：店沒開，「營業時間內無人值班」不成立。
+     不濾掉的話 10 月會憑空多出兩天紅字空班，而且是沒辦法補的那種。 */
+  const _gapSet=new Set(monthShiftGaps(monthShifts, month)
+    .filter(g=>!_closedMap[g.date]).map(g=>g.date));
   /* 過去的日期淡化（2026-10-19 使用者：「過去的日期可以暗化　除了請假的格子」）——
      班表往回看主要是在查「誰請了假」，已經過去的班本身不需要再被看見。
      ⚠ 請假格子不淡化：那正是回頭要看的東西。整列都是請假的那一列（最下面那列）
@@ -49274,7 +49361,13 @@ async function renderShiftsTab(){
     const wk=d.getDay()===0||d.getDay()===6;
     const ds=`${my}-${mm}-${String(i+1).padStart(2,'0')}`;
     const gapMark=_gapSet.has(ds)?'<span class="sh-gapdot" title="此日有空班時段">●</span>':'';
-    return `<th class="sh-dayhead${wk?' sh-wk':''}${_isPast(ds)?' sh-past-h':''}">${i+1}<br><span>${dow}</span>${gapMark}</th>`;
+    /* 停課日的表頭（2026-10-25）：日期下方掛一枚紅色的「停」。
+       ⚠ 不吃 sh-past-h 的淡化 —— 停課正是回頭要看的東西，淡掉就等於沒標。
+       ⚠ 空班的紅點不畫了：全館停課的日子沒有「空班」這回事，兩個紅記號疊在
+         同一格只會互相干擾。 */
+    const _cw=_closedMap[ds]||'';
+    const closedMark=_cw?`<span class="sh-closed-tag" title="${escH(`${Number(mm)}/${i+1} 全館停課・${_cw}`)}">停</span>`:'';
+    return `<th class="sh-dayhead${wk?' sh-wk':''}${_cw?' sh-closed-h':(_isPast(ds)?' sh-past-h':'')}">${i+1}<br><span>${dow}</span>${_cw?closedMark:gapMark}</th>`;
   }).join('');
 
   const rowsHtml=staff.map(e=>{
@@ -49298,7 +49391,12 @@ async function renderShiftsTab(){
       const hasLeave=list.some(shIsRosterLeave);   /* 2026-09-07：課程請假的補登列不把整格標成請假日 */
       const cellClick=_canEditShifts?` onclick="openShiftEdit('${e.id}','${dateStr}')"`:'';
       const _past=_isPast(dateStr)&&!hasLeave;   /* 請假格子不淡化 */
-      return `<td class="sh-cell${list.length?' has':''}${hasLeave?' has-leave':''}${isWk?' sh-cell-wk':''}${_past?' sh-past':''}${_canEditShifts?'':' sh-cell-ro'}"${cellClick}>${inner||(_canEditShifts?'<span class="sh-plus">＋</span>':'')}</td>`;
+      /* 停課日的格子（2026-10-25）：班照畫、不刪 —— 他那天**確實排了班**，
+         只是店沒開。斜線底讓整欄一眼看出是停課，滑過去看原因。
+         ⚠ 不淡化：淡化是「已經過去的班」的語彙，停課是另一件事，兩個都淡就分不出來。 */
+      const _cwc=_closedMap[dateStr]||'';
+      const _ttl=_cwc?` title="${escH(`${Number(mm)}/${i+1} 全館停課・${_cwc}`)}"`:'';
+      return `<td class="sh-cell${list.length?' has':''}${hasLeave?' has-leave':''}${isWk?' sh-cell-wk':''}${_cwc?' sh-closed':(_past?' sh-past':'')}${_canEditShifts?'':' sh-cell-ro'}"${_ttl}${cellClick}>${inner||(_canEditShifts?'<span class="sh-plus">＋</span>':'')}</td>`;
     }).join('');
     const tplDuty=(window.SALARY_TPL||{})[normEmp(e.employment_type||e.pay_type)]||{};
     const rate=(e.custom_salary?(e.duty_hourly||0):(tplDuty.duty_hourly||0));
@@ -49353,7 +49451,8 @@ async function renderShiftsTab(){
         return main+(s.sub_name?`<span class="sh-subnm${_paid?' paid':''}" title="${_paid?'店內員工，值班費照算':'店外人員，不計薪'}">${escH(s.sub_name)}</span>`:'');
       }).join('');
       const click=_canEditShifts?` onclick="openShiftEdit('${SUB_ROSTER_ID}','${dateStr}')"`:'';
-      return `<td class="sh-cell${list.length?' has':''}${isWk?' sh-cell-wk':''}${_isPast(dateStr)?' sh-past':''}${_canEditShifts?'':' sh-cell-ro'}"${click}>${inner||(_canEditShifts?'<span class="sh-plus">＋</span>':'')}</td>`;
+      const _cwc=_closedMap[dateStr]||'';   /* 支援班那一列也要跟著標（2026-10-25） */
+      return `<td class="sh-cell${list.length?' has':''}${isWk?' sh-cell-wk':''}${_cwc?' sh-closed':(_isPast(dateStr)?' sh-past':'')}${_canEditShifts?'':' sh-cell-ro'}"${click}>${inner||(_canEditShifts?'<span class="sh-plus">＋</span>':'')}</td>`;
     }).join('');
     const _n=monthShifts.filter(shIsSub).length;
     return `<tr class="sh-subrow">
@@ -49399,7 +49498,7 @@ async function renderShiftsTab(){
           escH(shLvKind(s))}</span><span class="sh-lvnm" style="background:${col.bg};color:${col.fg};">${
           escH(shLvAbbr(c))}</span></span>`;
       }).join('')}</span>`:'';
-      return `<td class="sh-cell${list.length?' has':''}${isWk?' sh-cell-wk':''} sh-cell-ro">${inner}</td>`;
+      return `<td class="sh-cell${list.length?' has':''}${isWk?' sh-cell-wk':''}${_closedMap[dateStr]?' sh-closed':''} sh-cell-ro">${inner}</td>`;
     }).join('');
     const _n=[...new Set(_lv.map(s=>String(s.emp_id||'')))].filter(Boolean).length;
     return `<tr class="sh-lvrow">
@@ -49410,7 +49509,8 @@ async function renderShiftsTab(){
   })();
 
   // 空班檢查：掃描當月營業時段內沒人排班的時段
-  const gaps=monthShiftGaps(shifts.filter(s=>(s.date||'').slice(0,7)===month), month);
+  const gaps=monthShiftGaps(shifts.filter(s=>(s.date||'').slice(0,7)===month), month)
+    .filter(g=>!_closedMap[g.date]);   /* 停課日不算空班（2026-10-25），同上 */
   const WDx=['日','一','二','三','四','五','六'];
   const gapCard = gaps.length===0
     ? `<div class="card" style="margin-bottom:14px;border-left:3px solid var(--green);"><div style="font-size:13px;color:var(--green);font-weight:600;">✓ 本月排班已覆蓋所有營業時段，無空班</div></div>`

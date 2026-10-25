@@ -19,10 +19,13 @@ ok('★★★ 理由寫在原地（看 11 月跟看 9 月都要對）',
 console.log('\n② 哪些格子會淡化');
 ok('★★★ 員工列：過去**而且不是請假**才淡化',
    /const _past=_isPast\(dateStr\)&&!hasLeave;/.test(src));
+/* 2026-10-25：全館停課的日子改掛 sh-closed（斜線底），而且**取代**淡化 ——
+   淡化是「過去的班」的語彙，停課是另一件事，兩個都淡就分不出是哪一種。
+   所以三處的寫法都變成三元：停課 ? sh-closed : (過去 ? sh-past : '')。 */
 ok('★★★ 員工列真的把 sh-past 掛上去',
-   /\$\{hasLeave\?' has-leave':''\}\$\{isWk\?' sh-cell-wk':''\}\$\{_past\?' sh-past':''\}/.test(src));
+   /\$\{hasLeave\?' has-leave':''\}\$\{isWk\?' sh-cell-wk':''\}\$\{_cwc\?' sh-closed':\(_past\?' sh-past':''\)\}/.test(src));
 ok('★★ 支援班列也淡化（那一列沒有請假）',
-   /\$\{isWk\?' sh-cell-wk':''\}\$\{_isPast\(dateStr\)\?' sh-past':''\}\$\{_canEditShifts/.test(src));
+   /\$\{isWk\?' sh-cell-wk':''\}\$\{_cwc\?' sh-closed':\(_isPast\(dateStr\)\?' sh-past':''\)\}\$\{_canEditShifts/.test(src));
 /* ⚠ 最下面那一列整列都是請假 —— 絕對不可以淡化，那正是回頭要看的東西。 */
 ok('★★★ 請假列完全不碰（整列都是要看的東西）', (()=>{
   const i=src.indexOf('const inner=list.length?`<span class="sh-lvwrap">');
@@ -30,7 +33,7 @@ ok('★★★ 請假列完全不碰（整列都是要看的東西）', (()=>{
   return seg.indexOf('sh-past')<0;
 })());
 ok('★★ 表頭的日號也淡一點（整欄才讀得出來）',
-   /\$\{_isPast\(ds\)\?' sh-past-h':''\}/.test(src));
+   /\$\{_cw\?' sh-closed-h':\(_isPast\(ds\)\?' sh-past-h':''\)\}/.test(src));
 
 console.log('\n③ 淡化的做法');
 /* 用 opacity 不要另外調一組灰：班別章的紅／金／綠是顏色語意，調色會把語意弄丟。 */

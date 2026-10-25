@@ -88,8 +88,10 @@ ok('★ 未打卡畫成空心未注水的圈', /if\(!att \|\| !att\.clock_in\)\{
    && /class="duty-ring dr-cup dr-empty/.test(src)
    && /\.dr-empty \.dr-cup-rim\{stroke:rgba\(0,61,50,\.22\);\}/.test(src));
 ok('★ 已過上班時間仍未打卡 → 紅色虛線圈＋驚嘆號',
-   /const late=!!\(isToday && shift && shift\.start_time && nowMinV>=timeToMin\(shift\.start_time\)\);/.test(src)
+   /const late=!_cw && !!\(isToday && shift && shift\.start_time && nowMinV>=timeToMin\(shift\.start_time\)\);/.test(src)
    && /\.dr-late \.dr-cup-rim\{stroke:var\(--danger,#b5372e\);stroke-dasharray:4 3;\}/.test(src));
+/* 2026-10-25：全館停課那天沒打卡不是漏打卡（使用者：「這邊值班也沒有標示」），
+   所以 late 前面多夾一個 !_cw。紅圈本身沒動。詳見 tests/cdayshifttest.js。 */
 ok('　　排序：已打卡的照上班時間，未打卡的排後面照班表',
    /const pa=\(a\.att&&a\.att\.clock_in\)\?0:1, pb=\(b\.att&&b\.att\.clock_in\)\?0:1;/.test(src));
 ok('　　離職／停用的員工不列', /\.filter\(c=>c\.status!=='inactive'&&c\.status!=='resigned'\)\s*\n\s*\.map\(c=>\(\{c, att:attMap/.test(src));

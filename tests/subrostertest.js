@@ -38,7 +38,9 @@ ok('★★ 沒有「週期」鈕（這一列不是人，沒有週期可排）',
    !/sh-subrow[\s\S]{0,600}openWeeklyShift/.test(TAB));
 ok('★★★ 時數照樣算進空班檢查 —— 有人補班就是有人顧店',
    /這一列的時數照樣算進「空班檢查」/.test(src)
-   && /const gaps=monthShiftGaps\(shifts\.filter\(s=>\(s\.date\|\|''\)\.slice\(0,7\)===month\), month\);/.test(TAB));
+   && /const gaps=monthShiftGaps\(shifts\.filter\(s=>\(s\.date\|\|''\)\.slice\(0,7\)===month\), month\)/.test(TAB));
+/* 2026-10-25：那一行後面接了 .filter(g=>!_closedMap[g.date]) —— 全館停課的日子
+   不算空班（店沒開）。支援班的時數照樣算進去，這一條沒變。 */
 ok('★★ 「值班員工共 N 位」不把這一列算進去', /值班員工共 \$\{staff\.length\} 位/.test(src));
 
 console.log('\n③ 關掉值班標籤之後，歷史不能跟著消失');

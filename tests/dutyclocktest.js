@@ -54,8 +54,10 @@ ok('★ 60 等份的分刻度畫得出來（虛線圓，每格 2.5447）',
    && /\.dr-cup-ticks\{fill:none;stroke:rgba\(0,61,50,\.20\);stroke-width:2\.6;\}/.test(src));
 ok('　　刻度在扇形底下（填到的地方被蓋住，沒填的看得出還剩幾格）',
    src.indexOf('class="dr-cup-ticks"') < src.indexOf('<path class="dr-clock"'));
+/* 2026-10-25：停課的空環是第三個分支（dutyRingHTML 多一條 closedWhy 的路），
+   三個圈都要有同一個時鐘面，不能有一個長得不一樣。 */
 ok('★ 尚未打卡的空環也有刻度（同一個時鐘面）',
-   (src.match(/class="dr-cup-ticks"/g)||[]).length===2);
+   (src.match(/class="dr-cup-ticks"/g)||[]).length===3);
 ok('★ 中央仍顯示時數、流星仍在（這次只換填滿方式）',
    /const center = `<div class="dr-center dr-center-done"><b>\$\{dispH\}<\/b><span>h<\/span><\/div>`;/.test(src)
    && /\.duty-ring\.dr-live \.dr-wrap::before\{inset:4px;/.test(src));
