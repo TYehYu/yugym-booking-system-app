@@ -179,10 +179,22 @@ ok('★★ 尊重「減少動態效果」的系統設定',
 console.log('\n⑥ 教練膠囊與顏色');
 /* 2026-10-26 二修：90–149px 也放得下教練，用縮寫（使用者：「是不是有些卡片右下角
    還是可以擺下教練名稱　太窄的還是可以用縮寫」）。90px 以下不給 —— 那裡姓名要吃 3–4 行。 */
-ok('★★★ 90–149px 顯示教練縮寫',
-   /@container \(min-width:90px\) and \(max-width:149px\)\{[\s\S]{0,700}\.evc-coach \.co-fl\{display:none;\}[\s\S]{0,120}\.co-ab\{display:inline;\}/.test(css));
-ok('★★★ 150px 以上才顯示全名（跟 B 面收欄位名同一條線）',
-   /@container \(min-width:150px\)\{[\s\S]{0,900}\.cal-ev\.cal-ev-std:not\(\.cag-std\) \.evc-coach:not\(\.evc-leavetag\)\{display:inline-flex;position:absolute;/.test(css));
+/* ══ 2026-10-26 三修：縮寫那一段拿掉，90px 起一律全名 ═══════════════════
+   使用者看線上畫面：「這個教練名應該不用縮寫吧」—— 量過他是對的：
+   最長的顯示名是五個拉丁字母（約 32px）＋右緣 5px ＝ 37px，
+   90px 的卡可用寬 72px，就算左邊還有場地短名（28px）也只佔 65px。 */
+ok('★★★ 90px 起一律寫全名（沒有縮寫那一段了）',
+   !/@container \(min-width:90px\) and \(max-width:149px\)/.test(css)
+   && /90px 起就寫教練\*\*全名\*\*/.test(css));
+ok('★★★ 代課標記分兩種寫法（150px 以下寫「代」）',
+   /b\.substitute_coach_id\?'<i class="cs-fl">（代）<\/i><i class="cs-ab">代<\/i>':''/.test(src)
+   && /@container \(max-width:149px\)\{\s*\n\s*\.cal-ev\.cal-ev-std \.evc-coach \.cs-fl\{display:none;\}/.test(css));
+ok('★★★ 場地短名的門檻跟著放大到 149px（兩者同一行，不然會疊到）',
+   /@container \(max-width:149px\)\{\s*\n\s*\.cal-ev\.cal-ev-std \.vs-fl\{display:none;\}/.test(css)
+   && /「史密斯訓練架」63px ＋「MANGO代」42px/.test(css));
+ok('★★★ 教練名從 90px 起就畫（門檻只剩這一個）',
+   /@container \(min-width:90px\)\{[\s\S]{0,900}\.cal-ev\.cal-ev-std:not\(\.cag-std\) \.evc-coach:not\(\.evc-leavetag\)\{display:inline-flex;position:absolute;/.test(css)
+   && /\.cal-ev\.cal-ev-std:not\(\.cag-std\) \.evc-coach\{display:none;\}/.test(css));
 /* ══ 2026-10-26 三修：A 面的教練名改成黑字、不要膠囊（使用者：「A面的教練名稱
    也用黑色文字就好」，跟首頁同一個講法）。深底的那兩位拿掉底色會變白字看不見，
    所以底色與字色一起改：背景透明＋墨色字。教練色留在左色條與 B 面底色上。 */
@@ -225,9 +237,8 @@ ok('★★★ Ink 的「30px 以上一律顯示教練」已退場',
 ok('　　退場理由寫在原地（改樣式前先 grep body.ink）',
    /改樣式前先 grep body\.ink/.test(css));
 /* A 面的場地在窄卡上被切成「跑步…」（使用者附圖）。兩種寫法由寬度挑，短名是砍台數與前綴。 */
-ok('★★★ A 面場地有完整／短名兩種寫法，90px 以下用短名',
-   /<i class="vs-fl">\$\{_selfVenue\}<\/i><i class="vs-ab">\$\{_venueShortA\}<\/i>/.test(src)
-   && /@container \(max-width:90px\)\{\s*\n\s*\.cal-ev\.cal-ev-std \.vs-fl\{display:none;\}/.test(css));
+ok('★★★ A 面場地有完整／短名兩種寫法（門檻見上，1026 三修放大到 149px）',
+   /<i class="vs-fl">\$\{_selfVenue\}<\/i><i class="vs-ab">\$\{_venueShortA\}<\/i>/.test(src));
 /* 窄卡的 B 面原本只有 全名／n-n／場地，最需要被看到的繳費標籤反而沒有。 */
 ok('★★★ 窄卡 B 面也給繳費標籤（自己一行）',
    /_payTag\?`<span class="bk-v bk-pw">\$\{_payTag\}<\/span>`:''/.test(src)

@@ -90,9 +90,11 @@ ok('★★★ Ink 那條的權重高一階（body.ink 多一個 class），否�
 ok('★★★ 舊的兩階（41px／Ink 30px）已經退場',
    !/@container \(max-width:41px\)\{\s*\n\s*\.cal-ev\.cal-ev-std \.evc-coach\{display:none;\}/.test(src)
    && !/body\.ink \.cal-ev\.cal-ev-std \.evc-coach\{display:inline-flex;\}/.test(src));
-ok('★★★ 改成只有 150px 以上才畫教練',
+/* 1026 三修：門檻從 150px 再下修到 90px，而且一律寫全名
+   （使用者：「這個教練名應該不用縮寫吧」—— 量過最長的名字只要 37px）。 */
+ok('★★★ 改成 90px 以上就畫教練（全名）',
    /\.cal-ev\.cal-ev-std:not\(\.cag-std\) \.evc-coach\{display:none;\}/.test(src)
-   && /@container \(min-width:150px\)\{[\s\S]{0,900}\.evc-coach:not\(\.evc-leavetag\)\{display:inline-flex;/.test(src));
+   && /@container \(min-width:90px\)\{[\s\S]{0,900}\.evc-coach:not\(\.evc-leavetag\)\{display:inline-flex;/.test(src));
 /* 門檻只能往「量過的值」改。這幾條擋的是「順手調一下數字」—— 0903→0904 之間
    我自己就憑感覺改壞兩次（36→發現非 Ink 40px 切字；32→發現 Ink 32px 也切字）。 */
 ok('★★ 舊的 90／70 已經不在了（改門檻要連註解一起改，不能只換數字）',
