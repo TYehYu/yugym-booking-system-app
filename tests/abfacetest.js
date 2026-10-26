@@ -47,14 +47,26 @@ console.log('\n② 字級：高度上限 vs 寬度÷字數');
 ok('★★★ JS 把字數掛成 nm-s2…nm-s6', /const _nmSCls = ` nm-s\$\{Math\.min\(Math\.max\(_nmLen,2\),6\)\}`;/.test(src));
 ok('★★★ 與直書用的 nm-v2／nm-v3 分開（團課與遮蔽卡也要有字級）',
    /字級則連團課與遮蔽卡都要套，不然那兩種永遠停在最小級/.test(src));
-ok('★★★ 算法＝min(高度上限, (寬度 − 固定開銷) ÷ 字數)',
-   /nm-s3\{font-size:clamp\(12px,min\(45cqh,calc\(\(100cqw - 56px\)\/3\)\),28px\) !important;\}/.test(css));
-ok('★★★ 時間先留位子（扣 56px＝內距 18 ＋ 時間 38）',
-   /先留給時間，剩下的才給名字/.test(css));
-ok('★★ 時間收起來的窄卡只扣 18px', /nm-s3\{font-size:clamp\(12px,min\(45cqh,calc\(\(100cqw - 18px\)\/3\)\),28px\) !important;\}/.test(css));
-ok('★★ 有教練膠囊時再扣 42px', /nm-s3\{font-size:clamp\(12px,min\(32cqh,calc\(\(100cqw - 98px\)\/3\)\),20px\) !important;\}/.test(css));
-ok('★★ 有場地時名字上限壓到 20px（把第三列的位子留出來）',
-   /:has\(\.evc-vsub\) \.evc-name\.nm-s3\{font-size:clamp\(12px,min\(32cqh,calc\(\(100cqw - 56px\)\/3\)\),20px\) !important;\}/.test(css));
+/* ══ 2026-10-26 二修：改成「兩個變數，一條算式」═══════════════════════
+   --nmw   寬度的固定開銷（內距 18px，有時間再 +38px）
+   --nmcap 字級上限（一般 28px；底下那一行有東西時 20px）
+   第一版把條件乘在一起寫成九組 font-size，加一個「90px 以上顯示教練縮寫」
+   就要再乘一輪，而且實際上漏了一格（112px 的三字名字掉到下限 12px）。 */
+ok('★★★ 算式整份只寫一次（五條，吃變數）',
+   /nm-s3\{font-size:clamp\(12px,min\(45cqh,calc\(\(100cqw - var\(--nmw\)\)\/3\)\),var\(--nmcap\)\) !important;\}/.test(css)
+   && (css.match(/\.evc-name\.nm-s3\{font-size:/g)||[]).length===1);
+ok('★★★ 預設 56px（內距 18 ＋ 時間 38）—— 時間先留位子',
+   /\.cal-ev\.cal-ev-std \.evc-name\{--nmw:56px;--nmcap:28px;\}/.test(css)
+   && /先留給時間，剩下的才給名字/.test(css));
+ok('★★★ 時間收起來的那幾種改成 18px，與時間門檻完全互補',
+   /@container \(max-width:83px\)\{ \.cal-ev\.cal-ev-std \.evc-name\{--nmw:18px;\} \}/.test(css)
+   && /@container \(min-width:84px\) and \(max-width:97px\)\{[\s\S]{0,260}--nmw:18px;\}/.test(css)
+   && /@container \(min-width:98px\) and \(max-width:111px\)\{[\s\S]{0,220}--nmw:18px;\}/.test(css));
+ok('★★★ 第三行被佔走就把上限壓到 20px（有場地、或 90px 以上有教練名）',
+   /\.cal-ev\.cal-ev-std:has\(\.evc-vsub\) \.evc-name\{--nmcap:20px;\}/.test(css)
+   && /@container \(min-width:90px\)\{ \.cal-ev\.cal-ev-std \.evc-name\{--nmcap:20px;\} \}/.test(css));
+ok('　　為什麼要改寫法（寫在原地）',
+   /加一個「90px 以上顯示教練縮寫」\s*\n?\s*就要再乘一輪，而且很容易漏掉某一格/.test(css));
 ok('　　成因寫在原地（每堂課都是 60 分鐘，所以高度綁死了字級）',
    /而\*\*每一堂課都是 60 分鐘＝62px 高\*\*/.test(css));
 
@@ -165,7 +177,11 @@ ok('★★ 尊重「減少動態效果」的系統設定',
    /@media \(prefers-reduced-motion:reduce\)\{\s*\n\s*\.cal-ev\.cal-ev-std \.evc-flip\{transition:none;\}/.test(css));
 
 console.log('\n⑥ 教練膠囊與顏色');
-ok('★★★ 150px 以上才顯示（跟 B 面收欄位名同一條線）',
+/* 2026-10-26 二修：90–149px 也放得下教練，用縮寫（使用者：「是不是有些卡片右下角
+   還是可以擺下教練名稱　太窄的還是可以用縮寫」）。90px 以下不給 —— 那裡姓名要吃 3–4 行。 */
+ok('★★★ 90–149px 顯示教練縮寫',
+   /@container \(min-width:90px\) and \(max-width:149px\)\{[\s\S]{0,700}\.evc-coach \.co-fl\{display:none;\}[\s\S]{0,120}\.co-ab\{display:inline;\}/.test(css));
+ok('★★★ 150px 以上才顯示全名（跟 B 面收欄位名同一條線）',
    /@container \(min-width:150px\)\{[\s\S]{0,900}\.cal-ev\.cal-ev-std:not\(\.cag-std\) \.evc-coach:not\(\.evc-leavetag\)\{display:inline-flex;position:absolute;/.test(css));
 /* ══ 2026-10-26 三修：A 面的教練名改成黑字、不要膠囊（使用者：「A面的教練名稱
    也用黑色文字就好」，跟首頁同一個講法）。深底的那兩位拿掉底色會變白字看不見，
@@ -231,13 +247,13 @@ ok('★★★ 換成自己的 class（.evc-sub 還有場地在用）',
 ok('★★ 比友善晚一階退場（67px 以下才收）',
    /@container \(max-width:67px\)\{\s*\n\s*\.cal-ev\.cal-ev-std \.evc-stag\{display:none;\}/.test(css));
 ok('　　共用位子的理由寫在原地', /友善是票券的限制、\s*\n?\s*體驗是課別，同一堂不可能兩者皆是/.test(src));
-/* ⚠ 有場地的卡，寬度預算的三段一定要跟「時間門檻」的三段一致 ——
-   第一版只寫一個 max-width:111px，84px 的兩字名字因此用到「沒有時間」的算式，
-   被放大到剛好多 1px，overflow-wrap:anywhere 就從兩個字中間折行，場地被推出卡外。 */
-ok('★★★ 有場地的卡也分三段（跟時間門檻對齊）',
-   /@container \(min-width:84px\) and \(max-width:97px\)\{\s*\n\s*\.cal-ev\.cal-ev-std:has\(\.evc-vsub\) \.evc-name\.nm-s3/.test(css)
-   && /@container \(min-width:98px\) and \(max-width:111px\)\{\s*\n\s*\.cal-ev\.cal-ev-std:has\(\.evc-vsub\) \.evc-name\.nm-s4/.test(css));
-ok('　　那個 1px 的坑寫在原地', /寬度預算錯一個 px，看起來就是「卡片壞了」/.test(css));
+/* ⚠ 寬度預算的分段一定要跟「時間門檻」一致。第一版（九組 font-size 那版）
+   漏了一格：84px 的兩字名字用到「沒有時間」的算式，被放大到剛好多 1px，
+   overflow-wrap:anywhere 就從兩個字中間折行，場地被推出卡外。
+   改成變數之後，分段只有 --nmw 那三條，不可能再漏。 */
+ok('★★★ 分段只剩 --nmw 那三條（不會再漏）',
+   (css.match(/--nmw:18px;/g)||[]).length===3
+   && !/:has\(\.evc-vsub\) \.evc-name\.nm-s3\{font-size:/.test(css));
 ok('★★ 61px 以下連場地都不畫（姓名要吃 3–4 行）',
    /@container \(max-width:61px\)\{\s*\n\s*\.cal-ev\.cal-ev-std \.evc-vsub\{display:none;\}/.test(css));
 
