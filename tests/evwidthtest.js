@@ -92,9 +92,15 @@ ok('★★★ 舊的兩階（41px／Ink 30px）已經退場',
    && !/body\.ink \.cal-ev\.cal-ev-std \.evc-coach\{display:inline-flex;\}/.test(src));
 /* 1026 三修：門檻從 150px 再下修到 90px，而且一律寫全名
    （使用者：「這個教練名應該不用縮寫吧」—— 量過最長的名字只要 37px）。 */
-ok('★★★ 改成 90px 以上就畫教練（全名）',
+/* ══ 2026-10-26 四修：門檻 90px → 56px ═════════════════════════════════
+   使用者附七日檢視截圖問「這個大小的卡片可以放得下教練名嗎」（同時段三張，約 62px）。
+   查下去發現我一直算錯一件事：**課卡不是 62px 高，是 94px**
+   （SLOT_PX=48、30 分一格，60 分鐘課＝兩格 96−2）。
+   之前「90px 以下沒有空著這回事」是拿 62px 算的，不成立。
+   寬度也夠：MANGO 約 32px，62px 的卡可用寬 44px。56px 是下限（50px 只剩 32px）。 */
+ok('★★★ 改成 56px 以上就畫教練（全名）',
    /\.cal-ev\.cal-ev-std:not\(\.cag-std\) \.evc-coach\{display:none;\}/.test(src)
-   && /@container \(min-width:90px\)\{[\s\S]{0,900}\.evc-coach:not\(\.evc-leavetag\)\{display:inline-flex;/.test(src));
+   && /@container \(min-width:56px\)\{[\s\S]{0,1200}\.evc-coach:not\(\.evc-leavetag\)\{display:inline-flex;/.test(src));
 /* 門檻只能往「量過的值」改。這幾條擋的是「順手調一下數字」—— 0903→0904 之間
    我自己就憑感覺改壞兩次（36→發現非 Ink 40px 切字；32→發現 Ink 32px 也切字）。 */
 ok('★★ 舊的 90／70 已經不在了（改門檻要連註解一起改，不能只換數字）',

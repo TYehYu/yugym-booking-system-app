@@ -62,9 +62,15 @@ ok('★★★ 時間收起來的那幾種改成 18px，與時間門檻完全互�
    /@container \(max-width:83px\)\{ \.cal-ev\.cal-ev-std \.evc-name\{--nmw:18px;\} \}/.test(css)
    && /@container \(min-width:84px\) and \(max-width:97px\)\{[\s\S]{0,260}--nmw:18px;\}/.test(css)
    && /@container \(min-width:98px\) and \(max-width:111px\)\{[\s\S]{0,220}--nmw:18px;\}/.test(css));
-ok('★★★ 第三行被佔走就把上限壓到 20px（有場地、或 90px 以上有教練名）',
+/* ══ 2026-10-26 四修：門檻 90px → 56px ═════════════════════════════════
+   使用者附七日檢視截圖問「這個大小的卡片可以放得下教練名嗎」（同時段三張，約 62px）。
+   查下去發現我一直算錯一件事：**課卡不是 62px 高，是 94px**
+   （SLOT_PX=48、30 分一格，60 分鐘課＝兩格 96−2）。
+   之前「90px 以下沒有空著這回事」是拿 62px 算的，不成立。
+   寬度也夠：MANGO 約 32px，62px 的卡可用寬 44px。56px 是下限（50px 只剩 32px）。 */
+ok('★★★ 第三行被佔走就把上限壓到 20px（有場地、或 56px 以上有教練名）',
    /\.cal-ev\.cal-ev-std:has\(\.evc-vsub\) \.evc-name\{--nmcap:20px;\}/.test(css)
-   && /@container \(min-width:90px\)\{ \.cal-ev\.cal-ev-std \.evc-name\{--nmcap:20px;\} \}/.test(css));
+   && /@container \(min-width:56px\)\{ \.cal-ev\.cal-ev-std \.evc-name\{--nmcap:20px;\} \}/.test(css));
 ok('　　為什麼要改寫法（寫在原地）',
    /加一個「90px 以上顯示教練縮寫」\s*\n?\s*就要再乘一輪，而且很容易漏掉某一格/.test(css));
 ok('　　成因寫在原地（每堂課都是 60 分鐘，所以高度綁死了字級）',
@@ -183,7 +189,7 @@ console.log('\n⑥ 教練膠囊與顏色');
    使用者看線上畫面：「這個教練名應該不用縮寫吧」—— 量過他是對的：
    最長的顯示名是五個拉丁字母（約 32px）＋右緣 5px ＝ 37px，
    90px 的卡可用寬 72px，就算左邊還有場地短名（28px）也只佔 65px。 */
-ok('★★★ 90px 起一律寫全名（沒有縮寫那一段了）',
+ok('★★★ 56px 起一律寫全名（沒有縮寫那一段了）',
    !/@container \(min-width:90px\) and \(max-width:149px\)/.test(css)
    && /90px 起就寫教練\*\*全名\*\*/.test(css));
 ok('★★★ 代課標記分兩種寫法（150px 以下寫「代」）',
@@ -192,8 +198,8 @@ ok('★★★ 代課標記分兩種寫法（150px 以下寫「代」）',
 ok('★★★ 場地短名的門檻跟著放大到 149px（兩者同一行，不然會疊到）',
    /@container \(max-width:149px\)\{\s*\n\s*\.cal-ev\.cal-ev-std \.vs-fl\{display:none;\}/.test(css)
    && /「史密斯訓練架」63px ＋「MANGO代」42px/.test(css));
-ok('★★★ 教練名從 90px 起就畫（門檻只剩這一個）',
-   /@container \(min-width:90px\)\{[\s\S]{0,900}\.cal-ev\.cal-ev-std:not\(\.cag-std\) \.evc-coach:not\(\.evc-leavetag\)\{display:inline-flex;position:absolute;/.test(css)
+ok('★★★ 教練名從 56px 起就畫（門檻只剩這一個）',
+   /@container \(min-width:56px\)\{[\s\S]{0,1200}\.cal-ev\.cal-ev-std:not\(\.cag-std\) \.evc-coach:not\(\.evc-leavetag\)\{display:inline-flex;position:absolute;/.test(css)
    && /\.cal-ev\.cal-ev-std:not\(\.cag-std\) \.evc-coach\{display:none;\}/.test(css));
 /* ══ 2026-10-26 三修：A 面的教練名改成黑字、不要膠囊（使用者：「A面的教練名稱
    也用黑色文字就好」，跟首頁同一個講法）。深底的那兩位拿掉底色會變白字看不見，
@@ -278,6 +284,11 @@ ok('★★★ 其他「沒有自己底色」的地方走 coachInkColor（挑比�
    /function coachInkColor\(id\)\{/.test(src)
    && /_fmCol\[c\.id\]=coachInkColor\(c\.id\);/.test(src)
    && /--sc:\$\{coachInkColor\(x\.id\)\}/.test(src));
+/* 1027 又抓到一處：行事曆的教練篩選 chip。色點畫在白底上，
+   直接吃 fg 的話 MANGO／BARRY／石頭 三顆是白的，整顆看不見。 */
+ok('★★★ 教練篩選 chip 的色點也走 coachInkColor',
+   /const ink = coachInkColor\(c\.id\);/.test(src)
+   && /const st = `--cc:\$\{ink\};` \+ \(on \? `background:\$\{ink\};color:#fff;`/.test(src));
 /* ⚠ 掃整份原始碼：每一處插值用到 `.fg}` 的，同一行必須也有 `.bg}` ——
    也就是「成對使用」。單獨出現就是把白字放到白底上的那種錯。 */
 ok('★★★ 每一處用到 fg 的地方都成對帶著 bg（沒有落單的）', (()=>{

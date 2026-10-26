@@ -28,13 +28,16 @@ const FILTERS=[
 /* calCourseChips 讀 window._calCourse（目前選哪一種），沙箱要給它一個 window。
    選中的那一顆行為不同（不暗化、title 改成「再點一次看全部」），所以測試裡要能切換。 */
 const WIN={_calCourse:'all'};
-const api=new Function('isTeachable','coachDisp','coachTagColor','CALENDAR_COURSE_FILTERS','window',
+/* 2026-10-27：色點改走 coachInkColor（白底上看得見的那個）——
+   沙箱要一起給，不然 calCoachChips 會丟 ReferenceError。 */
+const api=new Function('isTeachable','coachDisp','coachTagColor','coachInkColor','CALENDAR_COURSE_FILTERS','window',
   g('function calCoachChips(coaches, filterCoach, counts){','\n}')+'\n'
   +g('function calCourseChips(counts){','\n}')
   +'\nreturn {calCoachChips,calCourseChips};')(
   c=>c && c.active!==false,
   c=>c.name,
   ()=>({bg:'#eee',fg:'#333'}),
+  ()=>'#333',
   FILTERS, WIN);
 
 const COACHES=[{id:'c1',name:'ANN'},{id:'c2',name:'RANDY'},{id:'c3',name:'ZOE'},{id:'c4',name:'BARRY'}];
