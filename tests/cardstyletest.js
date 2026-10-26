@@ -87,9 +87,11 @@ ok('　　空堂也吃得到（bkIsOpenHold 的前提就是 pending_contract）'
 
 console.log('\n出席章的 DOM 只放一份');
 /* 2026-10-25：章搬出姓名列、變成浮水印；姓名列（.evc-r2）現在是姓名＋時間。 */
-ok('★ 行事曆：姓名列只剩姓名與時間，章與標籤都在第一列',
-   /<span class="evc-r2"><span class="evc-name\$\{bkNameBlankCls\(b\)\}\$\{_nmVCls\}\$\{_nmSCls\}">\$\{_stdName\}<\/span><b class="evc-hm">\$\{b\.start_time\}<\/b><\/span>/.test(src)
-   && /<span class="evc-r1">\$\{_wmOut\}\$\{_friOut\}\$\{_stdTag\}\$\{_alertOut\}\$\{_newOut\}<\/span>/.test(src));
+/* 2026-10-27：時間也搬去第一列（右半），姓名列現在**只剩姓名**；
+   章在時間右邊，警示離開第一列改成絕對定位的左下角。 */
+ok('★ 行事曆：姓名列只剩姓名，標籤在第一列左半、時間與章在右半',
+   /<span class="evc-r2"><span class="evc-name\$\{bkNameBlankCls\(b\)\}\$\{_nmVCls\}\$\{_nmSCls\}">\$\{_stdName\}<\/span><\/span>/.test(src)
+   && /<span class="evc-r1">\$\{_friOut\}\$\{_stdTag\}\$\{_newOut\}<b class="evc-hm">\$\{b\.start_time\}<\/b>\$\{_wmOut\}<\/span>/.test(src));
 ok('★ _stampOut 必須先於 _bodyOut 算完（否則 const TDZ 直接爆）',
    src.indexOf('const _stampOut =') < src.indexOf('const _bodyOut ='),
    {stamp:src.indexOf('const _stampOut ='), body:src.indexOf('const _bodyOut =')});
@@ -236,8 +238,8 @@ ok('★ 不再是右下角跟教練並列的膠囊',
 /* 2026-10-26：教練改成絕對定位的右下角膠囊，不再參與流排版 ——
    場地仍然是流排版的最後一列，教練在 DOM 裡排它後面（位置由 CSS 決定）。 */
 /* 2026-10-26 二修：狀態標籤搬進第一列，所以姓名列後面只剩場地與教練膠囊。 */
-ok('★ 場地是流排版的最後一列，教練膠囊排在它後面',
-   /<\/span>\$\{_venueSub\}\$\{_abbrOut\}\$\{_moreHtml\}<\/div>/.test(src));
+ok('★ 場地是流排版的最後一列，教練膠囊與警示排在它後面（兩者都絕對定位）',
+   /<\/span>\$\{_venueSub\}\$\{_abbrOut\}\$\{_alertOut\}\$\{_moreHtml\}<\/div>/.test(src));
 ok('　　只有教室／跑步機會有值（多功能是預設場地、不標）',
    /selfVenueLabel 本來就只在教室／跑步機才有值/.test(src));
 
@@ -382,11 +384,11 @@ ok('★ 越窄越少東西：窄卡先讓場地，150px 以下不畫教練',
 /* 2026-09-04 新增的第五樣「讓位」：第一列放不下時讓掉**時間**（章與驚嘆號留著）。 */
 /* 2026-10-25：時間搬去跟姓名同一列，舊的六條門檻退場，改成一條 150px。
    讓位的順序不變：時間先退，姓名留到最後。 */
-/* 2026-10-26：門檻從「150px 一律收」改成依名字長度（2 字 84px／3 字 98px／4 字以上 112px）。
-   使用者：「Ａ面還有一個重要資訊是時間」—— 原本收得太早。 */
-ok('★★ 擠不下才讓掉時間，而且依名字長度各自算',
-   /@container \(max-width:111px\)\{\s*\n\s*\.cal-ev\.cal-ev-std \.evc-hm\{display:none;\}/.test(css)
-   && /留時間的條件是「扣掉時間之後名字每個字還有 14px」/.test(css));
+/* 2026-10-27：時間搬回第一列，門檻改成量第一列同排那幾項擠不擠得下
+   （不再跟姓名長度有關 —— 它們不同列了）。 */
+ok('★★ 擠不下才讓掉時間，門檻是量第一列量出來的',
+   /@container \(max-width:42px\)\{\s*\n\s*\.cal-ev\.cal-ev-std \.evc-hm\{display:none;\}/.test(css)
+   && /門檻＝各項相加 ＋ 每項間 4px 間距 ＋ \.evc-txt 左右內距 15px（9＋6），進位。/.test(css));
 ok('　　原則寫在程式裡（寧可少一項，也不要每一項都殘缺）',
    /寧可少一項，也不要每一項都殘缺/.test(css));
 

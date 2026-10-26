@@ -98,9 +98,13 @@ ok('★★★ 舊的兩階（41px／Ink 30px）已經退場',
    （SLOT_PX=48、30 分一格，60 分鐘課＝兩格 96−2）。
    之前「90px 以下沒有空著這回事」是拿 62px 算的，不成立。
    寬度也夠：MANGO 約 32px，62px 的卡可用寬 44px。56px 是下限（50px 只剩 32px）。 */
-ok('★★★ 改成 56px 以上就畫教練（全名）',
+/* 2026-10-27 五修：門檻 56px → 38px，55px 以下改用縮寫。
+   使用者指著 10/26 11:00 那排四連卡（約 45px、姓名已轉直書）：
+   「這種直卡片教練名稱擺不下的話可以用縮寫顯示」。 */
+ok('★★★ 改成 38px 以上就畫教練，55px 以下用縮寫',
    /\.cal-ev\.cal-ev-std:not\(\.cag-std\) \.evc-coach\{display:none;\}/.test(src)
-   && /@container \(min-width:56px\)\{[\s\S]{0,1200}\.evc-coach:not\(\.evc-leavetag\)\{display:inline-flex;/.test(src));
+   && /@container \(min-width:38px\)\{[\s\S]{0,1400}\.evc-coach:not\(\.evc-leavetag\)\{display:inline-flex;/.test(src)
+   && /@container \(max-width:55px\)\{\s*\n\s*\.cal-ev\.cal-ev-std:not\(\.cag-std\) \.evc-coach \.co-fl\{display:none;\}/.test(src));
 /* 門檻只能往「量過的值」改。這幾條擋的是「順手調一下數字」—— 0903→0904 之間
    我自己就憑感覺改壞兩次（36→發現非 Ink 40px 切字；32→發現 Ink 32px 也切字）。 */
 ok('★★ 舊的 90／70 已經不在了（改門檻要連註解一起改，不能只換數字）',
@@ -128,10 +132,14 @@ ok('★★★ 徽章排進第一列的流裡（原本 absolute right:3px，時�
 /* 2026-10-26：出席章回到第一列**最前面**（使用者：「出席章可以改回第一列左邊第一格嗎」）。
    順序因此變成：章 → 友善 → ❗ → NEW，警示那一組靠 margin-left:auto 推到最右。 */
 /* 1026 二修：狀態標籤（體驗／待簽約…）也進第一列，插在友善與警示之間。 */
-ok('★★★ 第一列的順序：章 → 友善 → 狀態標籤靠左，❗ 與 NEW 靠右',
-   /<span class="evc-r1">\$\{_wmOut\}\$\{_friOut\}\$\{_stdTag\}\$\{_alertOut\}\$\{_newOut\}<\/span>/.test(src));
-ok('★★★ 時間跟姓名同一列（第二列）',
-   /<span class="evc-r2"><span class="evc-name[^>]*>\$\{_stdName\}<\/span><b class="evc-hm">\$\{b\.start_time\}<\/b><\/span>/.test(src));
+/* ══ 2026-10-27 定版 ══════════════════════════════════════════════════
+   「警示三角形可以改到左下角嗎？右上角讓給時間」
+   「出席章改到卡片右上角　時間的右邊　卡片左上角就只剩下標籤」
+   → 左半＝標籤（友善／體驗／團課）＋NEW；右半＝時間→章；警示在左下角。 */
+ok('★★★ 第一列：標籤靠左，時間與章靠右，警示已離開這一列',
+   /<span class="evc-r1">\$\{_friOut\}\$\{_stdTag\}\$\{_newOut\}<b class="evc-hm">\$\{b\.start_time\}<\/b>\$\{_wmOut\}<\/span>/.test(src));
+ok('★★★ 姓名列只剩姓名（時間不在那裡了）',
+   /<span class="evc-r2"><span class="evc-name[^>]*>\$\{_stdName\}<\/span><\/span>/.test(src));
 ok('★★★ 有出席章就不出 NEW（使用者：新跟簽不用同時出現）',
    /const _newOut = \(_isNewToday && !_stampOut\)/.test(src));
 ok('★★ 為什麼章與 NEW 互斥，寫在原地',
@@ -149,18 +157,27 @@ ok('★★★ 舊的六條退場，而且退場理由寫在原地',
    改成依名字長度各自算，留時間的條件是「扣掉時間之後名字每個字還有 14px」：
      2 字 84px 起　｜　3 字 98px 起　｜　4 字以上 112px 起。
    ⚠ 這三段與「字級」那三個 @container 完全互補，改門檻要兩邊一起改。 */
-ok('★★★ 時間的門檻改成依名字長度（112／98／84px 三段）',
-   /@container \(max-width:111px\)\{\s*\n\s*\.cal-ev\.cal-ev-std \.evc-hm\{display:none;\}/.test(src)
-   && /@container \(min-width:98px\) and \(max-width:111px\)\{[\s\S]{0,200}nm-s3\) \.evc-hm\{display:inline;\}/.test(src)
-   && /@container \(min-width:84px\) and \(max-width:97px\)\{[\s\S]{0,160}nm-s2\) \.evc-hm\{display:inline;\}/.test(src));
+/* 1027：時間搬回第一列，門檻改成量第一列同排那幾項（不再看姓名長度）。
+   九條，各項的自然寬度是 Playwright 量的，不是心算的。 */
+ok('★★★ 時間的門檻改成量第一列（43／62／76／78／88／97／107／111／121）',
+   /@container \(max-width:42px\)\{\s*\n\s*\.cal-ev\.cal-ev-std \.evc-hm\{display:none;\}/.test(src)
+   && /@container \(max-width:61px\)\{\s*\n\s*\.cal-ev\.cal-ev-std:has\(\.evc-r1 \.evc-check\) \.evc-hm\{display:none;\}/.test(src)
+   && /@container \(max-width:77px\)\{\s*\n\s*\.cal-ev\.cal-ev-std:has\(\.evc-fri\) \.evc-hm\{display:none;\}/.test(src)
+   && /@container \(max-width:87px\)\{\s*\n\s*\.cal-ev\.cal-ev-std:has\(\.evc-stag\) \.evc-hm\{display:none;\}/.test(src)
+   && (src.match(/\.evc-hm\{display:none;\}/g)||[]).length===9);
 ok('★★★ 舊的單一門檻（150px 一律收）已經不在',
    !/@container \(max-width:150px\)\{\s*\n\s*\.cal-ev\.cal-ev-std \.evc-hm\{display:none;\}/.test(src));
-ok('　　理由寫在原地（同樣 84px，「嚴晴」放得下、「蔡美芬吳」放不下）',
-   /同樣 84px 的卡，「嚴晴」放得下時間、「蔡美芬吳」放不下/.test(src));
-ok('★★ 友善的三階（兩字 → 一字 → 收起來），而且比警示先退',
-   /@container \(max-width:120px\)\{\s*\n\s*\.cal-ev\.cal-ev-std \.fri-fl\{display:none;\}/.test(src)
-   && /@container \(max-width:88px\)\{\s*\n\s*\.cal-ev\.cal-ev-std \.evc-fri\{display:none;\}/.test(src)
+ok('　　數字是量的不是算的（寫在原地）',
+   /都是\*\*在瀏覽器裡量的\*\*（Playwright 量 getBoundingClientRect/.test(src));
+/* 1027：門檻整組往下搬（66／56／55）。使用者看著兩張 95px 的卡問
+   「這個大小的卡片左上角的友善標籤有需要縮寫嗎？」—— 不需要。 */
+ok('★★ 友善的三階（66px↑ 友善／56–65 友／55↓ 收起來）',
+   /@container \(max-width:65px\)\{\s*\n\s*\.cal-ev\.cal-ev-std \.fri-fl\{display:none;\}/.test(src)
+   && /@container \(max-width:55px\)\{\s*\n\s*\.cal-ev\.cal-ev-std \.evc-fri\{display:none;\}/.test(src)
    && /它是「限制」不是待辦，比警示先退/.test(src));
+ok('★★ 狀態標籤也有三階（76px↑ 全字／56–75 一字／55↓ 收起來）',
+   /@container \(max-width:75px\)\{\s*\n\s*\.cal-ev\.cal-ev-std \.st-fl\{display:none;\}/.test(src)
+   && /@container \(max-width:55px\)\{\s*\n\s*\.cal-ev\.cal-ev-std \.evc-stag\{display:none;\}/.test(src));
 ok('★★ 警示留到最後，縮成小圓點也不消失',
    /@container \(max-width:52px\)\{[\s\S]{0,260}?border-radius:999px;background:var\(--danger,#b5372e\);\}/.test(src)
    && /它是「這張要處理」的唯一線索，縮成小圓點就好/.test(src));
@@ -169,14 +186,15 @@ ok('★★ 警示留到最後，縮成小圓點也不消失',
 ok('★★★ body.ink 的時間放寬規則已整組移除（兩套主題共用嚴的那組）',
    !/body\.ink \.cal-ev\.cal-ev-std[^{}]*\.evc-hm\{display:inline;\}/.test(src)
    && /這一版把 body\.ink 的放寬規則\*\*整組拿掉\*\*/.test(src));
-ok('★★★ NEW 全字→單字的兩個門檻（時間已收起後量的）',
-   /@container \(max-width:41px\)\{\s*\n\s*\.cal-ev\.cal-ev-std:not\(:has\(\.ev-payalert\)\) \.nw-fl\{display:none;\}/.test(src)
-   && /@container \(max-width:66px\)\{\s*\n\s*\.cal-ev\.cal-ev-std:has\(\.ev-payalert\) \.nw-fl\{display:none;\}/.test(src));
+/* 1027：警示離開第一列，原本「有警示／沒警示」兩組門檻合而為一（取寬鬆的那組）。 */
+ok('★★★ NEW 全字→單字只剩一個門檻（41px）',
+   /@container \(max-width:41px\)\{\s*\n\s*\.cal-ev\.cal-ev-std \.nw-fl\{display:none;\}/.test(src)
+   && !/:has\(\.ev-payalert\)\) \.nw-fl/.test(src));
 ok('★★★ 削內距不丟底色',
-   /@container \(max-width:50px\)\{\s*\n\s*\.cal-ev\.cal-ev-std:not\(:has\(\.ev-payalert\)\) \.evc-new\{border:none;padding:1px 1px;\}/.test(src));
-ok('★★★ 最後手段才藏 NEW（44／28）',
-   /@container \(max-width:44px\)\{\s*\n\s*\.cal-ev\.cal-ev-std:has\(\.ev-payalert\) \.evc-new\{display:none;\}/.test(src)
-   && /@container \(max-width:28px\)\{\s*\n\s*\.cal-ev\.cal-ev-std \.evc-new\{display:none;\}/.test(src));
+   /@container \(max-width:50px\)\{\s*\n\s*\.cal-ev\.cal-ev-std \.evc-new\{border:none;padding:1px 1px;\}/.test(src));
+ok('★★★ 最後手段才藏 NEW（28px，只剩一條）',
+   /@container \(max-width:28px\)\{\s*\n\s*\.cal-ev\.cal-ev-std \.evc-new\{display:none;\}/.test(src)
+   && !/:has\(\.ev-payalert\) \.evc-new\{display:none;\}/.test(src));
 /* 41px 以下章（x7..21）與流排版最左邊的 ❗（x=w-16）一定會撞；
    照紅>金>綠，讓最輕的章退。 */
 /* ⚠ 2026-10-09：未簽到的空心圈（.evc-todo）跟著章一起退 —— 它比章更輕。 */
@@ -205,8 +223,8 @@ ok('★★★ _bodyOut 的順序（第一列 → 姓名列 → 場地 → 教練
 ok('★★★ 教練不再推到右下角（那是首頁課卡才留著的位置）',
    /\.cal-ev\.cal-ev-std \.evc-coach\{ margin-top:0 !important; align-self:flex-start !important; \}/.test(src)
    && /\.tcard\.tcard-std \.tcard-co\{ margin-top:auto !important; align-self:flex-end !important; \}/.test(src));
-ok('★★ 出席章搬出姓名列（1025 進浮水印、1026 進第一列，兩次都不在姓名列）',
-   /<span class="evc-r1">\$\{_wmOut\}/.test(src)
+ok('★★ 出席章搬出姓名列（1025 浮水印、1026 第一列最左、1027 第一列最右）',
+   /<b class="evc-hm">\$\{b\.start_time\}<\/b>\$\{_wmOut\}<\/span>/.test(src)
    && !/\$\{_stampOut\}<\/span>/.test(src));
 
 console.log('\n⑤ 離線量法要留著（下次改門檻照這個跑）');
@@ -342,8 +360,8 @@ console.log('\n⑫ 場地移到最後一列（2026-09-04）');
    有場地的卡教練就被往下推一行，一整排看過去教練名對不齊。 */
 /* 2026-10-26：教練改成絕對定位的右下角膠囊（@container 150px 以上才顯示），
    不再參與流排版，所以它排在最後面；場地仍是流排版的最後一列。 */
-ok('★★★ DOM 順序：姓名 → 場地 → 教練膠囊（狀態標籤已搬到第一列）',
-   /<\/span>\$\{_venueSub\}\$\{_abbrOut\}\$\{_moreHtml\}<\/div>/.test(src));
+ok('★★★ DOM 順序：姓名 → 場地 → 教練膠囊 → 警示（後兩者都絕對定位）',
+   /<\/span>\$\{_venueSub\}\$\{_abbrOut\}\$\{_alertOut\}\$\{_moreHtml\}<\/div>/.test(src));
 ok('★★★ 狀態標籤不在姓名列後面了', !/<\/span>\$\{_stdTag\}\$\{_venueSub\}/.test(src));
 ok('★★ 為什麼教練排在場地前面，寫在原地',
    /場地是「這一堂在哪裡上」，屬於補充資訊；教練是「誰上的」，比場地重要/.test(src));

@@ -173,8 +173,9 @@ console.log('\n課卡：體驗／待簽約另起一列放在姓名下面（2026-
      /const _stdName = hideMember \? typeName : \(_grpCard \? \(gHeadsN>0\?grpHeadLabel\(b\):'團課'\) : \(_nameBase\|\|memName\)\);/.test(src));
   /* 2026-08-21：出席章改成姓名之後自己一列，標籤順延到章後面——
      仍然是「姓名下面獨立一列」，只是中間多了出席章那一列。 */
-  ok('★ 標籤畫在第一列（1026 從姓名下面搬上來）',
-     /const _stdTag = \(!hideMember && !_grpCard && _nameTag\) \? `<span class="evc-stag">\$\{_nameTag\}<\/span>` : '';/.test(src)
+  /* 2026-10-27：標籤多了一字版（st-fl／st-ab），團課也有自己的標籤。 */
+  ok('★ 標籤畫在第一列（1026 從姓名下面搬上來；1027 加一字版與團課）',
+     /<span class="evc-stag"><i class="st-fl">\$\{_stagTx\}<\/i><i class="st-ab">\$\{bkTagAbbr\(_stagTx\)\}<\/i><\/span>/.test(src)
      /* 2026-08-21：姓名與出席章包成 .evc-nmrow 一列，標籤仍接在那一列後面。
         2026-09-04：場地移到最後一列，標籤變成緊接在姓名列之後的那一項。 */
      /* 2026-10-25：出席章變成浮水印、版面改兩列，姓名列的 class 由 .evc-nmrow 換成 .evc-r2；
@@ -182,10 +183,13 @@ console.log('\n課卡：體驗／待簽約另起一列放在姓名下面（2026-
      /* 2026-10-26：姓名多掛一個字級用的長度 class（nm-s2…nm-s6）。
         同日二修：標籤**搬進第一列**（使用者：「體驗可以改成標籤跟友善」）——
         原本它跟場地同在姓名下面那一疊，兩個都有的卡會把場地擠掉。 */
-     && /<span class="evc-r1">\$\{_wmOut\}\$\{_friOut\}\$\{_stdTag\}\$\{_alertOut\}\$\{_newOut\}<\/span>/.test(src)
-     && /<span class="evc-r2"><span class="evc-name\$\{bkNameBlankCls\(b\)\}\$\{_nmVCls\}\$\{_nmSCls\}">\$\{_stdName\}<\/span><b class="evc-hm">\$\{b\.start_time\}<\/b><\/span>/.test(src));
-  ok('　　遮蔽卡與團課卡不掛（那兩種主行不是姓名）',
-     /!hideMember && !_grpCard && _nameTag/.test(src));
+     /* 2026-10-27：時間也進第一列、警示搬去左下角，姓名列只剩姓名。 */
+     && /<span class="evc-r1">\$\{_friOut\}\$\{_stdTag\}\$\{_newOut\}<b class="evc-hm">\$\{b\.start_time\}<\/b>\$\{_wmOut\}<\/span>/.test(src)
+     && /<span class="evc-r2"><span class="evc-name\$\{bkNameBlankCls\(b\)\}\$\{_nmVCls\}\$\{_nmSCls\}">\$\{_stdName\}<\/span><\/span>/.test(src));
+  /* 2026-10-27 改口：團課**改成要掛**（使用者點名「團課(新增）」），
+     只有遮蔽卡仍然不掛 —— 它連姓名都看不到，標籤也不該洩漏課別。 */
+  ok('　　遮蔽卡不掛（看不到姓名的卡不該洩漏課別）；團課 1027 起改掛「團課」',
+     /const _stagTx = hideMember \? '' : \(_grpCard \? '團課' : \(_nameTag\|\|''\)\);/.test(src));
   ok('　　小字樣式有定義，窄卡再縮一級',
      /\.cal-ev\.cal-ev-std \.evc-sub\{font-size:9\.5px;/.test(src)
      && /\.cal-ev\.cal-ev-std\.cal-ev-7d \.evc-sub,\.cal-ev\.cal-ev-std\.ev-w-tiny \.evc-sub\{font-size:9px;\}/.test(src));

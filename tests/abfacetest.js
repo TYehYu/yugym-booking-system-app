@@ -29,17 +29,29 @@ ok('★★★ 內容包在 .evc-flip 裡（翻的是內容層，不是整張卡�
    /const _bodyOut = `<div class="evc-flip"><div class="evc-body"><\/div>/.test(src));
 ok('★★★ 轉內容層的理由寫在原地（.cal-ev 要留著當 container）',
    /這樣 \.cal-ev 仍然是 container（container-type:size 掛在它身上）/.test(css));
-/* 1026 再加一項：狀態標籤（體驗／待簽約…）插在友善後面、警示前面。 */
-ok('★★★ 第一列：章 → 友善 → 狀態標籤 → 警示 → NEW',
-   /<span class="evc-r1">\$\{_wmOut\}\$\{_friOut\}\$\{_stdTag\}\$\{_alertOut\}\$\{_newOut\}<\/span>/.test(src));
-ok('★★ 第一列靠左排、警示用 margin-left:auto 推到最右',
-   /\.cal-ev\.cal-ev-std \.evc-r1\{display:flex;align-items:center;justify-content:flex-start;/.test(css)
-   && /\.cal-ev\.cal-ev-std \.evc-r1 \.ev-payalert\{margin-left:auto;\}/.test(css));
+/* ══ 2026-10-27 定版：第一列＝左半標籤、右半狀態 ═══════════════════════
+   使用者兩句話把這一列定了下來：
+     「警示三角形可以改到左下角嗎？右上角讓給時間」
+     「出席章改到卡片右上角　時間的右邊　卡片左上角就只剩下標籤　友善＋體驗＋團課(新增）」
+   所以順序是：友善／狀態標籤 → NEW ──（推到最右）── 時間 → 章。
+   警示不在這一列了（絕對定位的左下角）。 */
+ok('★★★ 第一列：友善 → 狀態標籤 → NEW → 時間 → 章（警示已不在這一列）',
+   /<span class="evc-r1">\$\{_friOut\}\$\{_stdTag\}\$\{_newOut\}<b class="evc-hm">\$\{b\.start_time\}<\/b>\$\{_wmOut\}<\/span>/.test(src));
+ok('★★★ 警示改成絕對定位的左下角（不再參與第一列的寬度）',
+   /\.cal-ev\.cal-ev-std \.ev-payalert\{top:auto;right:auto;left:5px;bottom:3px;\}/.test(css)
+   && !/\.cal-ev\.cal-ev-std \.evc-r1 \.ev-payalert\{margin-left:auto;\}/.test(css));
+ok('★★ 時間靠右、字級自己訂（搬到 15px 高的第一列就不能再繼承姓名那列）',
+   /\.cal-ev\.cal-ev-std \.evc-r1 \.evc-hm\{flex:none;margin-left:auto;font-size:10px;/.test(css));
+ok('　　為什麼用絕對定位而不是排進第三列（寫在原地）',
+   /排進流裡會跟場地搶那一行|排進第三列會跟場地搶那一行/.test(css));
 ok('★★★ 第二列 flex:none —— 不讓它長到卡底壓住教練膠囊',
    /\.cal-ev\.cal-ev-std \.evc-r2\{display:flex;align-items:center;gap:6px;width:100%;min-width:0;\s*\n\s*flex:none;\}/.test(css));
 ok('　　那個坑寫在原地（量到重疊 1px）', /量到重疊 1px，使用者回報「太擠」/.test(css));
-ok('★★★ 場地那一行不可壓縮（flex:none）',
-   /\.cal-ev\.cal-ev-std \.evc-vsub\{flex:none;\}/.test(css));
+ok('★★★ 場地那一行不可壓縮，而且高度一律保留（1027：姓名下方留個副標空間）',
+   /\.cal-ev\.cal-ev-std \.evc-vsub\{flex:none;min-height:12px;\}/.test(css)
+   && /: `<span class="evc-sub evc-vsub evc-vsub-ph"><\/span>`/.test(src));
+ok('　　為什麼空的也要畫（同一橫排的姓名要對齊）',
+   /同一橫排看過去\*\*姓名對不齊\*\*/.test(src));
 ok('　　為什麼要 flex:none —— 壓扁不會觸發溢出警告',
    /壓扁不會觸發任何溢出警告/.test(css));
 
@@ -55,37 +67,45 @@ ok('★★★ 與直書用的 nm-v2／nm-v3 分開（團課與遮蔽卡也要有
 ok('★★★ 算式整份只寫一次（五條，吃變數）',
    /nm-s3\{font-size:clamp\(12px,min\(45cqh,calc\(\(100cqw - var\(--nmw\)\)\/3\)\),var\(--nmcap\)\) !important;\}/.test(css)
    && (css.match(/\.evc-name\.nm-s3\{font-size:/g)||[]).length===1);
-ok('★★★ 預設 56px（內距 18 ＋ 時間 38）—— 時間先留位子',
-   /\.cal-ev\.cal-ev-std \.evc-name\{--nmw:56px;--nmcap:28px;\}/.test(css)
-   && /先留給時間，剩下的才給名字/.test(css));
-ok('★★★ 時間收起來的那幾種改成 18px，與時間門檻完全互補',
-   /@container \(max-width:83px\)\{ \.cal-ev\.cal-ev-std \.evc-name\{--nmw:18px;\} \}/.test(css)
-   && /@container \(min-width:84px\) and \(max-width:97px\)\{[\s\S]{0,260}--nmw:18px;\}/.test(css)
-   && /@container \(min-width:98px\) and \(max-width:111px\)\{[\s\S]{0,220}--nmw:18px;\}/.test(css));
+/* 1027：時間搬去第一列，第二列整列都是姓名 → --nmw 變成常數 18px，
+   原本那三條「時間收起來就放寬」的 @container 全部收掉。 */
+ok('★★★ --nmw 固定 18px（第二列整列都給姓名）',
+   /\.cal-ev\.cal-ev-std \.evc-name\{--nmw:18px;\}/.test(css)
+   && !/--nmw:56px/.test(css)
+   && (css.match(/--nmw:18px;/g)||[]).length===1);
+ok('　　三條舊分段整組收掉（不會再有「時間收了但名字沒變大」）',
+   !/@container \(max-width:83px\)\{ \.cal-ev\.cal-ev-std \.evc-name\{--nmw:18px;\} \}/.test(css));
 /* ══ 2026-10-26 四修：門檻 90px → 56px ═════════════════════════════════
    使用者附七日檢視截圖問「這個大小的卡片可以放得下教練名嗎」（同時段三張，約 62px）。
    查下去發現我一直算錯一件事：**課卡不是 62px 高，是 94px**
    （SLOT_PX=48、30 分一格，60 分鐘課＝兩格 96−2）。
    之前「90px 以下沒有空著這回事」是拿 62px 算的，不成立。
    寬度也夠：MANGO 約 32px，62px 的卡可用寬 44px。56px 是下限（50px 只剩 32px）。 */
-ok('★★★ 第三行被佔走就把上限壓到 20px（有場地、或 56px 以上有教練名）',
-   /\.cal-ev\.cal-ev-std:has\(\.evc-vsub\) \.evc-name\{--nmcap:20px;\}/.test(css)
-   && /@container \(min-width:56px\)\{ \.cal-ev\.cal-ev-std \.evc-name\{--nmcap:20px;\} \}/.test(css));
+/* 1027：使用者「希望姓名能大一點」。原本的 20px 是拿 62px 的卡算的，
+   卡其實 94px（9/1 以後 3042 筆全是 60 分鐘課）。重算後上限 26px。 */
+ok('★★★ 字級上限 26px，而且不再分「有沒有場地／有沒有教練」',
+   /\.cal-ev\.cal-ev-std \.evc-name\{--nmcap:26px;\}/.test(css)
+   && (css.match(/--nmcap:\d/g)||[]).length===1);
+ok('　　重算過程寫在原地（內容總高 ≤64px 才不會壓到教練）',
+   /內容總高要 ≤ 64px 才不會壓到教練/.test(css));
 ok('　　為什麼要改寫法（寫在原地）',
    /加一個「90px 以上顯示教練縮寫」\s*\n?\s*就要再乘一輪，而且很容易漏掉某一格/.test(css));
 ok('　　成因寫在原地（每堂課都是 60 分鐘，所以高度綁死了字級）',
    /而\*\*每一堂課都是 60 分鐘＝62px 高\*\*/.test(css));
 
 console.log('\n③ 時間門檻三段，與字級三段互補');
-ok('★★★ 2 字 84px 起、3 字 98px 起、4 字以上 112px 起',
-   /@container \(min-width:98px\) and \(max-width:111px\)\{[\s\S]{0,220}nm-s3\) \.evc-hm\{display:inline;\}/.test(css)
-   && /@container \(min-width:84px\) and \(max-width:97px\)\{[\s\S]{0,180}nm-s2\) \.evc-hm\{display:inline;\}/.test(css));
-ok('★★★ 字級那邊有完全對應的三段（83↓／84–97／98–111）',
-   /@container \(max-width:83px\)\{/.test(css)
-   && /@container \(min-width:84px\) and \(max-width:97px\)\{\s*\n\s*\.cal-ev\.cal-ev-std \.evc-name\.nm-s3/.test(css)
-   && /@container \(min-width:98px\) and \(max-width:111px\)\{\s*\n\s*\.cal-ev\.cal-ev-std \.evc-name\.nm-s4/.test(css));
-ok('★★ 互補關係寫在原地（改門檻要兩邊一起改）',
-   /改門檻要兩邊一起改，\s*\n?\s*否則會出現「時間收了但名字沒跟著變大」/.test(css));
+/* 1027：門檻不再跟姓名長度有關（它們不同列了），改成量第一列同排的那幾項。
+   每一個數字都是在瀏覽器裡量的（Playwright getBoundingClientRect）。 */
+ok('★★★ 時間門檻改成量第一列（43／62／76／78／88／97／107／111／121）',
+   /@container \(max-width:42px\)\{\s*\n\s*\.cal-ev\.cal-ev-std \.evc-hm\{display:none;\}/.test(css)
+   && /@container \(max-width:61px\)\{\s*\n\s*\.cal-ev\.cal-ev-std:has\(\.evc-r1 \.evc-check\) \.evc-hm/.test(css)
+   && /@container \(max-width:96px\)\{\s*\n\s*\.cal-ev\.cal-ev-std:has\(\.evc-r1 \.evc-check\):has\(\.evc-fri\) \.evc-hm/.test(css)
+   && /@container \(max-width:120px\)\{\s*\n\s*\.cal-ev\.cal-ev-std:has\(\.evc-new\):has\(\.evc-stag\) \.evc-hm/.test(css));
+ok('★★★ 依名字長度的那三段已經整組退場',
+   !/nm-s2\) \.evc-hm\{display:inline;\}/.test(css)
+   && !/nm-s3\) \.evc-hm\{display:inline;\}/.test(css));
+ok('★★ 數字是量的不是算的（寫在原地）',
+   /都是\*\*在瀏覽器裡量的\*\*（Playwright 量 getBoundingClientRect/.test(css));
 
 console.log('\n④ B 面');
 ok('★★★ 固定三列：教練／進度／場地',
@@ -198,9 +218,17 @@ ok('★★★ 代課標記分兩種寫法（150px 以下寫「代」）',
 ok('★★★ 場地短名的門檻跟著放大到 149px（兩者同一行，不然會疊到）',
    /@container \(max-width:149px\)\{\s*\n\s*\.cal-ev\.cal-ev-std \.vs-fl\{display:none;\}/.test(css)
    && /「史密斯訓練架」63px ＋「MANGO代」42px/.test(css));
-ok('★★★ 教練名從 56px 起就畫（門檻只剩這一個）',
-   /@container \(min-width:56px\)\{[\s\S]{0,1200}\.cal-ev\.cal-ev-std:not\(\.cag-std\) \.evc-coach:not\(\.evc-leavetag\)\{display:inline-flex;position:absolute;/.test(css)
+/* 1027 五修：使用者指著 10/26 11:00 那排四連卡（約 45px、姓名已轉直書）說
+   「這種直卡片教練名稱擺不下的話可以用縮寫顯示」。門檻 56px → 38px，55px 以下用縮寫。 */
+ok('★★★ 教練名從 38px 起就畫，55px 以下用縮寫',
+   /@container \(min-width:38px\)\{[\s\S]{0,1400}\.cal-ev\.cal-ev-std:not\(\.cag-std\) \.evc-coach:not\(\.evc-leavetag\)\{display:inline-flex;position:absolute;/.test(css)
+   && /@container \(max-width:55px\)\{\s*\n\s*\.cal-ev\.cal-ev-std:not\(\.cag-std\) \.evc-coach \.co-fl\{display:none;\}/.test(css)
    && /\.cal-ev\.cal-ev-std:not\(\.cag-std\) \.evc-coach\{display:none;\}/.test(css));
+ok('★★★ 縮寫那一段寫在 min-width:38px **之後**（同權重，後面的才贏）',
+   css.indexOf('@container (min-width:38px){\n    /* ══ 2026-10-26 三修')
+     < css.indexOf('@container (max-width:55px){\n    .cal-ev.cal-ev-std:not(.cag-std) .evc-coach .co-fl'));
+ok('　　順序的坑寫在原地（1027 第一版就是寫反了）',
+   /45px 的卡就會出現完整的「MANGO」而不是「MA」/.test(css));
 /* ══ 2026-10-26 三修：A 面的教練名改成黑字、不要膠囊（使用者：「A面的教練名稱
    也用黑色文字就好」，跟首頁同一個講法）。深底的那兩位拿掉底色會變白字看不見，
    所以底色與字色一起改：背景透明＋墨色字。教練色留在左色條與 B 面底色上。 */
@@ -255,21 +283,29 @@ ok('　　為什麼自己一行（併排放不下的數字寫在原地）',
 console.log('\n⑥c 狀態標籤搬進第一列');
 /* 使用者 1026：「體驗可以改成標籤跟友善　這樣才不會跟場地相撞　因為體驗跟友善
    不會同時出現　但是體驗跟其他場地有機會」。 */
-ok('★★★ 體驗／待簽約那一組搬進第一列，跟〔友善〕同一個位子',
-   /<span class="evc-r1">\$\{_wmOut\}\$\{_friOut\}\$\{_stdTag\}\$\{_alertOut\}\$\{_newOut\}<\/span>/.test(src)
+ok('★★★ 體驗／待簽約那一組在第一列，跟〔友善〕同一個位子',
+   /<span class="evc-r1">\$\{_friOut\}\$\{_stdTag\}/.test(src)
    && !/<\/span>\$\{_stdTag\}\$\{_venueSub\}/.test(src));
-ok('★★★ 換成自己的 class（.evc-sub 還有場地在用）',
-   /<span class="evc-stag">\$\{_nameTag\}<\/span>/.test(src)
-   && /\.cal-ev\.cal-ev-std \.evc-stag\{flex:none;/.test(css));
-ok('★★ 比友善晚一階退場（67px 以下才收）',
-   /@container \(max-width:67px\)\{\s*\n\s*\.cal-ev\.cal-ev-std \.evc-stag\{display:none;\}/.test(css));
+ok('★★★ 團課也有標籤了（1027 使用者：「友善＋體驗＋團課(新增）」）',
+   /_grpCard \? '團課'/.test(src));
+ok('★★★ 換成自己的 class，而且有一字版（st-fl／st-ab）',
+   /<span class="evc-stag"><i class="st-fl">\$\{_stagTx\}<\/i><i class="st-ab">\$\{bkTagAbbr\(_stagTx\)\}<\/i><\/span>/.test(src)
+   && /const BK_TAG_AB=\{'體驗':'體','待簽約':'約','待繳費':'費','場租':'租','待安排':'排','團課':'團'\}/.test(src));
+ok('★★ 標籤的三階（全字 76px↑／一字 56–75／55px↓ 收起來）',
+   /@container \(max-width:75px\)\{\s*\n\s*\.cal-ev\.cal-ev-std \.st-fl\{display:none;\}/.test(css)
+   && /@container \(max-width:55px\)\{\s*\n\s*\.cal-ev\.cal-ev-std \.evc-stag\{display:none;\}/.test(css));
+ok('★★ 友善的三階一起往下搬（66px↑ 友善／56–65 友／55↓ 收）',
+   /@container \(max-width:65px\)\{\s*\n\s*\.cal-ev\.cal-ev-std \.fri-fl\{display:none;\}/.test(css)
+   && /@container \(max-width:55px\)\{\s*\n\s*\.cal-ev\.cal-ev-std \.evc-fri\{display:none;\}/.test(css));
+ok('　　使用者那一句寫在原地（95px 的卡不需要縮寫）',
+   /這個大小的卡片左上角的友善標籤\s*\n?\s*有需要縮寫嗎/.test(css));
 ok('　　共用位子的理由寫在原地', /友善是票券的限制、\s*\n?\s*體驗是課別，同一堂不可能兩者皆是/.test(src));
 /* ⚠ 寬度預算的分段一定要跟「時間門檻」一致。第一版（九組 font-size 那版）
    漏了一格：84px 的兩字名字用到「沒有時間」的算式，被放大到剛好多 1px，
    overflow-wrap:anywhere 就從兩個字中間折行，場地被推出卡外。
    改成變數之後，分段只有 --nmw 那三條，不可能再漏。 */
-ok('★★★ 分段只剩 --nmw 那三條（不會再漏）',
-   (css.match(/--nmw:18px;/g)||[]).length===3
+ok('★★★ 分段已經整組消失（--nmw 只有一個值，不可能再漏）',
+   (css.match(/--nmw:18px;/g)||[]).length===1
    && !/:has\(\.evc-vsub\) \.evc-name\.nm-s3\{font-size:/.test(css));
 ok('★★ 61px 以下連場地都不畫（姓名要吃 3–4 行）',
    /@container \(max-width:61px\)\{\s*\n\s*\.cal-ev\.cal-ev-std \.evc-vsub\{display:none;\}/.test(css));
