@@ -51,8 +51,11 @@ ok('★★★ 當日課堂（totalClasses）只收 pt/friendly/group/massage —
 ok('★★★ 自主訓練筆數改用 bkIsSelf（只認 category==='+"'自主訓練'"+'），場租不算在內',
    /const selfCount=dayBk\.filter\(b=>bkIsSelf\(b\)\)\.length;/.test(src)
    && !/const selfCount=dayBk\.filter\(b=>bkCC\(b\)==='self'\)\.length;/.test(src));
-ok('★★★ 教練課費只算 category==='+"'私人教練'"+'（場租不在內）',
-   /function isPtPayClass\(b\)\{ return !!b && b\.category==='私人教練'; \}/.test(src));
+/* 2026-10-26：運動按摩併進教練課堂數（使用者定案「1 併入計算」）——
+   在那之前按摩不但不算堂數，薪資制度裡**根本沒有按摩這個項目**，
+   等於上了沒有任何課堂報酬。體驗仍然不算（0731 的定案沒有被推翻）。 */
+ok('★★★ 教練課費只算 私人教練＋運動按摩（場租不在內）',
+   /function isPtPayClass\(b\)\{ return !!b && \(b\.category==='私人教練' \|\| b\.category==='運動按摩'\); \}/.test(src));
 ok('★★★ 店長獎金的堂數只收教練課與團體課',
    /const LEADER_CATS=\['私人教練','小班肌力'\];/.test(src));
 /* 場租也不吃票口袋 —— 口袋分類器直接回 null */

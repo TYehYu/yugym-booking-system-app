@@ -43,7 +43,7 @@ console.log('\n③ 兩邊的教練課／團課定義沒有第二處分歧');
 {
   /* 兩支都用同一個 isPtPayClass 與 bkIsGroup，且「已上」都是 completed|checked_in。
      這三件事只要有一處各寫各的，數字又會飄。 */
-  ok('★★★ 教練課＝isPtPayClass，兩邊同一支', /function isPtPayClass\(b\)\{ return !!b && b\.category==='私人教練'; \}/.test(src)
+  ok('★★★ 教練課＝isPtPayClass，兩邊同一支', /function isPtPayClass\(b\)\{ return !!b && \(b\.category==='私人教練' \|\| b\.category==='運動按摩'\); \}/.test(src)
      && (src.match(/\.filter\(isPtPayClass\)\.length/g)||[]).length>=4);
   ok('★★★ 代課的課算在代課教練身上，兩邊都吃 bkCoachId',
      /const myBk=rangeBk\.filter\(b=>\(bkCoachId\(b\)\)===c\.id\);/.test(src)

@@ -156,8 +156,12 @@ console.log('\n第二批（2026-07-31）：自主訓練與運動按摩');
 ok('★ 「是不是自主訓練」也收成一支（34 處 → 1 處）',
    /function bkIsSelf\(b\)\{/.test(src)
    && (src.match(/\bb\.category==='自主訓練'/g)||[]).length===1);
+/* 2026-10-26：isPtPayClass 也要比對「運動按摩」（併進教練課堂數），
+   所以這個字串現在有兩處 —— 一處是口袋分類器，一處是算薪的堂數。
+   ⚠ 口袋那一支仍然是**唯一**該寫這句的分類器，這裡只是放寬計數。 */
 ok('★ 運動按摩同樣', /function bkIsMassage\(b\)\{/.test(src)
-   && (src.match(/\bb\.category==='運動按摩'/g)||[]).length===1);
+   && (src.match(/\bb\.category==='運動按摩'/g)||[]).length===2   /* 口袋分類器＋算薪的堂數 */
+   && /function isPtPayClass\(b\)\{ return !!b && \(b\.category==='私人教練' \|\| b\.category==='運動按摩'\); \}/.test(src));
 ok('　　為什麼自主訓練差最多，寫在程式裡',
    /單位是「點」不是「堂」、效期 7 天、120 分扣 2 點/.test(src));
 

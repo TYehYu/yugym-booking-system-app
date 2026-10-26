@@ -107,7 +107,7 @@ console.log('\n⑤ 薪資與儲存完全沒被動到');
   ok('★★★ 算薪那幾支一個字都沒改',
      /const ptPay=ptDone\*\(emp\.pt_rate\|\|0\);/.test(src)
      && /function calcPtBonus\(cfg, ptDone\)\{/.test(src)
-     && /function isPtPayClass\(b\)\{ return !!b && b\.category==='私人教練'; \}/.test(src));
+     && /function isPtPayClass\(b\)\{ return !!b && \(b\.category==='私人教練' \|\| b\.category==='運動按摩'\); \}/.test(src));
   ok('★★★ wide 只是版面旗標，沒有任何地方拿它判斷資料',
      !/wide[\s\S]{0,80}(dbPut|PAY_RULE_KEYS|calcSalary)/.test(src));
   ok('★★ 固定休與預設班別的存檔仍走原本那兩支',

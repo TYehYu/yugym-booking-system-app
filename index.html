@@ -15250,8 +15250,8 @@ function tbl(s){return TABLE_ALIAS[s]||s;}
 let sb=null;
 // ── 版本號（日期+時間格式：年後兩碼+月+日.時分，例 26620.1058 = 26年6/20 10:58）──
 // 每次改版手動更新這一行即可，畫面與 title 會一起更新
-const APP_VERSION = '261026.1524';
-const APP_VERSION_LABEL = 'v261026.1524';
+const APP_VERSION = '261026.1815';
+const APP_VERSION_LABEL = 'v261026.1815';
 const CLOUD = !!(window.YUGYM_CONFIG && window.YUGYM_CONFIG.url && window.YUGYM_CONFIG.anonKey);
 if(CLOUD){ sb = supabase.createClient(window.YUGYM_CONFIG.url, window.YUGYM_CONFIG.anonKey); }
 
@@ -47848,8 +47848,24 @@ function annualLeaveAccount(emp, shifts, year){
 // 規則：兼職/工讀/合作教練在值班時段內上教練課，該重疊時段以課程抽成為主，不重複計值班費
 /* 教練課堂數（2026-07-31 使用者定案：體驗課不算進教練課堂數，也不支薪）——
    原本 私人教練＋體驗 一起算，與櫃檯的薪資表（只算私人教練）差了 7 堂／7 月。
-   體驗課仍會建卡、仍算銷課堂數，只是不進教練的堂數與課費。 */
-function isPtPayClass(b){ return !!b && b.category==='私人教練'; }
+   體驗課仍會建卡、仍算銷課堂數，只是不進教練的堂數與課費。
+
+   ══ 2026-10-26：運動按摩併進來（使用者定案「1 併入計算」）══════════════
+   起因：使用者問「mango 9月 10月 運動按摩是不是沒有計算在教練課堂數裡面」——
+   查出來不只沒算進堂數，**薪資制度裡根本沒有按摩這個項目**
+   （五項：底薪／教練課費／達標獎金／團課人頭／值班時薪），
+   所以那五堂（9 月 2、10 月 3，都是黃美蓉、都有扣票）等於沒有任何課堂報酬。
+   併進來之後按摩與教練課同費率、同級距，也一起算達標獎金與店長獎金的堂數。
+   ⚠ 這是**追溯**的：9 月、10 月的薪資單數字會跟著變（那正是使用者要的）。
+   ⚠ 體驗仍然不算 —— 0731 的定案沒有被推翻。
+   ⚠ 要讓教練看得出「其中幾堂是按摩」，另外數一支 countMassage（薪資單上標出來）。 */
+function isPtPayClass(b){ return !!b && (b.category==='私人教練' || b.category==='運動按摩'); }
+/* 其中幾堂是運動按摩（2026-10-26 使用者：「可以顯示運動按摩堂數讓教練知道」）——
+   併進教練課堂數之後，教練看到的是一個合計數字；按摩是不同的工作，
+   標出來他才對得上自己的印象。只數、不另計薪。 */
+/* ⚠ 用 bkIsMassage 不要自己比字串：分類器只有一支（口袋規則），
+   自己比會變成第二個真相來源（pockettest 的「散裝課別比較」就是在守這件事）。 */
+function countMassage(list){ return (list||[]).filter(b=>bkIsMassage(b)).length; }
 /* 逐筆回傳「哪一天、哪一堂、重疊幾小時」（2026-08-30 使用者指示：
      「也要記錄在薪資單上　讓員工知道他為什麼被扣掉這個時數」）——
    原本只回傳一個總時數，薪資單上那些小時就這樣靜靜消失，
@@ -50470,7 +50486,8 @@ async function openPerfDetail(empId, month){
     const mine=bookings.filter(b=>(bkCoachId(b))===empId
       && String(b.date||'').slice(0,7)===ym && b.status!=='cancelled');
     const done=mine.filter(b=>b.status==='completed'||b.status==='checked_in');
-    const ptDone=done.filter(isPtPayClass).length;   // 體驗不算（2026-07-31）
+    const ptDone=done.filter(isPtPayClass).length;   // 體驗不算（2026-07-31）；按摩算（2026-10-26）
+    const ptMassage=countMassage(done);              // 其中幾堂是按摩（標給教練看）
     const grpList=done.filter(b=>bkIsGroup(b));
     const groupHeads=grpList.reduce((s,b)=>s+grpAttendHeads(b),0);   // 只算已簽到（2026-07-31）
     const leave=leaveSummary(shifts, empId, ym);
@@ -50511,13 +50528,17 @@ async function openPerfDetail(empId, month){
         money(sal.base), {dim:!_floor, pick:_floor, tag:_floor?'採用':'未採用'});
       /* 級距攤開時上面那一列只寫堂數：同一串「59堂×$600 + 20堂×$650…」
          寫兩次是多的（2026-10-26）。 */
+      /* 按摩併進教練課堂數之後要標出來（2026-10-26 使用者：「可以顯示運動按摩堂數
+         讓教練知道」）—— 合計一個數字看不出裡面有幾堂是按摩。 */
       const _hasTier=((sal.ptParts||[]).length>1);
-      rows+=row('教練課費', _hasTier?`${ptDone} 堂`:(sal.ptDetail||`${ptDone} 堂`),
+      const _mz=ptMassage>0?`（含按摩 ${ptMassage} 堂）`:'';
+      rows+=row('教練課費', (_hasTier?`${ptDone} 堂`:(sal.ptDetail||`${ptDone} 堂`))+_mz,
         money(sal.ptPay), {dim:_floor, pick:!_floor, tag:_floor?'未採用':'採用'});
       rows+=ptTierListHTML(sal);
     }else{
       const _hasTier=((sal.ptParts||[]).length>1);
-      rows+=row('教練課費', _hasTier?`${ptDone} 堂`:(sal.ptDetail||`${ptDone} 堂`), money(sal.ptPay));
+      const _mz=ptMassage>0?`（含按摩 ${ptMassage} 堂）`:'';
+      rows+=row('教練課費', (_hasTier?`${ptDone} 堂`:(sal.ptDetail||`${ptDone} 堂`))+_mz, money(sal.ptPay));
       rows+=ptTierListHTML(sal);
     }
     if(sal.bonus>0)    rows+=row('達標獎金', sal.bonusDetail||'', money(sal.bonus));
@@ -78586,7 +78607,8 @@ async function renderSalaryContent(TARGET, withHead){
   // 有代課算代課教練（2026-08-01，與月結明細同口徑）
   const myDone=bookings.filter(b=>bkCoachId(b)===empId&&(b.status==='completed'||b.status==='checked_in')&&bkCounts(b)&&b.date.slice(0,7)===month);
   const myAll=bookings.filter(b=>bkCoachId(b)===empId&&bkCounts(b)&&b.date.slice(0,7)===month);   // 全員請假不成課（2026-08-02）
-  const ptDone=myDone.filter(isPtPayClass).length;   // 體驗不算（2026-07-31）
+  const ptDone=myDone.filter(isPtPayClass).length;   // 體驗不算（2026-07-31）；按摩算（2026-10-26）
+  const ptMassage=countMassage(myDone);             // 其中幾堂是按摩（2026-10-26 使用者要求標出來）
   const groupDoneList=myDone.filter(b=>bkIsGroup(b));
   const groupDone=groupDoneList.length;
   // 團課總人頭：每堂實際簽到的人數加總（請假、漏簽都不算 —— 2026-07-31 使用者指示）
@@ -78719,11 +78741,11 @@ async function renderSalaryContent(TARGET, withHead){
           /* 請假那幾列已經移到「應發合計」底下（2026-10-04）——
              0801 起請假是算完總薪資才扣的，列在底薪旁邊會讓人以為底薪被扣過了，
              底下又冒出一列數字沒變的「調整後底薪」（adjBase 自 0801 就＝base，整列已移除）。 */
-          h+=row('教練課費',`$${sal.ptPay.toLocaleString()}`,`${ptDone} 堂`);
+          h+=row('教練課費',`$${sal.ptPay.toLocaleString()}`,`${ptDone} 堂${ptMassage>0?`（含按摩 ${ptMassage} 堂）`:''}`);
           h+=ptTierListHTML(sal);
           h+=row('教練課收入',`<b>$${sal.ptIncome.toLocaleString()}</b>`, sal.ptIsFloor?'取底薪':'取課費');
         }else{
-          h+=row('教練課費',`$${sal.ptPay.toLocaleString()}`,`${ptDone} 堂`);
+          h+=row('教練課費',`$${sal.ptPay.toLocaleString()}`,`${ptDone} 堂${ptMassage>0?`（含按摩 ${ptMassage} 堂）`:''}`);
           h+=ptTierListHTML(sal);
         }
         if(sal.bonus>0) h+=row('達標獎金',`$${sal.bonus.toLocaleString()}`, sal.bonusDetail);

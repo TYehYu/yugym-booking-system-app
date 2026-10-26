@@ -90,8 +90,10 @@ ok('★★ 版型沿用 .pfd-nl（跟值班重疊、店長名單同一組）', /
 })();
 
 console.log('\n④ 兩份薪資單都吃得到');
+/* 2026-10-26：堂數後面可能接「（含按摩 N 堂）」—— 按摩併進教練課堂數之後，
+   使用者要求標出來讓教練知道。級距明細的位置沒變。 */
 ok('★★★ 教練自己那份（sal-rows）',
-   /h\+=row\('教練課費',`\$\$\{sal\.ptPay\.toLocaleString\(\)\}`,`\$\{ptDone\} 堂`\);\s*\n\s*h\+=ptTierListHTML\(sal\);/.test(src));
+   /h\+=row\('教練課費',`\$\$\{sal\.ptPay\.toLocaleString\(\)\}`,`\$\{ptDone\} 堂\$\{ptMassage>0\?`（含按摩 \$\{ptMassage\} 堂）`:''\}`\);\s*\n\s*h\+=ptTierListHTML\(sal\);/.test(src));
 ok('★★★ 管理員那份（pfd-row）', /rows\+=ptTierListHTML\(sal\);/.test(src));
 ok('★★ 攤開時上面那列只寫堂數，不再重複同一串',
    /const _hasTier=\(\(sal\.ptParts\|\|\[\]\)\.length>1\);/.test(src)

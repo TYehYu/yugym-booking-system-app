@@ -77,7 +77,7 @@ console.log('\n⑤ 薪資完全沒被動到（使用者：「記得檢查不要�
   /* 教練培訓用的就是 category='私人教練'，所以算薪那幾支一個字都不用改 ——
      也正因如此，這一段要確認它們真的沒被改。 */
   ok('★★★ isPtPayClass 還是只認 category（沒有為了這個方案加例外）',
-     /function isPtPayClass\(b\)\{ return !!b && b\.category==='私人教練'; \}/.test(src));
+     /function isPtPayClass\(b\)\{ return !!b && \(b\.category==='私人教練' \|\| b\.category==='運動按摩'\); \}/.test(src));
   ok('★★★ calcSalary 的課費仍只看堂數與費率',
      /const ptPay=ptDone\*\(emp\.pt_rate\|\|0\);/.test(src));
   ok('★★★ 達標獎金仍只看 ptDone', /function calcPtBonus\(cfg, ptDone\)\{/.test(src));

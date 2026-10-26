@@ -127,7 +127,7 @@ console.log('\n⑤ 薪資完全沒被動到');
   ok('★★★ 課費、達標獎金、值班費那幾支一個字都沒改',
      /const ptPay=ptDone\*\(emp\.pt_rate\|\|0\);/.test(src)
      && /function calcPtBonus\(cfg, ptDone\)\{/.test(src)
-     && /function isPtPayClass\(b\)\{ return !!b && b\.category==='私人教練'; \}/.test(src));
+     && /function isPtPayClass\(b\)\{ return !!b && \(b\.category==='私人教練' \|\| b\.category==='運動按摩'\); \}/.test(src));
   /* 範本來源章只是「標示」，不可以反過來改變實際取值 */
   ok('★★★ hrTplFallbacks 只讀不寫（沒有任何賦值到 c 或 cfg）',
      !/hrTplFallbacks[\s\S]{0,900}(c\.\w+\s*=|cfg\.\w+\s*=)/.test(src));
