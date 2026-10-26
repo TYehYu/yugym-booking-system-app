@@ -184,12 +184,17 @@ console.log('\n課卡：體驗／待簽約另起一列放在姓名下面（2026-
         同日二修：標籤**搬進第一列**（使用者：「體驗可以改成標籤跟友善」）——
         原本它跟場地同在姓名下面那一疊，兩個都有的卡會把場地擠掉。 */
      /* 2026-10-27：時間也進第一列、警示搬去左下角，姓名列只剩姓名。 */
-     && /<span class="evc-r1">\$\{_friOut\}\$\{_stdTag\}\$\{_newOut\}<b class="evc-hm">\$\{b\.start_time\}<\/b>\$\{_wmOut\}<\/span>/.test(src)
+     && /<span class="evc-r1">\$\{_friOut\}\$\{_stdTag\}\$\{_newOut\}<span class="evc-rr"><b class="evc-hm">\$\{b\.start_time\}<\/b>\$\{_wmOut\}<\/span><\/span>/.test(src)
      && /<span class="evc-r2"><span class="evc-name\$\{bkNameBlankCls\(b\)\}\$\{_nmVCls\}\$\{_nmSCls\}">\$\{_stdName\}<\/span><\/span>/.test(src));
   /* 2026-10-27 改口：團課**改成要掛**（使用者點名「團課(新增）」），
-     只有遮蔽卡仍然不掛 —— 它連姓名都看不到，標籤也不該洩漏課別。 */
-  ok('　　遮蔽卡不掛（看不到姓名的卡不該洩漏課別）；團課 1027 起改掛「團課」',
-     /const _stagTx = hideMember \? '' : \(_grpCard \? '團課' : \(_nameTag\|\|''\)\);/.test(src));
+     只有遮蔽卡仍然不掛 —— 它連姓名都看不到，標籤也不該洩漏課別。
+     同日二修：〔待簽約〕〔待繳費〕拿掉（使用者：「已經有外框表示了」）——
+     紅框的條件就是 pending_contract，跟那兩個標籤完全同一個旗標。 */
+  ok('　　遮蔽卡不掛；團課掛「團課」；待簽約／待繳費交給紅框',
+     /\(_grpCard \? '團課'/.test(src)
+     && /\(\(_nameTag==='待簽約' \|\| _nameTag==='待繳費'\) \? '' : \(_nameTag\|\|''\)\)/.test(src));
+  ok('　　〔待安排〕留著（紅框表達不了「連人都還沒排」）',
+     /〔待安排〕\*\*留著\*\*/.test(src));
   ok('　　小字樣式有定義，窄卡再縮一級',
      /\.cal-ev\.cal-ev-std \.evc-sub\{font-size:9\.5px;/.test(src)
      && /\.cal-ev\.cal-ev-std\.cal-ev-7d \.evc-sub,\.cal-ev\.cal-ev-std\.ev-w-tiny \.evc-sub\{font-size:9px;\}/.test(src));

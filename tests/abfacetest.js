@@ -36,12 +36,19 @@ ok('★★★ 轉內容層的理由寫在原地（.cal-ev 要留著當 container
    所以順序是：友善／狀態標籤 → NEW ──（推到最右）── 時間 → 章。
    警示不在這一列了（絕對定位的左下角）。 */
 ok('★★★ 第一列：友善 → 狀態標籤 → NEW → 時間 → 章（警示已不在這一列）',
-   /<span class="evc-r1">\$\{_friOut\}\$\{_stdTag\}\$\{_newOut\}<b class="evc-hm">\$\{b\.start_time\}<\/b>\$\{_wmOut\}<\/span>/.test(src));
+   /<span class="evc-r1">\$\{_friOut\}\$\{_stdTag\}\$\{_newOut\}<span class="evc-rr"><b class="evc-hm">\$\{b\.start_time\}<\/b>\$\{_wmOut\}<\/span><\/span>/.test(src));
 ok('★★★ 警示改成絕對定位的左下角（不再參與第一列的寬度）',
    /\.cal-ev\.cal-ev-std \.ev-payalert\{top:auto;right:auto;left:5px;bottom:3px;\}/.test(css)
    && !/\.cal-ev\.cal-ev-std \.evc-r1 \.ev-payalert\{margin-left:auto;\}/.test(css));
-ok('★★ 時間靠右、字級自己訂（搬到 15px 高的第一列就不能再繼承姓名那列）',
-   /\.cal-ev\.cal-ev-std \.evc-r1 \.evc-hm\{flex:none;margin-left:auto;font-size:10px;/.test(css));
+/* ⚠ 1027 二修：右半（時間＋章）包成 .evc-rr 一起靠右。
+   原本是時間自己帶 margin-left:auto，但時間在窄卡會被 display:none 收起來，
+   那個 auto 跟著消失，章就掉回最左邊（使用者附圖：窄卡的「簽」跑到左上角）。 */
+ok('★★ 右半包成 .evc-rr 一起靠右（不是讓時間自己帶 margin-left:auto）',
+   /\.cal-ev\.cal-ev-std \.evc-r1 \.evc-rr\{margin-left:auto;flex:none;display:flex;/.test(css)
+   && /\.cal-ev\.cal-ev-std \.evc-r1 \.evc-hm\{flex:none;font-size:10px;/.test(css)
+   && !/\.evc-r1 \.evc-hm\{flex:none;margin-left:auto;/.test(css));
+ok('　　那個坑寫在原地（時間收起來章會掉回最左邊）',
+   /章就掉回最左邊（1027 使用者附圖：窄卡的「簽」跑到左上角）/.test(css));
 ok('　　為什麼用絕對定位而不是排進第三列（寫在原地）',
    /排進流裡會跟場地搶那一行|排進第三列會跟場地搶那一行/.test(css));
 ok('★★★ 第二列 flex:none —— 不讓它長到卡底壓住教練膠囊',
@@ -307,8 +314,13 @@ ok('　　共用位子的理由寫在原地', /友善是票券的限制、\s*\n?
 ok('★★★ 分段已經整組消失（--nmw 只有一個值，不可能再漏）',
    (css.match(/--nmw:18px;/g)||[]).length===1
    && !/:has\(\.evc-vsub\) \.evc-name\.nm-s3\{font-size:/.test(css));
-ok('★★ 61px 以下連場地都不畫（姓名要吃 3–4 行）',
-   /@container \(max-width:61px\)\{\s*\n\s*\.cal-ev\.cal-ev-std \.evc-vsub\{display:none;\}/.test(css));
+/* 1027：下限 61px → 45px。使用者附兩張窄卡圖：「會員姓名下方的跑步機不見了」
+   「這個大小也放不下了嗎」。61px 那個數字是拿錯的卡高（62px）算的。 */
+ok('★★ 45px 以下才不畫場地（量出來 45 乾淨、42 被切 1px）',
+   /@container \(max-width:44px\)\{\s*\n\s*\.cal-ev\.cal-ev-std \.evc-vsub\{display:none;\}/.test(css)
+   && !/@container \(max-width:61px\)\{\s*\n\s*\.cal-ev\.cal-ev-std \.evc-vsub\{display:none;\}/.test(css));
+ok('　　理由寫在原地（50px 以下姓名已轉直書，底下空得很）',
+   /50px 以下姓名已經轉直書/.test(css));
 
 console.log('\n⑦ 白底上的教練色（1026 使用者回報 MANGO／BARRY 變白字）');
 /* 教練色是**一對**：bg 是填色、fg 是「配上那個填色」時的字色。

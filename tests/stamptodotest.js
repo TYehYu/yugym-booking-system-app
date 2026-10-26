@@ -46,7 +46,7 @@ ok('★★★ 四種都還在，而且順序沒變（停 → 假 → 未 → 簽
    卡片左上角就只剩下標籤　友善＋體驗＋團課(新增）」。
    第一列從此是：左半＝標籤（含 NEW）、右半＝時間 → 章。 */
 ok('★★★ 章畫在第一列**最後面**（時間的右邊＝卡片右上角）',
-   /<span class="evc-r1">\$\{_friOut\}\$\{_stdTag\}\$\{_newOut\}<b class="evc-hm">\$\{b\.start_time\}<\/b>\$\{_wmOut\}<\/span>/.test(src));
+   /<span class="evc-r1">\$\{_friOut\}\$\{_stdTag\}\$\{_newOut\}<span class="evc-rr"><b class="evc-hm">\$\{b\.start_time\}<\/b>\$\{_wmOut\}<\/span><\/span>/.test(src));
 ok('★★★ 畫出來的是圓章不是浮水印（.evc-wm 整組退場）',
    /<i class="evc-check\$\{_chkCls\}"/.test(src) && !/class="evc-wm/.test(src));
 ok('★★ 15px 圓章（第一列就是 15px 高，再大會把那一列撐高）',
@@ -63,10 +63,12 @@ ok('★★★ 姓名的光暈也跟著拿掉（背後沒東西要擋了）',
    !/text-shadow:0 0 4px var\(--course-soft\)/.test(src));
 /* ⚠ 第一列原本是 space-between（只有兩項：友善靠左、警示靠右）。章進來變三項，
    space-between 會把友善推到中間，所以改靠左排＋警示用 margin-left:auto。 */
-ok('★★★ 第一列靠左排，靠右那半是**時間**用 margin-left:auto 推過去（章跟在它後面）',
+ok('★★★ 第一列靠左排，右半（時間＋章）包成 .evc-rr 一起靠右',
    /\.cal-ev\.cal-ev-std \.evc-r1\{display:flex;align-items:center;justify-content:flex-start;/.test(src)
-   && /\.cal-ev\.cal-ev-std \.evc-r1 \.evc-hm\{flex:none;margin-left:auto;/.test(src)
+   && /\.cal-ev\.cal-ev-std \.evc-r1 \.evc-rr\{margin-left:auto;/.test(src)
    && !/\.cal-ev\.cal-ev-std \.evc-r1 \.ev-payalert\{margin-left:auto;\}/.test(src));
+ok('★★★ 時間收起來時章仍然靠右（.evc-rr 的存在理由）',
+   !/\.evc-r1 \.evc-hm\{flex:none;margin-left:auto;/.test(src));
 ok('★★ 警示改成絕對定位的左下角（1027 使用者：「警示三角形可以改到左下角嗎？右上角讓給時間」）',
    /\.cal-ev\.cal-ev-std \.ev-payalert\{top:auto;right:auto;left:5px;bottom:3px;\}/.test(src));
 

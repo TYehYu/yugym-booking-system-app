@@ -91,7 +91,7 @@ console.log('\n出席章的 DOM 只放一份');
    章在時間右邊，警示離開第一列改成絕對定位的左下角。 */
 ok('★ 行事曆：姓名列只剩姓名，標籤在第一列左半、時間與章在右半',
    /<span class="evc-r2"><span class="evc-name\$\{bkNameBlankCls\(b\)\}\$\{_nmVCls\}\$\{_nmSCls\}">\$\{_stdName\}<\/span><\/span>/.test(src)
-   && /<span class="evc-r1">\$\{_friOut\}\$\{_stdTag\}\$\{_newOut\}<b class="evc-hm">\$\{b\.start_time\}<\/b>\$\{_wmOut\}<\/span>/.test(src));
+   && /<span class="evc-r1">\$\{_friOut\}\$\{_stdTag\}\$\{_newOut\}<span class="evc-rr"><b class="evc-hm">\$\{b\.start_time\}<\/b>\$\{_wmOut\}<\/span><\/span>/.test(src));
 ok('★ _stampOut 必須先於 _bodyOut 算完（否則 const TDZ 直接爆）',
    src.indexOf('const _stampOut =') < src.indexOf('const _bodyOut ='),
    {stamp:src.indexOf('const _stampOut ='), body:src.indexOf('const _bodyOut =')});

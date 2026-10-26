@@ -137,7 +137,7 @@ ok('★★★ 徽章排進第一列的流裡（原本 absolute right:3px，時�
    「出席章改到卡片右上角　時間的右邊　卡片左上角就只剩下標籤」
    → 左半＝標籤（友善／體驗／團課）＋NEW；右半＝時間→章；警示在左下角。 */
 ok('★★★ 第一列：標籤靠左，時間與章靠右，警示已離開這一列',
-   /<span class="evc-r1">\$\{_friOut\}\$\{_stdTag\}\$\{_newOut\}<b class="evc-hm">\$\{b\.start_time\}<\/b>\$\{_wmOut\}<\/span>/.test(src));
+   /<span class="evc-r1">\$\{_friOut\}\$\{_stdTag\}\$\{_newOut\}<span class="evc-rr"><b class="evc-hm">\$\{b\.start_time\}<\/b>\$\{_wmOut\}<\/span><\/span>/.test(src));
 ok('★★★ 姓名列只剩姓名（時間不在那裡了）',
    /<span class="evc-r2"><span class="evc-name[^>]*>\$\{_stdName\}<\/span><\/span>/.test(src));
 ok('★★★ 有出席章就不出 NEW（使用者：新跟簽不用同時出現）',
