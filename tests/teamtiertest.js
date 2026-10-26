@@ -64,7 +64,9 @@ console.log('\n③ 多階是「追加」不是「取代」');
   eq('★★★ 105 堂＝4,000＋2,000＝6,000（使用者回報的那一筆）',
      r.hitRows.map(x=>x.name).join(',')+'|'+r.pool, '黃沛瀞,鄭百益|10000');
   eq('★★★ 池 $10,000 ÷ 2 位主管 ＝ $5,000', r.pay, 5000);
-  ok('★★ 明細把每一位的金額寫出來', /鄭百益 105 堂 \$6,000/.test(r.detail), r.detail);
+  /* 2026-10-27：明細只留姓名與金額（使用者：「只要顯示達標人員姓名跟金額」）。 */
+  ok('★★ 明細把每一位的金額寫出來（堂數改由底下名單負責）',
+     /鄭百益 \$6,000/.test(r.detail) && !/堂/.test(r.detail), r.detail);
   /* 修好之前的樣子：只有一階 → 105 堂也只拿 4,000（正式庫就是這個狀態） */
   const bad=fn({is_manager:true}, {leaderRows:rows, leaderMgrs:['m1','m2'], month:'2026-09'},
     { team_tiers:[{classes:80,amount:4000}], team_members:null }, '2026-09');

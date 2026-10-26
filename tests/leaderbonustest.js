@@ -36,8 +36,10 @@ console.log('① 新制：逐位教練達標');
   eq('★ 名單三位、兩位達到 60 堂 → 兩筆 $2,000', r.pay, 4000);
   eq('　　達標人數就是筆數', r.units, 2);
   eq('★ 沒被打勾的人不算進來（小丁 11 堂不在名單，也不影響）', r.total, 70+60+59);
-  ok('★ 明細寫出誰達標，才對得起帳', /2 \/ 3 位達標/.test(r.detail)
-     && /小安 70 堂 \$2,000/.test(r.detail) && /小柏 60 堂 \$2,000/.test(r.detail), r.detail);
+  /* 2026-10-27 使用者（手機截圖）：「主管獎金下面公式太亂了　只要顯示達標人員姓名跟金額」。
+     堂數與「N / M 位達標」改由底下那份名單（leaderListHTML）負責，這一行不重複。 */
+  ok('★ 明細只寫誰達標、各多少錢', r.detail==='小安 $2,000、小柏 $2,000', r.detail);
+  ok('　　算式與堂數都不在這一行了', !/位達標/.test(r.detail) && !/堂/.test(r.detail), r.detail);
 
   const r0=F(MGR({leader_members:['C','D']}), {leaderRows:ROWS}, G, '2026-08');
   eq('★ 名單裡沒人達標 → 0', r0.pay, 0);

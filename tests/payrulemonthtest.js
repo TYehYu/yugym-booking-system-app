@@ -64,7 +64,9 @@ console.log('\n③ 店長獎金：兩個門檻');
   const r=F(MGR(), {leaderRows:ROWS}, G, '2026-08');
   eq('★ 門檻②是「追加」不是取代：120 堂 ＝ 4000＋2000', r.hitRows.length, 3);
   eq('★ 合計 ＝ 甲6000 ＋ 乙4000 ＋ 丁6000（丙 79 堂不到門檻）', r.pay, 16000);
-  ok('　　明細逐位寫出堂數與金額', /甲 120 堂 \$6,000/.test(r.detail) && /丁 100 堂 \$6,000/.test(r.detail), r.detail);
+  /* 2026-10-27：明細只留姓名與金額。 */
+  ok('　　明細逐位寫出金額', /甲 \$6,000/.test(r.detail) && /丁 \$6,000/.test(r.detail)
+     && !/堂/.test(r.detail), r.detail);
   eq('★ 剛好等於門檻算達標（80 與 100 都是含）',
      F(MGR({leader_members:['B','D']}), {leaderRows:ROWS}, G, '2026-08').pay, 4000+6000);
   eq('★ 門檻②填 0 ＝ 不用第二段（只有一個門檻的店長）',
