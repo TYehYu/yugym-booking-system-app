@@ -314,11 +314,21 @@ ok('　　共用位子的理由寫在原地', /友善是票券的限制、\s*\n?
 ok('★★★ 分段已經整組消失（--nmw 只有一個值，不可能再漏）',
    (css.match(/--nmw:18px;/g)||[]).length===1
    && !/:has\(\.evc-vsub\) \.evc-name\.nm-s3\{font-size:/.test(css));
-/* 1027：下限 61px → 45px。使用者附兩張窄卡圖：「會員姓名下方的跑步機不見了」
-   「這個大小也放不下了嗎」。61px 那個數字是拿錯的卡高（62px）算的。 */
-ok('★★ 45px 以下才不畫場地（量出來 45 乾淨、42 被切 1px）',
-   /@container \(max-width:44px\)\{\s*\n\s*\.cal-ev\.cal-ev-std \.evc-vsub\{display:none;\}/.test(css)
+/* 1027：下限 61px → 45px → 33px。使用者連附三張窄卡圖：
+   「會員姓名下方的跑步機不見了」「這個大小也放不下了嗎」
+   「陳苓汶是跑步機　黃景楷是教室　Ａ面擺不下了嗎？」
+   61px 那個數字是拿錯的卡高（62px）算的；再往下靠「兩字版」續命。 */
+ok('★★ 場地三級：三字 45px↑、兩字 33–44px、32px↓ 才不畫',
+   /@container \(max-width:44px\)\{\s*\n\s*\.cal-ev\.cal-ev-std \.vs-ab\{display:none;\}\s*\n\s*\.cal-ev\.cal-ev-std \.vs-s2\{display:inline;\}/.test(css)
+   && /@container \(max-width:32px\)\{\s*\n\s*\.cal-ev\.cal-ev-std \.evc-vsub\{display:none;\}/.test(css)
    && !/@container \(max-width:61px\)\{\s*\n\s*\.cal-ev\.cal-ev-std \.evc-vsub\{display:none;\}/.test(css));
+ok('★★ 兩字版是砍尾字，不是另建對照表（只有「跑步機」需要砍）',
+   /const _venueShortB = _venueShortA\.length>2 \? _venueShortA\.slice\(0,2\) : _venueShortA;/.test(src));
+/* 1027：B 面窄版的教練名也要縮寫（使用者附圖：「卡片太小Ｂ面的教練名稱就用縮寫」）。
+   1026 那句「最長的教練名約 32px」量錯了 —— MANGO 實測 43.1px。 */
+ok('★★ B 面窄版 53px 以下改教練縮寫',
+   /<i class="ba-fl">/.test(src) && /<i class="ba-ab">/.test(src)
+   && /@container \(max-width:53px\)\{\s*\n\s*\.cal-ev\.cal-ev-std \.evc-back \.ba-fl\{display:none;\}/.test(css));
 ok('　　理由寫在原地（50px 以下姓名已轉直書，底下空得很）',
    /50px 以下姓名已經轉直書/.test(css));
 
