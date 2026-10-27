@@ -178,7 +178,9 @@ console.log('\n⑦ 程式碼層面的把關');
      && /if\(_age >= DB_SWR_MAX\) _dbRebaseBg\(store\);/.test(src)
      && /補漏的風險在這裡，所以維持 10 分鐘整表校正一次/.test(src));
   ok('★ 寫入時把共用簽章丟掉（下次記到的是寫入後的簽章）',
-     /_sigPromise=null; _sigAt=0;\n\s*if\(store===undefined\)/.test(src));
+     /_sigPromise=null; _sigAt=0;/.test(src)
+     /* 2026-10-28：中間多了一行 tkCntMemoClear()（縮小版佔用表的記憶體不在 _dbCache 裡）。 */
+     && /tkCntMemoClear\(\);[\s\S]{0,200}if\(store===undefined\)/.test(src));
   ok('　　DB 端函式存在於 migration 留檔', fs.existsSync(process.env.HOME+'/Projects/yugym-booking-system-app/docs/migrations/20260804_fn_table_sigs.sql'));
 }
 

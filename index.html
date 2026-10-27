@@ -15407,8 +15407,8 @@ function tbl(s){return TABLE_ALIAS[s]||s;}
 let sb=null;
 // ── 版本號（日期+時間格式：年後兩碼+月+日.時分，例 26620.1058 = 26年6/20 10:58）──
 // 每次改版手動更新這一行即可，畫面與 title 會一起更新
-const APP_VERSION = '261027.0530';
-const APP_VERSION_LABEL = 'v261027.0530';
+const APP_VERSION = '261028.0044';
+const APP_VERSION_LABEL = 'v261028.0044';
 const CLOUD = !!(window.YUGYM_CONFIG && window.YUGYM_CONFIG.url && window.YUGYM_CONFIG.anonKey);
 if(CLOUD){ sb = supabase.createClient(window.YUGYM_CONFIG.url, window.YUGYM_CONFIG.anonKey); }
 
@@ -15618,6 +15618,9 @@ function dbCacheClear(store){
   /* 有寫入就把共用的簽章丟掉（2026-08-04）：不丟的話，下一次重抓會記到「寫入之前」
      的舊簽章，之後每次校驗都判定有變、白白多抓一輪。丟掉只是多打一支幾十 bytes 的 RPC。 */
   _sigPromise=null; _sigAt=0;
+  /* 縮小版佔用表的記憶體不在 _dbCache 裡，要另外丟（2026-10-28）——
+     不丟的話，剛簽到／剛取消的那一堂在 20 秒內還會被算成佔著位子。 */
+  try{ tkCntMemoClear(); }catch(_){}
   if(store===undefined){ _dbCache.clear(); try{ occCacheClear(); }catch(_){} return; }
   const list=Array.isArray(store)?store:[store];
   /* 「清快取」＝標記需要校驗，不是丟掉資料（2026-08-05 使用者回報「簽約轉正也變慢」）——
@@ -22477,8 +22480,18 @@ function tkTypeOkFor(t,type_id){
 async function listUsableTickets(member_id,type_id,bookDate,bookTime){
   const all=await dbGetAll('member_tickets');
   if(!window._ttCache){ try{ window._ttCache=await dbGetAll('ticket_types'); }catch(_){ window._ttCache=[]; } }
-  const cnt=await tkBookedCountMap();
-  return all.filter(t=>tkFitsBooking(t,member_id,type_id,bookDate,bookTime,cnt))
+  /* ══ 兩段式篩選（2026-10-28 效能）═══════════════════════════════════════
+     ① 先用**空的** cnt 篩一次：tkOverBooked 拿空表一律回 false，所以這一輪的
+        結果必定是最終答案的**超集**（只會多、不會少）。
+     ② 只對那幾張候選票查佔用表，再篩第二次。
+     這樣就不必為了「這位會員有幾張票」而整表抓 bookings＋ticket_logs。
+     ⚠ 不能直接用「這位會員名下的票」當範圍 —— 共享票與家庭共用的持有人是別人，
+       那樣會漏掉（tkUsableBy 才是真正的可用範圍，而它就在 tkFitsBooking 裡）。
+     ⚠ tkFitsBooking 是純函式（只讀 t 與參數），跑兩次沒有副作用。 */
+  const cand=all.filter(t=>tkFitsBooking(t,member_id,type_id,bookDate,bookTime,{}));
+  if(!cand.length) return [];
+  const cnt=await tkBookedCountMap(cand.map(t=>t.id));
+  return cand.filter(t=>tkFitsBooking(t,member_id,type_id,bookDate,bookTime,cnt))
     /* 排序（2026-08-03 使用者定案，李約儒 #1/#4 案例）：
        「應該從編號比較前面的票券先使用，除非後面的票券期限比較短才先用期限較近的」
        ① 限時段的票（友善）最先 —— 只能平日 18:00 前用，留著最容易白白過期。
@@ -22526,11 +22539,54 @@ async function listUsableTickets(member_id,type_id,bookDate,bookTime){
      ① 有 ticket_id 的預約（單人課）—— 一筆算一堂
      ② 沒有 ticket_id 的預約（團課）—— 從 ticket_logs 算該堂的淨扣課（扣 +1、退 −1）；
         取消的課不特別跳過，正常取消淨值就是 0，「扣課不退」的仍會留下 1（票真的被吃掉了）。 */
-async function tkBookedCountMap(){
+/* ══ 只抓用得到的那幾列（2026-10-28 效能）════════════════════════════════
+   `.in()` 分批打，一批 150 個 id —— PostgREST 走 GET，id 全部塞進網址，
+   一次塞太多會被網址長度擋掉（而且那種錯誤長得像「讀取失敗」，很難查）。 */
+async function _tkRowsIn(table, col, vals, sel){
+  const out=[], CH=150, v=[...new Set((vals||[]).map(String).filter(Boolean))];
+  for(let i=0;i<v.length;i+=CH){
+    const {data,error}=await sb.from(table).select(sel).in(col, v.slice(i,i+CH));
+    if(error) throw dbFriendlyError(error, table, '讀取');
+    if(data&&data.length) out.push(...data);
+  }
+  return out;
+}
+/* ══ 縮小版的佔用表（2026-10-28 使用者回報「從行事曆點課卡跳出來變慢了」）══════
+   原本不管誰點，一律 `dbGetAll('bookings')` ＋ `dbGetAll('ticket_logs')`
+   —— 兩張表各 10,000 多筆、各 11 次分頁請求，而 OFFSET 愈深愈慢
+   （實測最後一頁 93ms、第一頁 18ms）。正式庫統計：ticket_logs 那一支
+   38,795 次呼叫、平均 159ms。ticket_logs 10/01 才 8,557 筆，10/28 已 10,683 筆
+   —— 這個月剛跨過 10,000，分頁從 9 次變 11 次，所以「最近」才有感。
+
+   傳 ticketIds 進來就只抓那幾張票用得到的列（兩次小查詢取代 22 次分頁）。
+   ⚠ 不傳參數＝原本的整表行為，一個字都沒動 —— 另外 11 個呼叫點（超約防線、
+     挑票清單、報表）維持原樣，這次只縮小「點課卡」那一條路。
+   ⚠ 團課那一段要靠 `st[bid]`（那筆預約有沒有 ticket_id）才判斷得出來，
+     所以帳本裡出現過的 booking 也要一起撈回來，不能只撈 ticket_id 對得上的。 */
+const _tkCntMemo=new Map();   // key＝排序後的 id 字串 → {t, map}；20 秒內同一張卡不重複查
+async function tkBookedCountMap(ticketIds){
   const map={};
+  const scoped=Array.isArray(ticketIds);
+  if(scoped && !ticketIds.length) return map;
+  const _key=scoped?[...new Set(ticketIds.map(String))].sort().join(','):null;
+  if(scoped){
+    const hit=_tkCntMemo.get(_key);
+    if(hit && Date.now()-hit.t<DB_CACHE_TTL) return Object.assign({}, hit.map);
+  }
   try{
-    const bks=await dbGetAll('bookings');
-    const logs=await dbGetAll('ticket_logs').catch(()=>[]);
+    let bks, logs;
+    if(scoped){
+      const ids=[...new Set(ticketIds.map(String))];
+      logs=await _tkRowsIn('ticket_logs','ticket_id',ids,'ticket_id,booking_id,action,delta');
+      const _bidLg=(logs||[]).map(l=>l&&l.booking_id).filter(Boolean);
+      const byTk=await _tkRowsIn('bookings','ticket_id',ids,'id,ticket_id,status');
+      const byId=_bidLg.length?await _tkRowsIn('bookings','id',_bidLg,'id,ticket_id,status'):[];
+      const seen={}; bks=[];
+      [...byTk,...byId].forEach(b=>{ if(b&&b.id&&!seen[b.id]){ seen[b.id]=1; bks.push(b); } });
+    }else{
+      bks=await dbGetAll('bookings');
+      logs=await dbGetAll('ticket_logs').catch(()=>[]);
+    }
     /* 逐「票券×預約」的帳本淨值（2026-08-24 劉雪珠 8/31 案例）——
        原本只要「這筆預約掛著票、而且沒取消」就算佔一格，不管那一堂的堂數
        是不是早就退回來了。教練請假的新制（0814）正是這種形狀：
@@ -22586,9 +22642,12 @@ async function tkBookedCountMap(){
       const n=-(Number(_net[k])||0);
       if(n>0) map[tid]=(map[tid]||0)+n;
     });
+    if(scoped) _tkCntMemo.set(_key,{t:Date.now(), map:Object.assign({},map)});
   }catch(_){}
   return map;
 }
+/* 寫入後要把縮小版的記憶體也丟掉（dbCacheClear 管的是 dbGetAll 那一份，不含這個）。 */
+function tkCntMemoClear(){ _tkCntMemo.clear(); }
 function tkIsTimeRestricted(t){
   const tt=(window._ttCache||[]).find(x=>x.id===(t&&t.ticket_type_id));
   return !!(tt && tt.time_restricted);

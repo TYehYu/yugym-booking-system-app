@@ -56,7 +56,7 @@ console.log('\n② 實跑四種情形');
     console.log('\n③ 為什麼這件事會讓「更換票券」看不到那張票');
     ok('★★ 挑票一律要 usable —— 狀態壓錯就整張消失（listUsableTickets → tkFitsBooking）',
        /if\(t\.status!=='usable' \|\| !\(t\.sessions_remaining>0\)\) return false;/.test(src)
-       && /return all\.filter\(t=>tkFitsBooking\(t,member_id,type_id,bookDate,bookTime,cnt\)\)/.test(src));
+       && /return cand\.filter\(t=>tkFitsBooking\(t,member_id,type_id,bookDate,bookTime,cnt\)\)/.test(src));
     ok('★ 票券校正那邊早就有同一條判斷（兩處要說同一件事）',
        /if\(rem>0 && t\.status==='used_up'\) t\.status='usable';/.test(src)
        && /if\(rem===0 && t\.status==='usable'\) t\.status='used_up';/.test(src));

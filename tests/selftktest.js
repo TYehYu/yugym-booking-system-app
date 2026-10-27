@@ -72,7 +72,7 @@ ok('★ 畫面明講原因，不讓會員以為系統壞了',
 console.log('\n步驟 2 與挑票共用同一套判定');
 // 2026-07-30：多帶一個 bkCntByTicket（超約防線），簽名與呼叫端一起更新
 ok('★ 抽出共用判定 tkFitsBooking', /function tkFitsBooking\(t, member_id, type_id, bookDate, bookTime, bkCntByTicket\)\{/.test(src));
-ok('★ listUsableTickets 改用它', /return all\.filter\(t=>tkFitsBooking\(t,member_id,type_id,bookDate,bookTime,cnt\)\)/.test(src));
+ok('★ listUsableTickets 改用它', /return cand\.filter\(t=>tkFitsBooking\(t,member_id,type_id,bookDate,bookTime,cnt\)\)/.test(src));
 ok('★ 步驟 2 一般課程改用它（不再自寫一套）',
    /const tks=allTkG\.filter\(tt=>tkFitsBooking\(tt,m\.id,type_id,date,time,_bkCntG\)\);/.test(src)
    && !/allTkG\.filter\(tt=>tkUsableBy\(tt,m\.id\) && bkTicketTypeOk/.test(src));
