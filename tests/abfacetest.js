@@ -115,6 +115,20 @@ ok('★★ 數字是量的不是算的（寫在原地）',
    /都是\*\*在瀏覽器裡量的\*\*（Playwright 量 getBoundingClientRect/.test(css));
 
 console.log('\n④ B 面');
+/* ══ 2026-10-28：點開的卡停在 B 面 ═══════════════════════════════════
+   使用者：「課卡翻到Ｂ面的時候　我點選課卡它又會翻回Ａ面又翻回Ｂ面
+            其實翻到Ｂ面點課卡就不用在翻回去了　因為游標也還在這張卡片上」。
+   成因：點下去插入圓鈕面板 → 游標被蓋住 → :hover 掉了翻回 A →
+   面板定位完游標又回到卡上 → 0.15 秒後再翻回 B。一來一回＝閃兩下。 */
+ok('★★★ 展開狀態固定停在 B 面，不看 :hover',
+   /\.cal-ev\.cal-ev-std\.cal-ev-active:has\(\.evc-back\) \.evc-flip\{\s*\n\s*transform:rotateX\(180deg\);transition-delay:0s;\}/.test(css));
+/* ⚠ 權重跟 :hover 那條完全一樣（都是 0,5,0），只能靠寫在後面取勝。 */
+ok('★★★ 必須排在 :hover 那條**之後**（同權重，後面的才贏）',
+   css.indexOf(':has(.evc-back):hover .evc-flip') < css.indexOf('.cal-ev-active:has(.evc-back) .evc-flip'));
+ok('　　順序的坑寫在原地', /搬到前面就會被 :hover 的「沒 hover 就轉回 0deg」蓋掉/.test(css));
+ok('★★ 展開當下立刻定住（不能再等 0.15 秒）',
+   /transform:rotateX\(180deg\);transition-delay:0s;\}/.test(css));
+
 ok('★★★ 固定三列：教練／進度／場地',
    /_bkRow\('教練', _tipEscEarly\(_coFull\|\|'—'\)\)/.test(src)
    && /_bkRow\(_grpCard\?'會員':'進度'/.test(src)
