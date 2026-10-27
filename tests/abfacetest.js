@@ -121,10 +121,24 @@ console.log('\n④ B 面');
    成因：點下去插入圓鈕面板 → 游標被蓋住 → :hover 掉了翻回 A →
    面板定位完游標又回到卡上 → 0.15 秒後再翻回 B。一來一回＝閃兩下。 */
 ok('★★★ 展開狀態固定停在 B 面，不看 :hover',
-   /\.cal-ev\.cal-ev-std\.cal-ev-active:has\(\.evc-back\) \.evc-flip\{\s*\n\s*transform:rotateX\(180deg\);transition-delay:0s;\}/.test(css));
+   /\.cal-ev\.cal-ev-std\.evc-hold:has\(\.evc-back\) \.evc-flip,\s*\n\s*\.cal-ev\.cal-ev-std\.cal-ev-active:has\(\.evc-back\) \.evc-flip\{\s*\n\s*transform:rotateX\(180deg\);transition-delay:0s;\}/.test(css));
+/* ══ 1028 二修：使用者「課卡點一下還是會閃跳一下Ａ面」════════════════════
+   一修綁在 .cal-ev-active 上，但那個 class 要等 `await dbGet` 回來才掛得上 ——
+   中間隔著一次網路往返，那段空窗期 :hover 一掉就翻回 A。
+   改成在 expandBkCard 的**第一個 await 之前**同步掛 .evc-hold。 */
+ok('★★★ .evc-hold 在第一個 await 之前就掛上（這才是不閃的關鍵）',
+   /collapseBkCard\(\);[\s\S]{0,1200}if\(el\) el\.classList\.add\('evc-hold'\);\s*\n\s*const b = await dbGet\('bookings', id\);/.test(src));
+ok('★★★ 掛在 collapseBkCard() 之後（那一支會把 .evc-hold 清掉）',
+   src.indexOf("collapseBkCard();\n  /* ══ 翻面定住") >= 0
+   || /collapseBkCard\(\);\s*\n\s*\/\* ══ 翻面定住要在\*\*第一個 await 之前\*\*/.test(src));
+ok('★★★ 收起來要清掉（不然卡片會一直停在 B 面）',
+   /\.cal-ev-expanded, \.cal-ev-active, \.cal-ev-editing, \.evc-hold'\)/.test(src)
+   && /el\.classList\.remove\('evc-hold'\);/.test(src));
+ok('★★ 讀不到預約而提早 return 的那條路也要清掉',
+   /if\(!b\)\{ if\(el\) el\.classList\.remove\('evc-hold'\); openBookingDetail\(id\); return; \}/.test(src));
 /* ⚠ 權重跟 :hover 那條完全一樣（都是 0,5,0），只能靠寫在後面取勝。 */
 ok('★★★ 必須排在 :hover 那條**之後**（同權重，後面的才贏）',
-   css.indexOf(':has(.evc-back):hover .evc-flip') < css.indexOf('.cal-ev-active:has(.evc-back) .evc-flip'));
+   css.indexOf(':has(.evc-back):hover .evc-flip') < css.indexOf('.evc-hold:has(.evc-back) .evc-flip'));
 ok('　　順序的坑寫在原地', /搬到前面就會被 :hover 的「沒 hover 就轉回 0deg」蓋掉/.test(css));
 ok('★★ 展開當下立刻定住（不能再等 0.15 秒）',
    /transform:rotateX\(180deg\);transition-delay:0s;\}/.test(css));

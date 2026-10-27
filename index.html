@@ -7744,11 +7744,16 @@ body.wp-dragging-on .wp-item{cursor:grabbing;}
      成因：點下去會在卡片下方插入那排圓鈕的面板，游標瞬間被面板蓋住
      → :hover 掉了 → 翻回 A；面板定位完游標又回到卡上 → 0.15 秒後再翻回 B。
      一來一回剛好是兩次 0.34 秒的動畫，看起來就是「閃兩下」。
-     改成：卡片只要是展開狀態（.cal-ev-active）就固定停在 B 面，不看 :hover。
+     改成：卡片只要是展開狀態就固定停在 B 面，不看 :hover。
+     ⚠ 吃的是 **.evc-hold** 不是 .cal-ev-active —— 後者要等 `await dbGet` 回來才掛得上，
+       中間那次網路往返就是「閃一下 A 面」的空窗期（1028 二修，使用者回報兩次）。
+       .evc-hold 在 expandBkCard 的第一個 await 之前就同步掛上。
+       .cal-ev-active 一起留著當保險（兩個都在時結果一樣）。
      ⚠ transition-delay 設 0：展開當下要立刻定住，不能再等 0.15 秒。
      ⚠ 權重與上面那條 :hover 完全相同（都是 0,5,0），**靠寫在後面取勝** ——
        搬到前面就會被 :hover 的「沒 hover 就轉回 0deg」蓋掉，閃爍照舊。
      ⚠ 沒有 .evc-back 的卡（自主訓練、遮蔽卡）不受影響：:has() 擋著。 */
+  .cal-ev.cal-ev-std.evc-hold:has(.evc-back) .evc-flip,
   .cal-ev.cal-ev-std.cal-ev-active:has(.evc-back) .evc-flip{
     transform:rotateX(180deg);transition-delay:0s;}
   .cal-ev.cal-ev-std .evc-flip > .evc-body,
@@ -15420,8 +15425,8 @@ function tbl(s){return TABLE_ALIAS[s]||s;}
 let sb=null;
 // ── 版本號（日期+時間格式：年後兩碼+月+日.時分，例 26620.1058 = 26年6/20 10:58）──
 // 每次改版手動更新這一行即可，畫面與 title 會一起更新
-const APP_VERSION = '261028.0113';
-const APP_VERSION_LABEL = 'v261028.0113';
+const APP_VERSION = '261028.0126';
+const APP_VERSION_LABEL = 'v261028.0126';
 const CLOUD = !!(window.YUGYM_CONFIG && window.YUGYM_CONFIG.url && window.YUGYM_CONFIG.anonKey);
 if(CLOUD){ sb = supabase.createClient(window.YUGYM_CONFIG.url, window.YUGYM_CONFIG.anonKey); }
 
@@ -39077,8 +39082,18 @@ function ashCardMode(){
 async function expandBkCard(el, id){
   const _calCtxFlag=!!window._admCalCtx; window._admCalCtx=false;   /* 進場即取用並清掉（await 之前，避免時序洞） */
   collapseBkCard();
+  /* ══ 翻面定住要在**第一個 await 之前**（2026-10-28 二修）═══════════════
+     一修把「停在 B 面」綁在 .cal-ev-active 上，但那個 class 是在
+     `await dbGet('bookings', id)` **之後**才加的 —— 中間隔著一次網路往返，
+     那段空窗期只要游標離開卡面（卡片按下去會先縮一下、面板也可能先蓋上），
+     :hover 一掉就翻回 A，等 class 加上去才又翻回 B。
+     使用者：「課卡點一下還是會閃跳一下Ａ面」。
+     改成在這裡就掛上 .evc-hold：點下去的那一瞬間就定住，不等任何網路。
+     ⚠ 一定要在 collapseBkCard() **之後** —— 那一支會把所有卡的 .evc-hold 清掉。
+     ⚠ 下面每一條提早 return 的路都要記得清掉它（不然卡片會一直停在 B 面）。 */
+  if(el) el.classList.add('evc-hold');
   const b = await dbGet('bookings', id);
-  if(!b){ openBookingDetail(id); return; }
+  if(!b){ if(el) el.classList.remove('evc-hold'); openBookingDetail(id); return; }
   /* 課卡互動權限（2026-08-21 使用者定案：「所有教練都可以看到簡易課卡 但是只有管理員
      能夠全課卡互動 非管理員的教練只能互動自己的課卡」）——
      _coachReadonly 是既有的「純檢視」開關（明細與簡易卡的 editable／簽到／改期都吃它），
@@ -40873,9 +40888,10 @@ function collapseBkCard(){
   // 掃 DOM 上所有展開/編輯/orbit 狀態的卡一併清理，確保永遠關得掉。
   const els = new Set();
   if(window._expandedBkEl) els.add(window._expandedBkEl);
-  document.querySelectorAll('.cal-ev-expanded, .cal-ev-active, .cal-ev-editing').forEach(e=>els.add(e));
+  document.querySelectorAll('.cal-ev-expanded, .cal-ev-active, .cal-ev-editing, .evc-hold').forEach(e=>els.add(e));
   els.forEach(el=>{
     el.classList.remove('cal-ev-expanded'); el.classList.remove('cal-ev-editing'); el.classList.remove('cal-ev-active');
+    el.classList.remove('evc-hold');   /* 翻面定住（2026-10-28）：收起來就放開，卡片翻回 A 面 */
     el.style.marginLeft=''; el.style.marginTop='';
     const a=el.querySelector('.evc-actions'); if(a) a.remove();
     const ed=el.querySelector('.evx-edit'); if(ed) ed.remove();
