@@ -25,11 +25,18 @@ console.log('① 每一個 .range() 分頁都帶排序');
   const bare=src.replace(/\/\*[\s\S]*?\*\//g,' ').replace(/^\s*\/\/.*$/gm,' ');
   const lines=bare.split('\n').filter(t=>/\.range\(/.test(t));
   eq('★★★ 只有一個地方在做 range 分頁（集中在資料層）', lines.length, 1);
-  ok('★★★ 那一行有 .order(\'id\')',
-     /\.order\('id',\{ascending:true\}\)\.range\(f, f\+PAGE-1\)/.test(lines[0]));
+  /* 2026-10-28：改游標分頁之後，.order() 與 .range() 分成兩行寫
+     （中間多一句 `if(cur!=null) s=s.gt('id',cur);`），所以改驗整支 q。 */
+  ok('★★★ 分頁查詢有 .order(\'id\')',
+     /let s=sb\.from\(_tk\)\.select\(_sel\)\.order\('id',\{ascending:true\}\);/.test(src)
+     && /\.range\(f, f\+\(n\|\|PAGE\)-1\)/.test(lines[0]));
+  /* ⚠ 游標與排序鍵必須是**同一欄**：`gt('id')` 配 `order('id')`。
+     不同欄會漏列，而且跟 1002 那次一樣完全不報錯。 */
+  ok('★★★ 游標用的是同一個 id 欄',
+     /if\(cur!=null\) s=s\.gt\('id',cur\);/.test(src));
   /* ⚠ 排序鍵必須唯一且穩定。全表都是 text 主鍵，id 有索引，是最穩的分頁鍵。
      用 created_at 之類會出事：同一毫秒建立的兩列順序仍然不定。 */
-  ok('★★ 排序鍵是主鍵 id（唯一、有索引、不會變）', /\.order\('id'/.test(lines[0]));
+  ok('★★ 排序鍵是主鍵 id（唯一、有索引、不會變）', /\.order\('id'/.test(src));
 }
 
 console.log('\n② 成因寫在原地（這個洞看不見，註解是唯一的防線）');
@@ -54,9 +61,16 @@ console.log('\n③ 增量補資料那條路不受影響');
 
 console.log('\n④ 分頁機制本身沒被動壞');
 {
-  ok('★★★ 每頁仍是 1000、仍是波次並行', /const PAGE=1000, WAVE=3;/.test(src));
-  ok('★★★ 第一頁不滿就直接回（小表只打一次）',
-     /if\(out\.length<PAGE\)\{ _statPush\(out\.length, out\[0\]\); return out; \}/.test(src));
+  /* 2026-10-28：每頁改成「問 5000、伺服器給多少算多少」，WAVE 跟著頁大小調。
+     上限若仍是 1000（Supabase 後台 Max rows 的預設），行為與改版前相同。
+     ⚠ 逐列驗證在 tests/dbpagingtest.js（22 種筆數 × 2 種上限實跑）。 */
+  ok('★★★ 每頁問 5000、從第一頁學出實際上限、波次並行還在',
+     /const PAGE_TRY=5000;/.test(src) && /PAGE=out\.length;/.test(src)
+     && /WAVE=\(PAGE>=3000\)\?2:3;/.test(src)
+     && /Promise\.all\(Array\.from\(\{length:WAVE\}/.test(src));
+  ok('★★★ 第一頁不滿就直接回（小表只打一次）——但整數筆數不算「不滿」',
+     /if\(out\.length<PAGE_TRY && !_roundCap\(out\.length\)\)\{ _statPush\(out\.length, out\[0\]\); return out; \}/.test(src)
+     && /const _roundCap=n=>\(n>0 && n%500===0\);/.test(src));
   ok('★★ 精簡欄位（LEAN_DROP）照舊', /const _sel=_leanSel\.get\(_tk\)\|\|'\*';/.test(src));
   ok('★★ 讀取失敗仍然往上拋（不要安靜地少一頁）',
      /if\(r\.error\) throw dbFriendlyError\(r\.error, store, '讀取'\);/.test(src));

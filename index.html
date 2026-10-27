@@ -15407,8 +15407,8 @@ function tbl(s){return TABLE_ALIAS[s]||s;}
 let sb=null;
 // ── 版本號（日期+時間格式：年後兩碼+月+日.時分，例 26620.1058 = 26年6/20 10:58）──
 // 每次改版手動更新這一行即可，畫面與 title 會一起更新
-const APP_VERSION = '261028.0044';
-const APP_VERSION_LABEL = 'v261028.0044';
+const APP_VERSION = '261028.0058';
+const APP_VERSION_LABEL = 'v261028.0058';
 const CLOUD = !!(window.YUGYM_CONFIG && window.YUGYM_CONFIG.url && window.YUGYM_CONFIG.anonKey);
 if(CLOUD){ sb = supabase.createClient(window.YUGYM_CONFIG.url, window.YUGYM_CONFIG.anonKey); }
 
@@ -15679,7 +15679,35 @@ async function _dbGetAllFresh(store){
   }catch(_){} };
   /* 分頁改「波次並行」（2026-07-20 LAG 對策）：原逐頁序抓，大表（tickets 2,229＝3 頁）
      要 3 個序列往返；改為第 1 頁確認有續頁後、一次並行預抓 3 頁，罕見的超大表才需第二波。 */
-  const PAGE=1000, WAVE=3;
+  /* ══ 2026-10-28：OFFSET 改成「游標＋小位移」＋每頁問大一點 ═══════════════
+     使用者：「最近從行事曆點課卡 跳出來變慢了」查到底的第二件事。
+
+     ① 慢的不是筆數，是 **.range() 等同 OFFSET**：第 11 頁要先掃過前 10,000 列
+        才開始回傳（正式庫實測 bookings 第一頁 18ms、最後一頁 93ms）。
+        表每長一萬筆，整表讀取就多付一次二次成長。
+        改成**每一波記住上一波最後一個 id**，下一波用 `id > 游標` 接著撈 ——
+        波內還是 0／1×PAGE／2×PAGE 三頁並行（並行度一點都沒少），
+        但位移最多只到 2×PAGE，**不管表多大都一樣**。
+     ② 每頁問 5000 筆：實際能回幾筆由 Supabase 後台的 **Max rows** 決定
+        （Settings → API）。現在若是 1000，第一頁就會回 1000，
+        程式當場把 PAGE 學成 1000，行為與改版前一模一樣；
+        哪天後台調大，這裡自動跟著變少往返，不必再改程式。
+
+     ⚠ 第一頁回來的筆數若剛好是 1000／2000／5000／10000 這種「整數」，
+       **不可以當成資料到底了** —— 那極可能是伺服器的上限把它切掉的。
+       這正是 1002 那次「每次重新整理漏掉的列還不一樣」的同一類坑，
+       只是方向相反（那次是沒分頁，這次是把上限誤判成結尾）。
+     ⚠ 游標分頁比 OFFSET **更安全**：抓到一半有人新增／刪除時，
+       OFFSET 會讓後面的列整個位移（漏掉或重複），游標不會。 */
+  const PAGE_TRY=5000;
+  /* 「這個筆數看起來像被上限切出來的嗎」—— 用 500 的倍數判斷，不寫死幾個數字。
+     Max rows 不管設 1000／1500／2000／5000，都會落在 500 的倍數上。
+     ⚠ 真的有人把它設成 1234 這種數字才會失效，而那會**靜靜少資料**；
+       所以要改 Max rows 的話，順手確認是 500 的倍數。
+     ⚠ 代價：某張表的筆數剛好是 500 的倍數時，會多打一波（3 個並行請求）
+       然後拿到 0 筆才收工 —— 多一次往返換「絕對不會少資料」，划算。 */
+  const _roundCap=n=>(n>0 && n%500===0);
+  let PAGE=PAGE_TRY, WAVE=3;
   /* 精簡欄位（2026-08-04）：學到了就用，沒學到就照舊 select('*') 並趁這次學起來。
      整段流程對呼叫端完全透明，最壞情況＝與原本一模一樣。 */
   /* ⚠ 先探一列再決定要抓哪些欄位（2026-08-23，使用者回報「首頁點今日營收名單讀取好久好久」）——
@@ -15714,24 +15742,35 @@ async function _dbGetAllFresh(store){
      每次重新整理漏掉的列還不一樣，所以金額每天看都不同。
 
      用 id 排序：全表都是 text 主鍵、唯一且有索引，是最穩的分頁鍵。 */
-  const q=f=>sb.from(_tk).select(_sel).order('id',{ascending:true}).range(f, f+PAGE-1);
-  const first=await q(0);
+  /* cur＝上一波最後一個 id（null＝從頭）；f＝波內位移（0／1×PAGE／2×PAGE）。 */
+  const q=(cur,f,n)=>{
+    let s=sb.from(_tk).select(_sel).order('id',{ascending:true});
+    if(cur!=null) s=s.gt('id',cur);
+    return s.range(f, f+(n||PAGE)-1);
+  };
+  const first=await q(null,0,PAGE_TRY);
   if(_sel==='*' && first && first.data && first.data[0]) leanLearn(store, first.data[0]);
   if(first.error) throw dbFriendlyError(first.error, store, '讀取');
   let out=first.data||[];
-  if(out.length<PAGE){ _statPush(out.length, out[0]); return out; }
-  let from=PAGE;
+  /* 第一頁就學出「這台伺服器一頁最多給幾筆」。
+     不是整數 ⇒ 真的只有這麼多列，直接收工（與改版前同一個判斷）。 */
+  if(out.length<PAGE_TRY && !_roundCap(out.length)){ _statPush(out.length, out[0]); return out; }
+  PAGE=out.length;                       // 實測到的每頁上限
+  if(!(PAGE>0)){ _statPush(0, undefined); return out; }
+  WAVE=(PAGE>=3000)?2:3;                 // 頁變大就少並行幾頁，波內位移才不會又變深
+  let cur=out[out.length-1].id;
   for(;;){
-    const rs=await Promise.all(Array.from({length:WAVE},(_,i)=>q(from+i*PAGE)));
-    let done=false;
+    const rs=await Promise.all(Array.from({length:WAVE},(_,i)=>q(cur,i*PAGE)));
+    let done=false, last=null;
     for(const r of rs){
       if(r.error) throw dbFriendlyError(r.error, store, '讀取');
       const b=r.data||[];
       out=out.concat(b);
+      if(b.length) last=b[b.length-1].id;
       if(b.length<PAGE){ done=true; break; }
     }
     if(done) break;
-    from+=WAVE*PAGE;
+    cur=last;
   }
   _statPush(out.length, out[0]);
   return out;
