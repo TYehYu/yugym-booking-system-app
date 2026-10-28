@@ -44,9 +44,20 @@ ok('★★★ 值班／開課寫出現在的值，不是暗著的開關',
 /* 2026-10-28 三修（使用者：「可以用顏色區分可以/不可以嗎？」）——
    開著＝綠、關著＝灰、管理員＝金。 */
 ok('★★★ 用顏色分「可以／不可以」：開著綠、關著灰、管理員金',
-   /\.st-pl-on\{border-color:#cfe3d8;background:#eef5f1;color:var\(--green,#1f6f54\);\}/.test(src)
+   /\.st-pl-on\{border-color:#cfe3d8;background:#eef5f1;color:#1f6f54;\}/.test(src)
    && /\.st-pl-off\{color:var\(--t3\);background:var\(--card2\);\}/.test(src)
-   && /\.st-pl-adm\{border-color:#e8d9b8;background:#f7efe0;color:var\(--gold-d,#8a5e28\);\}/.test(src));
+   && /\.st-pl-adm\{border-color:#e8d9b8;background:#f7efe0;color:#8a5e28;\}/.test(src));
+/* ⚠⚠ 2026-10-28 使用者附圖「這個綠燈太暗了」—— 成因是借用 var(--green)：
+   **Ink 版把 --green 重新定義成咖啡色 #4A3B2E**（那套主題裡它是品牌色）。
+   要綠色就寫死，這整套的 --green 不保證是綠的。 */
+ok('★★★ 這幾顆不可以吃 var(--green)（Ink 之下它是咖啡色）', (()=>{
+  const m=/\.st-lamp\.on i\{[^}]*\}|\.st-pl-on[^{]*\{[^}]*\}|\.st-pl-adm[^{]*\{[^}]*\}/g;
+  return !(src.match(m)||[]).some(r=>/var\(--green|var\(--gold-d/.test(r));
+})());
+ok('★★ LINE 燈用品牌綠 #06C755（夠亮，語意也對）',
+   /\.st-lamp\.on i\{background:#06C755;/.test(src));
+ok('　　Ink 把 --green 換成咖啡色這件事寫在原地',
+   /Ink 版把 --green 重新定義成咖啡色 #4A3B2E/.test(src));
 /* ⚠ 紅色在這套系統是「有事要處理」（紅>金>綠）。「不需打卡」「不開課」是
    合作教練的正常設定，不是錯誤 —— 標紅會讓人以為要去修它。 */
 ok('★★★ 關著的那一側不可以用紅色（紅＝要處理，見品牌色階）',
