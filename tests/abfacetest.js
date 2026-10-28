@@ -375,8 +375,58 @@ ok('★★★ 其他「沒有自己底色」的地方走 coachInkColor（挑比�
 ok('★★★ 教練篩選 chip 的色點也走 coachInkColor',
    /const ink = coachInkColor\(c\.id\);/.test(src)
    && /const st = `--cc:\$\{ink\};` \+ \(on \? `background:\$\{ink\};color:#fff;`/.test(src));
+/* ══ 1028 第三次：營收明細的教練名（使用者附圖「barry 跟 mango 是不是都變白色字了」）══
+   這次成對使用**沒有救到** —— inline 帶了 bg＋fg 沒錯，但 Ink 版有一條
+   `body.ink … .rev-att{background:transparent !important}` 把底色抽掉，
+   只剩 fg，深底白字的那幾位就又變成白字白底。
+   所以「成對」只擋得住寫法，擋不住**後面有人把 bg 拿掉**。 */
+ok('★★★ 營收明細的教練名另外帶 --co-ink 給 Ink 用',
+   /--co-ink:\$\{coachInkColor\(r\.att\)\};/.test(src)
+   && /body\.ink \.mc-revlist-card \.rev-att:not\(\.rev-att-none\)\{color:var\(--co-ink,var\(--t2\)\) !important;\}/.test(css));
+ok('　　成因寫在原地（底色被 Ink 抽掉才露出來）',
+   /底色一拿掉就只剩 fg，而 MANGO／BARRY／石頭 的 fg 是 \*\*#FFFFFF\*\*/.test(src));
+/* ⚠ 真正的通則守在這裡：**凡是 Ink 把底色抽掉的 class，若它也吃 inline 的 fg，
+   就必須另外給一個單獨可讀的字色**（黑字或 --co-ink）。
+   自動掃：找出所有 `body.ink … {background:transparent !important}` 的選擇器，
+   取出 class，跟「inline 帶 .fg} 的那些 class」對照。 */
+/* 回傳清單再判斷 —— ⚠ 不可以寫成 `return bad.length===0 ? true : bad`：
+   非空陣列在 JS 是 **truthy**，那樣寫等於永遠綠燈（1028 反向驗證才抓到）。 */
+const _inkBad=(()=>{
+  /* ⚠ 不能只看「同一行」：.rev-att 的 class 與 inline style 分開兩行寫
+     （`<span class="rev-att"${_sty}`），第一版的掃法就是這樣漏掉它的。
+     改成在每一處 `.fg}` 前後各看 600 字，把出現的 class 都收進來。 */
+  const inlineFg=new Set();
+  const reFg=/color:\$\{[^}]*\.fg\}/g; let f;
+  while((f=reFg.exec(src))){
+    const w=src.slice(Math.max(0,f.index-600), f.index+600);
+    (w.match(/class="([a-z0-9 _${}.()|'-]+)"/g)||[]).forEach(m=>
+      m.slice(7,-1).split(/\s+/).forEach(c=>{ if(/^[a-z][a-z0-9_-]*$/.test(c)) inlineFg.add(c); }));
+  }
+  const bad=[];
+  const re=/(body\.ink[^{]*)\{([^}]*)\}/g; let m;
+  while((m=re.exec(css))){
+    if(!/background:transparent\s*!important/.test(m[2])) continue;
+    (m[1].match(/\.[a-z0-9_-]+/g)||[]).map(x=>x.slice(1))
+      .filter(c=>inlineFg.has(c)).forEach(c=>{
+        /* 只要**任何一條**規則（不限 body.ink）對這個 class 訂了帶 !important 的字色就算補過。
+           行事曆的 .evc-coach 就是這種：補在 @container 裡的非 Ink 規則上，
+           靠 !important 蓋過 Ink 那條（Ink 那條根本沒訂 color）。
+           ⚠ 一定要逐條規則比對。寫成一個大正則會跨過規則邊界
+             （`[^{]` 是允許 `}` 的），把別條規則的 color 當成這條有補。 */
+        let fixed=false, r2; const re2=/([^{}]+)\{([^}]*)\}/g;
+        while((r2=re2.exec(css))){
+          if(!new RegExp('\\.'+c+'(?![a-z0-9_-])').test(r2[1])) continue;
+          if(/(^|[;{\s])color\s*:[^;}]*!important/.test(r2[2])) { fixed=true; break; }
+        }
+        if(!fixed) bad.push(c);
+      });
+  }
+  return [...new Set(bad)];
+})();
+ok('★★★ 被 Ink 抽掉底色、又吃 inline fg 的 class，都有補字色', _inkBad.length===0, _inkBad);
 /* ⚠ 掃整份原始碼：每一處插值用到 `.fg}` 的，同一行必須也有 `.bg}` ——
-   也就是「成對使用」。單獨出現就是把白字放到白底上的那種錯。 */
+   也就是「成對使用」。單獨出現就是把白字放到白底上的那種錯。
+   ⚠ 這一條只擋得住寫法，擋不住上面那種「後面被抽掉底色」—— 兩條都要留。 */
 ok('★★★ 每一處用到 fg 的地方都成對帶著 bg（沒有落單的）', (()=>{
   const bad=src.split('\n')
     .map((l,i)=>({l,i:i+1}))
