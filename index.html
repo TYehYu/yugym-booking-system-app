@@ -15497,8 +15497,8 @@ function tbl(s){return TABLE_ALIAS[s]||s;}
 let sb=null;
 // ── 版本號（日期+時間格式：年後兩碼+月+日.時分，例 26620.1058 = 26年6/20 10:58）──
 // 每次改版手動更新這一行即可，畫面與 title 會一起更新
-const APP_VERSION = '261028.2359';
-const APP_VERSION_LABEL = 'v261028.2359';
+const APP_VERSION = '261029.0014';
+const APP_VERSION_LABEL = 'v261029.0014';
 const CLOUD = !!(window.YUGYM_CONFIG && window.YUGYM_CONFIG.url && window.YUGYM_CONFIG.anonKey);
 if(CLOUD){ sb = supabase.createClient(window.YUGYM_CONFIG.url, window.YUGYM_CONFIG.anonKey); }
 
@@ -51723,6 +51723,17 @@ function stEtPending(c){
   return to===stEtNow(c) ? null : {ym:nx, type:to};
 }
 function stRoleOf(c){ return c.role==='admin' ? 'admin' : (c.is_manager ? 'manager' : 'none'); }
+/* ══ 值班是「一件事、兩個欄位」（2026-10-28 使用者：「所以需不需要值班 不能從這邊設定嗎」）══
+   系統裡有兩個幾乎同義的旗標：
+     need_punch ＝ 要不要打卡（員工卡的值班分頁看它）
+     need_duty  ＝ 要不要排班、值班費怎麼算（薪資與排班看它）
+   實際資料：14 位在職員工裡 **13 位兩個值完全一樣**，只有黃沛瀞 false/true 不一致
+   —— 那一筆是舊資料，不是刻意設的。所以這裡把它們當成同一件事處理。
+   ⚠ 顯示取**聯集**：只要其中一個是 true 就顯示「需打卡」。
+     不然會出現「畫面寫不需打卡、系統照樣要他排班」這種看不出來的狀態（黃沛瀞就是）。
+   ⚠ 寫入**兩個一起寫**，而且連同「排程中的未來月份快照」一起改 ——
+     不然排好的職務異動會在月初把舊的 need_duty 搬回來。 */
+function stDutyOn(c){ return !!(c && (c.need_punch || c.need_duty)); }
 /* 一列控制項：職務／權限／值班／開課 都寫出現在的值，點一下開選單 */
 /* ⚠ 2026-10-28 二修（使用者：「職務 權限 值班 開課 統一放在標題」）——
    欄名從每一顆 pill 裡拿掉，改成**只在表頭出現一次**。
@@ -51760,7 +51771,8 @@ function stSwitchRow(c){
   return `<div class="st-sw">
     <span class="st-swg">${stPill(c.id,'role','權限',_roleTx,
       {admin:'adm',manager:'on',none:'off'}[stRoleOf(c)])}</span>
-    <span class="st-swg">${stPill(c.id,'punch','值班',c.need_punch?'需打卡':'不需打卡',c.need_punch?'on':'off')}${
+    <span class="st-swg">${(()=>{ const _duty=stDutyOn(c);
+      return stPill(c.id,'punch','值班',_duty?'需打卡':'不需打卡',_duty?'on':'off'); })()}${
       stPill(c.id,'teach','開課',c.can_teach?'可':'否',c.can_teach?'on':'off')}</span>
     <span class="st-swg"><span class="st-lamp${_line?' on':''}" title="LINE ${_line?'已綁定':'未綁定'}　·　綁定與解除在齒輪裡的員工資料"><i></i>LINE</span></span>
     <span class="st-swg st-swg-last">${g('danger')}</span>
@@ -51804,8 +51816,11 @@ async function stPickOpen(id, field){
     if(c.role==='front_desk') body=`<div class="bk-opt-note">這是櫃台裝置帳號，權限不從這裡改。</div>`;
   }else if(field==='punch'){
     title=`${nm}　值班`;
-    body=row('1','需打卡','上下班要打卡，列入值班時數與值班費',!!c.need_punch)
-        +row('0','不需打卡','不排值班（合作教練多半是這種）',!c.need_punch);
+    const _duty=stDutyOn(c);
+    body=row('1','需打卡','要排班、上下班打卡，列入值班時數與值班費',_duty)
+        +row('0','不需打卡','不排班、不打卡（合作教練多半是這種）',!_duty)
+        +`<div class="bk-opt-note">這一項同時管<b>排班</b>與<b>打卡</b>；
+          已經排程到下個月的職務異動也會跟著一起改。</div>`;
   }else if(field==='teach'){
     title=`${nm}　開課`;
     body=row('1','可','可以被排課、出現在行事曆的教練清單',!!c.can_teach)
@@ -51833,8 +51848,14 @@ async function stPickSet(id, field, val){
       await dbPut('coaches',c);
       showToast(`${c.name||'員工'}　權限改為${{admin:'管理員',manager:'主管',none:'無'}[val]}`);
     }else if(field==='punch'){
-      c.need_punch = (val==='1'); await dbPut('coaches',c);
-      showToast(`${c.name||'員工'}　${c.need_punch?'需要':'不需要'}打卡`);
+      const on=(val==='1');
+      c.need_punch=on; c.need_duty=on;
+      /* 排程中的未來月份也要跟著改，否則月初翻過去又變回舊值 */
+      const _r=payRulesMap(c), _cur=stCurYm();
+      if(_r){ Object.keys(_r).forEach(k=>{ if(/^\d{4}-\d{2}$/.test(k) && k>_cur && _r[k]
+                && _r[k].need_duty!==undefined) _r[k].need_duty=on; }); c.pay_rules=_r; }
+      await dbPut('coaches',c);
+      showToast(`${c.name||'員工'}　${on?'需要值班與打卡':'不排班、不打卡'}`);
     }else if(field==='teach'){
       c.can_teach = (val==='1'); await dbPut('coaches',c);
       showToast(`${c.name||'員工'}　${c.can_teach?'可以':'不能'}開課`);

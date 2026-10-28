@@ -39,8 +39,26 @@ ok('★★★ 權限三選一（管理員／主管／無）',
    /const ST_ROLE_OPTS=\[\['admin','管理員'\],\['manager','主管'\],\['none','無'\]\];/.test(src)
    && /function stRoleOf\(c\)\{ return c\.role==='admin' \? 'admin' : \(c\.is_manager \? 'manager' : 'none'\); \}/.test(src));
 ok('★★★ 值班／開課寫出現在的值，不是暗著的開關',
-   /stPill\(c\.id,'punch','值班',c\.need_punch\?'需打卡':'不需打卡',c\.need_punch\?'on':'off'\)/.test(src)
+   /stPill\(c\.id,'punch','值班',_duty\?'需打卡':'不需打卡',_duty\?'on':'off'\)/.test(src)
    && /stPill\(c\.id,'teach','開課',c\.can_teach\?'可':'否',c\.can_teach\?'on':'off'\)/.test(src));
+
+console.log('\n②b 值班是「一件事、兩個欄位」（1028 使用者：「需不需要值班不能從這邊設定嗎」）');
+/* need_punch＝要不要打卡；need_duty＝要不要排班、值班費怎麼算。
+   正式庫 14 位在職員工裡 13 位兩個值完全一樣，只有黃沛瀞 false/true 不一致（舊資料）。 */
+ok('★★★ 顯示取聯集：其中一個是 true 就算要值班',
+   /function stDutyOn\(c\)\{ return !!\(c && \(c\.need_punch \|\| c\.need_duty\)\); \}/.test(src));
+ok('　　為什麼取聯集（否則會出現「畫面寫不需打卡、系統照樣要他排班」）',
+   /畫面寫不需打卡、系統照樣要他排班/.test(src));
+ok('★★★ 寫入兩個欄位一起寫',
+   /c\.need_punch=on; c\.need_duty=on;/.test(src));
+ok('★★★ 排程中的未來月份快照也要跟著改（不然月初會搬回舊值）',
+   /if\(\/\^\\d\{4\}-\\d\{2\}\$\/\.test\(k\) && k>_cur/.test(src)
+   && /_r\[k\]\.need_duty=on;/.test(src));
+const dutyOn=new Function(grab('stDutyOn')+';return stDutyOn;')();
+ok('★★ 兩個都 false → 不需值班', dutyOn({need_punch:false,need_duty:false})===false);
+ok('★★ 只有 need_duty 是 true（黃沛瀞那種舊資料）→ 仍然算要值班',
+   dutyOn({need_punch:false,need_duty:true})===true);
+ok('★★ 空物件不炸', dutyOn({})===false && dutyOn(null)===false);
 /* 2026-10-28 三修（使用者：「可以用顏色區分可以/不可以嗎？」）——
    開著＝綠、關著＝灰、管理員＝金。 */
 ok('★★★ 用顏色分「可以／不可以」：開著綠、關著灰、管理員金',
