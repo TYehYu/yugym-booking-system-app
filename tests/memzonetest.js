@@ -133,9 +133,14 @@ console.log('\n左緣色條＝會員等級（2026-07-31 使用者指示）');
 ok('★ 每一列帶等級色', /lc:\(TIER_DEFS\[effTier\(m\)\]\|\|\{\}\)\.color\|\|'#8a8478',/.test(src));
 ok('★ lpTable 支援 row.lc（opt-in，其他頁不受影響）',
    /<div class="lp-row\$\{r\.lc\?' lp-lc':''\}" style="grid-template-columns:\$\{grid\};\$\{r\.lc\?`--lc:\$\{r\.lc\};`:''\}"/.test(src));
-ok('★ 與員工列表同一種語言（那邊是聘僱類型色條）',
-   /\.lp-row\.lp-lc\{border-left:4px solid var\(--lc,#8a8478\);\}/.test(src)
-   && /border-left:4px solid var\(--pc,#8a8478\);/.test(src));
+/* ⚠ 2026-10-29：員工列的 4px 色條移除了（impeccable 判為 side-tab），
+   **會員列的刻意保留** —— 那一頁的列沒有底色，色條是唯一寫出會員等級的東西。
+   所以這裡只釘會員側；兩邊不再是同一個寫法，這是有意的分歧。 */
+ok('★★ 會員列的等級色條留著（這一頁沒有底色，拿掉就看不出誰是主顧客）',
+   /\.lp-row\.lp-lc\{border-left:4px solid var\(--lc,#8a8478\);\}/.test(src));
+ok('★★ 員工列那條已經拿掉，底色接手（別再跟著會員側一起改回來）',
+   !/border-left:4px solid var\(--pc,#8a8478\);/.test(src)
+   && /background:color-mix\(in srgb, var\(--pc,#8a8478\) 20%, var\(--card,#fff\)\);/.test(src));
 /* 2026-08-05 三修（使用者附截圖）：色票併入工具列 lead 槽（與搜尋/篩選/翻頁同一列），
    新舊核對進度改統計卡第五格——表格上方不再各佔一列。 */
 /* 2026-08-27 使用者指示（附參考圖）：色票改成 segmented control（可點篩選），

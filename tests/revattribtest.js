@@ -14,9 +14,12 @@ const grabFn=n=>{const i=src.indexOf('function '+n+'(');let d=0;for(let k=src.in
 console.log('① tag 的顯示');
 {
   /* 2026-08-08 使用者指示：「教練 tag 要上教練的顏色」→ 多依賴 coachTagColor */
+  /* 2026-10-29：tag 的 style 多了 --co-ink（MANGO／BARRY／石頭那種深底白字的教練，
+     單獨用字色會糊掉，coachInkColor 會挑深的那一個）。這裡把它整支抓進來實跑，
+     不要用 stub —— 挑色邏輯本身就是要被測的東西。 */
   const mk=(desk,map)=>new Function('window','isDeskLike','coachTagColor',
-    grabFn('revAttribChip')+'\nreturn revAttribChip;')({_revCoachTag:map||{}},()=>desk,
-    id=>({bg:'#CFE0EF',fg:'#35617F'}));
+    grabFn('coachInkColor')+'\n'+grabFn('revAttribChip')+'\nreturn revAttribChip;')(
+    {_revCoachTag:map||{}},()=>desk, id=>({bg:'#CFE0EF',fg:'#35617F'}));
   const f=mk(true,{c1:'MANGO'});
   ok('★ 顯示歸屬教練的名字', /MANGO/.test(f({attKind:'tk',attRef:'T1',att:'c1'})));
   /* 2026-09-21 使用者：「原本卡片上的互動按鈕 可以移除了」—— 歸屬標籤改成純顯示，

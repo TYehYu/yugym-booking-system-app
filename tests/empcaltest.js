@@ -133,11 +133,23 @@ ok('★ 改用列表（不是卡片格）', /<div class="pp-dlist">/.test(src) &
    （詳細的條件與退路釘在 tests/emptabstest.js） */
 /* 2026-09-29：四頁併成兩頁（出勤／薪資），課堂與值班改成出勤裡面的小切換。 */
 /* 2026-09-30 使用者：「幫我把薪資分頁跟出勤交換位子」—— 薪資排第一 */
-ok('★ 兩顆分頁鈕：薪資／出勤（薪資在前），課堂與值班仍是內層小鈕',
+/* 2026-10-28 使用者指示：「出勤可以改成列表　日期 上班 下班 教練課 團體課 體驗課」——
+   內層那兩顆小鈕（課堂／值班打卡）整個退場：兩邊的資料現在同時在一張列表上，
+   不必再切來切去。外層兩顆分頁（薪資／出勤）不變。 */
+ok('★ 兩顆分頁鈕：薪資／出勤（薪資在前）',
    /\[\['salary','薪資'\]\],/.test(src)
    && /\(_canTeach\|\|_hasDuty\)\?\[\['classes','出勤'\]\]:\[\]\);/.test(src)
-   && /class="pp-subtab\$\{sub===k\?' on':''\}" onclick="ppEmpSub\('\$\{k\}'\)"/.test(src)
    && /class="pp-rectab\$\{PP\.recView===k\?' active':''\}" onclick="ppShowEmpRecord\('\$\{k\}'\)"/.test(src));
+ok('★★ 內層的課堂／值班小鈕已移除（併成一張列表）',
+   !/class="pp-subtab\$\{sub===k\?' on':''\}"/.test(src)
+   && /pane\.innerHTML='<div id="ppcal-wrap"><\/div>';/.test(src)
+   && /await ppCalOpen\('list', id,/.test(src));
+ok('★★ PP.empSub 沒有被一起刪掉 —— 月曆版的三個入口還在用',
+   /function ppEmpSub\(k\)\{ PP\.empSub=k; ppEmpPaneFill\(\); \}/.test(src)
+   && /PP\.empSub='duty'/.test(src));
+ok('★★★ 出勤列表六欄：日期／上班／下班／教練課／團體課／體驗課',
+   /function ppCalList\(\)\{/.test(src) && /function ppListRow\(ds, d, dow\)\{/.test(src)
+   && /<th>日期<\/th><th>上班<\/th><th>下班<\/th>\s*\n\s*<th>教練課<\/th><th>團體課<\/th><th>體驗課<\/th>/.test(src));
 ok('★★ 原本那四支入口沒有被刪（列表圖示、補登打卡返回都還在用）',
    /async function ppOpenEmpClasses\(/.test(src) && /async function ppOpenEmpShifts\(/.test(src)
    && /async function ppOpenEmpSalary\(/.test(src) && /async function openHrSalary\(/.test(src));
@@ -168,8 +180,13 @@ ok('★「特休」那顆卡也拿掉了（併進值班視窗）',
    !/ppDashCard\('leaf','特休'/.test(src) && !/async function ppOpenEmpLeave/.test(src));
 /* 0823 改分頁之後，這兩件事的落點換了位置，但都還在：
    「打卡」寫在分頁鈕上（值班打卡），特休寫在分頁列上方的摘要小字裡。 */
-ok('　　分頁鈕寫出「打卡」，不然沒人知道打卡搬去哪了',
-   /\['duty','值班打卡'\]/.test(src));
+/* 2026-10-28：小鈕退場後，「打卡」四個字改由列表自己寫出來 ——
+   使用者：「1可以列出來 但可以顯示[未打卡]或[休假]　2值班時間」。
+   沒打卡的那天照樣列，上班欄寫排班時間＋〔未打卡〕；只打上班沒打下班寫〔漏打〕。 */
+ok('　　列表自己寫得出打卡狀態，不然沒人知道打卡搬去哪了',
+   /未打卡/.test(src) && /漏打/.test(src) && /ppl-nop/.test(src) && /ppl-miss/.test(src));
+ok('　　請假與休假兩種都列得出來（不是整列不見）',
+   /ppl-leave/.test(src) && /ppl-rest/.test(src) && /休假/.test(src));
 /* 2026-09-08 使用者指示：「員工資料上方的基本資料新增　特休時數」——
    特休從工作紀錄的摘要小字搬到上方基本資料那一列（empAl），兩個地方都寫會對不起來。 */
 /* 2026-09-29：員工卡改成格子版，特休是「任職」那一組的一格。 */

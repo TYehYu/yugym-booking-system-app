@@ -42,8 +42,10 @@ ok('★★★ 管理員與主管各一枚章（管理員優先）',
    /const _lv=c\.role==='admin'\?'adm':\(c\.is_manager\?'mgr':''\);/.test(src)
    && /<span class="st-lv st-lv-\$\{_lv\}">/.test(src));
 /* ⚠ 章上的字用職稱（老闆／主管），判準仍是權限 —— 職稱給人看、權限給系統認 */
-ok('★★★ 章上寫職稱，沒填才退回權限名稱',
-   /escH\(c\.job_title\|\|\(_lv==='adm'\?'管理員':'主管'\)\)/.test(src));
+/* 2026-10-29：職稱先過 jobTitleTx（舊值對照：工讀→支援、店長→主管），
+   章上才不會印出已經不用的舊稱。判準仍是權限，不是職稱。 */
+ok('★★★ 章上寫職稱（過舊值對照），沒填才退回權限名稱',
+   /escH\(jobTitleTx\(c\.job_title\)\|\|\(_lv==='adm'\?'管理員':'主管'\)\)/.test(src));
 ok('★★★ 兩階同一枚章、只差質感（老闆加漸層與陰影，不換色）',
    /\.st-lv\{[\s\S]{0,200}?background:var\(--gold-d,#8A6E42\);\}/.test(src)
    && /\.st-lv-adm\{background:linear-gradient\(135deg,#C9A227,var\(--gold-d,#8A6E42\)\);/.test(src));
@@ -51,9 +53,11 @@ ok('★★ 舊的姓名格底色已經收掉（不留死 class）',
    !/st-who-adm|st-who-mgr/.test(src.replace(/\/\*[\s\S]*?\*\//g,' ')));
 ok('★★ 章不會把名字擠掉（只佔幾個字寬，margin-right 6px）',
    /\.st-lv\{[\s\S]{0,160}?margin-right:6px;/.test(src));
-ok('★★ 左邊那條色帶仍是聘僱類型，沒有被搶走',
-   /border-left:4px solid var\(--pc,#8a8478\);/.test(src)
-   && /style="--pc:\$\{etc\};"/.test(src));
+/* 2026-10-29：4px 色條移除，身分色改由整列 20% 底色表示（--pc 仍是同一個來源）。
+   這一條原本要守的是「色帶不要被職稱/權限搶走」—— 改守底色那一層。 */
+ok('★★ 整列的身分色仍是聘僱類型，沒有被搶走',
+   /background:color-mix\(in srgb, var\(--pc,#8a8478\) 20%, var\(--card,#fff\)\);/.test(src)
+   && /style="--pc:\$\{etc\};\$\{_etInk\?`--pc-ink:\$\{_etInk\};`:''\}"/.test(src));
 
 console.log('\n'+pass+' 過 / '+fail+' 敗');
 process.exit(fail?1:0);

@@ -88,8 +88,9 @@ ok('　　工作規則那格套上分隔線後仍垂直置中', /\.st-l-tags\{di
 console.log('\n放大與基線對齊');
 /* 使用者回報「文字高高低低」：那幾格是 grid 項目、垂直置中，字級不同時行框高度就不同，
    置中後基線自然對不齊 → 整排共用同一個字級與行高 */
+/* 2026-10-29：同一條規則多了 tabular-nums（66／6／152 位數要對齊） */
 ok('★ 數字與實領薪資共用同一個字級與行高（20px / 26px）',
-   /\.st-l-n,\.st-l-pay\{font-size:20px;line-height:26px;font-weight:800;font-family:var\(--num\),inherit;\}/.test(src));
+   /\.st-l-n,\.st-l-pay\{font-size:20px;line-height:26px;font-weight:800;font-family:var\(--num\),inherit;\n\s*font-variant-numeric:tabular-nums;\}/.test(src));
 ok('★ 原因寫在程式裡', /每格的行框高度就不一樣，置中後基線自然對不齊/.test(src));
 ok('　　「/排定」小字也跟著調', /\.st-l-n u\{text-decoration:none;font-size:11px;/.test(src));
 ok('　　兩段窄螢幕一起縮，且兩者仍同字級',

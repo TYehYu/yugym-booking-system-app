@@ -31,7 +31,9 @@ ok('★ 類型改用左邊色條區分，上方給色票說明',
    /const legend=ET_ORDER\.filter\(\(\[k\]\)=>secs\[k\]&&secs\[k\]\.length\)/.test(src)
    && /<b style="--lc:\$\{ET_COLOR\[k\]\|\|'#8a8478'\};">\$\{label\}<i>\$\{secs\[k\]\.length\}<\/i><\/b>/.test(src)
    && /\.st-legend b::before\{content:"";width:10px;height:10px;/.test(src));
-ok('　　色條本來就依類型上色（沿用 --pc）', /border-left:4px solid var\(--pc,#8a8478\);/.test(src));
+/* 2026-10-29：色條移除，身分色改由整列底色表示（同一個 --pc） */
+ok('　　整列本來就依類型上色（沿用 --pc）',
+   /background:color-mix\(in srgb, var\(--pc,#8a8478\) 20%, var\(--card,#fff\)\);/.test(src));
 
 console.log('\n表頭對齊');
 ok('★ 最後一欄不再用 max-content（表頭字短、資料列有六顆按鈕，兩個 grid 算出不同軌道）',
@@ -74,9 +76,13 @@ console.log('\n中間空白');
 ok('★ 姓名欄有上限、不再獨佔剩餘寬度',
    /minmax\(130px,240px\) 62px 62px 62px 62px 56px 48px 58px 100px 24px 96px minmax\(342px,1fr\)/.test(src));
 ok('　　原因寫在程式裡', /中間那片大空白則是姓名欄吃掉全部剩餘寬度造成的/.test(src));
-ok('　　窄螢幕分兩段收緊（≤1400px、≤1150px），開關字級一起縮',
-   /@media\(max-width:1400px\)\{[\s\S]{0,400}\.st-l-sw \.st-swb\{padding:5px 6px;font-size:10px;\}/.test(src)
-   && /@media\(max-width:1150px\)\{[\s\S]{0,400}\.st-l-sw \.st-swb\{padding:4px 5px;font-size:9\.5px;gap:4px;\}/.test(src));
+/* ⚠ 2026-10-29 反轉：原本兩段各自把字縮到 10px／9.5px，筆電常駐在這個區間，
+   等於店裡大部分時間看到的就是最小的那一版。字級一律守住 11px，
+   要省的空間從**內距與間距**讓出來（那兩樣縮了不影響讀）。 */
+ok('　　窄螢幕分兩段收緊（≤1400px、≤1150px），但字級守住 11px、只縮內距',
+   /@media\(max-width:1400px\)\{[\s\S]{0,400}\.st-l-sw \.st-swb\{padding:4px 5px;font-size:11px;\}/.test(src)
+   && /@media\(max-width:1150px\)\{[\s\S]{0,400}\.st-l-sw \.st-swb\{padding:3px 4px;font-size:11px;gap:3px;\}/.test(src)
+   && !/font-size:9\.5px;gap:4px;/.test(src));
 
 console.log('\n新增兩欄');
 /* 2026-10-28：休假日整欄換成「職務」（使用者：「移除休假日　改成職務…用下拉選單調整」）。 */

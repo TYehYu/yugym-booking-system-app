@@ -44,7 +44,8 @@ console.log('\n② 今日營收名單的顏色');
   const F=grabFn('revAttribChip');
   ok('★★ 教練 tag 穿行事曆同一套教練代表色',
      /const _c=nm\?coachTagColor\(r\.att\):null;/.test(F)
-     && /const _sty=_c\?` style="background:\$\{_c\.bg\};color:\$\{_c\.fg\};"`:'';/.test(F));
+     /* 2026-10-29：深底白字的教練單獨用字色會糊掉 → 多帶一個 --co-ink */
+     && /const _sty=_c\?` style="background:\$\{_c\.bg\};color:\$\{_c\.fg\};--co-ink:\$\{coachInkColor\(r\.att\)\};"`:'';/.test(F));
   ok('★ 可點與不可點兩種都上色（櫃檯與教練看到的一致）',
      (F.match(/\$\{_sty\}/g)||[]).length===2);
   ok('★ 未歸屬維持金色提醒（那是要處理的事，不是某位教練）',
@@ -53,8 +54,8 @@ console.log('\n② 今日營收名單的顏色');
      /function coachTagColor\(id\)\{/.test(src));
   // 實跑一次，確認樣式真的組進去
   const chip=new Function('window','isDeskLike','coachTagColor',
-    F+'\nreturn revAttribChip;')({_revCoachTag:{'c-1':'BARRY'}},()=>true,
-    ()=>({bg:'#C9E4E6',fg:'#2F6068'}));
+    grabFn('coachInkColor')+'\n'+F+'\nreturn revAttribChip;')(
+    {_revCoachTag:{'c-1':'BARRY'}},()=>true, ()=>({bg:'#C9E4E6',fg:'#2F6068'}));
   const html=chip({attKind:'tk',att:'c-1',attRef:'TK-1'});
   ok('★★ 產出的 HTML 帶著教練色', /background:#C9E4E6;color:#2F6068;/.test(html) && /BARRY/.test(html));
   const none=chip({attKind:'tk',att:null,attRef:'TK-1'});
