@@ -39,8 +39,10 @@ ok('★ 團課人次排在團課堂數後面、體驗再後面',
    /num\(st\.grp, [^\n]*, 2\)\n\s*\+ num\(st\.grpH, [^\n]*, 3\)\n\s*\+ num\(st\.trial, [^\n]*, 4\)\n\s*\+ num\(st\.renew,'', 5\)\n\s*\+ num\(fmtHours\(st\.hours\),'h', 6\)/.test(src));
 
 console.log('\n③ 版面跟著加欄');
-ok('★ 桌機格線多兩欄（中段 62/62/62/62/56）',
-   /grid-template-columns:10px 34px minmax\(130px,240px\) 62px 62px 62px 62px 56px 48px 58px 100px 24px 78px minmax\(360px,1fr\) 30px;/.test(src));
+/* 2026-10-28：第 13 欄 78px→96px（休假日換成「職務」的 pill，78px 會換行），
+   多出來的 18px 從第 14 欄的 minmax 下限借回來，整列總寬不變。 */
+ok('★ 桌機格線多兩欄（中段 62/62/62/62/56），職務欄 96px',
+   /grid-template-columns:10px 34px minmax\(130px,240px\) 62px 62px 62px 62px 56px 48px 58px 100px 24px 96px minmax\(342px,1fr\) 30px;/.test(src));
 ok('★ 權限開關的靠左對齊（2026-08-12 工作規則欄移除 → nth-child 14）',
    /\.st-lhead span:nth-child\(14\)\{text-align:left;\}/.test(src)
    && !/\.st-lhead span:nth-child\(13\)\{text-align:left;\}/.test(src));

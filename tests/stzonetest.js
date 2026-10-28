@@ -15,15 +15,29 @@ const head=g('const stHead=`<div class="st-lhead">','</div>`;');
 
 console.log('欄位順序');
 {
-  const cols=[...head.matchAll(/<span(?:\s[^>]*)?>([^<$]+?)(?:\$\{_mTag\})?<\/span>/g)]
+  /* ⚠ 1028 二修：控制項的表頭改成一格裡包四個標籤（權限／值班／開課／LINE／停用），
+     所以那一格的「欄名」要另外取 —— 這裡把它整格換成一個代表字串再比。 */
+  const head2=head.replace(/<span class="st-swh">[\s\S]*?<\/span><span><\/span>/,
+    '<span>權限・值班・開課</span><span></span>');
+  const cols=[...head2.matchAll(/<span(?:\s[^>]*)?>([^<$]+?)(?:\$\{_mTag\})?<\/span>/g)]
     .map(m=>m[1]).filter(x=>x && !/^\s*$/.test(x));
-  eq('★ 姓名 → 總堂數 → 教練課 → 團體課 → 續約 → 工作時數 → 實領薪資 → 休假日 → 權限開關',
-     cols, ['姓名','總堂數','教練課','團課堂數','團課人次','體驗','續約','工作時數','實領薪資','休假日','權限開關']);   /* 2026-08-12 工作規則欄移除 */
+  ok('★★ 四個欄名都搬到表頭了（資料列的 pill 只寫值）',
+     /<i class="st-pl-role">權限<\/i>/.test(src) && /<i class="st-pl-punch">值班<\/i>/.test(src)
+     && /<i class="st-pl-teach">開課<\/i>/.test(src)
+     && !/<u>\$\{label\}<\/u>/.test(src));
+  ok('★★ 表頭與 pill 吃同一組寬度變數（差一個像素就看得出來）',
+     /:root\{--w-et:72px;--w-role:66px;--w-punch:74px;--w-teach:44px;\}/.test(src)
+     && /\.st-pl-role\{width:var\(--w-role\);\}/.test(src)
+     && /\.st-swh i\{/.test(src));
+  /* 2026-10-28：休假日整欄換成「職務」，右半那一區改名「權限・值班・開課」
+     （使用者：「移除休假日　改成職務…　第二項權限　第三項值班　第四項開課」）。 */
+  eq('★ 姓名 → 總堂數 → 教練課 → 團體課 → 續約 → 工作時數 → 實領薪資 → 職務 → 權限・值班・開課',
+     cols, ['姓名','總堂數','教練課','團課堂數','團課人次','體驗','續約','工作時數','實領薪資','職務','權限・值班・開課']);
   /* 比欄位順序要看解析出來的 cols，不能用 head.indexOf —— 2026-08-26 總堂數那格加了
      title（內文提到「教練課」），raw 字串的 indexOf 會被 tooltip 的字咬到。 */
   ok('★ 總堂數排在教練課前面', cols.indexOf('總堂數')>=0 && cols.indexOf('總堂數')<cols.indexOf('教練課'));
-  ok('★ 實領薪資排在工作時數後面、休假日前面',
-     head.indexOf('工作時數')<head.indexOf('實領薪資') && head.indexOf('實領薪資')<head.indexOf('休假日'));
+  ok('★ 實領薪資排在工作時數後面、職務前面',
+     head.indexOf('工作時數')<head.indexOf('實領薪資') && head.indexOf('實領薪資')<head.indexOf('職務'));
   ok('　　新欄位一樣會跟著月份翻頁', /<span class="st-zb"[^>]*>總堂數\$\{_mTag\}<\/span>/.test(head));
 }
 
@@ -51,13 +65,13 @@ console.log('\n三個區域（只用分隔線表達，不放標題列）');
 ok('★ 區塊標題那一列已移除', !/st-hz/.test(src));
 ok('★ 表頭回到單列（沒有第二列的 grid-template-rows）',
    /border:1px solid var\(--bd\);border-radius:10px;margin-bottom:2px;\}/.test(src));
-ok('★ 分區改由兩條線表達：員工表現從「總堂數」起、權限管理從「休假日」起（2026-08-12 工作規則欄移除）',
+ok('★ 分區改由兩條線表達：員工表現從「總堂數」起、權限管理從「職務」起（1028 休假日換成職務）',
    /num\(st\.all, [^)]*, 0, 'st-zb'\)/.test(src)
-   && /<span class="st-l-off st-zb">/.test(src)   /* 2026-08-12 工作規則欄移除，分隔線移到休假日格 */
+   && /<span class="st-l-et st-zb">/.test(src)   /* 1028：分隔線跟著搬到職務那一格 */
    && /<span class="st-zb"[^>]*>總堂數\$\{_mTag\}<\/span>/.test(src)
-   && /<span class="st-zb">休假日<\/span>/.test(src));
-ok('★ 休假日歸在權限管理那一側（不在員工表現裡）',
-   /<span>實領薪資\$\{_mTag\}<\/span><span><\/span><span class="st-zb">休假日<\/span>/.test(src)
+   && /<span class="st-zb">職務<\/span>/.test(src));
+ok('★ 職務歸在權限管理那一側（不在員工表現裡）',
+   /<span>實領薪資\$\{_mTag\}<\/span><span><\/span><span class="st-zb">職務<\/span>/.test(src)
    && /工作規則與休假日屬於權限管理，不是員工表現/.test(src));
 /* 2026-07-31 使用者回報「總堂數的數字比較高」：原本 align-self:stretch 讓那一格被拉成整列高、
    內容從頂端排，只有它偏高 → 改用絕對定位的細線，格子不再 stretch */
@@ -89,7 +103,7 @@ ok('　　手機版數字也放大', /\.st-l-n\{grid-column:span 1;position:rela
 console.log('\n軌道與其他欄位');
 /* 2026-08-12 工作規則欄移除 → 15 欄；權限開關改吃剩餘寬度（minmax 1fr） */
 ok('★ 15 欄：姓名欄有上限，權限開關吃剩餘寬度',
-   /grid-template-columns:10px 34px minmax\(130px,240px\) 62px 62px 62px 62px 56px 48px 58px 100px 24px 78px minmax\(360px,1fr\) 30px;/.test(src)
+   /grid-template-columns:10px 34px minmax\(130px,240px\) 62px 62px 62px 62px 56px 48px 58px 100px 24px 96px minmax\(342px,1fr\) 30px;/.test(src)
    && /空白落在兩區中間/.test(src));
 ok('★ 三個斷點的軌道欄數一致（15 欄）', (()=>{
    const all=[...src.matchAll(/grid-template-columns:10px (?:34|32|28)px minmax\([^)]*\)([^;]*);/g)];

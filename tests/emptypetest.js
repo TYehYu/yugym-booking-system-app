@@ -90,8 +90,12 @@ console.log('\n④ 動錢的操作：二次確認＋防連按＋清快取');
 
 console.log('\n⑤ 只做當月；預排未來仍然只有管理員（薪資規則視窗）');
 ok('★★ 寫在原地', /只做「當月生效」。要預先排下個月的，仍然只有管理員能做（薪資規則視窗）。/.test(src));
-ok('★★ 四種身分都列得出來',
-   /const EMP_TYPE_PICK=\[\['full_time','正職'\],\['part_time','兼職'\],\s*\n\s*\['contractor','合作教練'\],\['intern','工讀'\]\];/.test(src));
+/* 2026-10-28：介面上「工讀」統一改叫「支援」（使用者定案，只換講法，
+   employment_type 仍然是 intern，薪資模板與勞健保判斷一個字都沒動）。
+   這裡吃中央對照表 PAY_LABEL.intern，不再各寫各的。 */
+ok('★★ 四種身分都列得出來（intern 的顯示名吃 PAY_LABEL）',
+   /const EMP_TYPE_PICK=\[\['full_time','正職'\],\['part_time','兼職'\],\s*\n\s*\['contractor','合作教練'\],\['intern',PAY_LABEL\.intern\]\];/.test(src));
+ok('★★ PAY_LABEL 的 intern 是「支援」', /intern:'支援'/.test(src) && !/intern:'工讀'/.test(src));
 
 console.log(`\n${pass} 通過 / ${fail} 失敗`);
 process.exit(fail?1:0);

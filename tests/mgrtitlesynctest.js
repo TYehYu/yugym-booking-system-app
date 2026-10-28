@@ -26,8 +26,12 @@ ok('★★★ **不做**反向（改職稱就給權限）—— is_manager 給�
 ok('★★★ 兩個入口都接上（列表的開關、薪資規則的勾）',
    /else if\(key==='manager'\)\{ c\.is_manager = on; stSyncMgrTitle\(c, on\); \}/.test(src)
    && /c\.is_manager=ck\('hr-ismgr'\);\s*\n\s*stSyncMgrTitle\(c, c\.is_manager\);/.test(src));
-ok('★★ 只有兩處寫 is_manager，都同步到了（沒有第三條漏網的路）',
-   (src.match(/c\.is_manager\s*=\s*/g)||[]).length===2);
+/* 2026-10-28：員工列表的權限改成三選一的選單（管理員／主管／無），
+   所以多了第三處寫 is_manager —— 它同樣接著 stSyncMgrTitle，沒有漏。 */
+ok('★★ 每一處寫 is_manager 的地方都接著同步職稱（沒有漏網的）', (()=>{
+  const at=[...src.matchAll(/c\.is_manager\s*=\s*/g)].map(m=>m.index);
+  return at.length===3 && at.every(i=>/stSyncMgrTitle/.test(src.slice(i,i+260)));
+})(), (src.match(/c\.is_manager\s*=\s*/g)||[]).length);
 ok('★★ 職稱下拉仍留著「店長（舊稱）」，舊資料看得到',
    /\['店長','店長（舊稱）'\]/.test(src));
 
