@@ -85,7 +85,7 @@ console.log('\n名額：亮幾個燈就佔幾台（2026-07-31 使用者確認）
   const g2=(a,b)=>{const i=src.indexOf(a);return src.slice(i,src.indexOf(b,i)+b.length);};
   const code=g2('window.VENUES = window.VENUES || [','\n}\n')+'\n'
     +g2('function venuePriorityFor(category){','\n}\n')+'\n'
-    +g2('function venueLoadAt(others, inst){','\n}\n')+'\n'
+    +g2('function venueLoadAt(others, inst, dedupe){'   /* 1029：多了 dedupe 參數，錨點要跟著改 */,'\n}\n')+'\n'
     +g2('function venuePrepAt(others, ns, ne, includeGrace){','\n}\n')+'\n'
     +g2('function allocateVenue(category, sameDay, ns, ne, selfId, forceVid){','\n}\n');
   /* 2026-08-29：allocateVenue 開始問口袋的 prepMin（團課開課前 15 分鐘要清場），
