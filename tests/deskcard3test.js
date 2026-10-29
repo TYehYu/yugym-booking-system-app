@@ -21,8 +21,21 @@ ok('★ 第一欄＝出席章（假／未／簽三種照舊）',
 ok('★ 第二欄：課程／（非預設才寫的場地）／會員姓名（粗體）',
    /<span class="t3-l1">\$\{catName\[cc\]\|\|'課程'\}<\/span>\s*\n\s*\$\{\(typeof venueIsNotable==='function' && venueIsNotable\(b\.category, b\.venue_unit\)\)/.test(src)
    && /<span class="t3-l2 tcard-mem\$\{bkNameBlankCls\(b\)\}">\$\{nm\}<\/span>/.test(src)
-   /* 2026-10-29：場地那一列拿掉之後姓名放大到 17.5px（量出來的，見 index.html 的說明） */
-   && /\.tcard-3c \.t3-l2\{font-size:17\.5px;font-weight:800;/.test(src));
+   /* 2026-10-29 二修：姓名 14.5 → 17.5 → 22px。能放這麼大是因為
+      ①場地那一列拿掉了 ②中間那列右邊是空的，姓名框往右多借 22px（框寬 97px）。
+      量出來的（見 index.html 的說明）：4 字 88px、6 字 79px，卡高不變。 */
+   && /\.tcard-3c \.t3-l2\{font-size:22px;font-weight:800;/.test(src)
+   && /\.tcol-cards \.tcard-std \.tcard-3c \.t3-l2\{margin-right:-22px;\}/.test(src));
+/* ⚠⚠ 姓名同時掛 .t3-l2 與 .tcard-mem，兩條選擇器權重相同（0,2,0）→ **後面那條贏**。
+   1029 第一次只改 .t3-l2，畫面完全沒變，而這支測試照樣綠 —— 因為它只比字串。
+   兩條都要釘，而且值要一樣，否則又會出現「改了沒生效」。 */
+ok('★★★ 姓名字級兩條都要改（同權重，後面那條才是真正生效的）',
+   /\.tcard-std \.tcard-mem\{font-size:22px;font-weight:800;\}/.test(src));
+ok('★★  兩條的值一致（不一致＝畫面吃後面那條，前面那條是假的）', (()=>{
+   const a=/\.tcard-3c \.t3-l2\{font-size:([\d.]+)px/.exec(src);
+   const b=/\.tcard-std \.tcard-mem\{font-size:([\d.]+)px/.exec(src);
+   return !!(a&&b&&a[1]===b[1]);
+})());
 ok('★★ 場地的判斷用現成那一支，不要在課卡裡另外寫一條規則',
    /function venueIsNotable\(category, unit\)\{/.test(src)
    && !/<span class="t3-l1 t3-venue">\$\{\(typeof venueDisplay==='function'\)\?\(venueDisplay\(b\)\|\|''\):''\}<\/span>\s*\n\s*<span class="t3-l2/.test(src));
