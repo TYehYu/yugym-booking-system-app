@@ -32,7 +32,7 @@ console.log('① 內容：色點在上，使用人與日期各一行在下');
      /\s+: dt;/.test(src));
   ok('★★ 兩處都套上了（已使用、已預約）',
      (src.match(/_shBody\(b, /g)||[]).length===2
-     && /\$\{_shBody\(b, b\?md\(b\):\(_md\?md\(\{date:_md\}\):'✓'\)\)\}/.test(src)
+     && /\$\{_shBody\(b, b\?md\(b\):\(_md\?md\(\{date:_md\}\):'舊'\)\)\}/.test(src)
      /* 2026-08-28：已預約那一處多一個分岔 —— 教練請假走 _lvBody（紅點＋請假＋日期） */
      && /\$\{clv\?_lvBody\(b, md\(b\)\):_shBody\(b, md\(b\)\)\}/.test(src));
 

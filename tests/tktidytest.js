@@ -329,8 +329,11 @@ ok('★★ 沒有課卡的格子（_ghost）依序吃 manual_uses 的日期',
    /const _mu=Array\.isArray\(t\.manual_uses\)\?t\.manual_uses\.filter\(Boolean\)\.slice\(\)\.sort\(\):\[\];/.test(TT)
    && /const _it=\(gi<_ghost\) \? \{b:null,st:'used',g:gi\+\+\}/.test(TT)
    && /const _md=\(!b && _it\.g!=null\) \? \(_mu\[_it\.g\]\|\|_ud\[_it\.g\]\|\|''\) : '';/.test(TT));
-ok('★ 沒補的還是畫 ✓（不能因為多了這個功能就變空白）',
-   /\$\{_shBody\(b, b\?md\(b\):\(_md\?md\(\{date:_md\}\):'✓'\)\)\}/.test(TT)
+/* ⚠ 2026-10-31 使用者指示：沒有課卡、也沒有補登日期的那幾格改印「舊」不印「✓」。
+   打勾看起來像「有紀錄只是沒顯示」，其實是**舊系統匯入時就沒有逐堂日期**
+   （舊檔 pkg_benefits.json 自己就有 used_nodate 欄位，數字完全對得上）。 */
+ok('★ 沒補的畫「舊」（不能因為多了這個功能就變空白）',
+   /\$\{_shBody\(b, b\?md\(b\):\(_md\?md\(\{date:_md\}\):'舊'\)\)\}/.test(TT)
    /* _shBody 沒有共享時原封不動回傳（2026-08-27） */
    && /: dt;/.test(TT));
 ok('★ 補登的格子看得出來（細虛線＋title 寫明沒有課卡）',
