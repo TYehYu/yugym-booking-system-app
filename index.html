@@ -15601,8 +15601,8 @@ function tbl(s){return TABLE_ALIAS[s]||s;}
 let sb=null;
 // ── 版本號（日期+時間格式：年後兩碼+月+日.時分，例 26620.1058 = 26年6/20 10:58）──
 // 每次改版手動更新這一行即可，畫面與 title 會一起更新
-const APP_VERSION = '261029.2121';
-const APP_VERSION_LABEL = 'v261029.2121';
+const APP_VERSION = '261031.0031';
+const APP_VERSION_LABEL = 'v261031.0031';
 const CLOUD = !!(window.YUGYM_CONFIG && window.YUGYM_CONFIG.url && window.YUGYM_CONFIG.anonKey);
 if(CLOUD){ sb = supabase.createClient(window.YUGYM_CONFIG.url, window.YUGYM_CONFIG.anonKey); }
 
@@ -16047,7 +16047,8 @@ const IDB_NAME='yugym-cache', IDB_STORE='tables', IDB_MAX_AGE=86400000;
 /* 快取紀元（2026-10-08）：跨工作階段快取「要不要整份丟掉」看這個字串，不看 APP_VERSION。
    ⚠ 只有改到**讀取／快取規則**（分頁、LEAN_DROP、簽章、增量補資料）時才往上跳一號；
      平常改版面或業務邏輯一律不要動 —— 動一次全店就冷啟動一次（1008 的 4.2 秒就是這樣來的）。 */
-const CACHE_EPOCH='2026-10-02.pageorder';
+/* 2026-10-30：還原規則改了（逐表還原＋連續崩潰自救）→ 依 CLAUDE.md 的規矩跳號一次 */
+const CACHE_EPOCH='2026-10-30.hydrate';
 let _idbP=null, _idbUid=null, _idbSaveT=null;
 const _idbDirty=new Set();
 function idbOpen(){
@@ -16100,12 +16101,50 @@ async function cacheFlush(){
     }catch(e){ dbWhy(k,'沒存進 IndexedDB',((e&&e.name)||'')+' '+((e&&e.message)||e)); }
   }
 }
+/* ══ 開場還原的兩道保險（2026-10-30 使用者回報：「mango 打不開手機行事曆」）══
+   症狀是 iOS Safari 的「重複發生問題」—— 分頁被系統砍掉、自動重載、再被砍，
+   一直循環。成因是記憶體：教練行事曆要用的 bookings 現在 10,847 筆／11MB JSON、
+   member_tickets 4,397 筆／4.5MB，而還原時是 `st.getAll()`
+   **一口氣把整份快取解序列化**（每張表存成一筆，每筆就是整張表的陣列）。
+
+   ① 逐表還原：改成先拿 key、再一張一張讀，一張表一個交易
+      （與寫入端 0823 的「一張表一個交易」同一個理由）。
+      峰值從「16MB 一次」降成「最大的那一張表」。
+   ② 連續崩潰自救：還原開始前在 localStorage 插旗，正常走完就拔旗。
+      下一次開場如果看到旗還在，代表**上一次是在還原途中死掉的** ——
+      這一次就跳過還原並清掉快取，讓它走網路（分頁抓，峰值低很多）。
+      ⚠ 這是斷開迴圈用的，不是效能優化：沒有它，使用者只能自己去
+        iPhone 設定裡刪網站資料才出得來。
+      ⚠ 用 localStorage 不用記憶體變數 —— 分頁被砍掉時記憶體什麼都不剩。
+      ⚠ 最壞情況只是「多清一次快取、多抓一次表」，不會掉資料。 */
+const BOOT_FLAG='yugym_boot_hydrating';
 async function cacheHydrate(uid){
   if(!uid) return 0;
   _idbUid=uid;
+  let _flagged=false;
+  try{
+    if(localStorage.getItem(BOOT_FLAG)){
+      localStorage.removeItem(BOOT_FLAG);
+      dbWhy('（開場）','上次還原途中沒走完，清一次快取避免再撞','連續崩潰自救');
+      try{ await cacheWipe(); }catch(_){}
+      _idbUid=uid;
+      try{ const w=await idbTx('readwrite'); if(w) w.put({uid:uid,table:'__ver',ver:CACHE_EPOCH,savedAt:Date.now()}, uid+'|__ver'); }catch(_){}
+      try{ window._dbHydrated=[]; }catch(_){}
+      return 0;
+    }
+    localStorage.setItem(BOOT_FLAG,'1'); _flagged=true;
+  }catch(_){}
   try{
     const st=await idbTx('readonly'); if(!st) return 0;
-    const rows=await new Promise(res=>{ try{ const rq=st.getAll(); rq.onsuccess=()=>res(rq.result||[]); rq.onerror=()=>res([]); }catch(_){ res([]); } });
+    /* 先只拿 key（幾十個字串），不碰資料 */
+    const keys=await new Promise(res=>{ try{ const rq=st.getAllKeys(); rq.onsuccess=()=>res(rq.result||[]); rq.onerror=()=>res([]); }catch(_){ res([]); } });
+    const rows=[];
+    for(const k of keys){
+      /* 一張表一個交易：交易在 await 之間會自己結束，不能重用上面那個 */
+      const st1=await idbTx('readonly'); if(!st1) break;
+      const row=await new Promise(res=>{ try{ const rq=st1.get(k); rq.onsuccess=()=>res(rq.result||null); rq.onerror=()=>res(null); }catch(_){ res(null); } });
+      if(row) rows.push(row);
+    }
     /* ══ 換版就把舊快取丟掉一次（2026-10-03）═══════════════════════════════
        9/30 的「分頁沒有 ORDER BY」會讓超過 1,000 筆的表隨機漏列（見
        tests/pageordertest.js），而那份漏列的資料會原封不動存進 IndexedDB、
@@ -16148,6 +16187,10 @@ async function cacheHydrate(uid){
     dbWhy('（開場）','從 IndexedDB 還原 '+n+' 張表',(window._dbHydrated||[]).join(','));
     return n;
   }catch(_){ return 0; }
+  /* ⚠⚠ 拔旗一定要放 finally —— 這支有四個 return（拿不到 store／紀元不同／
+     正常走完／例外），任何一條漏拔，下一次開場就會誤判成「上次崩潰」而清掉快取，
+     變成**每次開場都清一次**。寫這段時就先漏了「紀元不同」那一條。 */
+  finally{ if(_flagged) try{ localStorage.removeItem(BOOT_FLAG); }catch(_){} }
 }
 async function cacheWipe(){
   _idbDirty.clear(); _idbUid=null;

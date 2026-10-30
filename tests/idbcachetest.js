@@ -24,12 +24,18 @@ let pass=0,fail=0;
 const ok=(n,c,x)=>{ if(c){pass++;console.log('  ✓ '+n);} else {fail++;console.log('  ✗ '+n+(x!==undefined?'  → '+JSON.stringify(x):''));} };
 const grabFn=n=>{const i=src.indexOf('function '+n+'(');if(i<0)return'';let d=0;for(let k=src.indexOf('{',i);k<src.length;k++){if(src[k]==='{')d++;else if(src[k]==='}'){d--;if(!d)return src.slice(i,k+1);}}return'';};
 
-/* 假 IndexedDB：只要能 getAll / put / clear 就夠 */
+/* 假 IndexedDB
+   ⚠ 2026-10-30：還原改成「先拿 key、再一張一張讀」（原本是一口氣 getAll，
+     那是 iOS Safari 記憶體被撐爆的來源，見 tests/hydrateguardtest.js），
+     所以這裡要多補 getAllKeys / get。getAll 留著沒刪 —— 哪天改回去才不用重寫。 */
 function makeStore(rows){
   const map=new Map((rows||[]).map(r=>[r._k||(r.uid+'|'+r.table), r]));
+  const async_=v=>{ const rq={onsuccess:null,onerror:null,result:v};
+    setTimeout(()=>rq.onsuccess&&rq.onsuccess(),0); return rq; };
   return { map,
-    getAll(){ const rq={onsuccess:null,onerror:null,result:[...map.values()]};
-      setTimeout(()=>rq.onsuccess&&rq.onsuccess(),0); return rq; },
+    getAll(){ return async_([...map.values()]); },
+    getAllKeys(){ return async_([...map.keys()]); },
+    get(k){ return async_(map.get(k)||null); },
     put(v,k){ map.set(k,v); }, clear(){ map.clear(); } };
 }
 function load(store, o){
@@ -37,8 +43,14 @@ function load(store, o){
   /* 0823：cacheHydrate 會呼叫 dbWhy() 並寫 window._dbHydrated（純量測）——沙箱補上。 */
   /* ⚠ 2026-10-08：清不清快取改看 CACHE_EPOCH，不再看 APP_VERSION
      （綁 APP_VERSION 等於每推一次版全店冷啟動，1008 使用者回報開場 4.2 秒）。 */
+  /* ⚠ 2026-10-30：還原多了「連續崩潰自救」的旗子（localStorage），沙箱要補上，
+     否則 cacheHydrate 一進去就踩到 localStorage is not defined。
+     旗子本身的四條路徑釘在 tests/hydrateguardtest.js，這裡只要讓它跑得動。 */
+  const _ls={_v:{}, getItem(k){return this._v[k]||null;},
+    setItem(k,v){this._v[k]=String(v);}, removeItem(k){delete this._v[k];}};
   const env={ _dbCache:new Map(), IDB_MAX_AGE:86400000, CACHE_EPOCH:(o.ver||'TEST.1'),
-    idbTx:async()=>(o.broken?null:store), dbWhy:()=>{}, window:{} };
+    idbTx:async()=>(o.broken?null:store), dbWhy:()=>{}, window:{},
+    localStorage:_ls, BOOT_FLAG:'yugym_boot_hydrating' };
   const code=['let _idbUid=null,_idbSaveT=null; const _idbDirty=new Set();',
     'async '+grabFn('cacheHydrate'), 'async '+grabFn('cacheWipe'),
     'function _uid(){ return _idbUid; }'].join('\n');
