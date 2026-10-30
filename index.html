@@ -15601,8 +15601,8 @@ function tbl(s){return TABLE_ALIAS[s]||s;}
 let sb=null;
 // ── 版本號（日期+時間格式：年後兩碼+月+日.時分，例 26620.1058 = 26年6/20 10:58）──
 // 每次改版手動更新這一行即可，畫面與 title 會一起更新
-const APP_VERSION = '261031.0031';
-const APP_VERSION_LABEL = 'v261031.0031';
+const APP_VERSION = '261031.0037';
+const APP_VERSION_LABEL = 'v261031.0037';
 const CLOUD = !!(window.YUGYM_CONFIG && window.YUGYM_CONFIG.url && window.YUGYM_CONFIG.anonKey);
 if(CLOUD){ sb = supabase.createClient(window.YUGYM_CONFIG.url, window.YUGYM_CONFIG.anonKey); }
 
@@ -16138,11 +16138,30 @@ async function cacheHydrate(uid){
     const st=await idbTx('readonly'); if(!st) return 0;
     /* 先只拿 key（幾十個字串），不碰資料 */
     const keys=await new Promise(res=>{ try{ const rq=st.getAllKeys(); rq.onsuccess=()=>res(rq.result||[]); rq.onerror=()=>res([]); }catch(_){ res([]); } });
+    const _get=async(k)=>{
+      /* 一張表一個交易：交易在 await 之間會自己結束，不能重用上面那個 */
+      const st1=await idbTx('readonly'); if(!st1) return null;
+      return await new Promise(res=>{ try{ const rq=st1.get(k); rq.onsuccess=()=>res(rq.result||null); rq.onerror=()=>res(null); }catch(_){ res(null); } });
+    };
+    /* ⚠⚠ 紀元先驗，再讀資料（2026-10-30 二修）——
+       原本是「全部讀進來、再看紀元對不對」，於是**紀元不同的那一次照樣要把
+       11MB 的 bookings 解序列化一遍**，然後整份丟掉。對記憶體已經吃緊的手機來說，
+       那一次正是壓垮它的那一下；而升級後的第一次開場必定走這條。
+       改成只讀 `__ver` 這一筆（幾十個 bytes）就能決定要不要往下讀。 */
+    const _verRow0=keys.indexOf(uid+'|__ver')>=0 ? await _get(uid+'|__ver') : null;
+    if(!_verRow0 || _verRow0.ver!==CACHE_EPOCH){
+      dbWhy('（開場）','快取紀元不同，清一次（沒有讀任何資料表）',
+            ((_verRow0&&_verRow0.ver)||'(無)')+' → '+CACHE_EPOCH);
+      try{ await cacheWipe(); }catch(_){}
+      _idbUid=uid;
+      try{ const w=await idbTx('readwrite'); if(w) w.put({uid:uid,table:'__ver',ver:CACHE_EPOCH,savedAt:Date.now()}, uid+'|__ver'); }catch(_){}
+      try{ window._dbHydrated=[]; }catch(_){}
+      return 0;
+    }
     const rows=[];
     for(const k of keys){
-      /* 一張表一個交易：交易在 await 之間會自己結束，不能重用上面那個 */
-      const st1=await idbTx('readonly'); if(!st1) break;
-      const row=await new Promise(res=>{ try{ const rq=st1.get(k); rq.onsuccess=()=>res(rq.result||null); rq.onerror=()=>res(null); }catch(_){ res(null); } });
+      if(k===uid+'|__ver'){ rows.push(_verRow0); continue; }   // 已經讀過了
+      const row=await _get(k);
       if(row) rows.push(row);
     }
     /* ══ 換版就把舊快取丟掉一次（2026-10-03）═══════════════════════════════

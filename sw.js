@@ -20,7 +20,21 @@
    ⚠ 原本網路優先的理由是「避免更新後看到舊版」。那個需求現在由上面那個提示承擔，
      而且 verUpReload() 是用帶版本號的網址重新載入 —— 帶查詢字串的請求
      在下面會直接略過快取，所以「重新整理」一定拿得到新版。 */
-const CACHE = 'yugym-v1';
+/* ══ 快取名稱＝救援開關（2026-10-31）══════════════════════════════════════
+   Mango 的 iPhone 卡在崩潰迴圈裡（見 memory/yugym-ios-crash-loop）：
+   分頁一載入就被系統砍掉，而**她永遠拿不到修好的新版**，原因在下面 freshen：
+   換版之後要「先等 20 秒再抓」，但她的分頁活不到 20 秒，Service Worker 也跟著被收掉
+   → 新版永遠進不了她的快取 → 下一次開啟還是那份會崩潰的舊檔 → 無限迴圈。
+
+   **換掉這個名字就是遠端救援**：瀏覽器在每次導覽時會去比對 sw.js 有沒有變，
+   檔案變了就安裝新的；新的 activate 會把所有「不是現在這個名字」的快取整個刪掉
+   （見下面 activate）。舊的 index.html 一消失，下一次載入就只能走網路，
+   拿到的自然是修好的版本。使用者端完全不用做任何事。
+   ⚠ 代價：所有人下一次開啟要重抓一次 index.html（壓縮後約 880KB）。
+     只發生一次，而且本來換版就要抓。
+   ⚠ 要再救一次就再換一次名字（v3、v4…）。不要用 APP_VERSION 當名字 ——
+     那等於每推一次版全店重抓，1008 已經為同樣的理由把 CACHE_EPOCH 跟版本號脫鉤。 */
+const CACHE = 'yugym-v2';
 const CORE = ['./', './index.html', './manifest.json', './icon-192.png', './icon-512.png'];
 
 self.addEventListener('install', e => {
@@ -61,7 +75,13 @@ async function freshen(req, cached) {
        ⚠ 客人要的是「現在登得進去」，新版晚 20 秒再抓完全沒差（本來就要下次才生效）。
        ⚠ 不要改成「等頁面通知我」那種作法 —— 多一條訊息管道，壞掉時更難查；
          單純讓路就夠了。 */
-    await new Promise(r => setTimeout(r, 20000));
+    /* ⚠⚠ 這 20 秒是「讓路」用的（2026-10-12 陳力豪：抓新版把 4G 吃滿、
+       登入請求餓死逾時），但它也是 Mango 那支手機永遠更新不到的原因 ——
+       分頁撐不到 20 秒就被砍，Service Worker 跟著被收掉。
+       折衷：縮到 6 秒。登入那幾百 bytes 的請求在 6 秒內早就送出去了
+       （0ms 才是真的會撞到，20 秒只是當時抓了一個很寬的保險），
+       而 6 秒夠短，崩潰迴圈中的分頁也有機會把新版抓下來。 */
+    await new Promise(r => setTimeout(r, 6000));
     const res = await fetch(req, { cache: 'reload' });
     if (res && res.ok && res.status === 200) {
       const c = await caches.open(CACHE);

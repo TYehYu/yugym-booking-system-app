@@ -27,7 +27,14 @@ ok('★★★ 不再一口氣 getAll（那是記憶體峰值的來源）',
    !/const rows=await new Promise\(res=>\{ try\{ const rq=st\.getAll\(\);/.test(src)
    && /const rq=st\.getAllKeys\(\)/.test(src));
 ok('★★★ 一張表一個交易（交易在 await 之間會自己結束，不能重用）',
-   /const st1=await idbTx\('readonly'\); if\(!st1\) break;/.test(src));
+   /const st1=await idbTx\('readonly'\); if\(!st1\) return null;/.test(src)
+   && /const _get=async\(k\)=>\{/.test(src));
+/* ⚠ 2026-10-30 二修：紀元要**先驗再讀資料**。原本是「全部讀進來、再看紀元」，
+   於是紀元不同的那一次照樣把 11MB 的 bookings 解序列化一遍才丟掉 ——
+   而升級後的第一次開場必定走這條，對記憶體吃緊的手機正是壓垮它的那一下。 */
+ok('★★★ 紀元先驗、再讀資料（只讀 __ver 那一筆就能決定）',
+   /const _verRow0=keys\.indexOf\(uid\+'\|__ver'\)>=0 \? await _get\(uid\+'\|__ver'\) : null;/.test(src)
+   && /快取紀元不同，清一次（沒有讀任何資料表）/.test(src));
 ok('★★★ 拔旗放在 finally（四個 return 都要拔）',
    /finally\{ if\(_flagged\) try\{ localStorage\.removeItem\(BOOT_FLAG\); \}catch\(_\)\{\} \}/.test(src));
 ok('★★  旗子用 localStorage，不是記憶體變數（分頁被砍時記憶體什麼都不剩）',

@@ -68,10 +68,15 @@ console.log('\n⑤ 第三現場：推新版當下，服務工作者在背景抓 
    也就是登入的第一個請求逾時。那個請求只有幾百 bytes，4G 不該連不上 ——
    同一時間服務工作者正在背景抓新版的 880KB，把頻寬整個吃掉。 */
 const SW=fs.readFileSync(process.env.HOME+'/Projects/yugym-booking-system-app/sw.js','utf8');
-ok('★★★ 服務工作者抓新版前先讓路 20 秒（登入優先）',
-   /await new Promise\(r => setTimeout\(r, 20000\)\);\s*\n\s*const res = await fetch\(req, \{ cache: 'reload' \}\);/.test(SW));
+/* ⚠ 2026-10-31 縮短成 6 秒：20 秒同時也是「崩潰迴圈中的手機永遠更新不到」的原因
+   （Mango 的 iPhone 一載入就被系統砍掉，撐不到 20 秒，Service Worker 跟著被收掉
+   → 新版永遠進不了她的快取）。6 秒仍然讓得開登入那幾百 bytes 的請求，
+   但短到崩潰中的分頁也有機會把新版抓下來。見 tests/swrescuetest.js。
+   ⚠ **不可以直接拿掉等待** —— 0ms 才是 1012 陳力豪登入逾時的成因。 */
+ok('★★★ 服務工作者抓新版前先讓路（登入優先）',
+   /await new Promise\(r => setTimeout\(r, 6000\)\);\s*\n\s*const res = await fetch\(req, \{ cache: 'reload' \}\);/.test(SW));
 ok('★★ 讓路的理由寫在原地（下次有人想把它拿掉時看得到）',
-   /把 4G 的頻寬整個吃掉/.test(SW) && /新版晚 20 秒再抓完全沒差/.test(SW));
+   /把 4G 的頻寬整個吃掉/.test(SW) && /讓路/.test(SW) && /陳力豪/.test(SW));
 ok('★★ HEAD 比對仍然立刻做（那只有幾百 bytes，不佔頻寬）',
    /const head = await fetch\(req\.url, \{ method: 'HEAD', cache: 'no-store' \}\);/.test(SW));
 ok('★★★ 驗證失敗會自動重試一次（隔 2 秒）',
