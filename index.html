@@ -15601,8 +15601,8 @@ function tbl(s){return TABLE_ALIAS[s]||s;}
 let sb=null;
 // ── 版本號（日期+時間格式：年後兩碼+月+日.時分，例 26620.1058 = 26年6/20 10:58）──
 // 每次改版手動更新這一行即可，畫面與 title 會一起更新
-const APP_VERSION = '261031.0037';
-const APP_VERSION_LABEL = 'v261031.0037';
+const APP_VERSION = '261031.0047';
+const APP_VERSION_LABEL = 'v261031.0047';
 const CLOUD = !!(window.YUGYM_CONFIG && window.YUGYM_CONFIG.url && window.YUGYM_CONFIG.anonKey);
 if(CLOUD){ sb = supabase.createClient(window.YUGYM_CONFIG.url, window.YUGYM_CONFIG.anonKey); }
 
@@ -29345,7 +29345,33 @@ function computeLastBkMarks(allTickets, bookings, typeMap){
   (allTickets||[]).forEach(t=>{
     const arr=_bkByTk[t.id]; if(!arr||!arr.length) return;
     const n=Number(t.sessions_total)||arr.length;
-    arr.forEach((b,i)=>{ window._bkSeq[b.id]={i:i+1,n}; });
+    /* ⚠⚠ 有些堂數**用掉了卻沒有課卡**（2026-10-31 使用者回報：吳宥伯那張 48 堂的票，
+       最後一堂顯示 40/48，正確是 48/48）——
+       成因：舊系統帶過來的票，2025/10/10～12/26 那 8 堂當初沒有課卡，
+       只在 2026-08-25 用一筆 adjust 把日期補登上去（票券卡的圓形卡畫得出來、
+       但 bookings 裡沒有那幾列）。這裡只數得到 40 張課卡，於是從 1 編到 40。
+
+       用「票上總共用掉幾堂」減「數得到的課卡數」當前置偏移：
+         用掉 = sessions_total − sessions_remaining（48−0＝48）
+         課卡 = arr.length（40）        → 前面有 8 堂沒有卡 → 從第 9 堂起算
+       ⚠ 夾在 0 以上：反過來的情況（課卡比扣款多，也就是「有綁沒扣」）不要變成負的，
+         那是另一個問題，不該在這裡用編號去掩蓋它。
+       ⚠ 只影響「第幾堂／共幾堂」這個顯示。續課提醒（_renewLastBk）是下面另一套算法，
+         不吃這個偏移 —— 兩邊都改會變成同一件事修兩次。
+       ⚠ 偏移是整段往後推，所以只有「沒卡的堂數都排在前面」時才完全正確
+         （吳宥伯這張正是：沒卡的是 2025 年，有卡的從 2026-01-02 開始）。
+         中間才缺卡的票，缺口之後的編號會對、之前的會偏 —— 仍然比現在整串都偏好。 */
+    /* ⚠ 不可以只寫 Number(t.sessions_remaining) —— **Number(null) 是 0 不是 NaN**，
+       舊資料餘額是空的時候會被當成「用光了」，整串編號往後跳（測試抓到的）。 */
+    const _remRaw=t.sessions_remaining;
+    const _rem=(_remRaw==null||_remRaw==='')?NaN:Number(_remRaw);
+    const _used=isNaN(_rem)?NaN:(n-_rem);
+    /* ⚠ 名字不要叫 _ghost —— 票券圓形卡那支（_shBody 附近）已經有一個同名的，
+       而 tests/tkshnametest.js 是用 `const _ghost=` 當切片的結束標記，撞名會把它切壞。
+       ⚠ 附帶一提：圓形卡那邊早就用同樣的算法扣掉「沒有課卡的堂數」，
+         所以票券卡一直是對的 —— 漏的只有課卡上的編號這一處。 */
+    const _noCardN=isNaN(_used)?0:Math.max(0, _used-arr.length);
+    arr.forEach((b,i)=>{ window._bkSeq[b.id]={i:_noCardN+i+1,n}; });
   });
   const _newestBuy={};
   (allTickets||[]).forEach(t2=>{

@@ -157,7 +157,10 @@ ok('　　無限次卡只標「第 N 堂」（9999 堂的票寫成 45/9999 沒�
 ok('★ 沿用 computeLastBkMarks 已建好的索引，不另外掃一次 bookings',
    /window\._bkSeq=\{\};/.test(src)
    && /const arr=_bkByTk\[t\.id\]; if\(!arr\|\|!arr\.length\) return;/.test(src)
-   && /arr\.forEach\(\(b,i\)=>\{ window\._bkSeq\[b\.id\]=\{i:i\+1,n\}; \}\);/.test(src));
+   /* 2026-10-31：編號多了「用掉卻沒有課卡的堂數」當前置偏移
+      （吳宥伯 48 堂的票有 8 堂是 2025 年用掉的、bookings 裡沒有那幾列，
+       最後一堂原本顯示 40/48）。行為釘在 tests/bkseqghosttest.js。 */
+   && /arr\.forEach\(\(b,i\)=>\{ window\._bkSeq\[b\.id\]=\{i:_noCardN\+i\+1,n\}; \}\);/.test(src));
 ok('　　分母沒有 sessions_total 就退回「目前排了幾堂」',
    /const n=Number\(t\.sessions_total\)\|\|arr\.length;/.test(src));
 ok('　　樣式比姓名小一階、淡一點（不跟人名搶視線）',
