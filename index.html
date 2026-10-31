@@ -65152,6 +65152,15 @@ async function admCalMultiHTML(nDays){
   const days=[]; for(let i=0;i<7;i++){ const d=new Date(start); d.setDate(start.getDate()+i); days.push(d); }
   let bks=[],mems=[],cos=[];
   try{ [bks,mems,cos]=await Promise.all([dbGetAll('bookings'),dbGetAll('members'),dbGetAll('coaches')]); }catch(_){}
+  /* 2026-11-01 教練端手機行事曆記憶體修復（Mango 回報切換下一週觸發 iOS「重複發生問題」）：
+     原本 dayAll 是「每天各自對全店 bks 掃一次 filter」，一週 7 天＝整張表掃 7 遍
+     （正式庫 bookings 約 1 萬筆，7 倍疊加在同一次渲染裡）。
+     這裡全表只掃一次、依日期分組成查找表，下面 7 天改成 O(1) 查表——
+     ⚠ allocateVenue 與 mine 兩處都要吃到跟原本 dayAll 完全相同的內容（同一天的全店資料，
+       不能只給這位教練自己的），所以這裡只改「怎麼拿到它」，不改內容本身，
+       場地容量/其他教練占用判斷維持原樣。 */
+  const byDate={};
+  (bks||[]).forEach(b=>{ if(b&&b.status!=='cancelled'){ (byDate[b.date]||(byDate[b.date]=[])).push(b); } });
   const mm={}; (mems||[]).forEach(m=>{ mm[m.id]=m.name; });
   /* 2026-08-19 三修：教練 chips 退場——一週固定顯示「登入者自己」的課卡 */
   const cSel=SESSION&&SESSION.id;
@@ -65174,7 +65183,7 @@ async function admCalMultiHTML(nDays){
   const nowMin=(new Date()).getHours()*60+(new Date()).getMinutes();
   const colsHtml=days.map(d=>{
     const ds=ymd(d);
-    const dayAll=(bks||[]).filter(b=>b&&b.date===ds&&b.status!=='cancelled');
+    const dayAll=byDate[ds]||[];
     /* 場地狀態帶（同一日檢視的額滿邏輯，加上「跑」）：教練課配不到→看教室→看跑步機 */
     let bands='';
     try{
