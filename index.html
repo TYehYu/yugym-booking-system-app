@@ -52407,7 +52407,9 @@ async function renderStaffList(){
      ⚠ sort 是穩定排序，所以同一階裡的原本順序（依聘僱類型）不會被打亂。 */
   const _stRank=c=>((c&&c.role==='admin')?0:((c&&c.is_manager)?1:2));
   const _ET_RANK={full_time:0,part_time:1,contractor:2,intern:3};
-  const _etRank=c=>{ const k=normEmp(c.employment_type||c.pay_type);
+  /* 2026-11-01：排序改用 stEtNow(c)（月份生效快照），跟職務 pill 同一套判斷——
+     原本讀資料列即時欄位，排程到下個月的異動還沒真的寫回欄位就會排錯區。 */
+  const _etRank=c=>{ const k=stEtNow(c);
     return (_ET_RANK[k]!=null)?_ET_RANK[k]:9; };
   filtered.sort((a,b)=>(_stRank(a)-_stRank(b))||(_etRank(a)-_etRank(b)));
 
@@ -52510,7 +52512,9 @@ async function renderStaffList(){
     /* 2026-07-28 使用者指示：員工卡依聘僱類型分類分區 */
     const ET_ORDER=[['full_time','正職'],['part_time','兼職'],['contractor','合作'],['intern',PAY_LABEL.intern],['other','未分類／待設定']];
     const secs={};
-    pageRows.forEach(c=>{ const k=normEmp(c.employment_type||c.pay_type);
+    /* 2026-11-01：分區 key 改用 stEtNow(c)——上方「正職/兼職/合作/支援」人數統計跟著這份
+       分組算，原本讀即時欄位，職務排程生效當天欄位還沒更新時統計會算錯區。 */
+    pageRows.forEach(c=>{ const k=stEtNow(c);
       const key=ET_ORDER.some(([kk])=>kk===k)?k:'other';
       (secs[key]=secs[key]||[]).push(c); });
     /* 2026-07-30 使用者指示：改回列表，但保留卡片上的權限開關與右上角齒輪。
@@ -52519,7 +52523,10 @@ async function renderStaffList(){
     const stRow=c=>{
       const pending=c.invite_status==='pending';
       const tl=typeLabel(c);
-      const etc=ET_COLOR[normEmp(c.employment_type||c.pay_type)]||'#8a8478';
+      /* 2026-11-01：整列背景色/色條改用 stEtNow(c)，跟職務 pill、排序（_etRank）、
+         上方人數統計（secs）同一套判斷——原本讀即時欄位，沛瀞改兼職/美蓉改合作
+         那天就是顏色沒跟著職務切過去（使用者回報，見 HANDOFF.md 第8節）。 */
+      const etc=ET_COLOR[stEtNow(c)]||'#8a8478';
       const _off=c.status==='inactive';
       const gear=pending
         ? `<button class="st-gear st-gear-row" title="複製邀請連結" onclick="event.stopPropagation();copyInvite('${c.invite_token}')">${LNI.link||'🔗'}</button>`
@@ -52566,7 +52573,7 @@ async function renderStaffList(){
       /* 2026-10-28：休假日那一欄整個移除（使用者：「移除休假日　改成職務」），
          原本在這裡算的 _offDays 也跟著退場 —— 休假日仍然在齒輪裡的員工資料看得到、
          改得動，只是不再佔列表的欄位。 */
-      const _etInk=ET_INK[normEmp(c.employment_type||c.pay_type)];
+      const _etInk=ET_INK[stEtNow(c)];
       return `<div class="st-lrow${_off?' st-off':''}" style="--pc:${etc};${_etInk?`--pc-ink:${_etInk};`:''}" onclick="${click}">
         <span class="st-led${_off?' off':''}" title="${_off?'已停用':'啟用中'}"></span>
         <span class="st-l-ava" style="overflow:hidden;">${c.avatar_url?avatarImgHTML(c.avatar_url):genderAvatarSVG(c.gender)}</span>
