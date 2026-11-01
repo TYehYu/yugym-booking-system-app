@@ -89,9 +89,11 @@ ok('★★★ 關著的那一側不可以用紅色（紅＝要處理，見品牌
      合作 2.90 → 5.59；支援在 hover 底上 4.22 也差一點（靜態 4.69 是過的）。 */
 ok('★★ 職務吃聘僱類型色（--pc，跟整列底色同一個值），不另外發明一組',
    /\.st-pl-et\{color:var\(--pc-ink,var\(--pc,var\(--text\)\)\);/.test(src));
+/* 2026-11-01：_etInk 的判斷依據改用 stEtNow(c)（月份生效快照），跟背景色/排序/
+   人數統計同一套——原本讀即時欄位，職務排程生效當天會跟顏色一起漂掉。 */
 ok('★★ 深版只列需要的（合作／支援），正職與兼職不受影響',
    /const ET_INK=\{contractor:'#7c5d37', intern:'#6e4faf'\};/.test(src)
-   && /const _etInk=ET_INK\[normEmp\(c\.employment_type\|\|c\.pay_type\)\];/.test(src));
+   && /const _etInk=ET_INK\[stEtNow\(c\)\];/.test(src));
 ok('★★★ LINE 退成燈號、不可點（綁定移到齒輪）',
    /<span class="st-lamp\$\{_line\?' on':''\}"/.test(src)
    && /綁定與解除在齒輪裡的員工資料/.test(src));
