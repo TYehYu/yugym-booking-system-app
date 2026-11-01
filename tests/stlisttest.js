@@ -92,10 +92,11 @@ ok('★ 工作規則只放值班與代課（打卡／開課已在右邊的權限
    /if\(c\.need_duty\) _rules\.push\('<i class="wd">值班<\/i>'\);/.test(src)
    && /if\(c\.can_substitute\) _rules\.push\('<i class="ws">代課<\/i>'\);/.test(src)
    && /打卡／開課已經在右邊的權限開關裡，這裡只放值班與代課，不重複/.test(src));
-/* 2026-11-01：_et 改傳 _ym（翻月要跟著變），stEtNow 簽章也多了可選的 ym 參數。 */
+/* 2026-11-01：_et 改傳 _ym（翻月要跟著變），stEtNow 簽章也多了可選的 ym 參數。
+   2026-11-02：stEtNow 內部多了無快照時的純顯示備援表，斷言改比對新的函式開頭。 */
 ok('★ 職務那一格吃月份快照，不是即時欄位',
    /const _et=stEtNow\(c,_ym\), _pd=stEtPending\(c\);/.test(src)
-   && /function stEtNow\(c, ym\)\{ return normEmp\(\(empAtMonth\(c, ym\|\|stCurYm\(\)\)\|\|c\)\.employment_type\); \}/.test(src));
+   && /function stEtNow\(c, ym\)\{\s*\n\s*const _ym=ym\|\|stCurYm\(\);\s*\n\s*const resolved=empAtMonth\(c, _ym\)\|\|c;/.test(src));
 ok('　　_offDays 跟著退場（那一欄沒了）', !/const _offDays=String\(c\.fixed_off_days/.test(src));
 ok('　　空欄顯示破折號而不是空白（休假日那一欄 1028 移除後只剩未計薪）',
    (src.match(/<i class="st-l-none">—<\/i>/g)||[]).length===1);

@@ -170,10 +170,12 @@ const apply=new Function('stCurYm','stNextYm','stEtNow','stEtPending','payRulesM
         && SAVED.pay_rules['2026-09'].employment_type==='full_time'), SAVED.pay_rules);
 
   console.log('\n④ 列表顯示的是快照不是即時欄位');
-  /* 2026-11-01：stEtNow 加了可選的 ym 參數（翻到歷史月份要吃那個月的快照，
-     不是永遠吃今天），斷言改比對新簽章；核心機制（吃 empAtMonth 快照）沒變。 */
+  /* 2026-11-01：stEtNow 加了可選的 ym 參數。2026-11-02：又加上「完全沒有快照時」
+     的純顯示備援表（跟 calcSalary／pay_rules 無關），核心機制（優先吃 empAtMonth
+     快照）沒變，斷言改比對新的函式開頭與備援判斷式。 */
   ok('★★★ stEtNow 吃 empAtMonth（排程中的人列表仍顯示當月身分；可傳 ym 翻歷史月份）',
-     /function stEtNow\(c, ym\)\{ return normEmp\(\(empAtMonth\(c, ym\|\|stCurYm\(\)\)\|\|c\)\.employment_type\); \}/.test(src));
+     /function stEtNow\(c, ym\)\{\s*\n\s*const _ym=ym\|\|stCurYm\(\);\s*\n\s*const resolved=empAtMonth\(c, _ym\)\|\|c;/.test(src)
+     && /if\(resolved===c\)\{/.test(src));
   ok('★★★ 有排程就在職務下面標出來（金色＝可以做但要知道）',
      /class="st-et-pend"/.test(src) && /\.st-et-pend\{[\s\S]{0,120}color:var\(--gold-d/.test(src));
   ok('　　為什麼不需要排程器，寫在原地',

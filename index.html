@@ -51960,7 +51960,32 @@ function stNextYm(){ let[y,m]=stCurYm().split('-').map(Number); m++; if(m>12){m=
      現在改成可傳 ym；不傳就維持舊行為（= 今天），給「編輯職務」那幾個呼叫點用——
      那幾個動作本來就是「從現在起生效」，不該因為剛好在瀏覽歷史月份就把現在誤判掉。
      純顯示用的4個呼叫點（職務標籤/背景色/排序/人數統計）改傳目前翻月選到的 _ym。 */
-function stEtNow(c, ym){ return normEmp((empAtMonth(c, ym||stCurYm())||c).employment_type); }
+/* 歷史職務顯示修正（2026-11-02，黃美蓉1-9月案例）——這幾個月份完全沒有 pay_rules
+   快照，empAtMonth 找不到快照時會原封不動傳回同一個物件（見該函式），於是這裡退回
+   資料列目前的即時欄位，顯示成「現在」的職務，不是那個月該有的職務。
+   ⚠⚠ 刻意不動 pay_rules／empAtMonth 本身——calcSalary 直接用 employment_type 分支
+     （不只是讀對應的費率數字），光換標籤就可能讓薪資算出不同結果；這張表純粹是
+     「empAtMonth 真的找不到任何快照」那個分支的最後一層顯示備援，calcSalary／
+     empPayConfig 完全不會讀到這裡，薪資計算路徑一行都沒變。
+   ⚠ 用 resolved===c（參照相等）判斷「有沒有快照」，不是用值比對——
+     empAtMonth 有命中快照時一定回傳新物件（Object.assign 出來的），沒命中才會
+     原封不動傳回同一個參照，這個判斷式跟 empAtMonth 的實作綁在一起，不能分開改。 */
+const ET_DISPLAY_HISTORY_FALLBACK = {
+  'c-mqueqc9uxp3k': [ // 黃美蓉：1-4月兼職、5-9月正職（10月起已有正式快照，不需要補）
+    {from:'2026-01', to:'2026-04', type:'part_time'},
+    {from:'2026-05', to:'2026-09', type:'full_time'},
+  ],
+};
+function stEtNow(c, ym){
+  const _ym=ym||stCurYm();
+  const resolved=empAtMonth(c, _ym)||c;
+  if(resolved===c){
+    const hist=ET_DISPLAY_HISTORY_FALLBACK[c&&c.id];
+    const hit=hist&&hist.find(h=>_ym>=h.from && _ym<=h.to);
+    if(hit) return normEmp(hit.type);
+  }
+  return normEmp(resolved.employment_type);
+}
 /* 有沒有「排程中、還沒生效」的僱用別異動（下個月的快照跟這個月不一樣） */
 function stEtPending(c){
   const nx=stNextYm(), m=payRulesMap(c);
