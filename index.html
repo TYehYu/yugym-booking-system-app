@@ -51952,9 +51952,15 @@ const ST_ROLE_OPTS=[['admin','管理員'],['manager','主管'],['none','無']];
 function stCurYm(){ return ymd(TODAY).slice(0,7); }
 function stNextYm(){ let[y,m]=stCurYm().split('-').map(Number); m++; if(m>12){m=1;y++;}
   return `${y}-${String(m).padStart(2,'0')}`; }
-/* 這位員工「這個月實際適用」的僱用別 —— 吃月份快照，不是資料列上的即時欄位。
-   排程到下個月的異動寫進 pay_rules[下個月]，所以這裡讀到的仍是這個月的身分。 */
-function stEtNow(c){ return normEmp((empAtMonth(c, stCurYm())||c).employment_type); }
+/* 這位員工「某個月實際適用」的僱用別 —— 吃月份快照，不是資料列上的即時欄位。
+   排程到下個月的異動寫進 pay_rules[下個月]，所以這裡讀到的仍是那個月的身分。
+   ⚠ 2026-11-01 修正：原本不接 ym、永遠吃 stCurYm()（今天），導致翻到歷史月份時
+     職務標籤/背景色/排序/人數統計還是顯示「今天」的身分，不是那個月該有的身分
+     （黃沛瀞/黃美蓉 11/1 換職務後，切回 10 月畫面兩人職務也跟著變成新的）。
+     現在改成可傳 ym；不傳就維持舊行為（= 今天），給「編輯職務」那幾個呼叫點用——
+     那幾個動作本來就是「從現在起生效」，不該因為剛好在瀏覽歷史月份就把現在誤判掉。
+     純顯示用的4個呼叫點（職務標籤/背景色/排序/人數統計）改傳目前翻月選到的 _ym。 */
+function stEtNow(c, ym){ return normEmp((empAtMonth(c, ym||stCurYm())||c).employment_type); }
 /* 有沒有「排程中、還沒生效」的僱用別異動（下個月的快照跟這個月不一樣） */
 function stEtPending(c){
   const nx=stNextYm(), m=payRulesMap(c);
@@ -52018,8 +52024,12 @@ function stSwitchRow(c){
     <span class="st-swg st-swg-last">${g('danger')}</span>
   </div>`;
 }
-/* 選單：showModal ＋ .bk-opt（house pattern）。職務多一段「什麼時候生效」。 */
+/* 選單：showModal ＋ .bk-opt（house pattern）。職務多一段「什麼時候生效」。
+   ⚠ 2026-11-01：瀏覽歷史月份時整個擋下，不開編輯視窗——這幾顆按鈕改的都是
+     「現在／下個月起」的真實狀態，跟畫面上翻到的歷史月份是兩回事，混在一起編輯
+     容易讓人誤以為在改那個月的歷史，實際上改的永遠是現在。 */
 async function stPickOpen(id, field){
+  if(stMonthCur()!==ymd(TODAY).slice(0,7)){ showToast('正在看歷史月份，請先切回本月再修改'); return; }
   const c=await dbGet('coaches',id);
   if(!c){ showToast('找不到員工'); return; }
   const nm=c.name||'員工';
@@ -52409,7 +52419,7 @@ async function renderStaffList(){
   const _ET_RANK={full_time:0,part_time:1,contractor:2,intern:3};
   /* 2026-11-01：排序改用 stEtNow(c)（月份生效快照），跟職務 pill 同一套判斷——
      原本讀資料列即時欄位，排程到下個月的異動還沒真的寫回欄位就會排錯區。 */
-  const _etRank=c=>{ const k=stEtNow(c);
+  const _etRank=c=>{ const k=stEtNow(c,_ym);
     return (_ET_RANK[k]!=null)?_ET_RANK[k]:9; };
   filtered.sort((a,b)=>(_stRank(a)-_stRank(b))||(_etRank(a)-_etRank(b)));
 
@@ -52514,7 +52524,7 @@ async function renderStaffList(){
     const secs={};
     /* 2026-11-01：分區 key 改用 stEtNow(c)——上方「正職/兼職/合作/支援」人數統計跟著這份
        分組算，原本讀即時欄位，職務排程生效當天欄位還沒更新時統計會算錯區。 */
-    pageRows.forEach(c=>{ const k=stEtNow(c);
+    pageRows.forEach(c=>{ const k=stEtNow(c,_ym);
       const key=ET_ORDER.some(([kk])=>kk===k)?k:'other';
       (secs[key]=secs[key]||[]).push(c); });
     /* 2026-07-30 使用者指示：改回列表，但保留卡片上的權限開關與右上角齒輪。
@@ -52526,7 +52536,7 @@ async function renderStaffList(){
       /* 2026-11-01：整列背景色/色條改用 stEtNow(c)，跟職務 pill、排序（_etRank）、
          上方人數統計（secs）同一套判斷——原本讀即時欄位，沛瀞改兼職/美蓉改合作
          那天就是顏色沒跟著職務切過去（使用者回報，見 HANDOFF.md 第8節）。 */
-      const etc=ET_COLOR[stEtNow(c)]||'#8a8478';
+      const etc=ET_COLOR[stEtNow(c,_ym)]||'#8a8478';
       const _off=c.status==='inactive';
       const gear=pending
         ? `<button class="st-gear st-gear-row" title="複製邀請連結" onclick="event.stopPropagation();copyInvite('${c.invite_token}')">${LNI.link||'🔗'}</button>`
@@ -52573,7 +52583,7 @@ async function renderStaffList(){
       /* 2026-10-28：休假日那一欄整個移除（使用者：「移除休假日　改成職務」），
          原本在這裡算的 _offDays 也跟著退場 —— 休假日仍然在齒輪裡的員工資料看得到、
          改得動，只是不再佔列表的欄位。 */
-      const _etInk=ET_INK[stEtNow(c)];
+      const _etInk=ET_INK[stEtNow(c,_ym)];
       return `<div class="st-lrow${_off?' st-off':''}" style="--pc:${etc};${_etInk?`--pc-ink:${_etInk};`:''}" onclick="${click}">
         <span class="st-led${_off?' off':''}" title="${_off?'已停用':'啟用中'}"></span>
         <span class="st-l-ava" style="overflow:hidden;">${c.avatar_url?avatarImgHTML(c.avatar_url):genderAvatarSVG(c.gender)}</span>
@@ -52615,8 +52625,11 @@ async function renderStaffList(){
             /* 1028：休假日整欄移除，位子讓給「職務」（使用者：「移除休假日 改成職務」）。
                休假日仍然在齒輪裡的員工資料看得到、改得動，只是不佔列表的欄位。
                ⚠ 這一格顯示的是 stEtNow()（吃月份快照），不是資料列上的即時欄位 ——
-                 排到下個月的異動在這裡看得到排程標、但當月身分不變。 */
-            + (()=>{ const _et=stEtNow(c), _pd=stEtPending(c);
+                 排到下個月的異動在這裡看得到排程標、但當月身分不變。
+               ⚠ 2026-11-01：_et 改傳 _ym（翻到哪個月就顯示那個月的職務）；_pd（排程中標記）
+                 刻意維持吃「今天」不變——排程是「從現在起」的概念，不該因為剛好在看歷史
+                 月份就連著跟著切，所以瀏覽歷史月份時還是會看到「12月起改為X」的提示。 */
+            + (()=>{ const _et=stEtNow(c,_ym), _pd=stEtPending(c);
                 return `<span class="st-l-et st-zb">${stPill(c.id,'et','職務',PAY_LABEL[_et]||'—','et')}${
                   _pd?`<i class="st-et-pend" title="${_pd.ym.replace('-','/')} 起改為 ${PAY_LABEL[_pd.type]}">${_pd.ym.slice(5)}月起 ${PAY_LABEL[_pd.type]}</i>`:''}</span>`; })()
             + `<span class="st-l-sw" onclick="event.stopPropagation();">${stSwitchRow(c)}</span>`}

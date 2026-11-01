@@ -91,9 +91,10 @@ ok('★★ 職務吃聘僱類型色（--pc，跟整列底色同一個值），�
    /\.st-pl-et\{color:var\(--pc-ink,var\(--pc,var\(--text\)\)\);/.test(src));
 /* 2026-11-01：_etInk 的判斷依據改用 stEtNow(c)（月份生效快照），跟背景色/排序/
    人數統計同一套——原本讀即時欄位，職務排程生效當天會跟顏色一起漂掉。 */
+/* 2026-11-01：_etInk 改傳 _ym（翻月要跟著變），語意跟文字比對一起更新。 */
 ok('★★ 深版只列需要的（合作／支援），正職與兼職不受影響',
    /const ET_INK=\{contractor:'#7c5d37', intern:'#6e4faf'\};/.test(src)
-   && /const _etInk=ET_INK\[stEtNow\(c\)\];/.test(src));
+   && /const _etInk=ET_INK\[stEtNow\(c,_ym\)\];/.test(src));
 ok('★★★ LINE 退成燈號、不可點（綁定移到齒輪）',
    /<span class="st-lamp\$\{_line\?' on':''\}"/.test(src)
    && /綁定與解除在齒輪裡的員工資料/.test(src));
@@ -169,8 +170,10 @@ const apply=new Function('stCurYm','stNextYm','stEtNow','stEtPending','payRulesM
         && SAVED.pay_rules['2026-09'].employment_type==='full_time'), SAVED.pay_rules);
 
   console.log('\n④ 列表顯示的是快照不是即時欄位');
-  ok('★★★ stEtNow 吃 empAtMonth（排程中的人列表仍顯示當月身分）',
-     /function stEtNow\(c\)\{ return normEmp\(\(empAtMonth\(c, stCurYm\(\)\)\|\|c\)\.employment_type\); \}/.test(src));
+  /* 2026-11-01：stEtNow 加了可選的 ym 參數（翻到歷史月份要吃那個月的快照，
+     不是永遠吃今天），斷言改比對新簽章；核心機制（吃 empAtMonth 快照）沒變。 */
+  ok('★★★ stEtNow 吃 empAtMonth（排程中的人列表仍顯示當月身分；可傳 ym 翻歷史月份）',
+     /function stEtNow\(c, ym\)\{ return normEmp\(\(empAtMonth\(c, ym\|\|stCurYm\(\)\)\|\|c\)\.employment_type\); \}/.test(src));
   ok('★★★ 有排程就在職務下面標出來（金色＝可以做但要知道）',
      /class="st-et-pend"/.test(src) && /\.st-et-pend\{[\s\S]{0,120}color:var\(--gold-d/.test(src));
   ok('　　為什麼不需要排程器，寫在原地',
