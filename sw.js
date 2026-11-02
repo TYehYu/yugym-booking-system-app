@@ -34,7 +34,10 @@
      只發生一次，而且本來換版就要抓。
    ⚠ 要再救一次就再換一次名字（v3、v4…）。不要用 APP_VERSION 當名字 ——
      那等於每推一次版全店重抓，1008 已經為同樣的理由把 CACHE_EPOCH 跟版本號脫鉤。 */
-const CACHE = 'yugym-v2';
+/* 2026-11-03：MANGO再次回報手機行事曆黑畫面，行事曆改成日期範圍查詢的修復已上線——
+   換掉這個名字強制下一次載入整個清掉舊快取、直接走網路，不用等背景6秒機制碰運氣
+   （同2026-10-31那次遠端救援的做法，見上方這一段原本的說明）。 */
+const CACHE = 'yugym-v3';
 const CORE = ['./', './index.html', './manifest.json', './icon-192.png', './icon-512.png'];
 
 self.addEventListener('install', e => {

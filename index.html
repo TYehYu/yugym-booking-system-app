@@ -15606,8 +15606,8 @@ function tbl(s){return TABLE_ALIAS[s]||s;}
 let sb=null;
 // ── 版本號（日期+時間格式：年後兩碼+月+日.時分，例 26620.1058 = 26年6/20 10:58）──
 // 每次改版手動更新這一行即可，畫面與 title 會一起更新
-const APP_VERSION = '261102.1530';
-const APP_VERSION_LABEL = 'v261102.1530';
+const APP_VERSION = '261103.0349';
+const APP_VERSION_LABEL = 'v261103.0349';
 const CLOUD = !!(window.YUGYM_CONFIG && window.YUGYM_CONFIG.url && window.YUGYM_CONFIG.anonKey);
 if(CLOUD){ sb = supabase.createClient(window.YUGYM_CONFIG.url, window.YUGYM_CONFIG.anonKey); }
 
@@ -16291,6 +16291,49 @@ function dbWhy(key,why,extra){ try{
   window._dbWhy.push({表:key, 判斷:why, 說明:extra||''});
   if(window._dbWhy.length>200) window._dbWhy.shift();
 }catch(_){} }
+/* 2026-11-03（MANGO手機行事曆再次黑畫面）：教練端行事曆原本用 dbGetAll('bookings')
+   整表（正式庫現已破萬筆、11MB+ JSON）換取「同一天的全店場地占用」與「月曆格數字」，
+   這兩種需求其實都用不到整表，改用這兩支**繞過共用_dbCache的直連查詢**：
+   ① dbBookingsRange：只要「這幾天、全店」的資料（場地占用/當日課卡要看到別人的課）。
+   ② dbBookingsForCoach：只要「這位教練、不限日期」的資料（月曆格數字要能任意翻月）。
+   两支都不進_dbCache、不受簽章快取影響，永遠是即時資料；也因此不需要額外的快取失效處理。
+   RLS已確認 bookings_select_all_coach 政策讓任一教練可以SELECT全店bookings，直連查詢不需要新權限。 */
+async function dbBookingsRange(startDate,endDate){
+  /* ⚠ 2026-10-02事故教訓（見pageordertest.js）：.range()分頁一定要帶.order('id')，
+     沒有排序鍵，兩次獨立查詢不保證列序相同，會漏列或重複。這裡跟dbGetAll用同一欄位(id)。 */
+  const out=[]; let from=0; const page=1000;
+  for(;;){
+    const {data,error}=await sb.from('bookings').select('*')
+      .gte('date',startDate).lte('date',endDate)
+      .order('id',{ascending:true})
+      .range(from,from+page-1);
+    if(error){ console.error('dbBookingsRange失敗:',error); break; }
+    out.push(...(data||[]));
+    if(!data || data.length<page) break;
+    from+=page;
+  }
+  return out;
+}
+async function dbBookingsForCoach(coachId,cols){
+  /* 2026-11-03（Phase4）：不限日期代表量會隨教練年資一直長——唯讀查過正式庫，
+     MANGO本人1,475筆、全店最高1,777筆，早就超過單頁1000筆上限。
+     cols是選用的窄欄位清單（呼叫端已確認自己只用到哪幾欄才可以傳），
+     不傳就維持select('*')，不強迫所有呼叫端都只能拿5欄。 */
+  if(!coachId) return [];
+  const sel=(cols&&cols.length)?cols.join(','):'*';
+  const out=[]; let from=0; const page=1000;
+  for(;;){
+    const {data,error}=await sb.from('bookings').select(sel)
+      .or(`coach_id.eq.${coachId},substitute_coach_id.eq.${coachId}`)
+      .order('id',{ascending:true})
+      .range(from,from+page-1);
+    if(error){ console.error('dbBookingsForCoach失敗:',error); break; }
+    out.push(...(data||[]));
+    if(!data || data.length<page) break;
+    from+=page;
+  }
+  return out;
+}
 async function dbGetAll(store,opts){
   const key=tbl(store);
   if(opts&&opts.fresh){
@@ -34297,6 +34340,11 @@ async function _cagRevalidate(sigBefore){
 }
 async function renderCoachAgenda(){
   const host=document.getElementById('wtl-page'); if(!host) return;
+  /* 2026-11-03（Phase4）：局部世代計數器——快速連續切換週次/月份時，每次呼叫各自
+     抓資料、哪個先回來不保證，沒有這個會讓「先點的那次」晚回來反而蓋掉畫面。
+     只在這支函式內部生效，不碰navTo()，不影響其他頁面。 */
+  window._cagAgendaGen=(window._cagAgendaGen||0)+1;
+  const _myAgendaGen=window._cagAgendaGen;
   const myId=SESSION.id;
   if(window._cagMin===undefined) window._cagMin=true;   // 2026-07-21 使用者指示：月曆預設收合（⌄ 展開）
   if(!window._cagSelDate) window._cagSelDate=ymd(TODAY);
@@ -34304,15 +34352,33 @@ async function renderCoachAgenda(){
 
   /* 冷開機（重新開系統）先畫再說（2026-08-06 使用者回報「每一次重新開系統，
      從首頁換到預約都會讀取」）—— 與桌機同一套：跨工作階段快取（IndexedDB，
-     開場 cacheHydrate 載回來）拿得到就直接畫，畫完背景校驗，有變才重畫一次。 */
-  let bookings,members,coaches;
-  const _cagPk=['bookings','members','coaches'].map(t=>dbPeek(t));
+     開場 cacheHydrate 載回來）拿得到就直接畫，畫完背景校驗，有變才重畫一次。
+     ⚠ 2026-11-03（MANGO手機行事曆再次黑畫面）：bookings這一份不再走這套warm-cache，
+       改用dbBookingsRange/dbBookingsForCoach直連查詢（見下）——members/coaches很小，維持原樣。 */
+  let members,coaches;
+  const _cagPk=['members','coaches'].map(t=>dbPeek(t));
   if(_cagPk.every(Boolean)){
-    [bookings,members,coaches]=_cagPk.map(p=>p.data);
-    if(_cagPk.some(p=>p.stale)) _cagRevalidate(_calSigBk(bookings));
+    [members,coaches]=_cagPk.map(p=>p.data);
   }else{
-    [bookings,members,coaches]=await Promise.all([dbGetAll('bookings'),dbGetAll('members'),dbGetAll('coaches')]);
+    [members,coaches]=await Promise.all([dbGetAll('members'),dbGetAll('coaches')]);
   }
+  /* bookings拆成兩份、都不進_dbCache：
+     ① dayRangeBk：選定日前後各3天、全店資料——當日課卡與場地占用需要看到別人的課，
+        原本dbGetAll('bookings')整表（破萬筆）才做得到，現在只查這一週就夠。
+     ② myAllBk：這位教練自己（主責或代課）的全部預約，不限日期——月曆格數字(cntByDate)
+        要能任意翻月份，所以不能用日期窄範圍，但用coach_id過濾後遠比全店小很多。 */
+  const _selForRange=parseYmd(window._cagSelDate)||new Date(TODAY);
+  const _rgStart=new Date(_selForRange); _rgStart.setDate(_selForRange.getDate()-3);
+  const _rgEnd=new Date(_selForRange); _rgEnd.setDate(_selForRange.getDate()+3);
+  let dayRangeBk=[],myAllBk=[];
+  /* myAllBk（月曆格cntByDate）實際只用到這5欄——mergeSiblingUnits要id/sibling_of/venue_unit，
+     cntByDate的forEach只用date/status，已逐一核對過函式本體，不是憑印象猜的。
+     dayRangeBk不縮欄位：它要餵給後面一整段課卡渲染（會員姓名/時間/備註等很多欄位都用得到）。 */
+  try{ [dayRangeBk,myAllBk]=await Promise.all([
+    dbBookingsRange(ymd(_rgStart),ymd(_rgEnd)),
+    dbBookingsForCoach(myId,['id','date','status','sibling_of','venue_unit'])
+  ]); }catch(_){}
+  const bookings=dayRangeBk;
   if(!window._ttCache){
     const _tt=dbPeek('ticket_types');
     if(_tt) window._ttCache=_tt.data;
@@ -34324,6 +34390,9 @@ async function renderCoachAgenda(){
     const _tkAll=_tkPk ? _tkPk.data : await dbGetAll('member_tickets');
     computeLastBkMarks(_tkAll, bookings, Object.fromEntries((window._ttCache||[]).map(t=>[t.id,t])));
   }catch(_){ window._installLastBk=window._installLastBk||{}; window._renewLastBk=window._renewLastBk||{}; }
+  /* 這裡是最後一個await之後——世代檢查放這裡：比它早的所有await都可能被打斷執行順序，
+     比它晚的全是同步組字串，JS單執行緒不會再被插隊，查一次就夠，不用每段都查。 */
+  if(window._cagAgendaGen!==_myAgendaGen) return;
   const memMap=memNameMap(members);
   const coachObj=Object.fromEntries(coaches.map(c=>[c.id,c]));
   /* 2026-08-01 使用者回報：「A 教練請 B 教練代課，這堂課應該要顯示在 B 教練這邊」——
@@ -34343,8 +34412,10 @@ async function renderCoachAgenda(){
   const todayStr=ymd(TODAY);
   const selDate=window._cagSelDate;
   /* 每日計數（2026-07-23 使用者指示）：一律「本人」當日課堂數——教練＝自己的課；
-     管理員在預約行事曆也只看自己的（全店總數看首頁月曆）。 */
-  const cntSrc = mine;
+     管理員在預約行事曆也只看自己的（全店總數看首頁月曆）。
+     2026-11-03：月曆格要能任意翻月，不能用dayRangeBk這個窄範圍算——改用myAllBk
+     （這位教練全部時間的課，已用coach_id在資料庫端過濾，不是mine那份窄範圍）。 */
+  const cntSrc = mergeSiblingUnits(myAllBk);
   const cntByDate={}; cntSrc.forEach(b=>{ if(b.status==='cancelled')return; cntByDate[b.date]=(cntByDate[b.date]||0)+1; });   // 保留顯示的取消課卡不列入堂數（2026-08-17）
   /* 月曆日期下方＝課堂數數字（2026-07-23 使用者指示：形狀點退場、改回數字）——
      教練＝該教練當日總課堂（cntSrc=mine）、管理員＝全店（cntSrc=allBk）。 */
@@ -65211,14 +65282,16 @@ async function admCalMultiHTML(nDays){
   const start=heroWeekMonday(sel);
   const days=[]; for(let i=0;i<7;i++){ const d=new Date(start); d.setDate(start.getDate()+i); days.push(d); }
   let bks=[],mems=[],cos=[];
-  try{ [bks,mems,cos]=await Promise.all([dbGetAll('bookings'),dbGetAll('members'),dbGetAll('coaches')]); }catch(_){}
   /* 2026-11-01 教練端手機行事曆記憶體修復（Mango 回報切換下一週觸發 iOS「重複發生問題」）：
      原本 dayAll 是「每天各自對全店 bks 掃一次 filter」，一週 7 天＝整張表掃 7 遍
      （正式庫 bookings 約 1 萬筆，7 倍疊加在同一次渲染裡）。
      這裡全表只掃一次、依日期分組成查找表，下面 7 天改成 O(1) 查表——
      ⚠ allocateVenue 與 mine 兩處都要吃到跟原本 dayAll 完全相同的內容（同一天的全店資料，
        不能只給這位教練自己的），所以這裡只改「怎麼拿到它」，不改內容本身，
-       場地容量/其他教練占用判斷維持原樣。 */
+       場地容量/其他教練占用判斷維持原樣。
+     2026-11-03：連「全表掃一次」都還是整張11MB+下載到手機——改成只查這一週(dbBookingsRange)，
+     members/coaches本來就小張，維持dbGetAll。 */
+  try{ [bks,mems,cos]=await Promise.all([dbBookingsRange(ymd(days[0]),ymd(days[6])),dbGetAll('members'),dbGetAll('coaches')]); }catch(_){}
   const byDate={};
   (bks||[]).forEach(b=>{ if(b&&b.status!=='cancelled'){ (byDate[b.date]||(byDate[b.date]=[])).push(b); } });
   const mm={}; (mems||[]).forEach(m=>{ mm[m.id]=m.name; });
@@ -65298,10 +65371,13 @@ async function admCalMultiHTML(nDays){
 async function admCalHeaderHTML(){
   const today=ymd(TODAY);
   const sel=window._cagSelDate||today; window._cagSelDate=sel;
-  let bks=[]; try{ bks=await dbGetAll('bookings'); }catch(_){}
+  const mon=heroWeekMonday(sel);
+  /* 2026-11-03：這裡的cnt只是「上方日期列的堂數徽章」，只需要這一週，
+     原本dbGetAll('bookings')抓整表（破萬筆）才算出7個數字，改成只查這一週。 */
+  const _hdrEnd=new Date(mon); _hdrEnd.setDate(mon.getDate()+6);
+  let bks=[]; try{ bks=await dbBookingsRange(ymd(mon),ymd(_hdrEnd)); }catch(_){}
   const cnt={}; (bks||[]).forEach(b=>{ if(!b||b.status==='cancelled'||b.sibling_of)return;
     if(bkIsSelf(b)||b.category==='場租')return; cnt[b.date]=(cnt[b.date]||0)+1; });
-  const mon=heroWeekMonday(sel);
   const nD=(Number(window._admCalDays)||1)===1?1:7;   /* 三日退場（2026-08-19 使用者指示） */
   /* 一週檢視：整列七天都點亮（2026-08-23 使用者指示：「手機行事曆一週 上方日期列
      是不是全部點亮就好」）——選取框的意思是「你正在看這一天」，但一週檢視畫面上

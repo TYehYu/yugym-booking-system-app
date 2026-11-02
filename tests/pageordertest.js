@@ -24,12 +24,17 @@ console.log('① 每一個 .range() 分頁都帶排序');
      14333 行還有一句 // 註解也提到 .range() —— 斷言命中自己的說明，踩過五次了。 */
   const bare=src.replace(/\/\*[\s\S]*?\*\//g,' ').replace(/^\s*\/\/.*$/gm,' ');
   const lines=bare.split('\n').filter(t=>/\.range\(/.test(t));
-  eq('★★★ 只有一個地方在做 range 分頁（集中在資料層）', lines.length, 1);
-  /* 2026-10-28：改游標分頁之後，.order() 與 .range() 分成兩行寫
-     （中間多一句 `if(cur!=null) s=s.gt('id',cur);`），所以改驗整支 q。 */
-  ok('★★★ 分頁查詢有 .order(\'id\')',
+  /* 2026-11-03：MANGO手機行事曆記憶體修復新增 dbBookingsRange／dbBookingsForCoach，
+     各自有自己的range()分頁迴圈（不是重用dbGetAll那支，查詢條件不同：按日期範圍／按教練）。
+     數字從1變3不是退化——三個地方「各自」都有正確帶.order('id')，逐一驗證，不是只信任筆數。 */
+  eq('★★★ range 分頁一共3個地方（資料層dbGetAll + 教練行事曆新增的2支範圍查詢）', lines.length, 3);
+  ok('★★★ dbGetAll 分頁查詢有 .order(\'id\')',
      /let s=sb\.from\(_tk\)\.select\(_sel\)\.order\('id',\{ascending:true\}\);/.test(src)
-     && /\.range\(f, f\+\(n\|\|PAGE\)-1\)/.test(lines[0]));
+     && lines.some(l=>/\.range\(f, f\+\(n\|\|PAGE\)-1\)/.test(l)));
+  ok('★★★ dbBookingsRange 也帶 .order(\'id\')，同一欄位分頁',
+     /async function dbBookingsRange[\s\S]*?\.order\('id',\{ascending:true\}\)\s*\n\s*\.range\(from,from\+page-1\)[\s\S]*?^}/m.test(src));
+  ok('★★★ dbBookingsForCoach 也帶 .order(\'id\')，同一欄位分頁',
+     /async function dbBookingsForCoach[\s\S]*?\.order\('id',\{ascending:true\}\)\s*\n\s*\.range\(from,from\+page-1\)[\s\S]*?^}/m.test(src));
   /* ⚠ 游標與排序鍵必須是**同一欄**：`gt('id')` 配 `order('id')`。
      不同欄會漏列，而且跟 1002 那次一樣完全不報錯。 */
   ok('★★★ 游標用的是同一個 id 欄',
