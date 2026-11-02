@@ -15606,8 +15606,8 @@ function tbl(s){return TABLE_ALIAS[s]||s;}
 let sb=null;
 // ── 版本號（日期+時間格式：年後兩碼+月+日.時分，例 26620.1058 = 26年6/20 10:58）──
 // 每次改版手動更新這一行即可，畫面與 title 會一起更新
-const APP_VERSION = '261102.0045';
-const APP_VERSION_LABEL = 'v261102.0045';
+const APP_VERSION = '261102.1530';
+const APP_VERSION_LABEL = 'v261102.1530';
 const CLOUD = !!(window.YUGYM_CONFIG && window.YUGYM_CONFIG.url && window.YUGYM_CONFIG.anonKey);
 if(CLOUD){ sb = supabase.createClient(window.YUGYM_CONFIG.url, window.YUGYM_CONFIG.anonKey); }
 
@@ -48355,7 +48355,12 @@ const PAY_RULE_KEYS=['employment_type','need_duty','weekly_work_days','weekly_mi
   'base_salary','duty_hourly','pt_mode','pt_rate','pt_tiers','group_rate',
   'pt_bonus_enabled','pt_bonus_mode','pt_bonus','custom_salary',
   'is_manager','is_supervisor','supervisor_bonus',
-  'leader_members','leader_t1','leader_b1','leader_t2','leader_b2'];
+  'leader_members','leader_t1','leader_b1','leader_t2','leader_b2',
+  /* 2026-11-02（黃美蓉回報：轉合作教練後，連10月以前正職的勞健保扣款都一起被取消）——
+     這4個欄位原本不在清單裡，empAtMonth() 不會按月快照它們，calcSalary() 永遠讀「現在」的
+     即時值，跟是在算哪個月完全無關。加進來後，連 saveInsurance() 也要比照 stApplyEmpType()
+     先凍結更早月份、再寫當月快照（見 saveInsurance 內的改動），兩邊缺一不可。 */
+  'insured_grade','insurance_identity','labor_insurance_status','health_insurance_status'];
 function payRulesMap(emp){
   const m=emp&&emp.pay_rules;
   return (m && typeof m==='object' && !Array.isArray(m)) ? m : null;
@@ -52903,6 +52908,14 @@ function insPreview(){
 async function saveInsurance(id){
  try{
   const c=await dbGet('coaches',id); const g=x=>document.getElementById(x).value;
+  /* 2026-11-02：勞健保欄位納入 PAY_RULE_KEYS 後，存檔要比照 stApplyEmpType() 同一套規矩——
+     先把「改之前」的樣子凍結到更早的月份（只在還沒有任何快照時做一次），
+     再把這個月寫成新快照。沒有這段，加進 PAY_RULE_KEYS 本身不會自動補救歷史月份。 */
+  const ym=stCurYm();
+  const rules=Object.assign({}, payRulesMap(c)||{});
+  if(!Object.keys(rules).some(k=>k<ym)){
+    rules[prevYm(ym)]=payRuleSnapshot(c);
+  }
   c.insurance_identity=g('ins-identity')||'employee';
   c.labor_insurance_status=g('ins-labor')||null;
   c.health_insurance_status=g('ins-health')||null;
@@ -52911,6 +52924,8 @@ async function saveInsurance(id){
   c.insured_unit=g('ins-unit')||null;
   c.insured_enroll_date=g('ins-enroll')||null;
   c.insured_withdraw_date=g('ins-withdraw')||null;
+  rules[ym]=payRuleSnapshot(c);
+  c.pay_rules=rules;
   await dbPut('coaches',c); closeModal(); showToast('勞健保資料已儲存'); navTo('staff');
  }catch(e){ console.error('saveInsurance 失敗:',e); showToast('儲存失敗：'+(e&&e.message?e.message:e)); }
 }
