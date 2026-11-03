@@ -15606,8 +15606,8 @@ function tbl(s){return TABLE_ALIAS[s]||s;}
 let sb=null;
 // ── 版本號（日期+時間格式：年後兩碼+月+日.時分，例 26620.1058 = 26年6/20 10:58）──
 // 每次改版手動更新這一行即可，畫面與 title 會一起更新
-const APP_VERSION = '261103.0349';
-const APP_VERSION_LABEL = 'v261103.0349';
+const APP_VERSION = '261103.0810';
+const APP_VERSION_LABEL = 'v261103.0810';
 const CLOUD = !!(window.YUGYM_CONFIG && window.YUGYM_CONFIG.url && window.YUGYM_CONFIG.anonKey);
 if(CLOUD){ sb = supabase.createClient(window.YUGYM_CONFIG.url, window.YUGYM_CONFIG.anonKey); }
 
@@ -67288,26 +67288,35 @@ PAGES.coach_calendar=async function(){
   if(!window._coachSelDate) window._coachSelDate=ymd(TODAY);
   if(!window._coachMonth){const t=parseYmd(window._coachSelDate)||new Date(TODAY);window._coachMonth={y:t.getFullYear(),m:t.getMonth()};}
 
-  const[bookings,members,coaches]=await Promise.all([dbGetAll('bookings'),dbGetAll('members'),dbGetAll('coaches')]);
-  try{ window._allTkCache=await dbGetAll('member_tickets'); }catch(_){ window._allTkCache=[]; }
-  try{ window._ttCache=await dbGetAll('ticket_types'); }catch(_){ window._ttCache=[]; }
-  try{ const tlogs=await dbGetAll('training_logs'); window._tlogBids=new Set(tlogs.map(l=>l.booking_id)); }catch(_){ window._tlogBids=new Set(); }
-  const memMap=memNameMap(members);
-  const coachMap=Object.fromEntries(coaches.map(c=>[c.id,coachDisp(c)]));
-  const typeMap={};
-  const visible=bookings.filter(b=>{
-    if(b.status==='cancelled') return false;
-    return bkIsCoach(b,myId); // 月曆/週量只看我的課
-  });
-  // 全店當日預約（未取消）：供「當日排課表」依場地容量判斷座位（含別人的課）
-  const allView2=bookings.filter(b=>b.status!=='cancelled');
-
-  window._coachCalData={visible,memMap,coachMap,typeMap,allView:false,myId,allBk:allView2};
-
   // ── 電腦版：共用後台行事曆元件（週/日時間軸、點空格新增、拖曳改期、點課卡）──
   //    opts.me=myId → renderCalendar 內部只顯示我的課，別人的課遮蔽為「已預約」、不可點、不顯示姓名；
   //    新增預約時教練欄位自動帶自己（openBookingModal 內 isMobile/_calMineOnly 之外，另由 _bkPrefillCoach 控制）。
   if(!isMobile){
+    /* 2026-11-06（Mango第三次行事曆黑畫面）：這一段（整表bookings／member_tickets／
+       ticket_types／training_logs＋window._coachCalData）原本在isMobile判斷「之前」就
+       無條件執行——手機版若coachCalV2()失敗落到這條回退路徑，一樣會整表硬抓一次
+       （10,938筆），跟首頁那次是同一種手法。
+       逐一核對過：window._coachCalData只被coach-month/coach-cal/coach-3day/coach-week/
+       coach-daylist這幾支讀取，全部只在這個!isMobile分支裡的renderCalendar()才會用到；
+       手機版走的renderCoachAgenda()完整讀過一遍，沒有依賴這裡的任何一個變數
+       （它自己用dbBookingsRange/dbBookingsForCoach，ticket_types/member_tickets也有
+       自己的dbPeek防呆）。搬進這個分支，手機版回退時完全不會執行到這段。 */
+    const[bookings,members,coaches]=await Promise.all([dbGetAll('bookings'),dbGetAll('members'),dbGetAll('coaches')]);
+    try{ window._allTkCache=await dbGetAll('member_tickets'); }catch(_){ window._allTkCache=[]; }
+    try{ window._ttCache=await dbGetAll('ticket_types'); }catch(_){ window._ttCache=[]; }
+    try{ const tlogs=await dbGetAll('training_logs'); window._tlogBids=new Set(tlogs.map(l=>l.booking_id)); }catch(_){ window._tlogBids=new Set(); }
+    const memMap=memNameMap(members);
+    const coachMap=Object.fromEntries(coaches.map(c=>[c.id,coachDisp(c)]));
+    const typeMap={};
+    const visible=bookings.filter(b=>{
+      if(b.status==='cancelled') return false;
+      return bkIsCoach(b,myId); // 月曆/週量只看我的課
+    });
+    // 全店當日預約（未取消）：供「當日排課表」依場地容量判斷座位（含別人的課）
+    const allView2=bookings.filter(b=>b.status!=='cancelled');
+
+    window._coachCalData={visible,memMap,coachMap,typeMap,allView:false,myId,allBk:allView2};
+
     // 電腦版：週曆，可排課/改期/拖曳（訓練紀錄不放，點課卡進課程明細）
     window._coachReadonly=false;
     window._calMineOnly=true;            // 新增預約預設帶自己
