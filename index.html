@@ -15606,8 +15606,8 @@ function tbl(s){return TABLE_ALIAS[s]||s;}
 let sb=null;
 // ── 版本號（日期+時間格式：年後兩碼+月+日.時分，例 26620.1058 = 26年6/20 10:58）──
 // 每次改版手動更新這一行即可，畫面與 title 會一起更新
-const APP_VERSION = '261103.0900';
-const APP_VERSION_LABEL = 'v261103.0900';
+const APP_VERSION = '261103.1939';
+const APP_VERSION_LABEL = 'v261103.1939';
 const CLOUD = !!(window.YUGYM_CONFIG && window.YUGYM_CONFIG.url && window.YUGYM_CONFIG.anonKey);
 if(CLOUD){ sb = supabase.createClient(window.YUGYM_CONFIG.url, window.YUGYM_CONFIG.anonKey); }
 
@@ -22922,8 +22922,8 @@ async function tkBookedCountMap(ticketIds){
       const ids=[...new Set(ticketIds.map(String))];
       logs=await _tkRowsIn('ticket_logs','ticket_id',ids,'ticket_id,booking_id,action,delta');
       const _bidLg=(logs||[]).map(l=>l&&l.booking_id).filter(Boolean);
-      const byTk=await _tkRowsIn('bookings','ticket_id',ids,'id,ticket_id,status');
-      const byId=_bidLg.length?await _tkRowsIn('bookings','id',_bidLg,'id,ticket_id,status'):[];
+      const byTk=await _tkRowsIn('bookings','ticket_id',ids,'id,ticket_id,status,pending_contract');
+      const byId=_bidLg.length?await _tkRowsIn('bookings','id',_bidLg,'id,ticket_id,status,pending_contract'):[];
       const seen={}; bks=[];
       [...byTk,...byId].forEach(b=>{ if(b&&b.id&&!seen[b.id]){ seen[b.id]=1; bks.push(b); } });
     }else{
@@ -22952,7 +22952,24 @@ async function tkBookedCountMap(ticketIds){
     const st={};
     (bks||[]).forEach(b=>{
       if(!b || !b.id) return;
-      st[b.id]={hasTk:!!b.ticket_id};
+      /* 2026-11-04（孫怡敏 12/04 19:00 待簽約卡顯示儲值非轉正，P1）——
+         下面團課專用的淨值補算段原本只看 hasTk（現在有沒有綁 ticket_id），沒有
+         排除「待簽約」：待簽約卡的 ticket_id 會被清成 null，但若它之前曾經排過
+         （例如原本是正常連續預約的一堂，後來被改回待簽約），當初那筆 deduct
+         紀錄還留著、沒有跟著沖銷，就會被這段誤認成團課名額又多算一格佔用。
+
+         ⚠ 原本想用「是不是團課」（bkIsGroup／category）當條件，唯讀查過正式庫
+         才發現範圍抓錯：category='自主訓練'（157 筆）與 category='私人教練' 裡
+         pending_contract=false 的 115 筆（66 取消＋49 已完成，多半是舊系統匯入、
+         本來就不綁 ticket_id 的真實歷史扣課），同樣符合「無 ticket_id＋有帳本」，
+         但它們是真的用掉了、理應繼續算進佔用——用 bkIsGroup 篩會連這些一起排除，
+         變成新的超賣破洞。
+
+         真正的分界線是 pending_contract：查過的 377 筆團課全部 pending_contract=
+         false（團課從來不會是待簽約），私人教練裡「現在待簽約」的只有 49 筆
+         （41 取消＋8 未來還沒上，孫怡敏這張在其中），其餘都是 false。
+         所以只排除「現在是待簽約」這一種，團課與歷史真實扣課完全不受影響。 */
+      st[b.id]={hasTk:!!b.ticket_id, pendingNow:!!b.pending_contract};
       if(!b.ticket_id || b.status==='cancelled') return;
       /* ⚠ 沒有任何帳本紀錄的照舊算佔用 —— 舊系統匯入的課本來就沒有 ticket_logs，
          用「查不到帳就當沒扣」會把超約防線整個拆掉。 */
@@ -22979,7 +22996,7 @@ async function tkBookedCountMap(ticketIds){
       const i=k.indexOf('|'); if(i<0) return;
       const tid=k.slice(0,i), bid=k.slice(i+1);
       const x=st[bid];
-      if(!x || x.hasTk) return;                  // 已由 ticket_id 計過 → 不重複算
+      if(!x || x.hasTk || x.pendingNow) return;  // 已由 ticket_id 計過，或現在是待簽約（帳是舊的）→ 不補算
       /* 取消的課不能直接跳過：正常取消是「扣 1 退 1」＝淨 0，但取消時選「扣課不退」
          那一堂票是真的被吃掉了，仍佔住一格（2026-08-06）。淨值自然算得出來。 */
       const n=-(Number(_net[k])||0);
