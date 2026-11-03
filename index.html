@@ -15606,8 +15606,8 @@ function tbl(s){return TABLE_ALIAS[s]||s;}
 let sb=null;
 // ── 版本號（日期+時間格式：年後兩碼+月+日.時分，例 26620.1058 = 26年6/20 10:58）──
 // 每次改版手動更新這一行即可，畫面與 title 會一起更新
-const APP_VERSION = '261103.0810';
-const APP_VERSION_LABEL = 'v261103.0810';
+const APP_VERSION = '261103.0900';
+const APP_VERSION_LABEL = 'v261103.0900';
 const CLOUD = !!(window.YUGYM_CONFIG && window.YUGYM_CONFIG.url && window.YUGYM_CONFIG.anonKey);
 if(CLOUD){ sb = supabase.createClient(window.YUGYM_CONFIG.url, window.YUGYM_CONFIG.anonKey); }
 
@@ -65693,11 +65693,26 @@ function coachAttnShift(dir){
    ・下方＝自己的課卡，沿用管理員首頁那套 .tcard-std（時間／姓名＋出席章／第幾堂）。
    ⚠ 課卡的產生器目前是複寫一份、不是共用管理員首頁那支 —— 刻意的：
      這樣改這一頁不會動到教練與櫃檯正在用的畫面。旗標拿掉時要把兩邊合成一支。 */
+/* 2026-11-06（Mango首頁點日期黑畫面，P0緊急修復）：這裡原本跟renderCoachAgenda修復前一樣，
+     整表dbGetAll('bookings')——11/03那次只修了行事曆頁，沒有連帶修到首頁這支，
+     點首頁日期(ctPickDay)會重新整頁、再整表抓一次，10,938筆正式庫資料在手機上
+     反覆這樣抓就是記憶體被撐爆的根因。這一頁三處用到bookings（當天課卡／週日期列
+     小圓點／本月成績）全部只看「自己的課」，改用已驗證過的dbBookingsForCoach
+     （教練篩選在查詢端完成，黃美蓉本人1,480筆遠低於整表10,938筆），
+     不傳cols維持select('*')，三處既有欄位需求不用重新盤點。
+     ⚠ 刻意不加.catch(()=>[])——這支失敗要讓navTo既有的catch顯示「資料載入錯誤」
+     紅字，不能跟其他六張表一樣悄悄當成空陣列：bookings是這一頁的主要資料，
+     查詢真的失敗卻顯示「這一天沒有課程」會讓教練誤以為自己真的沒課。
+     member_tickets原本也是整表4,458筆、跟bookings一起疊加，改成跟renderCoachAgenda
+     同一套既有防呆：peek得到（跨工作階段快取）就直接用，peek不到才整表抓
+     （通常只有冷啟動或第一次登入會走到），不是新寫法。 */
 async function coachHomeV2(){
+  const _hv2TkPk=dbPeek('member_tickets');
   const [bookings,members,coaches,attendance,shifts,types,mtickets]=await Promise.all([
-    dbGetAll('bookings'), dbGetAll('members'), dbGetAll('coaches').catch(()=>[]),
+    dbBookingsForCoach(SESSION.id), dbGetAll('members'), dbGetAll('coaches').catch(()=>[]),
     dbGetAll('attendance').catch(()=>[]), dbGetAll('shifts').catch(()=>[]),
-    dbGetAll('ticket_types').catch(()=>[]), dbGetAll('member_tickets').catch(()=>[])]);
+    dbGetAll('ticket_types').catch(()=>[]),
+    _hv2TkPk ? Promise.resolve(_hv2TkPk.data) : dbGetAll('member_tickets').catch(()=>[])]);
   const today=ymd(TODAY);
   const date=(typeof _coachViewDate!=='undefined' && _coachViewDate) || today;
   const typeMap=Object.fromEntries((types||[]).map(t=>[t.id,t]));
@@ -65778,7 +65793,14 @@ async function coachHomeV2(){
   }
 
   /* ── ③ 今日課卡列表（沿用管理員手機首頁的 .admh-card）── */
-  const _tkBkMap={}; (bookings||[]).forEach(x=>{ if(x&&x.ticket_id&&x.status!=='cancelled'&&!x.sibling_of){ (_tkBkMap[x.ticket_id]=_tkBkMap[x.ticket_id]||[]).push(x); } });
+  /* ⚠ bookings現在是dbBookingsForCoach（只有這位教練coach_id/substitute_coach_id
+     命中的列）——但「第幾堂」要數的是這張票全部的排課，可能有會員換過教練、同一張票
+     被別的教練帶過（沒有substitute_coach_id關聯，不會進到上面那份bookings）。
+     只對今天課卡實際用到的那幾張票，額外用_tkRowsIn（既有的ticket_id範圍查詢，
+     tkBookedCountMap已經在用的同一支）補查全教練範圍，不影響其他用途。 */
+  const _dayTkIds=[...new Set(dayBk.map(b=>b&&b.ticket_id).filter(Boolean))];
+  const _tkRows=_dayTkIds.length?await _tkRowsIn('bookings','ticket_id',_dayTkIds,'id,ticket_id,date,start_time,status,sibling_of').catch(()=>[]):[];
+  const _tkBkMap={}; _tkRows.forEach(x=>{ if(x&&x.ticket_id&&x.status!=='cancelled'&&!x.sibling_of){ (_tkBkMap[x.ticket_id]=_tkBkMap[x.ticket_id]||[]).push(x); } });
   /* 代課才用得到：只有「不是自己帶的那堂」會標名字（見下面 _cnm） */
   const _cm2={}; (coaches||[]).forEach(c=>{ if(c&&c.id) _cm2[c.id]=(typeof coachDisp==='function'?coachDisp(c):c.name)||''; });
   const _cards=dayBk.slice().sort((a,b)=>String(a.start_time).localeCompare(String(b.start_time))).map(b=>{
