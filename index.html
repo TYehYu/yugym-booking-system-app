@@ -55773,8 +55773,38 @@ function ppRecordHtml(){
                ⚠ 舊資料的 created_by／cancelled_by 可能是空的（0810 之前、或舊系統匯入），
                  那就誠實寫「沒有記錄」，不要猜。 */
             const _mmn=c.memMap||{};
+            /* 2026-11-06 使用者回報：陳玟勳的團課「開課 有肌1・8/26 16:47」被誤讀成
+               報名來源/時間——那其實是「這堂課誰建立、何時建立」，團課是櫃檯先開班、
+               會員之後才各自報名加入，兩者是不同的事。
+               團課改顯示「真正的報名來源」：從這個人自己票券的扣課紀錄（ticket_logs）
+               找 operator 與 created_at —— 報名當下就是 fn_member_join_group 或櫃檯
+               手動加人時寫的那一筆 deduct，時間點才是真正的報名時間，不是建立時間。
+               ⚠ 只認「這張票、這堂課」淨值還是扣著的那一筆（net<0）——會員如果報名後
+                 又退出、或曾經加入又被移除過，同一組 (ticket_id,booking_id) 會有
+                 deduct/refund 交錯紀錄，net>=0 代表現在其實沒有真的扣在這堂上，
+                 這種情況不猜測來源，直接顯示「預約來源未確認」（與 0825 那句
+                 「沒有記錄就誠實寫沒有記錄」同一條語彙）。
+               ⚠ 身分判定不借用 bkActorLabel 的 'MEM-' 前綴判斷——會員 id 有新舊兩種
+                 格式（MEM-xxxx／舊的 m19xxxx），直接跟這位會員自己的 id 比對最準確，
+                 不會因為格式而誤判成員工。 */
+            const _grpSrc=(()=>{
+              if(!bkIsGroup(b)) return null;
+              const _myTkIds=new Set((c.myTk||[]).map(t=>t.id));
+              const _cand=(c.myLogs||[]).filter(l=>l&&l.booking_id===b.id&&_myTkIds.has(l.ticket_id));
+              if(!_cand.length) return '預約來源未確認';
+              const _net=_cand.reduce((s,l)=>s+(Number.isFinite(Number(l.delta))?Number(l.delta):(l.action==='deduct'?-1:(l.action==='refund'?1:0))),0);
+              if(!(_net<0)) return '預約來源未確認';
+              const _deducts=_cand.filter(l=>l.action==='deduct').sort((x,y)=>String(y.created_at||'').localeCompare(String(x.created_at||'')));
+              if(!_deducts.length) return '預約來源未確認';
+              const _top=_deducts[0], _who=String(_top.operator||''), _t=bkOpTime(_top.created_at);
+              if(!_who) return '預約來源未確認';
+              if(_who===PP.id) return `會員自行預約${_t?'・'+_t:''}`;
+              const _nm=_cm[_who];
+              return _nm ? `${_nm}代預約${_t?'・'+_t:''}` : '預約來源未確認';
+            })();
             const _lb=bkIsGroup(b)?'開課':'建立';
-            const _opC=`${_lb} ${bkActorLabel(b.created_by,_cm,_mmn,b.created_at,'created')}${bkOpTime(b.created_at)?'・'+bkOpTime(b.created_at):''}`;
+            const _opC=_grpSrc!=null ? _grpSrc
+              : `${_lb} ${bkActorLabel(b.created_by,_cm,_mmn,b.created_at,'created')}${bkOpTime(b.created_at)?'・'+bkOpTime(b.created_at):''}`;
             const _opX=_cx?`取消 ${bkActorLabel(b.cancelled_by,_cm,_mmn,b.cancelled_at,'cancelled')}${bkOpTime(b.cancelled_at)?'・'+bkOpTime(b.cancelled_at):''}`:'';
             _rows+=`<div class="pp-bkrow${_cx?' pp-bkrow-cx':''}" style="--bkc:${col};">
               <div class="pp-bkdate"><b>${Number(String(b.date).slice(5,7))}/${Number(String(b.date).slice(8,10))}</b><span>（${wd}）</span></div>
