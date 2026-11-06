@@ -34432,7 +34432,28 @@ async function renderCoachAgenda(){
   try{
     const _tkPk=dbPeek('member_tickets');
     const _tkAll=_tkPk ? _tkPk.data : await dbGetAll('member_tickets');
-    computeLastBkMarks(_tkAll, bookings, Object.fromEntries((window._ttCache||[]).map(t=>[t.id,t])));
+    /* 2026-11-06（蔡惠蓉11/6、王慧穎11/6 案例，手機版最後一堂誤標）：
+       dayRangeBk（＝這裡的 bookings）是選定日±3天的窄窗口（2026-11-03 MANGO效能修復
+       引入），但「這張票真正排到哪一天」要看完整歷史——真正最後一堂若在窗口外
+       （兩案例都排到下個月），computeLastBkMarks 只看得到窗口內這幾筆，
+       會把「窗口內剛好最後一筆」誤判成「全票最後一堂」，提醒標錯日期。
+       只對今天課卡實際用到的那幾張票，額外用_tkRowsIn（coachHomeV2._tkBkMap已經在用
+       的同一支範圍查詢）補抓這些票的全部預約（不限日期），不影響dayRangeBk本身
+       （課卡渲染／場地占用仍用窄窗口，效能不受影響——只多一支.in(ticket_id)查詢，
+       筆數等同今天看得到的客人數，不是整表）。
+       ⚠ 團課（member_ids，無ticket_id）的最後一堂判斷是另一段邏輯、直接掃
+         bookings找該會員團課，同樣有這個窗口限制，本次未修——留待後續處理。 */
+    const _dayTkIds=[...new Set(bookings.map(b=>b&&b.ticket_id).filter(Boolean))];
+    const _tkFullRows=_dayTkIds.length
+      ? await _tkRowsIn('bookings','ticket_id',_dayTkIds,'id,ticket_id,date,start_time,status,coach_leave').catch(()=>[])
+      : [];
+    const _lastBkMarkSrc=_tkFullRows.length ? (()=>{
+        const seen={}, out=[];
+        _tkFullRows.forEach(x=>{ if(x&&x.id&&!seen[x.id]){ seen[x.id]=1; out.push(x); } });
+        bookings.forEach(x=>{ if(x&&x.id&&!seen[x.id]){ seen[x.id]=1; out.push(x); } });
+        return out;
+      })() : bookings;
+    computeLastBkMarks(_tkAll, _lastBkMarkSrc, Object.fromEntries((window._ttCache||[]).map(t=>[t.id,t])));
   }catch(_){ window._installLastBk=window._installLastBk||{}; window._renewLastBk=window._renewLastBk||{}; }
   /* 這裡是最後一個await之後——世代檢查放這裡：比它早的所有await都可能被打斷執行順序，
      比它晚的全是同步組字串，JS單執行緒不會再被插隊，查一次就夠，不用每段都查。 */
