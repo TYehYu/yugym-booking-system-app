@@ -15606,8 +15606,8 @@ function tbl(s){return TABLE_ALIAS[s]||s;}
 let sb=null;
 // ── 版本號（日期+時間格式：年後兩碼+月+日.時分，例 26620.1058 = 26年6/20 10:58）──
 // 每次改版手動更新這一行即可，畫面與 title 會一起更新
-const APP_VERSION = '261106.2155';
-const APP_VERSION_LABEL = 'v261106.2155';
+const APP_VERSION = '261106.2254';
+const APP_VERSION_LABEL = 'v261106.2254';
 const CLOUD = !!(window.YUGYM_CONFIG && window.YUGYM_CONFIG.url && window.YUGYM_CONFIG.anonKey);
 if(CLOUD){ sb = supabase.createClient(window.YUGYM_CONFIG.url, window.YUGYM_CONFIG.anonKey); }
 
@@ -34444,9 +34444,26 @@ async function renderCoachAgenda(){
        ⚠ 團課（member_ids，無ticket_id）的最後一堂判斷是另一段邏輯、直接掃
          bookings找該會員團課，同樣有這個窗口限制，本次未修——留待後續處理。 */
     const _dayTkIds=[...new Set(bookings.map(b=>b&&b.ticket_id).filter(Boolean))];
-    const _tkFullRows=_dayTkIds.length
-      ? await _tkRowsIn('bookings','ticket_id',_dayTkIds,'id,ticket_id,date,start_time,status,coach_leave').catch(()=>[])
-      : [];
+    /* 2026-11-07（蔡靜雯案例：上一版修正邏輯上應涵蓋，但無法單靠程式碼閱讀確認
+       當次真的有成功補到完整歷史）——_tkRowsIn 原本用 .catch(()=>[]) 吞掉任何失敗，
+       失敗時會靜默退回窄窗口（重現同一個誤判，卻看不出是「查詢失敗」還是「邏輯本身
+       又有新漏洞」）。這裡只加可觀測性，三種結果都留痕：成功有資料／成功但空／
+       拋例外被接住。⚠ 只記數量與耗時，不印會員姓名、票券內容或任何個資。
+       ⚠ 失敗時的退回行為（_lastBkMarkSrc 退回 bookings）完全不變，只是現在看得到
+       它發生過。 */
+    let _tkFullRows=[];
+    if(_dayTkIds.length){
+      const _tkT0=performance.now();
+      try{
+        _tkFullRows=await _tkRowsIn('bookings','ticket_id',_dayTkIds,'id,ticket_id,date,start_time,status,coach_leave');
+        _calDiag(_tkFullRows.length ? 'agenda:lastbk-fullrows-ok' : 'agenda:lastbk-fullrows-empty',
+          { tkIdCount:_dayTkIds.length, rowCount:_tkFullRows.length, ms:Math.round(performance.now()-_tkT0) });
+      }catch(e){
+        _tkFullRows=[];
+        _calDiag('agenda:lastbk-fullrows-error',
+          { tkIdCount:_dayTkIds.length, msg:(e&&e.message)||String(e), ms:Math.round(performance.now()-_tkT0) });
+      }
+    }
     const _lastBkMarkSrc=_tkFullRows.length ? (()=>{
         const seen={}, out=[];
         _tkFullRows.forEach(x=>{ if(x&&x.id&&!seen[x.id]){ seen[x.id]=1; out.push(x); } });
