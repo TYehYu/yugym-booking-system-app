@@ -29079,6 +29079,33 @@ function bkOpTime(ts){
     return `${Number(d.slice(5,7))}/${Number(d.slice(8,10))} ${d.slice(11,16)}`;
   }catch(_){ return ''; }
 }
+/* 團課「真正的報名來源」（2026-11-06 抽成共用，原本只在會員詳細頁算一次）——
+   團課的 created_by/created_at 是「這堂課誰開的、何時開的」，不是「這個人何時報名」
+   （櫃檯先開班，會員各自之後才加入）。報名當下的真相在 ticket_logs：
+   這位會員自己票券、這一堂的 deduct 紀錄，operator／created_at 才是報名者與報名時間。
+   ⚠ candidateTicketIds 由呼叫端決定範圍——會員詳細頁傳「這位會員名下所有票」（逐一比對
+     booking_id 找得到哪一張），bkCardPop 已經由票券夾解出「這個名額實際扣的那張票」，
+     傳單一張即可，更精準、不會誤抓同一人另一張票的紀錄。
+   ⚠ 只認淨值仍是扣著的那一筆（net<0）——報名後又退出、或曾被移除過，同一組
+     (ticket_id,booking_id) 會有 deduct/refund 交錯，net>=0 代表現在並未真的扣在
+     這堂上，這種情況不猜測來源，顯示「預約來源未確認」。
+   ⚠ 身分判定直接比對呼叫端傳入的 viewMemberId，不借用 'MEM-' 前綴判斷——
+     會員 id 有新舊兩種格式（MEM-xxxx／舊的 m19xxxx），直接比對最準確。 */
+function grpJoinSource(bookingId, candidateTicketIds, logs, viewMemberId, coachMap){
+  const _ids=new Set((candidateTicketIds||[]).filter(Boolean).map(String));
+  if(!_ids.size) return '預約來源未確認';
+  const _cand=(logs||[]).filter(l=>l&&l.booking_id===bookingId&&_ids.has(String(l.ticket_id)));
+  if(!_cand.length) return '預約來源未確認';
+  const _net=_cand.reduce((s,l)=>s+(Number.isFinite(Number(l.delta))?Number(l.delta):(l.action==='deduct'?-1:(l.action==='refund'?1:0))),0);
+  if(!(_net<0)) return '預約來源未確認';
+  const _deducts=_cand.filter(l=>l.action==='deduct').sort((x,y)=>String(y.created_at||'').localeCompare(String(x.created_at||'')));
+  if(!_deducts.length) return '預約來源未確認';
+  const _top=_deducts[0], _who=String(_top.operator||''), _t=bkOpTime(_top.created_at);
+  if(!_who) return '預約來源未確認';
+  if(_who===String(viewMemberId||'')) return `會員自行預約${_t?'・'+_t:''}`;
+  const _nm=(coachMap||{})[_who];
+  return _nm ? `${_nm}代預約${_t?'・'+_t:''}` : '預約來源未確認';
+}
 function bkName(b, nameOf){
   if(!b) return '—';
   const v=b.member_id ? (nameOf?nameOf(b.member_id):'') : '';
@@ -40110,7 +40137,13 @@ async function bkCardPop(el, b, btns, acts){
            「Randy 把郭祐竹加進來」—— 那是假的（他只是 7/28 開了這堂課）。
            團課改畫在標題卡（那裡講的本來就是這一堂課），單人課才留在會員卡
            —— 單人課的「這一堂」就等於「這個人的這一堂」，不會誤讀。 */
-      const _opLine=bkIsGroup(b)?'':(()=>{
+      /* 2026-11-06 三修：改用共用函式 grpJoinSource（與會員詳細頁同一套邏輯）算出
+         「真正的報名來源」——從這位會員這一堂實際扣的那張票（_slot.t）去查
+         ticket_logs 的 deduct 紀錄，operator／created_at 才是報名者與報名時間，
+         不是整堂課的建立時間。查無可靠紀錄就誠實顯示「預約來源未確認」，不猜測。 */
+      const _opLine=bkIsGroup(b)
+        ? `<div class="ash-mop">${escH(grpJoinSource(b.id, (_slot&&_slot.t)?[_slot.t.id]:[], (_wctx&&_wctx.logs)||[], r.mid, cm))}</div>`
+        : (()=>{
         const _c=`建立 ${bkActorLabel(b.created_by,cm,mm,b.created_at,'created')}${bkOpTime(b.created_at)?'・'+bkOpTime(b.created_at):''}`;
         const _x=(b.status==='cancelled')
           ? `　取消 ${bkActorLabel(b.cancelled_by,cm,mm,b.cancelled_at,'cancelled')}${bkOpTime(b.cancelled_at)?'・'+bkOpTime(b.cancelled_at):''}` : '';
@@ -55787,21 +55820,13 @@ function ppRecordHtml(){
                ⚠ 身分判定不借用 bkActorLabel 的 'MEM-' 前綴判斷——會員 id 有新舊兩種
                  格式（MEM-xxxx／舊的 m19xxxx），直接跟這位會員自己的 id 比對最準確，
                  不會因為格式而誤判成員工。 */
-            const _grpSrc=(()=>{
-              if(!bkIsGroup(b)) return null;
-              const _myTkIds=new Set((c.myTk||[]).map(t=>t.id));
-              const _cand=(c.myLogs||[]).filter(l=>l&&l.booking_id===b.id&&_myTkIds.has(l.ticket_id));
-              if(!_cand.length) return '預約來源未確認';
-              const _net=_cand.reduce((s,l)=>s+(Number.isFinite(Number(l.delta))?Number(l.delta):(l.action==='deduct'?-1:(l.action==='refund'?1:0))),0);
-              if(!(_net<0)) return '預約來源未確認';
-              const _deducts=_cand.filter(l=>l.action==='deduct').sort((x,y)=>String(y.created_at||'').localeCompare(String(x.created_at||'')));
-              if(!_deducts.length) return '預約來源未確認';
-              const _top=_deducts[0], _who=String(_top.operator||''), _t=bkOpTime(_top.created_at);
-              if(!_who) return '預約來源未確認';
-              if(_who===PP.id) return `會員自行預約${_t?'・'+_t:''}`;
-              const _nm=_cm[_who];
-              return _nm ? `${_nm}代預約${_t?'・'+_t:''}` : '預約來源未確認';
-            })();
+            /* 2026-11-06：團課「真正的報名來源」改呼叫共用函式 grpJoinSource
+               （與 bkCardPop 的簡易課卡同一套邏輯，不再各寫一份——原本這裡的判斷
+               已抽出，背景與條件說明見 grpJoinSource 本體上方的註解）。
+               候選票券範圍＝這位會員名下所有票（逐一比對哪一張有這堂的扣課紀錄）。 */
+            const _grpSrc=bkIsGroup(b)
+              ? grpJoinSource(b.id, (c.myTk||[]).map(t=>t.id), c.myLogs, PP.id, _cm)
+              : null;
             const _lb=bkIsGroup(b)?'開課':'建立';
             const _opC=_grpSrc!=null ? _grpSrc
               : `${_lb} ${bkActorLabel(b.created_by,_cm,_mmn,b.created_at,'created')}${bkOpTime(b.created_at)?'・'+bkOpTime(b.created_at):''}`;
