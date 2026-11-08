@@ -15632,8 +15632,8 @@ function tbl(s){return TABLE_ALIAS[s]||s;}
 let sb=null;
 // ── 版本號（日期+時間格式：年後兩碼+月+日.時分，例 26620.1058 = 26年6/20 10:58）──
 // 每次改版手動更新這一行即可，畫面與 title 會一起更新
-const APP_VERSION = '261108.1154';
-const APP_VERSION_LABEL = 'v261108.1154';
+const APP_VERSION = '261108.1316';
+const APP_VERSION_LABEL = 'v261108.1316';
 const CLOUD = !!(window.YUGYM_CONFIG && window.YUGYM_CONFIG.url && window.YUGYM_CONFIG.anonKey);
 if(CLOUD){ sb = supabase.createClient(window.YUGYM_CONFIG.url, window.YUGYM_CONFIG.anonKey); }
 
@@ -67399,6 +67399,19 @@ async function saveFixPunchOut(recId){
    ② window._chvCal 打開 —— 開任何一張課卡時，依「這堂是不是我帶的」決定純檢視與否
       （見 expandBkCard／openCourseCard 開頭那一段）。 */
 async function coachCalV2(){
+  _calDiag('coachCalV2:enter');
+  /* 2026-11-08 複查：PAGES.coach_calendar 手機分支一進來就 return coachCalV2()，
+     從沒走到桌機那條「const _stepping=!!window._calStepping; window._calStepping=false;」
+     （約67672行）——等於手機這邊 _calStepping 一旦被 admCalPick 設成 true，
+     就再也沒人清掉它，永遠停在 true。本次新增的票券快取改吃這個旗標之前，
+     沒人讀過它、這個漏洞沒有可觀察的後果；現在要靠它判斷「是不是單純翻頁」，
+     必須在這裡比照桌機那行同一招，先讀值、立刻清掉，離開行事曆後只要超過本次
+     action 就不會被誤判成「還在翻頁」。只影響本函式局部變數，不動其他頁面。 */
+  const _stepping=!!window._calStepping; window._calStepping=false;
+  /* 連點「上一週/下一週」保護：沿用既有的 navTo 序號（window._navSeqNo，見
+     「切頁重入保護」那段），同一個序號代表「目前最新的那一次呼叫」。較慢的舊呼叫
+     跑完發現序號已經被更新的呼叫蓋過，就不再寫 C.innerHTML，避免舊畫面蓋掉新畫面。 */
+  const _mySeq=window._navSeqNo;
   startCalPoll();
   window._chvCal=true;
   window._coachReadonly=false;
@@ -67408,24 +67421,65 @@ async function coachCalV2(){
     window._cagAdminInit=1;
     window._cagLayerMine=true; window._cagLayerOthers=true; window._cagLayerGroup=true;
   }
+  let _t0=performance.now();
   try{ window._meStaff=await dbGet('coaches',SESSION.id); }catch(_){}
-  try{ window._ttCache=await dbGetAll('ticket_types'); }catch(_){ window._ttCache=[]; }
-  try{ window._allTkCache=await dbGetAll('member_tickets'); }catch(_){ window._allTkCache=[]; }
+  _calDiag('coachCalV2:meStaff-done', { ms: Math.round(performance.now()-_t0) });
+  /* 2026-11-08（Mango切換日期/週黑畫面調查）：ticket_types／member_tickets 原本每次
+     切換日期/週（admCalPick → navTo → coachCalV2 整頁重跑）都會重新呼叫一次 dbGetAll，
+     每次都是一輪新的 await（含 tableSigs 簽章比對這趟 RPC）＋回傳陣列整份 .slice()
+     複製——純日期導覽（只是看同一週的不同天）用不到更新的票券資料，這些开销全部
+     多餘。跟桌機 renderCalendar 的 stepping 快取（window._calDataCache，同樣
+     120000ms 窗口）是同一招，這裡只是把同一個已經在用的模式套到教練手機這邊，
+     原本沒套到。
+     ⚠ 不是只看 _calStepping 就跳過——還檢查「上次真的抓到資料」的時間沒超過
+       2 分鐘，避免只因為是「翻頁」動作就無限期沿用舊資料；超過窗口一律回到
+       原本的 await 正常抓取（下面 else 那段，邏輯完全沒變）。
+     ⚠ 沒有背景重抓——故意跟桌機那套一樣簡單：2 分鐘內就是直接沿用，最差情況是
+       「切換頁面時看到至多 2 分鐘前的票券餘額」，跟桌機沿用 _calDataCache 時可接受
+       的新鮮度一致；2 分鐘一到，下一次任何切換都會自然走回整段重新 await，不會
+       卡死在舊資料。
+     ⚠ 沒有新增事件監聽器或計時器，純粹是這個函式內的分支判斷。 */
+  const _mtFresh=window._allTkCache && window._ttCache && window._mtCacheAt!=null
+    && (Date.now()-window._mtCacheAt<120000) && _stepping;
+  if(_mtFresh){
+    _calDiag('coachCalV2:ticketCache-reused', { ageMs: Date.now()-window._mtCacheAt });
+  }else{
+    _t0=performance.now();
+    try{ window._ttCache=await dbGetAll('ticket_types'); }catch(_){ window._ttCache=[]; }
+    _calDiag('coachCalV2:ticketTypes-done', { ms: Math.round(performance.now()-_t0), rows: (window._ttCache||[]).length });
+    _t0=performance.now();
+    try{ window._allTkCache=await dbGetAll('member_tickets'); }catch(_){ window._allTkCache=[]; }
+    window._mtCacheAt=Date.now();
+    _calDiag('coachCalV2:memberTickets-done', { ms: Math.round(performance.now()-_t0), rows: (window._allTkCache||[]).length });
+  }
   if(!window._cagSelDate) window._cagSelDate=ymd(TODAY);
   const _nD=Number(window._admCalDays)||1;
+  _t0=performance.now();
   const _hdr=await admCalHeaderHTML();
+  _calDiag('coachCalV2:header-done', { ms: Math.round(performance.now()-_t0), nDays: _nD });
   if(_nD>1){
+    _t0=performance.now();
+    const _multiHtml=await admCalMultiHTML(_nD);
+    _calDiag('coachCalV2:multiHTML-done', { ms: Math.round(performance.now()-_t0) });
+    /* 連點保護（見函式開頭 _mySeq 的說明）：這裡才真的擋得到「較慢的舊呼叫蓋掉新畫面」——
+       navTo 外層的序號防護只擋得到它自己那一段收尾，擋不到 coachCalV2 這種
+       自己直接寫 C.innerHTML 的頁面函式本體。 */
+    if(_mySeq!==window._navSeqNo){ _calDiag('coachCalV2:stale-skip-multi'); return; }
     C.innerHTML=`<div class="cag-wrap" id="cag-wrap">
       <div class="admh-sticky admcal-sticky" style="position:static;">${_hdr}</div>
-      <div class="cag-body" id="cag-body" style="padding:0 10px;">${await admCalMultiHTML(_nD)}</div>
+      <div class="cag-body" id="cag-body" style="padding:0 10px;">${_multiHtml}</div>
     </div>`;
     try{ cagPositionWrap(); }catch(_){}
+    _calDiag('coachCalV2:exit-multi');
     return;
   }
+  if(_mySeq!==window._navSeqNo){ _calDiag('coachCalV2:stale-skip-agenda-pre'); return; }
   _calDays=null;
   window._admCalHdr=_hdr;               // cag 是滿版覆蓋層，表頭要塞進去（0819 真機驗出）
   C.innerHTML=`<div id="wtl-page"></div>`;
+  _t0=performance.now();
   await renderCoachAgenda();
+  _calDiag('coachCalV2:exit-agenda', { ms: Math.round(performance.now()-_t0) });
 }
 /* ════════ 教練端:預約行事曆 ════════ */
 PAGES.coach_calendar=async function(){
