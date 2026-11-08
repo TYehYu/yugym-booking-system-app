@@ -8,23 +8,31 @@
 
    做法：卡片 inline 設 --coach-bar，左色條 background 用 var() 接回課程色當預設。
    沒有教練（自主訓練、場租）、遮蔽身分、首頁今日教練課卡（.tcard-std）都不設，
-   行為完全不變 —— 不必為它們另外寫規則。 */
+   行為完全不變 —— 不必為它們另外寫規則。
+
+   ⚠ 2026-11-08 使用者再次指示整組對調（A/B 面色對調，另見 abfacetest.js）：
+   A 面（.cal-ev.cal-ev-std .evc-body::before，含 Ink 版本）左色條**改回**課程色，
+   教練身分搬去底色；B 面左色條改吃教練色，跟 A 面互換。
+   .tcard（首頁今日教練任務卡）不在這次調整範圍內，仍然原樣吃 --coach-bar，
+   下面①的斷言已依此更新，③④維持原狀（只動左色條，沒動教練色/課程色的定義）。 */
 const fs=require('fs');
 const src=fs.readFileSync(process.env.HOME+'/Projects/yugym-booking-system-app/index.html','utf8');
 let pass=0,fail=0;
 const ok=(n,c,x)=>{ if(c){pass++;console.log('  ✓ '+n);} else {fail++;console.log('  ✗ '+n+(x!==undefined?'  → '+JSON.stringify(x):''));} };
 
-console.log('① 左色條吃 --coach-bar，預設仍是課程色');
+console.log('① .tcard 的左色條仍吃 --coach-bar（這支不在 2026-11-08 對調範圍內）');
 ok('★★★ 一般課卡的左色條',
    /\.tcard\.tcard-std \.tcard-body::before\{[^}]*background:var\(--coach-bar, var\(--course-accent,#3D7039\)\); \}/.test(src));
 ok('★★★ 運動按摩那條也要吃（它本來寫死色碼）',
    /\.tcard\.tcard-std\.course-massage \.tcard-body::before\{ background:var\(--coach-bar,#2f8f83\); \}/.test(src));
-/* ⚠ Ink 視覺層另有一條同樣的規則、權重更高 —— 只改上面那條，開 Ink 的人看不到變化。
-   這是 yugym-ink-override-trap 記過的坑，釘住。 */
-ok('★★★ Ink 視覺層那條也要吃',
-   /body\.ink \.cal-ev\.cal-ev-std \.evc-body::before\{width:3px;border-radius:0;\s*\n\s*background:var\(--coach-bar, var\(--course-accent,#3D7039\)\);\}/.test(src));
-ok('★★ 不可以有任何一條左色條還寫死 --course-accent',
-   !/evc-body::before\{[^}]*background:var\(--course-accent/.test(src.replace(/\/\*[\s\S]*?\*\//g,'')));
+/* ⚠ 2026-11-08 對調後：A 面（.evc-body::before）改回吃課程色，Ink 版本也一起改——
+   教練身分搬到底色去了（body.ink .evc-body 本體），色條不用再講一次。 */
+ok('★★★ A 面左色條（Ink 版本）已改回吃課程色，不再吃 --coach-bar',
+   /body\.ink \.cal-ev\.cal-ev-std \.evc-body::before\{width:3px;border-radius:0;\s*\n\s*background:var\(--course-accent,#3D7039\);\}/.test(src));
+ok('★★ A 面左色條（非 Ink 版本）也改回課程色，兩邊要一起改（同一個 yugym-ink-override-trap 坑）',
+   /\.cal-ev\.cal-ev-std \.evc-body::before\{ content:''; position:absolute; left:0; top:0; bottom:0; width:5px; border-radius:10px 0 0 10px; background:var\(--course-accent,#3D7039\); \}/.test(src));
+ok('★★ B 面左色條（.evc-back::before）改吃教練色，跟 A 面互換角色',
+   /\.cal-ev\.cal-ev-std \.evc-back::before\{content:'';position:absolute;left:0;top:0;bottom:0;\s*\n\s*width:3px;background:var\(--coach-bar, var\(--course-accent,#3D7039\)\);\}/.test(src));
 
 console.log('\n② 什麼時候才帶教練色');
 ok('★★★ 有教練、沒被遮蔽才設 --coach-bar',
