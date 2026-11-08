@@ -72,6 +72,42 @@ function mkWorld(){
       t.sessions_remaining--; W.ded.push(bid+':'+tk.id+(o&&o.multi?'*':'')); return true; },
     refundTicket:async(tid,bid)=>{ const t=tkOf(tid); if(t) t.sessions_remaining++; W.ded.push('R:'+bid+':'+tid); },
     grpNetDeductTicket:async()=>null,
+    /* 2026-11-01（2d-3）：_saveGroupMembers 的實際寫入改呼叫 sb.rpc('fn_group_save_members',...)。
+       這支模擬沿用這個沙箱既有的 deductTicket／refundTicket／grpNetDeductTicket 替身去決定
+       「扣不扣得到、退哪張」，只是把「寫回 W.BK」的職責從舊的 dbPut('bookings',b) 換成這裡——
+       跟真正的 RPC 一樣，是「規劃在前端、真正寫入在這一支」。 */
+    activateTicketIfNeeded:async()=>null,
+    refundTicketDateRevertOnly:async()=>{},
+    CLOUD:true,
+    sb:{ rpc:async(name,params)=>{
+      const bid=params.p_booking_id, b=W.BK[bid];
+      if(!b) return {data:{ok:false,error_code:'NO_BOOKING'},error:null};
+      b.member_ids=b.member_ids||[]; b.seat_tickets=b.seat_tickets||{};
+      if(!b.ticket_type_id && params.p_ticket_type_fix) b.ticket_type_id=params.p_ticket_type_fix;
+      if(params.p_max_heads!=null) b.max_heads=params.p_max_heads;
+      const results=[];
+      for(const mid of (params.p_removes||[])){
+        const tkid=await env.grpNetDeductTicket(bid,mid);
+        if(tkid) await env.refundTicket(tkid,bid,env.SESSION.id);
+        const idx=b.member_ids.indexOf(mid);
+        if(idx>=0) b.member_ids.splice(idx,1);
+        const keys=Object.keys(b.seat_tickets).filter(k=>env.seatMid(k)===String(mid));
+        if(keys.length) delete b.seat_tickets[keys[keys.length-1]];
+        results.push({op:'remove',member_id:mid,ok:true,refunded_ticket_id:tkid||null});
+      }
+      for(const add of (params.p_adds||[])){
+        const tkObj=tkOf(add.ticket_id);
+        const ok=tkObj?await env.deductTicket(tkObj,bid,env.SESSION.id,{multi:add.multi}):false;
+        if(!ok){ results.push({op:'add',member_id:add.member_id,ok:false,error_code:'NO_REMAINING'}); continue; }
+        const seats=b.member_ids.filter(x=>x===add.member_id).length;
+        const key=seats>0?(add.member_id+'#'+(seats+1)):add.member_id;
+        b.member_ids.push(add.member_id);
+        b.seat_tickets[key]=add.ticket_id;
+        results.push({op:'add',member_id:add.member_id,ok:true,ticket_id:add.ticket_id});
+      }
+      W.puts.push(bid);
+      return {data:{ok:true,results,member_ids:b.member_ids.slice()},error:null};
+    } },
     grpPickOf:(mid,i)=>{ const a=(env.window._grpTkPick||{})[mid]; return Array.isArray(a)?(a[i]||null):(a||null); },
     grpPickTk:(mid,i,tk)=>{ const p=(env.window._grpTkPick=env.window._grpTkPick||{});
       const a=Array.isArray(p[mid])?p[mid]:[]; a[i]=tk; p[mid]=a; },

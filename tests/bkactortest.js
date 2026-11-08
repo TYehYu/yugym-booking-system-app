@@ -101,12 +101,14 @@ console.log('\n取消人留得住（0825 使用者回報「顯示沒有紀錄」
    ① status+cancelled_at（觸發器填上取消人）② 再補 refund_waived，送的是取消前讀的
    那份 b（沒有 cancelled_by），第二次 old.status 已是 cancelled、觸發器跳過 → 被蓋回 null。 */
 const CB=src.slice(src.indexOf('async function cancelBooking(id, refundMode, opts){'),
-                   src.indexOf('let refundedCount=0, refundMissed=false;'));
+                   src.indexOf('/* 取消前的贈點提醒'));
 ok('★★ 取消只寫一次（status／cancelled_at／refund_waived 一起送）',
    (CB.match(/await dbPut\('bookings',b\);/g)||[]).length===1
    /* 2026-09-01：refund_waived 多夾一個「這一堂真的扣過票嗎」——
-      沒扣過的課沒有東西可以「不退」（見 bkWasDeducted）。仍然只寫一次。 */
-   && /b\.status='cancelled';\s*\n\s*b\.cancelled_at=new Date\(\)\.toISOString\(\);[\s\S]{0,700}?b\.refund_waived = \(!doRefund\) && \(await bkWasDeducted\(b\)\);/.test(CB));
+      沒扣過的課沒有東西可以「不退」（見 bkWasDeducted）。仍然只寫一次。
+      2026-11-07 Phase1修正：旗標改成依「結果分類」寫（operator_waived／refund_failed
+      才算true），但仍然是取消流程最後只 dbPut 一次——見 cancelrefundclassifytest.js */
+   && /b\.status='cancelled';\s*\n\s*b\.cancelled_at=new Date\(\)\.toISOString\(\);[\s\S]{0,700}?b\.refund_waived = \(_cancelOutcome==='operator_waived' \|\| _cancelOutcome==='refund_failed'\);/.test(CB));
 ok('★★ 退不退要在寫回之前算完（不然沒辦法併成一次）',
    CB.indexOf('let doRefund;') < CB.indexOf("b.status='cancelled';"));
 ok('　　為什麼併成一次寫在原地', /少一整類「用舊物件覆蓋新欄位」的坑/.test(CB));

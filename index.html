@@ -16317,6 +16317,49 @@ function dbWhy(key,why,extra){ try{
   window._dbWhy.push({表:key, 判斷:why, 說明:extra||''});
   if(window._dbWhy.length>200) window._dbWhy.shift();
 }catch(_){} }
+/* 2026-11-03（MANGO手機行事曆再次黑畫面）：教練端行事曆原本用 dbGetAll('bookings')
+   整表（正式庫現已破萬筆、11MB+ JSON）換取「同一天的全店場地占用」與「月曆格數字」，
+   這兩種需求其實都用不到整表，改用這兩支**繞過共用_dbCache的直連查詢**：
+   ① dbBookingsRange：只要「這幾天、全店」的資料（場地占用/當日課卡要看到別人的課）。
+   ② dbBookingsForCoach：只要「這位教練、不限日期」的資料（月曆格數字要能任意翻月）。
+   两支都不進_dbCache、不受簽章快取影響，永遠是即時資料；也因此不需要額外的快取失效處理。
+   RLS已確認 bookings_select_all_coach 政策讓任一教練可以SELECT全店bookings，直連查詢不需要新權限。 */
+async function dbBookingsRange(startDate,endDate){
+  /* ⚠ 2026-10-02事故教訓（見pageordertest.js）：.range()分頁一定要帶.order('id')，
+     沒有排序鍵，兩次獨立查詢不保證列序相同，會漏列或重複。這裡跟dbGetAll用同一欄位(id)。 */
+  const out=[]; let from=0; const page=1000;
+  for(;;){
+    const {data,error}=await sb.from('bookings').select('*')
+      .gte('date',startDate).lte('date',endDate)
+      .order('id',{ascending:true})
+      .range(from,from+page-1);
+    if(error){ console.error('dbBookingsRange失敗:',error); break; }
+    out.push(...(data||[]));
+    if(!data || data.length<page) break;
+    from+=page;
+  }
+  return out;
+}
+async function dbBookingsForCoach(coachId,cols){
+  /* 2026-11-03（Phase4）：不限日期代表量會隨教練年資一直長——唯讀查過正式庫，
+     MANGO本人1,475筆、全店最高1,777筆，早就超過單頁1000筆上限。
+     cols是選用的窄欄位清單（呼叫端已確認自己只用到哪幾欄才可以傳），
+     不傳就維持select('*')，不強迫所有呼叫端都只能拿5欄。 */
+  if(!coachId) return [];
+  const sel=(cols&&cols.length)?cols.join(','):'*';
+  const out=[]; let from=0; const page=1000;
+  for(;;){
+    const {data,error}=await sb.from('bookings').select(sel)
+      .or(`coach_id.eq.${coachId},substitute_coach_id.eq.${coachId}`)
+      .order('id',{ascending:true})
+      .range(from,from+page-1);
+    if(error){ console.error('dbBookingsForCoach失敗:',error); break; }
+    out.push(...(data||[]));
+    if(!data || data.length<page) break;
+    from+=page;
+  }
+  return out;
+}
 async function dbGetAll(store,opts){
   const key=tbl(store);
   if(opts&&opts.fresh){
@@ -22905,8 +22948,8 @@ async function tkBookedCountMap(ticketIds){
       const ids=[...new Set(ticketIds.map(String))];
       logs=await _tkRowsIn('ticket_logs','ticket_id',ids,'ticket_id,booking_id,action,delta');
       const _bidLg=(logs||[]).map(l=>l&&l.booking_id).filter(Boolean);
-      const byTk=await _tkRowsIn('bookings','ticket_id',ids,'id,ticket_id,status');
-      const byId=_bidLg.length?await _tkRowsIn('bookings','id',_bidLg,'id,ticket_id,status'):[];
+      const byTk=await _tkRowsIn('bookings','ticket_id',ids,'id,ticket_id,status,pending_contract');
+      const byId=_bidLg.length?await _tkRowsIn('bookings','id',_bidLg,'id,ticket_id,status,pending_contract'):[];
       const seen={}; bks=[];
       [...byTk,...byId].forEach(b=>{ if(b&&b.id&&!seen[b.id]){ seen[b.id]=1; bks.push(b); } });
     }else{
@@ -22935,7 +22978,24 @@ async function tkBookedCountMap(ticketIds){
     const st={};
     (bks||[]).forEach(b=>{
       if(!b || !b.id) return;
-      st[b.id]={hasTk:!!b.ticket_id};
+      /* 2026-11-04（孫怡敏 12/04 19:00 待簽約卡顯示儲值非轉正，P1）——
+         下面團課專用的淨值補算段原本只看 hasTk（現在有沒有綁 ticket_id），沒有
+         排除「待簽約」：待簽約卡的 ticket_id 會被清成 null，但若它之前曾經排過
+         （例如原本是正常連續預約的一堂，後來被改回待簽約），當初那筆 deduct
+         紀錄還留著、沒有跟著沖銷，就會被這段誤認成團課名額又多算一格佔用。
+
+         ⚠ 原本想用「是不是團課」（bkIsGroup／category）當條件，唯讀查過正式庫
+         才發現範圍抓錯：category='自主訓練'（157 筆）與 category='私人教練' 裡
+         pending_contract=false 的 115 筆（66 取消＋49 已完成，多半是舊系統匯入、
+         本來就不綁 ticket_id 的真實歷史扣課），同樣符合「無 ticket_id＋有帳本」，
+         但它們是真的用掉了、理應繼續算進佔用——用 bkIsGroup 篩會連這些一起排除，
+         變成新的超賣破洞。
+
+         真正的分界線是 pending_contract：查過的 377 筆團課全部 pending_contract=
+         false（團課從來不會是待簽約），私人教練裡「現在待簽約」的只有 49 筆
+         （41 取消＋8 未來還沒上，孫怡敏這張在其中），其餘都是 false。
+         所以只排除「現在是待簽約」這一種，團課與歷史真實扣課完全不受影響。 */
+      st[b.id]={hasTk:!!b.ticket_id, pendingNow:!!b.pending_contract};
       if(!b.ticket_id || b.status==='cancelled') return;
       /* ⚠ 沒有任何帳本紀錄的照舊算佔用 —— 舊系統匯入的課本來就沒有 ticket_logs，
          用「查不到帳就當沒扣」會把超約防線整個拆掉。 */
@@ -22962,7 +23022,7 @@ async function tkBookedCountMap(ticketIds){
       const i=k.indexOf('|'); if(i<0) return;
       const tid=k.slice(0,i), bid=k.slice(i+1);
       const x=st[bid];
-      if(!x || x.hasTk) return;                  // 已由 ticket_id 計過 → 不重複算
+      if(!x || x.hasTk || x.pendingNow) return;  // 已由 ticket_id 計過，或現在是待簽約（帳是舊的）→ 不補算
       /* 取消的課不能直接跳過：正常取消是「扣 1 退 1」＝淨 0，但取消時選「扣課不退」
          那一堂票是真的被吃掉了，仍佔住一格（2026-08-06）。淨值自然算得出來。 */
       const n=-(Number(_net[k])||0);
@@ -23407,6 +23467,35 @@ async function refundTicket(ticket_id,booking_id,operator){
   await dbPut('member_tickets',t);
   await logTicket(ticket_id,'refund',1,booking_id,operator,'取消退課'+(reverted?'（已無有效預約，效期退回未開通）':''));
   return true;
+}
+/* 退票的「效期退回未開通」校正，單獨抽出來給走 fn_group_save_members 那條路用
+   （2026-11-01，2d-3）——餘額＋帳本的退票已經由 RPC 在鎖裡做完，這支只補
+   refundTicket 原本後半段那段系統範圍的效期自癒檢查（tkHoldingBookings），
+   不再碰 sessions_remaining／ticket_logs，避免跟 RPC 重複處理。
+   ⚠ 刻意留在前端、刻意不要求原子——這段是事後校正，不是金額/名額的正確性紅線
+     （見 YUGYM_HANDOFF.md 第3.4節的說明）。 */
+async function refundTicketDateRevertOnly(ticket_id, booking_id){
+  if(!ticket_id) return;
+  const t=await dbGet('member_tickets',ticket_id);
+  if(!t || !t.valid_days || !t.activated_at || !(CLOUD && sb)) return;
+  let changed=false;
+  const rest=await tkHoldingBookings(ticket_id, booking_id);
+  if(rest && rest.length===0){
+    t.activated_at=null; t.start_date=null; t.expire_date=null; changed=true;
+  }else if(rest && rest.length && t.start_date){
+    try{
+      const cb=booking_id?await dbGet('bookings',booking_id):null;
+      const ns=String(rest[0].date).slice(0,10);
+      if(cb && String(cb.date).slice(0,10)===String(t.start_date).slice(0,10) && ns>String(t.start_date).slice(0,10)){
+        const d0=parseYmd(ns);
+        if(d0){ const de=new Date(d0); de.setDate(de.getDate()+(Number(t.valid_days)||0)-1);
+          t.start_date=ns; t.expire_date=ymd(de);
+          const line=`${ymd(TODAY)} 首堂取消，效期改依新首堂 ${ns.replace(/-/g,'/')} 起算（→ ${ymd(de).replace(/-/g,'/')}）`;
+          t.note=String(t.note||'').trim()?String(t.note).trim()+'\n'+line:line; changed=true; }
+      }
+    }catch(_){}
+  }
+  if(changed) await dbPut('member_tickets',t);
 }
 /* ══ 匯入預約的退堂 fallback（2026-07-25 使用者指示）══════════════════════
    舊系統匯入的預約 ticket_id 為 null（歷史上課沒有逐筆對應到票券），取消時 refundTicket
@@ -24200,11 +24289,13 @@ function rpcBookingErrMsg(code){
     // 指定票券的專屬錯誤（2026-08-01）：講清楚是「你選的那一張」不能用，而不是籠統的沒票
     'TICKET.NOT_FOUND':'找不到您選的那張票券（可能剛被刪除），請重新整理後再試',
     'TICKET.NOT_YOURS':'您選的那張票券不屬於這位會員（也不在他的共享名單裡）',
+    // 2026-11-02：同一次操作重試時解析出不同票券，故意回衝突而不是誤扣（風險②修正的安全失敗模式）
+    'IDEMPOTENCY.CONFLICT':'這筆預約的內容跟剛才送出的不一致，請重新確認後再試一次',
   };
   return M[code]||('建立失敗：'+(code||'未知錯誤'));
 }
 // 呼叫 fn_create_booking；回傳 {ok:true} 或 {ok:false, reason}
-async function createBookingViaRpc(o, tk, ds, ts){
+async function createBookingViaRpc(o, tk, ds, ts, idemKey){
   const bt=benefitTypeOfTypeId((tk&&tk.ticket_type_id)||o.type_id);
   if(!bt) return { ok:false, reason:'無法判斷票券類型（benefit_type）' };  // 保險：回報而非誤扣
   const sp=spaceForBooking(o.category);
@@ -24221,7 +24312,8 @@ async function createBookingViaRpc(o, tk, ds, ts){
     p_category:o.category, p_benefit_type:bt,
     p_date:ds, p_start_time:ts||o.time, p_duration:o.duration||60,
     p_space_id:sp.space, p_resource_id:sp.resource, p_note:null,
-    p_ticket_id:(tk&&tk.id)||null
+    p_ticket_id:(tk&&tk.id)||null,
+    p_idempotency_key:idemKey||null   // 2026-11-01：同一次操作重試/網路重送不會建出第二筆
   });
   // RPC 在 DB 端會動 bookings / member_tickets / ticket_logs / notifications 多張表，
   // 且不經過 dbPut → 必須自行清快取，否則行事曆會顯示不到剛建立的課。
@@ -29045,6 +29137,33 @@ function bkOpTime(ts){
     return `${Number(d.slice(5,7))}/${Number(d.slice(8,10))} ${d.slice(11,16)}`;
   }catch(_){ return ''; }
 }
+/* 團課「真正的報名來源」（2026-11-06 抽成共用，原本只在會員詳細頁算一次）——
+   團課的 created_by/created_at 是「這堂課誰開的、何時開的」，不是「這個人何時報名」
+   （櫃檯先開班，會員各自之後才加入）。報名當下的真相在 ticket_logs：
+   這位會員自己票券、這一堂的 deduct 紀錄，operator／created_at 才是報名者與報名時間。
+   ⚠ candidateTicketIds 由呼叫端決定範圍——會員詳細頁傳「這位會員名下所有票」（逐一比對
+     booking_id 找得到哪一張），bkCardPop 已經由票券夾解出「這個名額實際扣的那張票」，
+     傳單一張即可，更精準、不會誤抓同一人另一張票的紀錄。
+   ⚠ 只認淨值仍是扣著的那一筆（net<0）——報名後又退出、或曾被移除過，同一組
+     (ticket_id,booking_id) 會有 deduct/refund 交錯，net>=0 代表現在並未真的扣在
+     這堂上，這種情況不猜測來源，顯示「預約來源未確認」。
+   ⚠ 身分判定直接比對呼叫端傳入的 viewMemberId，不借用 'MEM-' 前綴判斷——
+     會員 id 有新舊兩種格式（MEM-xxxx／舊的 m19xxxx），直接比對最準確。 */
+function grpJoinSource(bookingId, candidateTicketIds, logs, viewMemberId, coachMap){
+  const _ids=new Set((candidateTicketIds||[]).filter(Boolean).map(String));
+  if(!_ids.size) return '預約來源未確認';
+  const _cand=(logs||[]).filter(l=>l&&l.booking_id===bookingId&&_ids.has(String(l.ticket_id)));
+  if(!_cand.length) return '預約來源未確認';
+  const _net=_cand.reduce((s,l)=>s+(Number.isFinite(Number(l.delta))?Number(l.delta):(l.action==='deduct'?-1:(l.action==='refund'?1:0))),0);
+  if(!(_net<0)) return '預約來源未確認';
+  const _deducts=_cand.filter(l=>l.action==='deduct').sort((x,y)=>String(y.created_at||'').localeCompare(String(x.created_at||'')));
+  if(!_deducts.length) return '預約來源未確認';
+  const _top=_deducts[0], _who=String(_top.operator||''), _t=bkOpTime(_top.created_at);
+  if(!_who) return '預約來源未確認';
+  if(_who===String(viewMemberId||'')) return `會員自行預約${_t?'・'+_t:''}`;
+  const _nm=(coachMap||{})[_who];
+  return _nm ? `${_nm}代預約${_t?'・'+_t:''}` : '預約來源未確認';
+}
 function bkName(b, nameOf){
   if(!b) return '—';
   const v=b.member_id ? (nameOf?nameOf(b.member_id):'') : '';
@@ -31587,27 +31706,45 @@ function _calSigTk(arr){
 }
 /* 行事曆 30 秒輪詢（2026-07-27 使用者回報：A 電腦簽到、B 電腦課卡沒跟著更新）——
    強制重抓 bookings/member_tickets 後走既有 _calRevalidate 簽章比對，有變才悄悄重繪；
-   離開行事曆自動停。 */
+   離開行事曆自動停。
+   ⚠ 2026-11-06唯讀複查更正：下面的dbCacheClear只歸零時間戳(t=0)，不會動到sig——
+     所以這裡的dbGetAll不是每次都整表重抓，而是會先走dbGetAll自己的「簽章比對→
+     增量補資料」那條路，只有delta補不成才退回整表。實際是哪一種，要看
+     window._dbWhy（dbGetAll既有的診斷紀錄，不用額外加）。這次只加「這一輪花了
+     多久、前一輪是否還沒做完就又觸發」這兩件window._dbWhy本身答不出來的事。 */
+function _calDiag(stage, extra){
+  try{
+    window._calDiagLog = window._calDiagLog || [];
+    const e = Object.assign({ stage, t: Math.round(performance.now()) }, extra || {});
+    window._calDiagLog.push(e);
+    if (window._calDiagLog.length > 200) window._calDiagLog.shift();
+    console.log('[cal-diag]', stage, extra || '');
+  } catch (_) {}
+}
 function startCalPoll(){
-  if(window._calPollTimer) return;
+  if(window._calPollTimer){ _calDiag('poll:skip-already-running'); return; }
   const _k=CUR_PAGE;
+  _calDiag('poll:start', { page: _k });
   window._calPollTimer=setInterval(async()=>{
-    if(CUR_PAGE!==_k){ clearInterval(window._calPollTimer); window._calPollTimer=null; return; }
+    if(CUR_PAGE!==_k){ clearInterval(window._calPollTimer); window._calPollTimer=null; _calDiag('poll:stop-page-changed'); return; }
+    /* ⚠ 純觀察，不攔截——只是把「前一輪還沒做完、下一輪又觸發」這件原本看不到的事記下來，
+       不改變原本一律照跑的行為。 */
+    if(window._calPollBusy) _calDiag('poll:tick-overlap-detected');
+    window._calPollBusy=true;
+    const _t0=performance.now();
     try{
-      if(document.hidden) return;               // 分頁在背景就不打（回前景 visibilitychange 會補）
-      if(!(await remoteSigChanged())) return;   // 簽章變了才重抓（省流量）
-      /* ⚠ 2026-08-23：這裡原本帶 fresh 旗標，而它的意思是
-         「跳過簽章與增量補資料，直接整表重下載」。健身房整天都有人簽到／預約／取消，
-         簽章幾乎一直在變 —— 等於每 10 秒把 bookings 5.4MB ＋ member_tickets 2.5MB
-         重新下載一次。使用者回報「行事曆開課卡慢到不行」「開會員資料十幾秒」，
-         實際上是這支輪詢一直在佔線。
-         增量補資料（dbDeltaPatch）本來就是為這個情境做的：只撈變動的那幾列。
-         改成 dbCacheClear（只把時間戳歸零、資料與簽章都留著）＋ 一般的 dbGetAll，
-         就會走「簽章校驗 → 只補變動列」那條路。即時性完全不變。 */
+      if(document.hidden){ _calDiag('poll:skip-hidden'); return; }               // 分頁在背景就不打（回前景 visibilitychange 會補）
+      const _sigT0=performance.now();
+      const _changed=await remoteSigChanged();
+      _calDiag('poll:sigcheck', { changed: _changed, ms: Math.round(performance.now()-_sigT0) });
+      if(!_changed) return;   // 簽章變了才重抓（省流量）
       try{ dbCacheClear(['bookings','member_tickets']); }catch(_){}
-      await Promise.all(['bookings','member_tickets'].map(t=>dbGetAll(t).catch(()=>null)));
+      const _fT0=performance.now();
+      const _r=await Promise.all(['bookings','member_tickets'].map(t=>dbGetAll(t).catch(()=>null)));
+      _calDiag('poll:refetch-done', { ms: Math.round(performance.now()-_fT0), rows: (_r||[]).map(x=>x?x.length:null) });
       _calRevalidate();
-    }catch(_){}
+    }catch(e){ _calDiag('poll:error', { msg: (e&&e.message)||String(e) }); }
+    finally{ window._calPollBusy=false; _calDiag('poll:tick-end', { ms: Math.round(performance.now()-_t0) }); }
   },10000);   /* 2026-08-11 使用者回報「會員上課簽到畫面沒那麼即時」：30s→10s
                  （會員掃碼簽到後，櫃檯/教練的課卡要快點變）；簽章沒變時一輪只有幾十 bytes */
 }
@@ -34325,6 +34462,12 @@ async function _cagRevalidate(sigBefore){
 }
 async function renderCoachAgenda(){
   const host=document.getElementById('wtl-page'); if(!host) return;
+  /* 2026-11-03（Phase4）：局部世代計數器——快速連續切換週次/月份時，每次呼叫各自
+     抓資料、哪個先回來不保證，沒有這個會讓「先點的那次」晚回來反而蓋掉畫面。
+     只在這支函式內部生效，不碰navTo()，不影響其他頁面。 */
+  window._cagAgendaGen=(window._cagAgendaGen||0)+1;
+  const _myAgendaGen=window._cagAgendaGen;
+  _calDiag('agenda:enter', { gen: _myAgendaGen });
   const myId=SESSION.id;
   if(window._cagMin===undefined) window._cagMin=true;   // 2026-07-21 使用者指示：月曆預設收合（⌄ 展開）
   if(!window._cagSelDate) window._cagSelDate=ymd(TODAY);
@@ -34332,26 +34475,93 @@ async function renderCoachAgenda(){
 
   /* 冷開機（重新開系統）先畫再說（2026-08-06 使用者回報「每一次重新開系統，
      從首頁換到預約都會讀取」）—— 與桌機同一套：跨工作階段快取（IndexedDB，
-     開場 cacheHydrate 載回來）拿得到就直接畫，畫完背景校驗，有變才重畫一次。 */
-  let bookings,members,coaches;
-  const _cagPk=['bookings','members','coaches'].map(t=>dbPeek(t));
+     開場 cacheHydrate 載回來）拿得到就直接畫，畫完背景校驗，有變才重畫一次。
+     ⚠ 2026-11-03（MANGO手機行事曆再次黑畫面）：bookings這一份不再走這套warm-cache，
+       改用dbBookingsRange/dbBookingsForCoach直連查詢（見下）——members/coaches很小，維持原樣。 */
+  let members,coaches;
+  const _cagPk=['members','coaches'].map(t=>dbPeek(t));
+  let _agT0=performance.now();
   if(_cagPk.every(Boolean)){
-    [bookings,members,coaches]=_cagPk.map(p=>p.data);
-    if(_cagPk.some(p=>p.stale)) _cagRevalidate(_calSigBk(bookings));
+    [members,coaches]=_cagPk.map(p=>p.data);
+    _calDiag('agenda:names-from-peek', { ms: Math.round(performance.now()-_agT0) });
   }else{
-    [bookings,members,coaches]=await Promise.all([dbGetAll('bookings'),dbGetAll('members'),dbGetAll('coaches')]);
+    [members,coaches]=await Promise.all([dbGetAll('members'),dbGetAll('coaches')]);
+    _calDiag('agenda:names-from-fetch', { ms: Math.round(performance.now()-_agT0) });
   }
+  /* bookings拆成兩份、都不進_dbCache：
+     ① dayRangeBk：選定日前後各3天、全店資料——當日課卡與場地占用需要看到別人的課，
+        原本dbGetAll('bookings')整表（破萬筆）才做得到，現在只查這一週就夠。
+     ② myAllBk：這位教練自己（主責或代課）的全部預約，不限日期——月曆格數字(cntByDate)
+        要能任意翻月份，所以不能用日期窄範圍，但用coach_id過濾後遠比全店小很多。 */
+  const _selForRange=parseYmd(window._cagSelDate)||new Date(TODAY);
+  const _rgStart=new Date(_selForRange); _rgStart.setDate(_selForRange.getDate()-3);
+  const _rgEnd=new Date(_selForRange); _rgEnd.setDate(_selForRange.getDate()+3);
+  let dayRangeBk=[],myAllBk=[];
+  /* myAllBk（月曆格cntByDate）實際只用到這5欄——mergeSiblingUnits要id/sibling_of/venue_unit，
+     cntByDate的forEach只用date/status，已逐一核對過函式本體，不是憑印象猜的。
+     dayRangeBk不縮欄位：它要餵給後面一整段課卡渲染（會員姓名/時間/備註等很多欄位都用得到）。 */
+  _agT0=performance.now();
+  try{ [dayRangeBk,myAllBk]=await Promise.all([
+    dbBookingsRange(ymd(_rgStart),ymd(_rgEnd)),
+    dbBookingsForCoach(myId,['id','date','status','sibling_of','venue_unit'])
+  ]); }catch(e){ _calDiag('agenda:bookings-fetch-error', { msg: (e&&e.message)||String(e) }); }
+  _calDiag('agenda:bookings-fetch-done', { ms: Math.round(performance.now()-_agT0), dayRangeN: dayRangeBk.length, myAllN: myAllBk.length });
+  const bookings=dayRangeBk;
   if(!window._ttCache){
     const _tt=dbPeek('ticket_types');
     if(_tt) window._ttCache=_tt.data;
     else try{ window._ttCache=await dbGetAll('ticket_types'); }catch(_){ window._ttCache=[]; }
   }
   /* 課卡右上角的繳費／續約提醒（2026-07-29 使用者指示：手機端也要有，判準與桌機同一支） */
+  _agT0=performance.now();
   try{
     const _tkPk=dbPeek('member_tickets');
     const _tkAll=_tkPk ? _tkPk.data : await dbGetAll('member_tickets');
-    computeLastBkMarks(_tkAll, bookings, Object.fromEntries((window._ttCache||[]).map(t=>[t.id,t])));
-  }catch(_){ window._installLastBk=window._installLastBk||{}; window._renewLastBk=window._renewLastBk||{}; }
+    /* 2026-11-06（蔡惠蓉11/6、王慧穎11/6 案例，手機版最後一堂誤標）：
+       dayRangeBk（＝這裡的 bookings）是選定日±3天的窄窗口（2026-11-03 MANGO效能修復
+       引入），但「這張票真正排到哪一天」要看完整歷史——真正最後一堂若在窗口外
+       （兩案例都排到下個月），computeLastBkMarks 只看得到窗口內這幾筆，
+       會把「窗口內剛好最後一筆」誤判成「全票最後一堂」，提醒標錯日期。
+       只對今天課卡實際用到的那幾張票，額外用_tkRowsIn（coachHomeV2._tkBkMap已經在用
+       的同一支範圍查詢）補抓這些票的全部預約（不限日期），不影響dayRangeBk本身
+       （課卡渲染／場地占用仍用窄窗口，效能不受影響——只多一支.in(ticket_id)查詢，
+       筆數等同今天看得到的客人數，不是整表）。
+       ⚠ 團課（member_ids，無ticket_id）的最後一堂判斷是另一段邏輯、直接掃
+         bookings找該會員團課，同樣有這個窗口限制，本次未修——留待後續處理。 */
+    const _dayTkIds=[...new Set(bookings.map(b=>b&&b.ticket_id).filter(Boolean))];
+    /* 2026-11-07（蔡靜雯案例：上一版修正邏輯上應涵蓋，但無法單靠程式碼閱讀確認
+       當次真的有成功補到完整歷史）——_tkRowsIn 原本用 .catch(()=>[]) 吞掉任何失敗，
+       失敗時會靜默退回窄窗口（重現同一個誤判，卻看不出是「查詢失敗」還是「邏輯本身
+       又有新漏洞」）。這裡只加可觀測性，三種結果都留痕：成功有資料／成功但空／
+       拋例外被接住。⚠ 只記數量與耗時，不印會員姓名、票券內容或任何個資。
+       ⚠ 失敗時的退回行為（_lastBkMarkSrc 退回 bookings）完全不變，只是現在看得到
+       它發生過。 */
+    let _tkFullRows=[];
+    if(_dayTkIds.length){
+      const _tkT0=performance.now();
+      try{
+        _tkFullRows=await _tkRowsIn('bookings','ticket_id',_dayTkIds,'id,ticket_id,date,start_time,status,coach_leave');
+        _calDiag(_tkFullRows.length ? 'agenda:lastbk-fullrows-ok' : 'agenda:lastbk-fullrows-empty',
+          { tkIdCount:_dayTkIds.length, rowCount:_tkFullRows.length, ms:Math.round(performance.now()-_tkT0) });
+      }catch(e){
+        _tkFullRows=[];
+        _calDiag('agenda:lastbk-fullrows-error',
+          { tkIdCount:_dayTkIds.length, msg:(e&&e.message)||String(e), ms:Math.round(performance.now()-_tkT0) });
+      }
+    }
+    const _lastBkMarkSrc=_tkFullRows.length ? (()=>{
+        const seen={}, out=[];
+        _tkFullRows.forEach(x=>{ if(x&&x.id&&!seen[x.id]){ seen[x.id]=1; out.push(x); } });
+        bookings.forEach(x=>{ if(x&&x.id&&!seen[x.id]){ seen[x.id]=1; out.push(x); } });
+        return out;
+      })() : bookings;
+    computeLastBkMarks(_tkAll, _lastBkMarkSrc, Object.fromEntries((window._ttCache||[]).map(t=>[t.id,t])));
+    _calDiag('agenda:lastbkmarks-done', { ms: Math.round(performance.now()-_agT0), fromPeek: !!dbPeek('member_tickets'), rows: (_tkAll||[]).length, fullTkRows: _tkFullRows.length });
+  }catch(e){ window._installLastBk=window._installLastBk||{}; window._renewLastBk=window._renewLastBk||{}; _calDiag('agenda:lastbkmarks-error', { msg: (e&&e.message)||String(e) }); }
+  /* 這裡是最後一個await之後——世代檢查放這裡：比它早的所有await都可能被打斷執行順序，
+     比它晚的全是同步組字串，JS單執行緒不會再被插隊，查一次就夠，不用每段都查。 */
+  if(window._cagAgendaGen!==_myAgendaGen){ _calDiag('agenda:superseded', { gen: _myAgendaGen, latest: window._cagAgendaGen }); return; }
+  _calDiag('agenda:render-start', { gen: _myAgendaGen });
   const memMap=memNameMap(members);
   const coachObj=Object.fromEntries(coaches.map(c=>[c.id,c]));
   /* 2026-08-01 使用者回報：「A 教練請 B 教練代課，這堂課應該要顯示在 B 教練這邊」——
@@ -34371,8 +34581,10 @@ async function renderCoachAgenda(){
   const todayStr=ymd(TODAY);
   const selDate=window._cagSelDate;
   /* 每日計數（2026-07-23 使用者指示）：一律「本人」當日課堂數——教練＝自己的課；
-     管理員在預約行事曆也只看自己的（全店總數看首頁月曆）。 */
-  const cntSrc = mine;
+     管理員在預約行事曆也只看自己的（全店總數看首頁月曆）。
+     2026-11-03：月曆格要能任意翻月，不能用dayRangeBk這個窄範圍算——改用myAllBk
+     （這位教練全部時間的課，已用coach_id在資料庫端過濾，不是mine那份窄範圍）。 */
+  const cntSrc = mergeSiblingUnits(myAllBk);
   const cntByDate={}; cntSrc.forEach(b=>{ if(b.status==='cancelled')return; cntByDate[b.date]=(cntByDate[b.date]||0)+1; });   // 保留顯示的取消課卡不列入堂數（2026-08-17）
   /* 月曆日期下方＝課堂數數字（2026-07-23 使用者指示：形狀點退場、改回數字）——
      教練＝該教練當日總課堂（cntSrc=mine）、管理員＝全店（cntSrc=allBk）。 */
@@ -35501,6 +35713,8 @@ async function bkStep1Next(){
 }
 async function openBookingModal(){
   window._bkFamUser=null;   // 家庭成員使用人旗標只作用單筆（2026-08-03）
+  window._bkOpId=null;      // 2026-11-01 idempotency：每次「重新打開」視窗才算新操作，換新 id（上一步/視窗內重試不走這裡）
+  window._bkOpFingerprint=null;   // 2026-11-02：內容指紋也一併歸零，新開的視窗不該沿用上一次的指紋
   const[coaches,types,_bkMemsAll]=await Promise.all([dbGetAll('coaches'),dbGetAll('ticket_types'),dbGetAll('members')]);
   window._bkAllMembers=_bkMemsAll.filter(m=>m.status==='active').sort((a,b)=>(a.name||'').localeCompare(b.name||''));
   const isCoach=SESSION.role==='coach' && !SESSION.is_manager;   // 店長比照櫃台（2026-07-27）
@@ -38392,6 +38606,34 @@ async function submitPendingHold(){
     ? buildRecurringSlots(date,time,rc.dows,rc.times,Math.min(rc.count,RECUR_MAX),ymd(addDays(parseYmd(date),370)))
     : [{date,time}];
   const foot=document.querySelector('.modal-foot');
+  /* 2026-11-09（施佩怡Fix B）：這支一直把「沒有票券」的卡位一律當成「一般待簽約」，
+     沒有票券是客觀事實，不代表這個會員跟這個卡位沒有任何關係——如果會員已經有一張
+     分期票、而且還有「已簽約但未開通」的鎖定額度，這一堂其實就是分期保留，該帶上
+     「分期待繳費保留」備註（bkIsInstHold認的就是這個字樣），將來開通下一期時
+     promoteHeldBooking 才找得到它；不帶的話會被誤判成跟任何合約都無關的新卡位。
+     ⚠ 只在「算得出來、確定在鎖定額度之內」時才標記——canHold沿用runRecurringBooking
+       同一套判斷（tkUsableBy＋status usable＋tkIsInstall＋票種相符），_holdQuota則是
+       「鎖定總額度」扣掉「這個會員這個票種現有、已經標記過分期保留的堂數」，
+       逐堂往下扣；扣完之後（額度之外的部分）維持原樣不標記，不是用日期或堂數上限
+       用猜的——這正是「對於無法可靠判定所屬合約的預約，維持原有狀態」的意思。
+     ⚠ 只多讀兩次既有表（member_tickets／bookings，都已有快取），不新增任何權限、
+       場地容量、衝突檢查的判斷，validateBooking與 vbk 那段完全沒動。 */
+  let _holdQuota=0;
+  try{
+    const _phMid=((document.getElementById('ph-mid')||{}).value||'').trim()||null;
+    if(_phMid){
+      const _tks=await dbGetAll('member_tickets');
+      const _instTk=_tks.find(x=>tkUsableBy(x,_phMid) && x.status==='usable' && tkIsInstall(x)
+        && bkTicketTypeOk(x, type_id));
+      if(_instTk){
+        const _lockedLeft=Math.max(0,(Number(_instTk.sessions_total)||0)-(Number(_instTk.unlocked_sessions)||0));
+        const _allBk=await dbGetAll('bookings');
+        const _alreadyHeld=_allBk.filter(x=>x && x.member_id===_phMid && x.status==='booked'
+          && (x.ticket_type_id||null)===(type_id||null) && bkIsInstHold(x)).length;
+        _holdQuota=Math.max(0,_lockedLeft-_alreadyHeld);
+      }
+    }
+  }catch(_){}
   let made=0, skipped=[];
   for(const sl of slots){
     const d=sl.date, tv=sl.time;
@@ -38408,10 +38650,12 @@ async function submitPendingHold(){
     const vbk={id:null,coach_id,category:t.category,ticket_type_id:type_id,member_id:_mid,venue_pref:bkWizVenue()};
     const verr=await validateBooking(vbk,d,tv,60);
     if(verr){ skipped.push(`${String(d).slice(5).replace('-','/')} ${tv}（${verr}）`); continue; }
+    const _isHold=_holdQuota>0; if(_isHold) _holdQuota--;
     const bk={id:uid('BK'),member_id:_mid,trial_name:_mid?null:name,trial_phone:_mid?null:phone,
       coach_id,ticket_id:null,ticket_type_id:type_id,category:t.category,format:t.format||null,
       date:d,start_time:tv,duration:60,status:'booked',recurring:!!rc.on,
       pending_contract:true, venue_unit:vbk.venue_unit||null,
+      note:_isHold?'分期待繳費保留（收款後自動補扣）':null,
       created_by:SESSION.id,created_at:new Date().toISOString()};
     await dbPut('bookings',bk);
     made++;
@@ -38643,8 +38887,13 @@ async function _doBkMoveTicket(){
     }else{
       from.pending_contract=true;
     }
-    await dbPut('bookings',to);
+    /* 2026-11-03 孫怡敏票券異常調查：原本先寫to（拿到票）再寫from（放掉票）——
+       中途若from那一步寫入失敗（網路、RLS…），就會留下to／from同時掛著同一張票、
+       都不是待簽約的狀態，等於這張票被重複主張。改成先寫from（放票）再寫to（拿票）：
+       同一種中途失敗這次會變成「誰都還沒拿到，票暫時沒人認領」——還能重試，
+       不會比原本更糟，但絕對不會比現在更糟（不會雙重主張同一張票）。 */
     await dbPut('bookings',from);
+    await dbPut('bookings',to);
     await logTicket(tk.id,'adjust',0,to.id,SESSION.id,
       `調課：${from.date} ${String(from.start_time||'').slice(0,5)} → ${to.date} ${String(to.start_time||'').slice(0,5)}`
       + (mode==='cancel'?'（原課取消）':'（原課改為待簽約）'));
@@ -38659,9 +38908,15 @@ async function _doBkMoveTicket(){
     if(!_ok && _btn){ _btn.disabled=false; _btn.textContent=_tx; }
   }
 }
-async function openConvertPending(id){
+/* 2026-11-03 孫怡敏案例修正：原本只要偵測到同會員有多筆待簽約就自動彈「整串卡位要怎麼轉」，
+   點「轉正」卻先跳出一個要做選擇的視窗，很容易被誤會成卡住／壞掉。
+   改成預設只轉正使用者點的這一堂，批次功能仍保留，但要走 openConvertPendingAsk 這個
+   明確的「整串」入口才會問——mode 存在 window._cpMode，讓同一串呼叫鏈（含票券選擇視窗）
+   不用逐一多傳一個參數。 */
+async function openConvertPending(id, mode){
   const b=await dbGet('bookings',id);
   if(!b||!b.pending_contract){ showToast('這筆不是待簽約卡位'); return; }
+  window._cpMode = mode||null;
   /* 已用「綁定會員」掛過名的卡位（2026-08-04）：身分已經人工確認過，直接進扣票流程 */
   if(b.member_id){
     window._cpMembers=await dbGetAll('members'); window._cpBid=id;
@@ -38697,8 +38952,13 @@ function cpRenderList(){
   const list=(window._cpMembers||[]).filter(m=>!q||(m.name||'').toLowerCase().includes(q)||(m.phone||'').includes(q)).slice(0,30);
   host.innerHTML=list.map(m=>`<button class="btn btn-ghost" style="width:100%;text-align:left;margin-bottom:6px;" onclick="doConvertPending('${m.id}')">${m.name}　<span style="color:var(--t3);font-size:12px;">${fmtPhone(m.phone)}</span></button>`).join('')||'<div style="padding:14px;color:var(--t3);font-size:13px;">找不到會員</div>';
 }
+/* 整串批次轉正的明確入口（2026-11-03）：與一般「轉正」共用同一套邏輯，只是多帶一個
+   mode='ask' —— 让 _doConvertPending 照舊彈「整串卡位要怎麼轉」，但要使用者從這顆按鈕
+   主動點進來，不再是偵測到多筆待簽約就自動跳出。 */
+function openConvertPendingAsk(id){ return openConvertPending(id,'ask'); }
 /* 轉正簽約：會員有兩張以上可用票券時先問要扣哪一張（2026-07-30 使用者指示：所有預約都能選票券） */
 async function doConvertPending(memberId, tkId, mode){
+  mode = mode || window._cpMode || null;   // 沿用 openConvertPending 存的模式（票券選擇視窗等中繼呼叫不用逐一多傳）
   // 防連點（2026-08-01）：轉正式預約會扣課，重覆送出就重覆扣
   return onceAct('convert:'+(window._cpBid||'')+':'+(tkId||'')+':'+(mode||''), ()=>_doConvertPending(memberId,tkId,mode));
 }
@@ -38783,18 +39043,51 @@ async function _doConvertPending(memberId, tkId, mode){
          || (x.member_id===memberId && !bkIsInstHold(x)) ))
     .sort((a,c)=>_k(a).localeCompare(_k(c)));
   if(!series.some(x=>x.id===b.id)) series=[b].concat(series);
+  const otherCount=series.length-1;   // 2026-11-03：預設只轉這一堂，其他待簽約堂數算給使用者看
   const isInst=tk.installment&&typeof tk.installment==='object';
   let avail=Math.max(0, tkUnlockedLeft(tk));
   let lockedLeft=isInst?Math.max(0,(Number(tk.sessions_total)||0)-(Number(tk.unlocked_sessions)||0)):0;
+  /* 2026-11-09（施佩怡Fix C三修，部署前複查動態測試才抓到）：上面 series 的蒐集
+     條件刻意排除掉「已經是分期保留」的手足（!bkIsInstHold(x)）——那些已經正確
+     標記、交給 promoteHeldBooking 處理，不該在這裡重算一次。但 lockedLeft 是從
+     票券「總堂數−已開通堂數」直接算出來的一個數字，不知道這些被排除的手足
+     已經存在——如果不處理，這裡會把同一份鎖定額度**分給** series 裡其他（通常
+     是待續約、跟這張合約無關的）卡位，等於用同一份額度動到不該動的預約。
+     ⚠ 二修版本（上一輪）是「扣掉手足數量的差額」（4−3=1），但施佩怡案例的
+       4 堂鎖定額度對不齊剛好只有 3 筆對應的手足紀錄（可能是歷史資料本來就有
+       落差），扣完還剩 1 堂差額，二修會把這 1 堂分給「12/18起那13堂」裡的
+       其中一堂——這仍然違反「不得修改既有13堂預約」「不得把13堂未來預約
+       當成可扣票券」這兩條鐵則，即使只動到1堂也不行。
+     ⚠ 三修：只要偵測到這個會員這個票種**已經有任何一筆**現成的分期保留手足
+       （不管差額是不是剛好對得齊），就代表這張票的鎖定額度已經有別的機制
+       （promoteHeldBooking）在負責，這次操作的 series 完全不應該再分到任何
+       lockedLeft——一律歸零，不猜測差額怎麼分。只有「這個會員這個票種完全沒有
+       任何現成手足」（新客戶整批第一次轉正的原始情境，2026-08-04 定的那個
+       「先約12堂先繳4堂→後面8堂轉分期保留」）才會维持原本吃滿 lockedLeft
+       的行為——兩種情境用「有沒有現成手足」完全區分開，不是用猜的。 */
+  try{
+    const _siblingHeld=_all.some(x=>x.id!==b.id && x.member_id===memberId
+      && (x.ticket_type_id||null)===(b.ticket_type_id||null)
+      && x.status==='booked' && x.date>=ymd(TODAY) && bkIsInstHold(x));
+    if(_siblingHeld) lockedLeft=0;
+  }catch(_){}
   /* 先讓人看清楚會動到什麼（2026-08-04 使用者提問：教練們早就大量用待簽約卡位了，
      這個功能上線後會有什麼影響？）——正式庫現有 538 筆待簽約卡位、66 個人，
      最長一串 24 堂。整串轉正會「扣課／轉保留／取消」三種結果一次發生，
      其中「取消」是把教練排好的時段還出去，按下去之前一定要先看到數字。
-     只有一堂的卡位不會多這一步。 */
-  if(series.length>1 && mode!=='one' && mode!=='series'){
+     只有一堂的卡位不會多這一步。
+     2026-11-03 孫怡敏案例修正：這個視窗改成只在使用者主動按「整串」(mode='ask')
+     才會跳出來——一般點「轉正」不再自動偵測到多筆就彈窗，避免被誤會成卡住。 */
+  if(mode==='ask' && series.length>1){
     _clr();                       // 要再問一次「整串怎麼轉」→ 先收掉忙碌狀態
-    let a=avail, l=lockedLeft, nB=0, nH=0, drop=[];
-    series.forEach(x=>{ if(a>0){a--;nB++;} else if(l>0){l--;nH++;} else drop.push(x); });
+    /* 2026-11-09（施佩怡Fix C）：超出目前這張票券容量的卡位，改成「保留原狀」，
+       不再自動取消——合約12堂不代表會員這個時段只能排12筆未來預約，很多人會先把
+       固定時段卡住等續約。原本「超出簽約堂數→取消」會把這些還沒簽下一份合約的
+       卡位直接釋出給別人，等於幫會員把位子讓掉，而且無法復原。
+       ⚠ 這裡只改「怎麼處理」，不改「怎麼分類」——series 的蒐集範圍、avail／
+         lockedLeft 的算法完全沒動，一樣是同一張票的容量內才算扣課/保留。 */
+    let a=avail, l=lockedLeft, nB=0, nH=0, over=[];
+    series.forEach(x=>{ if(a>0){a--;nB++;} else if(l>0){l--;nH++;} else over.push(x); });
     const m=(window._cpMembers||[]).find(x=>x.id===memberId)||{};
     const _d=x=>String(x.date).replace(/-/g,'/')+' '+String(x.start_time).slice(0,5);
     /* ══ 2026-09-22 收斂（使用者：「剛剛幫林義智轉正　轉正的那個視窗　訊息太多了」）══
@@ -38816,9 +39109,9 @@ async function _doConvertPending(memberId, tkId, mode){
       <div class="sc-list">
         <div class="sc-row"><span class="sc-d">扣課（${_plan}）</span><span class="sc-x">${nB} 堂</span></div>
         ${nH?`<div class="sc-row"><span class="sc-d">轉分期待繳費保留</span><span class="sc-x">${nH} 堂</span></div>`:''}
-        ${drop.length?`<div class="sc-row"><span class="sc-d" style="color:#b5372e;">超出簽約堂數 → 取消</span><span class="sc-x" style="color:#b5372e;">${drop.length} 堂</span></div>`:''}
+        ${over.length?`<div class="sc-row"><span class="sc-d" style="color:var(--gold-d,#8a6e2f);">超出目前票券範圍 → 保留原狀</span><span class="sc-x" style="color:var(--gold-d,#8a6e2f);">${over.length} 堂</span></div>`:''}
       </div>
-      ${drop.length?`<div class="mk-key">時段會釋出，別人約得走 —— 還要上的話改按〔只轉這一堂〕<small>${drop.slice(0,6).map(_d).join('、')}${drop.length>6?`…等 ${drop.length} 堂`:''}</small></div>`:''}
+      ${over.length?`<div class="mk-key">這些時段維持原狀，不會被取消或扣課——等簽下一份合約／續約時再處理<small>${over.slice(0,6).map(_d).join('、')}${over.length>6?`…等 ${over.length} 堂`:''}</small></div>`:''}
       <div class="modal-foot" style="flex-wrap:wrap;gap:8px;">
         <button class="btn btn-ghost" onclick="openBookingDetail('${id}')">返回</button>
         <button class="btn btn-ghost" onclick="doConvertPending('${memberId}','${tk.id}','one')">只轉這一堂</button>
@@ -38826,8 +39119,8 @@ async function _doConvertPending(memberId, tkId, mode){
       </div>`);
     return;
   }
-  if(mode==='one') series=[b];
-  let bound=0, held=0, dropped=0;
+  if(mode!=='series') series=[b];   // 2026-11-03：預設與 'one'、'ask'（沒有其他待簽約時）都只處理這一堂
+  let bound=0, held=0, kept=0;
   for(const hb of series){
     if(avail>0){
       hb.member_id=memberId; hb.ticket_id=tk.id; hb.ticket_type_id=tk.ticket_type_id||hb.ticket_type_id||null;
@@ -38841,17 +39134,20 @@ async function _doConvertPending(memberId, tkId, mode){
       await dbPut('bookings',hb);      // pending_contract 維持 true＝分期保留（紅框待收款）
       lockedLeft--; held++;
     }else{
-      hb.status='cancelled'; hb.cancelled_at=new Date().toISOString();
-      hb.note=(hb.note?hb.note+'｜':'')+'簽約堂數不含此堂，轉正時自動取消';
-      await dbPut('bookings',hb);
-      dropped++;
+      /* 2026-11-09（施佩怡Fix C）：超出這張票容量的卡位改成完全不碰——不寫
+         status、不寫note、不呼叫dbPut，資料庫裡原封不動。只計數讓使用者知道
+         有幾堂落在這個範圍外，之後簽下一份合約/續約時再另外處理。 */
+      kept++;
     }
   }
   dbCacheClear(['bookings','member_tickets','ticket_logs']);
   closeModal();
   showToast(`已轉正式預約：扣課 ${bound} 堂`
     +(held?`、轉分期保留 ${held} 堂`:'')
-    +(dropped?`、取消多出的 ${dropped} 堂`:''));
+    +(kept?`、保留原狀（超出範圍）${kept} 堂`:'')
+    /* 2026-11-03 孫怡敏案例：預設只轉這一堂時，順便讓使用者知道還有幾堂待簽約沒動到，
+       不是漏掉，是本來就不自動處理——要處理再按〔整串轉正〕。 */
+    +(mode!=='series' && otherCount>0 ? `。此會員另有 ${otherCount} 堂待簽約預約，本次預設只轉正目前這 1 堂，其他預約不受影響。` : ''));
   navTo(CUR_PAGE);
  }catch(e){ _clr(); showToast('轉換失敗：'+(e&&e.message?e.message:e)); }
 }
@@ -38884,6 +39180,9 @@ async function submitBooking(){
      建立期間鎖住，按鈕顯示進度。 */
   if(window._bkSubmitting){ showToast('建立中，請稍候…'); return; }
   window._bkSubmitting=true;
+  /* 2026-11-01 idempotency：同一次操作（含網路逾時後使用者再按一次）沿用同一組 id；
+     openBookingModal() 開視窗時已經清成 null，這裡第一次送出才會真的產生新的。 */
+  window._bkOpId = window._bkOpId || uid('IDEM');
   try{ await _submitBookingInner(); } finally{ window._bkSubmitting=false; }
 }
 async function _submitBookingInner(){
@@ -39117,6 +39416,18 @@ async function _submitBookingInner(){
     }
     if(!(await confirmVenueOverflow(vbkChk))) return; // 教練取消
   }
+  /* 2026-11-01 idempotency 風險修正②（2026-11-02）：使用者在視窗沒關的情況下
+     改了日期/時間/教練/會員/課程，原本的 opId 卻原封不動沿用，會讓送出的新內容
+     跟 fn_create_booking 裡那把 key 綁的舊內容對不上，直接撞 IDEMPOTENCY.CONFLICT——
+     使用者合理地改了預約內容，卻收到一個看不懂的衝突錯誤，等於擋住了正常編輯重送。
+     做法：送出前比對這次內容的指紋，指紋變了才換新 opId；指紋沒變（真的是網路逾時
+     後再按一次、或「調課重送」原封不動再跑一次）才沿用舊的，維持原本的冪等效果。
+     ⚠ 指紋只需要跟「送進 fn_create_booking 的那幾欄」同一組即可，不用含票券 id——
+       票券是 runRecurringBooking 逐堂才解析出來的，但課程/會員/教練/日期任一個變了，
+       解析出來的票券本來就會跟著變，後端的 ticket_id 比對（風險①修正）會接住。 */
+  const _bkFp=JSON.stringify([member_id,coach_id,t.category,type_id,date,time,
+    recurring?_rc.dows:[], recurring?_rc.times:null, recurring?_rc.count:1]);
+  if(window._bkOpFingerprint!==_bkFp){ window._bkOpId=uid('IDEM'); window._bkOpFingerprint=_bkFp; }
   /* 參數抽成一包（2026-08-14 調課功能）：票券不足時的「調課重送」要原封不動再跑一次 */
   const _rrOpts={
     member_id, coach_id, substitute_coach_id:null,
@@ -39129,6 +39440,7 @@ async function _submitBookingInner(){
     count: recurring ? _rc.count : 1,   // 2026-07-29：改由「次數」決定（上限＝可約堂數）
     until: null,
     findTicketFn: bkFindTk,
+    opId: window._bkOpId||null,   // 2026-11-01 idempotency：同一次操作的識別碼，逐堂再各自組專屬 key
     onProgress:(cur,total)=>{   // 逐堂進度寫回按鈕（2026-07-28：長連續預約不再像當機）
       const btn=[...document.querySelectorAll('#modal-bg .btn.btn-green')].pop();
       if(btn){ btn.disabled=true; btn.textContent=`建立中 ${cur} / ${total}…`; }
@@ -39325,7 +39637,12 @@ async function runRecurringBooking(opts){
          （教室幾號／跑步機）沒了，顯示與改期都會錯。場地邏輯只在前端，走原路徑。 */
       if(window.FEATURE_FLAGS&&FEATURE_FLAGS.createBookingRpc&&CLOUD&&!noDeduct&&tk&&!holdOnly&&!o.venue_pref&&!bkIsSelf(bk)){
         // ── Sprint 3：改由後端 RPC 單一交易建立＋扣票（旗標開啟時）──
-        const rr=await createBookingViaRpc(o, tk, ds, ts);
+        /* 2026-11-01 idempotency：同一次操作的 opId 固定，這裡逐堂各自接上日期/時間組成
+           專屬 key——同一次操作重試時，同一堂課算出來的 key 一樣（冪等）；
+           不同堂課（連續預約的不同日期）key 不一樣，不會被誤判成同一筆。
+           o.opId 沒有值（這支引擎被其他呼叫端呼叫、沒傳 opId）就不帶 key，行為跟改之前一樣。 */
+        const idemKey = o.opId ? (o.opId+':'+ds+'@'+ts) : null;
+        const rr=await createBookingViaRpc(o, tk, ds, ts, idemKey);
         if(rr.ok){ ok++; results.push({date:ds,ok:true,bkId:rr.booking_id||null,tkId:tk?tk.id:null,tkName:tk?(tk.plan_name||'票券'):''}); }
         else { skipped++; results.push({date:ds,ok:false,reason:rr.reason}); }
       } else {
@@ -39537,19 +39854,31 @@ async function expandBkCard(el, id){
     }
     if(staff && !closed && b.status==='booked' && b.member_id){
       {
-        let _hasTk=false;
-        try{ _hasTk=((await listUsableTickets(b.member_id, bkTypeIdOf(b), b.date, b.start_time))||[]).length>0; }catch(_){}
-        /* 分期保留要走「開通下一期」而不是「儲值」（2026-08-21 使用者回報 8/22 施佩怡）——
-           那位客人已經買了方案、錢也收過第一期，再叫櫃檯去開銷售視窗是錯的路。
-           bkIsInstHold 靠 note 的「分期待繳費保留」標記分辨（建立保留時寫的）。 */
+        /* 分期保留要走「開通下一期」而不是「轉正」或「儲值」（2026-08-21 使用者回報
+           8/22 施佩怡；2026-11-09 施佩怡第二次案例回報同一根因再補修）——
+           那位客人已經買了方案、錢也收過第一期，再叫櫃檯去開銷售視窗或走一般轉正都是錯的路。
+           bkIsInstHold 靠 note 的「分期待繳費保留」標記分辨（建立保留時寫的）。
+           ⚠ 2026-11-09 二修：原本順序是「先問_hasTk、_hasTk為true就一律轉正」，
+             只要這張分期票剛好還剩一點已開通未扣的額度（tkUnlockedLeft>0），
+             listUsableTickets 就會把它算成「有票可用」，_hasTk 變 true，
+             於是蓋過_isInst，分期保留卡位又跳回「轉正」——跟上一版修的是同一個根因，
+             這次漏掉的是「誰的優先權比較高」。改成**_isInst 優先判斷**：
+             只要這一堂本身已經是分期保留，不管會員手上還有沒有其他可用票，
+             一律先走「分期」（開通下一期），徹底不會再被_hasTk蓋過去。
+           ⚠ _hasTk 的 listUsableTickets() 呼叫搬到 _isInst 為 false 時才做——
+             分期保留那支不需要這個查詢結果，省一次非必要的票券查表。 */
         const _isInst=(typeof bkIsInstHold==='function') && bkIsInstHold(b);
+        let _hasTk=false;
+        if(!_isInst){
+          try{ _hasTk=((await listUsableTickets(b.member_id, bkTypeIdOf(b), b.date, b.start_time))||[]).length>0; }catch(_){}
+        }
         /* ashBackArm 要在 collapseBkCard 之前（它記的是目前展開的那張卡的 DOM 參照，
            收起來就抓不到了）——有它，轉正視窗的「返回」才會回到課卡，而不是已經退役的
            預約明細（2026-08-21 使用者回報：「這裡的返回又會回到預約明細視窗」）。 */
-        btns += _hasTk
-          ? evoBtn('evo-r2','evo-primary',`ashBackArm('${id}');collapseBkCard();openConvertPending('${id}')`,'check','轉正')   /* 請假/異常狀態不給轉正（2026-08-14） */
-          : (_isInst
-             ? evoBtn('evo-r2','evo-gold',`collapseBkCard();ashInstNext('${id}')`,'plus','分期')
+        btns += _isInst
+          ? evoBtn('evo-r2','evo-gold',`collapseBkCard();ashInstNext('${id}')`,'plus','分期')
+          : (_hasTk
+             ? evoBtn('evo-r2','evo-primary',`ashBackArm('${id}');collapseBkCard();openConvertPending('${id}')`,'check','轉正')   /* 請假/異常狀態不給轉正（2026-08-14） */
              : evoBtn('evo-r2','evo-gold',`collapseBkCard();ppTopUp('${b.member_id}')`,'plus','儲值'));
         /* 〔調課〕（2026-10-08 使用者指示）：沒有可用票、但**後面有綁了票的課**時才出現 ——
            那種情況不是「沒買」，是票被未來的課先佔走了，叫櫃檯去儲值是錯的方向。
@@ -40044,13 +40373,16 @@ async function bkCardPop(el, b, btns, acts){
         :(_noShow?'<span class="ash-mtag ash-mtag-ns">未到</span>'
         :(inHere?'<span class="ash-mtag ash-mtag-ok">已簽到</span>':''));
       /* 操作紀錄（2026-08-25 使用者指示：「會員卡上面新增顯示操作時間跟由誰操作的」）——
-         ⚠ 二修：**團課不畫在會員卡上**。created_by 記的是「這一堂課是誰開的」，
-           不是「這個人是誰加進來的」；團課的名額是後來陸續加的、沒有各自的時間戳。
-           畫在四張會員卡上，使用者看到的是「建立 RANDY」四次，讀起來就變成
-           「Randy 把郭祐竹加進來」—— 那是假的（他只是 7/28 開了這堂課）。
-           團課改畫在標題卡（那裡講的本來就是這一堂課），單人課才留在會員卡
-           —— 單人課的「這一堂」就等於「這個人的這一堂」，不會誤讀。 */
-      const _opLine=bkIsGroup(b)?'':(()=>{
+         ⚠ 二修（當時）：**團課不畫在會員卡上**。created_by 記的是「這一堂課是誰開的」，
+           不是「這個人是誰加進來的」；畫在四張會員卡上會變成「Randy 把郭祐竹加進來」
+           這種假訊息（他只是開了這堂課）。
+         2026-11-06 三修：改用共用函式 grpJoinSource（與會員詳細頁同一套邏輯）算出
+           「真正的報名來源」——從這位會員這一堂實際扣的那張票（_slot.t）去查
+           ticket_logs 的 deduct 紀錄，operator／created_at 才是報名者與報名時間，
+           不是整堂課的建立時間。查無可靠紀錄就誠實顯示「預約來源未確認」，不猜測。 */
+      const _opLine=bkIsGroup(b)
+        ? `<div class="ash-mop">${escH(grpJoinSource(b.id, (_slot&&_slot.t)?[_slot.t.id]:[], (_wctx&&_wctx.logs)||[], r.mid, cm))}</div>`
+        : (()=>{
         const _c=`建立 ${bkActorLabel(b.created_by,cm,mm,b.created_at,'created')}${bkOpTime(b.created_at)?'・'+bkOpTime(b.created_at):''}`;
         const _x=(b.status==='cancelled')
           ? `　取消 ${bkActorLabel(b.cancelled_by,cm,mm,b.cancelled_at,'cancelled')}${bkOpTime(b.cancelled_at)?'・'+bkOpTime(b.cancelled_at):''}` : '';
@@ -42177,7 +42509,8 @@ async function openBookingDetail(id){
           &&(isDeskLike()||(SESSION&&SESSION.role==='coach'&&(bkCoachId(b))===SESSION.id)))
         ? `<button class="btn btn-ghost" onclick="${bkIsOpenHold(b)?`closeModal();bkAddMemberOpen('${b.id}')`:`window._bpFrom='';openBindPending('${b.id}')`}">${bkIsOpenHold(b)?'安排會員':'綁定會員'}</button>`:''}
       ${(b.pending_contract&&!b.ticket_id&&b.status==='booked'&&(isDeskLike())&&!bkIsInstHold(b))
-        ? `<button class="btn btn-green bkd-signup" onclick="openConvertPending('${b.id}')">轉正簽約</button>`:''}
+        ? `<button class="btn btn-green bkd-signup" onclick="openConvertPending('${b.id}')">轉正簽約</button>
+           <button class="btn btn-ghost" onclick="openConvertPendingAsk('${b.id}')" title="這位會員若還有其他待簽約預約，一次處理">整串轉正</button>`:''}
     </div>`);
 }
 /* ── 連續取消（2026-07-29 使用者指示：連續預約也要有連續取消）─────────────
@@ -43896,12 +44229,16 @@ async function _saveGroupMembers(id){
       return false;
     }
   }
-  // 新加入的有票就扣、移除的退回（依該 booking 的票券類型）
+  /* 新增/移除的實際寫入一律走 fn_group_save_members（2d-3，2026-11-01）——
+     原本這裡逐筆呼叫 deductTicket／refundTicket、最後一次性 dbPut('bookings',b) 整列覆蓋，
+     會跟會員自己報名那條路（fn_member_join_group）互相蓋掉名額。改成：下面「挑哪張票、
+     要不要 multi」整段業務邏輯完全不動（照抄，只是改成規劃成 _plan 而不是立刻扣），
+     規劃完才一次性送進 RPC，由 RPC 在鎖住這一堂的同一個交易裡重新驗證、真的寫入。
+     詳見 YUGYM_HANDOFF.md 第3.4節。 */
   const _seatIdx={};   // 逐名額挑票（2026-08-05）：新名額接在既有名額後面，索引從已有數量起算
-  const _addFam={};    // 會員 → 這次加的名額扣到哪位使用人的票（null＝混用，不限定）
-  const _addTk={};     // 會員 → 這次加的名額扣到「哪一張」票（null＝混用，不限定）
-  const _noTk={};      // 會員 → 這次加入但扣不到票的名額數
-  const _failed=new Set();   // 扣不到票的會員：後續名額直接跳過，名額鍵才不會跳號（2026-08-20）
+  const _noTk={};      // 會員 → 這次加入但扣不到票（含 RPC 判定失敗）的名額數
+  const _failed=new Set();   // 規劃階段就挑不到票的會員：後續名額直接跳過，名額鍵才不會跳號（2026-08-20）
+  const _plan=[];      // 規劃好、真的要送進 RPC 的 add 項目：{mid, tk, multi}
   /* 這一堂已經被某個名額用掉的票（2026-08-29 使用者附截圖：「這三個會員卡是同一張票券吧?」）
 
      許佳慈 9/4 20:00 的三個名額全指到 TK-mte3pejgah8w：那天稍早取消過一次，
@@ -43952,56 +44289,67 @@ async function _saveGroupMembers(id){
     }
     // 真的沒有別張了 → 回頭用已經扣過的那張（一張票扣多格，合法，見上面）
     if(!tk) tk=await findUsableTicket(mid,b.ticket_type_id,b.date,b.start_time);
-    /* 2026-08-06：deductTicket 的餘額護欄會回 false（沒扣到）——
-       這時要跟「找不到票」一樣算進警告，不能讓名額靜靜地沒付錢。
+    /* 2026-08-06：找不到票的話要跟「沒票」一樣算進警告，不能讓名額靜靜地沒付錢。
        2026-08-29：走到「同一張票扣第二格」時要明講 multi，否則重複扣護欄會回 true
-       卻沒真的扣，名額就白站在名單上（許佳慈 9/4 就是這樣）。 */
-    const _ded = tk ? await deductTicket(tk,b.id,SESSION.id,
-      _used.has(String(tk.id))?{multi:true}:undefined) : false;
-    if(_ded) _used.add(String(tk.id));
-    /* 取消教練招待（2026-08-20 使用者定案）：扣不到票的名額不再寫入名單——
-       前面已先擋過一次，走到這裡是「驗票後、扣票前」被別的操作用掉的競態。 */
-    if(!_ded){ (_noTk[mid]=(_noTk[mid]||0)+1); _failed.add(String(mid)); continue; }
-    /* 逐名額記下用了哪張票（2026-08-06 使用者指示：「團課的預約沒有地方可以紀錄，
-       不能新增一個地方給他紀錄嗎？」）—— bookings.seat_tickets 是名額鍵 → 票券 id。
-       有了這個事實，票券夾就不必再靠先進先出推算。 */
-    if(_ded){ const _sk=(_i>0)?(mid+'#'+(_i+1)):mid;
-      b.seat_tickets=Object.assign({}, b.seat_tickets||{}, {[_sk]:tk.id});
-      /* 這一格扣到誰的票（2026-08-29 使用者回報：「我用了許佳慈(姐姐)　這邊卻跑出11票
-         可是姐姐應該只有四張」）—— 連續預約要照這位使用人的餘額算，不是整個帳號的。
-         同一位會員這次加的幾格若扣到不同使用人，就記 null（不限定）。 */
-      const _f=String(tk.family_user||'');
-      if(_addFam[mid]===undefined) _addFam[mid]=_f;
-      else if(_addFam[mid]!==_f) _addFam[mid]=null;
-      /* 連前一步「用哪一個方案？」挑的那一張也記下來（2026-08-29 使用者：
-         「我在前一步選了其中一份票券而已　這邊應該只要顯示該票券的4堂」）——
-         同一位使用人可能有好幾張（本人＝補課券＋兩張優惠團課），選了哪張就只算哪張。 */
-      if(_addTk[mid]===undefined) _addTk[mid]=String(tk.id);
-      else if(_addTk[mid]!==String(tk.id)) _addTk[mid]=null; }
+       卻沒真的扣，名額就白站在名單上（許佳慈 9/4 就是這樣）。
+       ⚠ 2026-11-01 起這裡不再立刻扣票——只規劃好要送進 RPC 的內容，真的扣票/驗證
+       在 fn_group_save_members 裡進行，_used 在這裡先樂觀標記只是給同一次呼叫裡
+       後續名額判斷「這張是不是已經排給別人了」用。
+       取消教練招待（2026-08-20）：扣不到票的名額不再寫入名單——規劃階段就挑不到票
+       直接算進 _noTk，根本不會送進 p_adds，RPC 那邊也不會知道有這個人要加。 */
+    if(!tk){ (_noTk[mid]=(_noTk[mid]||0)+1); _failed.add(String(mid)); continue; }
+    const multi=_used.has(String(tk.id));
+    _used.add(String(tk.id));
+    await activateTicketIfNeeded(tk,b.id);   // 首堂預約 → 開通並起算效期（原本在 deductTicket 內部做）
+    _plan.push({mid, tk, multi});
   }
-  for(const mid of removed){
-    /* 找該會員因這堂課「還有淨扣課」的票退回（2026-08-03 修：原本抓第一筆扣課紀錄，
-       同一人兩個名額扣在不同票上時會退錯張／退兩次同一張）。
-       refundTicket 內的 dbPut 會清快取，迴圈下一輪能看到剛寫入的退回紀錄。 */
-    const tkid=await grpNetDeductTicket(b.id, mid);
-    if(tkid) await refundTicket(tkid,b.id,SESSION.id);
-    /* 名額歸屬也要跟著移除（2026-08-06）：退掉的是這個人最後一個名額 */
-    if(b.seat_tickets){ const _st=Object.assign({},b.seat_tickets);
-      const _ks=Object.keys(_st).filter(k=>seatMid(k)===String(mid));
-      if(_ks.length){ delete _st[_ks[_ks.length-1]]; b.seat_tickets=_st; } }
+
+  const p_adds=_plan.map(p=>({
+    member_id:p.mid, ticket_id:p.tk.id, multi:p.multi,
+    start_date:p.tk.start_date||null, expire_date:p.tk.expire_date||null, activated_at:p.tk.activated_at||null
+  }));
+  /* remove 不需要前端先挑票——fn_group_save_members 在鎖裡用當下最新的帳本
+     即時找「這個人這堂淨扣>0」的那張票，比前端先查好再傳更安全（見 HANDOFF 3.4節）。
+     attendance 孤兒鍵清理（2026-07-30 發現：移出名單的人狀態留在 attendance 會變成
+     孤兒鍵，「整堂有沒有人簽到」是看 Object.values(attendance)，孤兒鍵會讓判斷失準）
+     也一併交給 RPC 用同一套 seatKeys() 名額鍵規則清——理由沒變，只是搬了地方。 */
+  const {data:_rpcRes, error:_rpcErr} = await sb.rpc('fn_group_save_members', {
+    p_booking_id:b.id, p_max_heads:gmax, p_ticket_type_fix:b.ticket_type_id||null,
+    p_adds, p_removes:removed
+  });
+  dbCacheClear(['bookings','member_tickets','ticket_logs']);
+  if(_rpcErr || !_rpcRes || _rpcRes.ok!==true){
+    showToast('⚠ 名單儲存失敗：'+((_rpcRes&&_rpcRes.error_code)||(_rpcErr&&_rpcErr.message)||'未知錯誤'));
+    return;
   }
-  /* 沒扣到票的名額從名單移除（2026-08-20 取消教練招待：名額＝一定有票） */
-  Object.entries(_noTk).forEach(([mid,n])=>{ for(let i=0;i<n;i++){
-    const j=next.map(String).lastIndexOf(String(mid)); if(j>=0) next.splice(j,1); } });
-  b.member_ids=next;
-  /* 名額變動後清掉沒有對應名額的出席狀態（2026-07-30 發現）——
-     原本只更新 member_ids，被移出名單的人狀態會留在 attendance 變成孤兒鍵
-     （7/31 11:00 那堂就留著一位已不在名單的 booked），
-     而「整堂有沒有人簽到」是看 Object.values(attendance)，孤兒鍵會讓判斷失準。 */
-  const _att=attObj(b), _live=new Set(seatKeys(b));
-  Object.keys(_att).forEach(k=>{ if(!_live.has(k)) delete _att[k]; });
-  b.attendance=_att;
-  await dbPut('bookings',b);
+  const _addFam={}, _addTk={};   // 會員 → 這次加的名額扣到哪位使用人／哪一張票（null＝混用，不限定）
+  const _results=_rpcRes.results||[];
+  const _addResults=_results.filter(r=>r.op==='add');
+  const _rmResults=_results.filter(r=>r.op==='remove');
+  /* RPC 按送進去的順序一筆對一筆回結果，用索引對齊回 _plan 就知道哪個名額真的成功。
+     成功才記 _addFam／_addTk（同原本只在 _ded 成立時才記的規則）；失敗併入 _noTk，
+     跟規劃階段就找不到票的情況用同一份警示視窗處理。
+     逐名額記下用了哪張票（2026-08-06 使用者指示：「團課的預約沒有地方可以紀錄，
+     不能新增一個地方給他紀錄嗎？」）——寫入本身（seat_tickets）2026-11-01 起
+     交給 RPC 做，這裡記的 _addFam／_addTk 是給後續「連續預約」沿用同一位
+     使用人/同一張票用。 */
+  _plan.forEach((p,i)=>{
+    const r=_addResults[i];
+    if(r && r.ok){
+      const _f=String(p.tk.family_user||'');
+      if(_addFam[p.mid]===undefined) _addFam[p.mid]=_f; else if(_addFam[p.mid]!==_f) _addFam[p.mid]=null;
+      if(_addTk[p.mid]===undefined) _addTk[p.mid]=String(p.tk.id); else if(_addTk[p.mid]!==String(p.tk.id)) _addTk[p.mid]=null;
+    }else{
+      (_noTk[p.mid]=(_noTk[p.mid]||0)+1);
+    }
+  });
+  /* 退票的效期自癒校正——餘額／帳本／名額已經由 RPC 在交易裡做完，這裡只補
+     refundTicket 原本後半段那段系統範圍檢查，失敗不影響名單本身（見函式註解）。 */
+  for(const r of _rmResults){
+    if(r.ok && r.refunded_ticket_id){
+      try{ await refundTicketDateRevertOnly(r.refunded_ticket_id, b.id); }catch(e){ console.error('退票效期校正失敗',e); }
+    }
+  }
   showToast('名單已更新');
   /* 開課後補位的連續預約（2026-08-03 使用者指示）：「團體課已經開課後，新加入的
      會員要有重複預約的能力」「先開了 10 堂 10 週，新會員只買了 4 堂 → 可以重複預約 4 堂」。
@@ -46164,6 +46512,16 @@ async function cancelBooking(id, refundMode, opts){
   const _silent=!!(opts&&opts.silent);
   const b=await dbGet('bookings',id);
   if(!b)return;
+  /* 2026-11-07 冪等保護（Phase1修正）：舊版備援路徑原本沒有擋「已經是cancelled」
+     就重入——RPC路徑本來就有這一句，但RPC失敗回退、或一開始就不符合RPC資格
+     （團課/無票/force/none/plain）時，完全沒有同等保護。沒有這一道，手滑連點
+     兩次、或網路延遲讓同一個取消被送出兩次，第二次會再跑一輪退款邏輯，
+     即使 refundTicket 自己有「餘額不超過總堂數」的護欄擋得住重複加堂數，
+     也會不必要地重複寫入贈點收回／補課券收回等其他副作用。 */
+  if(b.status==='cancelled'){
+    if(!_silent) showToast('這筆預約已經取消過了');
+    return;
+  }
 
   // ── Sprint 3：混合取消分流 ──
   // 僅「單人課 + 有 ticket_id（新制）+ 自動政策」走 RPC；團課、legacy 無票、強制退/不退一律走下方舊邏輯。
@@ -46230,35 +46588,42 @@ async function cancelBooking(id, refundMode, opts){
   else if(refundMode==='none') doRefund=false;
   else doRefund = true;             // auto：目前政策一律退課（2026-07-28 使用者定案，暫停 24h 扣課）
                                     // plain（2026-09-11）：視窗說「沒扣過」的確定取消 —— 有扣過就退，永遠不標扣課不退
-  /* 只寫一次（2026-08-25 使用者回報「剛剛從我手機端取消這堂課，但為什麼顯示沒有紀錄」）——
-     原本這裡連寫兩次：先 status＋cancelled_at，再補 refund_waived。第二次送的是
-     **記憶體裡那份 b**（取消前讀的，沒有 cancelled_by），於是 DB 觸發器剛填好的
-     取消人被蓋回 null。DB 那邊已經改成「已取消且送進來是空的就沿用舊值」，
-     這裡再把兩次併成一次 —— 少一次寫入，也少一整類「用舊物件覆蓋新欄位」的坑。 */
-  b.status='cancelled';
-  b.cancelled_at=new Date().toISOString();
-  /* ⚠ 「沒扣過的課，沒有東西可以『不退』」（2026-09-01 王錫昌 9/03、吳美芳 9/03 案例）——
-     refund_waived 的語意是「取消時**選了**扣課不退」，是一個人做的決定。
-     但「這一堂帳本上查不到扣課」那條路（見 __askSeriesCancel 的 noTicket 分支）
-     只有一顆「確定取消」、從頭到尾沒問過人，卻也走到這裡把旗標蓋成 true。
-     下游把它當成「這一格用掉了」（bkEatenCancel → 金色扣課點、佔一格），
-     客人於是平白少一堂 —— 而那一堂根本沒被扣過。
-     旗標只在「真的扣過、而且這次選擇不退」時才成立。 */
-  b.refund_waived = (!doRefund) && (await bkWasDeducted(b));
-  await dbPut('bookings',b);
-
-  let refundedCount=0, refundMissed=false;
+  /* 2026-11-07 Phase1修正（根因：refund_waived 原本在退款「執行前」就依意圖
+     寫死，退款邏輯若判斷錯誤而跳過，旗標已經蓋成 false，從此跟「操作人員
+     真的選擇不退」完全分不出來——王嘉綺等4筆正式庫異常的成因）。
+     改成：先跑完整退款邏輯、得到 4 選 1 的「實際結果」分類，狀態與旗標
+     只在結果確定後一次寫入（仍沿用 2026-08-25 的「只寫一次」）：
+       refunded        — 確實退了票券
+       no_deduction    — 帳本上這一堂本來沒扣過，沒東西可退，不算「不退」
+       refund_failed   — 應該退、也確實扣過，但退款動作本身沒有成功
+       operator_waived — 操作人員在取消當下明確選擇扣課不退（且真的扣過課）
+     refund_waived 改成「operator_waived 或 refund_failed 都算 true」：
+     兩者都是「扣課沒退」的終局狀態，都要能被 bkEatenCancel／「取消未退」
+     徽章抓到、給店家一個看得到、點得到「校正」的入口——而不是讓 refund_failed
+     被系統吞掉、落回去混成一個分不出原因的「舊」殘影徽章。
+     ⚠ 殘留風險（無法在前端完全排除）：退款執行與這裡的 dbPut('bookings',b)
+     仍是兩個分開、依序的網路寫入，中間斷線會留下「票券已退、預約狀態還沒
+     標成 cancelled」的空窗——但這個空窗是自我修復的：重按一次取消，
+     bkNetDeductDB 會看到淨扣課已經是 0（已經退過），分類成 no_deduction，
+     不會重複退款，再把狀態補寫成 cancelled 即可。真正要完全消除這個空窗，
+     只有搬進伺服器端單一交易（fn_cancel_booking 的路線）才做得到，這次
+     範圍不含該 RPC，不在這裡解決。 */
+  let _cancelOutcome;   // 'refunded' | 'no_deduction' | 'refund_failed' | 'operator_waived'
+  let refundedCount=0;
   if(doRefund){
     if(bkIsGroup(b)){
       const logs=(await dbGetAll('ticket_logs')).filter(l=>l.booking_id===b.id && l.action==='deduct');
       const refunded=(await dbGetAll('ticket_logs')).filter(l=>l.booking_id===b.id && l.action==='refund');
       const refundCntByTk={};
       refunded.forEach(l=>{refundCntByTk[l.ticket_id]=(refundCntByTk[l.ticket_id]||0)+1;});
+      let _anyFail=false;
       for(const log of logs){
         if((refundCntByTk[log.ticket_id]||0)>0){ refundCntByTk[log.ticket_id]--; continue; }
         // 2026-08-06：護欄擋下（餘額已滿）時不算退成功，Toast 才不會說退了幾堂其實沒退
         if(await refundTicket(log.ticket_id,b.id,SESSION.id)) refundedCount++;
+        else _anyFail=true;
       }
+      _cancelOutcome = refundedCount>0 ? 'refunded' : (_anyFail ? 'refund_failed' : 'no_deduction');
     }else if(b.ticket_id){
       /* 再擋一次（2026-08-26）：畫面那一層已經不會問退不退了，但 refundMode='force'
          也可能從別的呼叫端進來。沒扣過就不退 —— 退了就是憑空多一堂。
@@ -46269,21 +46634,74 @@ async function cancelBooking(id, refundMode, opts){
         /* 問不到 ≠ 沒扣過。寧可退（refundTicket 有「不超過總堂數」的護欄擋重複退），
            也不要在查不到的時候默默吃掉客人一堂。 */
         console.warn('取消退課：查不到扣課紀錄（查詢失敗），保守起見照退',b.id,b.ticket_id);
-        refundedCount=(await refundTicket(b.ticket_id,b.id,SESSION.id))?1:0;
+        const _ok=await refundTicket(b.ticket_id,b.id,SESSION.id);
+        refundedCount=_ok?1:0;
+        _cancelOutcome=_ok?'refunded':'refund_failed';
       }else if(_net>0){
-        refundedCount=(await refundTicket(b.ticket_id,b.id,SESSION.id))?1:0;
+        const _ok=await refundTicket(b.ticket_id,b.id,SESSION.id);
+        refundedCount=_ok?1:0;
+        _cancelOutcome=_ok?'refunded':'refund_failed';
       }else if(refundMode==='plain'){
         refundedCount=0;   // 視窗已經講過「這一堂沒有扣過票」，不用再寫警示帳、再跳一次
+        _cancelOutcome='no_deduction';
       }else{
-        /* 「查得到、而且真的沒扣過」才走這裡。以前這裡只有 console.warn ——
-           客人少一堂，畫面上完全沒有痕跡。改成留一筆警示帳＋當面說一聲，
-           與 refundTicket 兩個失敗分支同一套做法（2026-08-19 黃柏桓案例定的）。 */
+        /* net<=0 這裡其實涵蓋兩種完全不同的情況（2026-11-07 F情境真實測試庫測試發現）：
+           ①從沒扣過——真的沒東西可退。
+           ②扣過、而且已經退完了（net=扣1-退1=0）——發生在上一次取消「退款已經寫進
+             ticket_logs/member_tickets，但booking狀態寫入那一步斷線」之後的重按：
+             這裡進來時booking.status必然還是未取消（已取消的話函式最前面的冪等保護
+             就擋掉了），所以①②無法只看_net本身分辨，要另外問一次「這個(booking,ticket)
+             組合是不是已經有一筆refund」。
+           ②絕對不能照搬①的「查不到扣課」警示字——資料其實是對的，講成「沒退到」
+           是誤導；但也不能完全當成無事發生悄悄略過——「這裡曾經半套、現在補狀態」
+           這件事本身要留痕跡，否則以後想查「這堂到底經歷過什麼」會查不到。 */
+        /* 直接問資料庫，不走整表快取的filter——與上面 bkNetDeductDB 同一個理由
+           （2026-09-07 王秋香9/12案例）：這裡要問的就是「現在、當下」是否已經有
+           一筆退款，快取慢半拍就會判斷錯誤，問資料庫才可靠。 */
+        /* 2026-11-07 ChatGPT審查發現：Supabase client查詢失敗多半不會throw，是回
+           {data:null,error:{...}}——原本只判斷data、沒看error，查詢失敗會跟「真的
+           沒退過」混成同一種結果，而且catch是空的完全沒留痕跡。查詢失敗時必須明確
+           視為「尚未確認」，不能直接推定成「沒有退款紀錄」——保守掉回下面既有、
+           已測試過的「查不到扣課」警示分支（不影響refund_waived/refundedCount，
+           不會重複退款），但這次失敗要留下可追查的非個資log。 */
+        let _alreadyRefunded=false;
+        if(CLOUD && sb){
+          try{
+            const {data,error}=await sb.from('ticket_logs').select('id').eq('booking_id',b.id).eq('ticket_id',b.ticket_id).eq('action','refund');
+            if(error) throw error;
+            _alreadyRefunded = Array.isArray(data) && data.length>0;
+          }catch(e){
+            console.error('[cancelBooking] 查詢是否已退款失敗，保守視為「尚未確認」（不等於沒有退款紀錄）',
+              {bookingId:b.id,ticketId:b.ticket_id,stage:'already_refunded_check',error:(e&&e.message)||String(e)});
+          }
+        }
         refundedCount=0;
-        console.warn('取消未退課：這一堂在該票券上沒有淨扣課紀錄',b.id,b.ticket_id,{_net});
-        try{ await logTicket(b.ticket_id,'adjust',0,b.id,SESSION.id,
-          '取消未退課：帳本上查不到這一堂的淨扣課（沒扣過就不退，退了會憑空多一堂）'); }catch(_){}
-        if(!_silent){ try{ showToast('這一堂在票券上查不到扣課紀錄，已取消但沒有退回堂數 —— 若不對請用票券卡的「校正」處理', 8000); }catch(_){} }
+        _cancelOutcome='no_deduction';
+        if(_alreadyRefunded){
+          console.warn('取消：偵測到此預約先前已完成退款但狀態未同步（可能網路中斷造成），本次僅補寫取消狀態，未重複退款',b.id,b.ticket_id);
+          try{ await logTicket(b.ticket_id,'adjust',0,b.id,SESSION.id,
+            '系統偵測：這堂課先前已完成退款但預約狀態未同步（可能是網路中斷造成），本次僅補上取消狀態，未重複退款'); }
+          catch(e){
+            console.error('[cancelBooking] 狀態補償記錄寫入失敗',{bookingId:b.id,ticketId:b.ticket_id,stage:'already_refunded_log',error:(e&&e.message)||String(e)});
+          }
+          /* 不跳「查不到扣課」那種會嚇到人的toast——這不是沒退到，是補狀態；
+             但上面的console.warn與adjust log都留著，後台查得到這段過程。 */
+        }else{
+          /* 「查得到、而且真的沒扣過」才走這裡。以前這裡只有 console.warn ——
+             客人少一堂，畫面上完全沒有痕跡。改成留一筆警示帳＋當面說一聲，
+             與 refundTicket 兩個失敗分支同一套做法（2026-08-19 黃柏桓案例定的）。 */
+          console.warn('取消未退課：這一堂在該票券上沒有淨扣課紀錄',b.id,b.ticket_id,{_net});
+          try{ await logTicket(b.ticket_id,'adjust',0,b.id,SESSION.id,
+            '取消未退課：帳本上查不到這一堂的淨扣課（沒扣過就不退，退了會憑空多一堂）'); }
+          catch(e){
+            // 2026-11-07：移除靜默吞錯——只留 booking/ticket id 與錯誤類型，不含會員姓名等個資
+            console.error('[cancelBooking] 警示帳寫入失敗',{bookingId:b.id,ticketId:b.ticket_id,stage:'no_deduction_log',error:(e&&e.message)||String(e)});
+          }
+          if(!_silent){ try{ showToast('這一堂在票券上查不到扣課紀錄，已取消但沒有退回堂數 —— 若不對請用票券卡的「校正」處理', 8000); }catch(_){} }
+        }
       }
+    }else{
+      _cancelOutcome='no_deduction';   // 沒綁票、也不是團課，無票可退
     }
     /* 「沒綁票就回頭找一張票退」的備援（refundLegacyBooking）2026-08-14 退場——
        使用者指示（陳秀蘭案例：取消 6 筆無票預約、票憑空多 6 堂）：
@@ -46294,9 +46712,28 @@ async function cancelBooking(id, refundMode, opts){
   }else if(b.ticket_id){
     /* 扣課不退要留紀錄（2026-08-13 使用者案例：吳宸維 10/23 誤按扣課，追查只能靠
        「有扣無退」反推）——寫一筆 delta 0 的紀錄標明是刻意扣課，以後一眼分得出
-       「操作選擇」與「系統漏退」。 */
-    try{ await logTicket(b.ticket_id,'adjust',0,b.id,SESSION.id,'取消・扣課不退（櫃檯選擇，票視同已使用）'); }catch(_){}
+       「操作選擇」與「系統漏退」。旗標是否算「操作人員選擇」要看真的扣過課
+       （2026-09-01 王錫昌/吳美芳案例：沒扣過的課，沒有東西可以『不退』）。 */
+    _cancelOutcome = (await bkWasDeducted(b)) ? 'operator_waived' : 'no_deduction';
+    try{ await logTicket(b.ticket_id,'adjust',0,b.id,SESSION.id,'取消・扣課不退（櫃檯選擇，票視同已使用）'); }
+    catch(e){
+      console.error('[cancelBooking] 扣課不退警示帳寫入失敗',{bookingId:b.id,ticketId:b.ticket_id,stage:'operator_waived_log',error:(e&&e.message)||String(e)});
+    }
+  }else{
+    _cancelOutcome = (await bkWasDeducted(b)) ? 'operator_waived' : 'no_deduction';
   }
+
+  /* 只寫一次（2026-08-25 使用者回報「剛剛從我手機端取消這堂課，但為什麼顯示沒有紀錄」）——
+     原本這裡連寫兩次：先 status＋cancelled_at，再補 refund_waived。第二次送的是
+     **記憶體裡那份 b**（取消前讀的，沒有 cancelled_by），於是 DB 觸發器剛填好的
+     取消人被蓋回 null。DB 那邊已經改成「已取消且送進來是空的就沿用舊值」，
+     這裡再把兩次併成一次 —— 少一次寫入，也少一整類「用舊物件覆蓋新欄位」的坑。 */
+  b.status='cancelled';
+  b.cancelled_at=new Date().toISOString();
+  b.refund_waived = (_cancelOutcome==='operator_waived' || _cancelOutcome==='refund_failed');
+  await dbPut('bookings',b);
+
+  let refundMissed = (_cancelOutcome==='refund_failed');
 
   // 贈點回收（2026-07-30 使用者指示）：整堂取消 → 這堂發的自主訓練點數收回，
   // 已經拿去排課的自主訓練也一併取消（贈點的前提沒了）
@@ -46331,7 +46768,7 @@ async function cancelBooking(id, refundMode, opts){
   const _rt=rewardToastText(_rv);
   const _mkt=_mkRv?`，並收回未使用的補課券 ${_mkRv} 張`:'';
   if(refundedCount>0) showToast(`已取消預約，退回 ${refundedCount} 堂票券`+_mkt+_rt);
-  else if(refundMissed) showToast('已取消預約，但找不到可退的票券 —— 請到會員票券手動確認堂數'+_mkt+_rt);
+  else if(refundMissed) showToast('已取消預約，但退款未成功 —— 已標示「取消未退」，請到票券卡用「校正」處理'+_mkt+_rt);
   else if(within24 && refundMode!=='none' && refundMode!=='force' && refundMode!=='plain') showToast('已取消預約（24 小時內，扣課不退）'+_mkt+_rt);
   else showToast('已取消預約'+_mkt+_rt);
   navTo(CUR_PAGE);
@@ -55713,8 +56150,16 @@ function ppRecordHtml(){
                ⚠ 舊資料的 created_by／cancelled_by 可能是空的（0810 之前、或舊系統匯入），
                  那就誠實寫「沒有記錄」，不要猜。 */
             const _mmn=c.memMap||{};
+            /* 2026-11-06：團課「真正的報名來源」改呼叫共用函式 grpJoinSource
+               （與 bkCardPop 的簡易課卡同一套邏輯，不再各寫一份——原本這裡的判斷
+               已抽出，背景與條件說明見 grpJoinSource 本體上方的註解）。
+               候選票券範圍＝這位會員名下所有票（逐一比對哪一張有這堂的扣課紀錄）。 */
+            const _grpSrc=bkIsGroup(b)
+              ? grpJoinSource(b.id, (c.myTk||[]).map(t=>t.id), c.myLogs, PP.id, _cm)
+              : null;
             const _lb=bkIsGroup(b)?'開課':'建立';
-            const _opC=`${_lb} ${bkActorLabel(b.created_by,_cm,_mmn,b.created_at,'created')}${bkOpTime(b.created_at)?'・'+bkOpTime(b.created_at):''}`;
+            const _opC=_grpSrc!=null ? _grpSrc
+              : `${_lb} ${bkActorLabel(b.created_by,_cm,_mmn,b.created_at,'created')}${bkOpTime(b.created_at)?'・'+bkOpTime(b.created_at):''}`;
             const _opX=_cx?`取消 ${bkActorLabel(b.cancelled_by,_cm,_mmn,b.cancelled_at,'cancelled')}${bkOpTime(b.cancelled_at)?'・'+bkOpTime(b.cancelled_at):''}`:'';
             _rows+=`<div class="pp-bkrow${_cx?' pp-bkrow-cx':''}" style="--bkc:${col};">
               <div class="pp-bkdate"><b>${Number(String(b.date).slice(5,7))}/${Number(String(b.date).slice(8,10))}</b><span>（${wd}）</span></div>
@@ -65239,14 +65684,16 @@ async function admCalMultiHTML(nDays){
   const start=heroWeekMonday(sel);
   const days=[]; for(let i=0;i<7;i++){ const d=new Date(start); d.setDate(start.getDate()+i); days.push(d); }
   let bks=[],mems=[],cos=[];
-  try{ [bks,mems,cos]=await Promise.all([dbGetAll('bookings'),dbGetAll('members'),dbGetAll('coaches')]); }catch(_){}
   /* 2026-11-01 教練端手機行事曆記憶體修復（Mango 回報切換下一週觸發 iOS「重複發生問題」）：
      原本 dayAll 是「每天各自對全店 bks 掃一次 filter」，一週 7 天＝整張表掃 7 遍
      （正式庫 bookings 約 1 萬筆，7 倍疊加在同一次渲染裡）。
      這裡全表只掃一次、依日期分組成查找表，下面 7 天改成 O(1) 查表——
      ⚠ allocateVenue 與 mine 兩處都要吃到跟原本 dayAll 完全相同的內容（同一天的全店資料，
        不能只給這位教練自己的），所以這裡只改「怎麼拿到它」，不改內容本身，
-       場地容量/其他教練占用判斷維持原樣。 */
+       場地容量/其他教練占用判斷維持原樣。
+     2026-11-03：連「全表掃一次」都還是整張11MB+下載到手機——改成只查這一週(dbBookingsRange)，
+     members/coaches本來就小張，維持dbGetAll。 */
+  try{ [bks,mems,cos]=await Promise.all([dbBookingsRange(ymd(days[0]),ymd(days[6])),dbGetAll('members'),dbGetAll('coaches')]); }catch(_){}
   const byDate={};
   (bks||[]).forEach(b=>{ if(b&&b.status!=='cancelled'){ (byDate[b.date]||(byDate[b.date]=[])).push(b); } });
   const mm={}; (mems||[]).forEach(m=>{ mm[m.id]=m.name; });
@@ -65326,10 +65773,13 @@ async function admCalMultiHTML(nDays){
 async function admCalHeaderHTML(){
   const today=ymd(TODAY);
   const sel=window._cagSelDate||today; window._cagSelDate=sel;
-  let bks=[]; try{ bks=await dbGetAll('bookings'); }catch(_){}
+  const mon=heroWeekMonday(sel);
+  /* 2026-11-03：這裡的cnt只是「上方日期列的堂數徽章」，只需要這一週，
+     原本dbGetAll('bookings')抓整表（破萬筆）才算出7個數字，改成只查這一週。 */
+  const _hdrEnd=new Date(mon); _hdrEnd.setDate(mon.getDate()+6);
+  let bks=[]; try{ bks=await dbBookingsRange(ymd(mon),ymd(_hdrEnd)); }catch(_){}
   const cnt={}; (bks||[]).forEach(b=>{ if(!b||b.status==='cancelled'||b.sibling_of)return;
     if(bkIsSelf(b)||b.category==='場租')return; cnt[b.date]=(cnt[b.date]||0)+1; });
-  const mon=heroWeekMonday(sel);
   const nD=(Number(window._admCalDays)||1)===1?1:7;   /* 三日退場（2026-08-19 使用者指示） */
   /* 一週檢視：整列七天都點亮（2026-08-23 使用者指示：「手機行事曆一週 上方日期列
      是不是全部點亮就好」）——選取框的意思是「你正在看這一天」，但一週檢視畫面上
@@ -65646,10 +66096,26 @@ function coachAttnShift(dir){
    ⚠ 課卡的產生器目前是複寫一份、不是共用管理員首頁那支 —— 刻意的：
      這樣改這一頁不會動到教練與櫃檯正在用的畫面。旗標拿掉時要把兩邊合成一支。 */
 async function coachHomeV2(){
+  /* 2026-11-06（Mango首頁點日期黑畫面）：這裡原本跟renderCoachAgenda修復前一樣，
+     整表dbGetAll('bookings')——11/03那次只修了行事曆頁，沒有連帶修到首頁這支，
+     點首頁日期(ctPickDay)會重新整頁、再整表抓一次，10,938筆正式庫資料在手機上
+     反覆這樣抓就是記憶體被撐爆的根因。這一頁三處用到bookings（當天課卡／週日期列
+     小圓點／本月成績）全部只看「自己的課」，改用已驗證過的dbBookingsForCoach
+     （教練篩選在查詢端完成，黃美蓉本人1,480筆遠低於整表10,938筆——上一版這裡
+     寫1,489筆是查錯人，實際是另一位教練的筆數，這次連同更正）即可，
+     不傳cols維持select('*')，三處既有欄位需求不用重新盤點。
+     ⚠ 刻意不加.catch(()=>[])——這支失敗要讓navTo既有的catch顯示「資料載入錯誤」
+     紅字，不能跟其他六張表一樣悄悄當成空陣列：bookings是這一頁的主要資料，
+     查詢真的失敗卻顯示「這一天沒有課程」會讓教練誤以為自己真的沒課。
+     2026-11-06（P0緊急）：member_tickets原本也是整表4,458筆、跟bookings一起疊加。
+     改成跟renderCoachAgenda同一套既有防呆：peek得到（跨工作階段快取）就直接用，
+     peek不到才整表抓（通常只有冷啟動或第一次登入會走到），不是新寫法。 */
+  const _hv2TkPk=dbPeek('member_tickets');
   const [bookings,members,coaches,attendance,shifts,types,mtickets]=await Promise.all([
-    dbGetAll('bookings'), dbGetAll('members'), dbGetAll('coaches').catch(()=>[]),
+    dbBookingsForCoach(SESSION.id), dbGetAll('members'), dbGetAll('coaches').catch(()=>[]),
     dbGetAll('attendance').catch(()=>[]), dbGetAll('shifts').catch(()=>[]),
-    dbGetAll('ticket_types').catch(()=>[]), dbGetAll('member_tickets').catch(()=>[])]);
+    dbGetAll('ticket_types').catch(()=>[]),
+    _hv2TkPk ? Promise.resolve(_hv2TkPk.data) : dbGetAll('member_tickets').catch(()=>[])]);
   const today=ymd(TODAY);
   const date=(typeof _coachViewDate!=='undefined' && _coachViewDate) || today;
   const typeMap=Object.fromEntries((types||[]).map(t=>[t.id,t]));
@@ -65730,7 +66196,14 @@ async function coachHomeV2(){
   }
 
   /* ── ③ 今日課卡列表（沿用管理員手機首頁的 .admh-card）── */
-  const _tkBkMap={}; (bookings||[]).forEach(x=>{ if(x&&x.ticket_id&&x.status!=='cancelled'&&!x.sibling_of){ (_tkBkMap[x.ticket_id]=_tkBkMap[x.ticket_id]||[]).push(x); } });
+  /* ⚠ 2026-11-06：bookings現在是dbBookingsForCoach（只有這位教練coach_id/substitute_coach_id
+     命中的列）——但「第幾堂」要數的是這張票全部的排課，可能有會員換過教練、同一張票
+     被別的教練帶過（沒有substitute_coach_id關聯，不會進到上面那份bookings）。
+     只對今天課卡實際用到的那幾張票，額外用_tkRowsIn（既有的ticket_id範圍查詢，
+     tkBookedCountMap已經在用的同一支）補查全教練範圍，不影響其他三處coach-scope的用途。 */
+  const _dayTkIds=[...new Set(dayBk.map(b=>b&&b.ticket_id).filter(Boolean))];
+  const _tkRows=_dayTkIds.length?await _tkRowsIn('bookings','ticket_id',_dayTkIds,'id,ticket_id,date,start_time,status,sibling_of').catch(()=>[]):[];
+  const _tkBkMap={}; _tkRows.forEach(x=>{ if(x&&x.ticket_id&&x.status!=='cancelled'&&!x.sibling_of){ (_tkBkMap[x.ticket_id]=_tkBkMap[x.ticket_id]||[]).push(x); } });
   /* 代課才用得到：只有「不是自己帶的那堂」會標名字（見下面 _cnm） */
   const _cm2={}; (coaches||[]).forEach(c=>{ if(c&&c.id) _cm2[c.id]=(typeof coachDisp==='function'?coachDisp(c):c.name)||''; });
   const _cards=dayBk.slice().sort((a,b)=>String(a.start_time).localeCompare(String(b.start_time))).map(b=>{
@@ -67191,6 +67664,19 @@ async function saveFixPunchOut(recId){
    ② window._chvCal 打開 —— 開任何一張課卡時，依「這堂是不是我帶的」決定純檢視與否
       （見 expandBkCard／openCourseCard 開頭那一段）。 */
 async function coachCalV2(){
+  _calDiag('coachCalV2:enter');
+  /* 2026-11-08 複查：PAGES.coach_calendar 手機分支一進來就 return coachCalV2()，
+     從沒走到桌機那條「const _stepping=!!window._calStepping; window._calStepping=false;」
+     （約67672行）——等於手機這邊 _calStepping 一旦被 admCalPick 設成 true，
+     就再也沒人清掉它，永遠停在 true。本次新增的票券快取改吃這個旗標之前，
+     沒人讀過它、這個漏洞沒有可觀察的後果；現在要靠它判斷「是不是單純翻頁」，
+     必須在這裡比照桌機那行同一招，先讀值、立刻清掉，離開行事曆後只要超過本次
+     action 就不會被誤判成「還在翻頁」。只影響本函式局部變數，不動其他頁面。 */
+  const _stepping=!!window._calStepping; window._calStepping=false;
+  /* 連點「上一週/下一週」保護：沿用既有的 navTo 序號（window._navSeqNo，見
+     「切頁重入保護」那段），同一個序號代表「目前最新的那一次呼叫」。較慢的舊呼叫
+     跑完發現序號已經被更新的呼叫蓋過，就不再寫 C.innerHTML，避免舊畫面蓋掉新畫面。 */
+  const _mySeq=window._navSeqNo;
   startCalPoll();
   window._chvCal=true;
   window._coachReadonly=false;
@@ -67200,24 +67686,65 @@ async function coachCalV2(){
     window._cagAdminInit=1;
     window._cagLayerMine=true; window._cagLayerOthers=true; window._cagLayerGroup=true;
   }
+  let _t0=performance.now();
   try{ window._meStaff=await dbGet('coaches',SESSION.id); }catch(_){}
-  try{ window._ttCache=await dbGetAll('ticket_types'); }catch(_){ window._ttCache=[]; }
-  try{ window._allTkCache=await dbGetAll('member_tickets'); }catch(_){ window._allTkCache=[]; }
+  _calDiag('coachCalV2:meStaff-done', { ms: Math.round(performance.now()-_t0) });
+  /* 2026-11-08（Mango切換日期/週黑畫面調查）：ticket_types／member_tickets 原本每次
+     切換日期/週（admCalPick → navTo → coachCalV2 整頁重跑）都會重新呼叫一次 dbGetAll，
+     每次都是一輪新的 await（含 tableSigs 簽章比對這趟 RPC）＋回傳陣列整份 .slice()
+     複製——純日期導覽（只是看同一週的不同天）用不到更新的票券資料，這些开销全部
+     多餘。跟桌機 renderCalendar 的 stepping 快取（window._calDataCache，同樣
+     120000ms 窗口）是同一招，這裡只是把同一個已經在用的模式套到教練手機這邊，
+     原本沒套到。
+     ⚠ 不是只看 _calStepping 就跳過——還檢查「上次真的抓到資料」的時間沒超過
+       2 分鐘，避免只因為是「翻頁」動作就無限期沿用舊資料；超過窗口一律回到
+       原本的 await 正常抓取（下面 else 那段，邏輯完全沒變）。
+     ⚠ 沒有背景重抓——故意跟桌機那套一樣簡單：2 分鐘內就是直接沿用，最差情況是
+       「切換頁面時看到至多 2 分鐘前的票券餘額」，跟桌機沿用 _calDataCache 時可接受
+       的新鮮度一致；2 分鐘一到，下一次任何切換都會自然走回整段重新 await，不會
+       卡死在舊資料。
+     ⚠ 沒有新增事件監聽器或計時器，純粹是這個函式內的分支判斷。 */
+  const _mtFresh=window._allTkCache && window._ttCache && window._mtCacheAt!=null
+    && (Date.now()-window._mtCacheAt<120000) && _stepping;
+  if(_mtFresh){
+    _calDiag('coachCalV2:ticketCache-reused', { ageMs: Date.now()-window._mtCacheAt });
+  }else{
+    _t0=performance.now();
+    try{ window._ttCache=await dbGetAll('ticket_types'); }catch(_){ window._ttCache=[]; }
+    _calDiag('coachCalV2:ticketTypes-done', { ms: Math.round(performance.now()-_t0), rows: (window._ttCache||[]).length });
+    _t0=performance.now();
+    try{ window._allTkCache=await dbGetAll('member_tickets'); }catch(_){ window._allTkCache=[]; }
+    window._mtCacheAt=Date.now();
+    _calDiag('coachCalV2:memberTickets-done', { ms: Math.round(performance.now()-_t0), rows: (window._allTkCache||[]).length });
+  }
   if(!window._cagSelDate) window._cagSelDate=ymd(TODAY);
   const _nD=Number(window._admCalDays)||1;
+  _t0=performance.now();
   const _hdr=await admCalHeaderHTML();
+  _calDiag('coachCalV2:header-done', { ms: Math.round(performance.now()-_t0), nDays: _nD });
   if(_nD>1){
+    _t0=performance.now();
+    const _multiHtml=await admCalMultiHTML(_nD);
+    _calDiag('coachCalV2:multiHTML-done', { ms: Math.round(performance.now()-_t0) });
+    /* 連點保護（見函式開頭 _mySeq 的說明）：這裡才真的擋得到「較慢的舊呼叫蓋掉新畫面」——
+       navTo 外層的序號防護只擋得到它自己那一段收尾，擋不到 coachCalV2 這種
+       自己直接寫 C.innerHTML 的頁面函式本體。 */
+    if(_mySeq!==window._navSeqNo){ _calDiag('coachCalV2:stale-skip-multi'); return; }
     C.innerHTML=`<div class="cag-wrap" id="cag-wrap">
       <div class="admh-sticky admcal-sticky" style="position:static;">${_hdr}</div>
-      <div class="cag-body" id="cag-body" style="padding:0 10px;">${await admCalMultiHTML(_nD)}</div>
+      <div class="cag-body" id="cag-body" style="padding:0 10px;">${_multiHtml}</div>
     </div>`;
     try{ cagPositionWrap(); }catch(_){}
+    _calDiag('coachCalV2:exit-multi');
     return;
   }
+  if(_mySeq!==window._navSeqNo){ _calDiag('coachCalV2:stale-skip-agenda-pre'); return; }
   _calDays=null;
   window._admCalHdr=_hdr;               // cag 是滿版覆蓋層，表頭要塞進去（0819 真機驗出）
   C.innerHTML=`<div id="wtl-page"></div>`;
+  _t0=performance.now();
   await renderCoachAgenda();
+  _calDiag('coachCalV2:exit-agenda', { ms: Math.round(performance.now()-_t0) });
 }
 /* ════════ 教練端:預約行事曆 ════════ */
 PAGES.coach_calendar=async function(){
@@ -67240,26 +67767,35 @@ PAGES.coach_calendar=async function(){
   if(!window._coachSelDate) window._coachSelDate=ymd(TODAY);
   if(!window._coachMonth){const t=parseYmd(window._coachSelDate)||new Date(TODAY);window._coachMonth={y:t.getFullYear(),m:t.getMonth()};}
 
-  const[bookings,members,coaches]=await Promise.all([dbGetAll('bookings'),dbGetAll('members'),dbGetAll('coaches')]);
-  try{ window._allTkCache=await dbGetAll('member_tickets'); }catch(_){ window._allTkCache=[]; }
-  try{ window._ttCache=await dbGetAll('ticket_types'); }catch(_){ window._ttCache=[]; }
-  try{ const tlogs=await dbGetAll('training_logs'); window._tlogBids=new Set(tlogs.map(l=>l.booking_id)); }catch(_){ window._tlogBids=new Set(); }
-  const memMap=memNameMap(members);
-  const coachMap=Object.fromEntries(coaches.map(c=>[c.id,coachDisp(c)]));
-  const typeMap={};
-  const visible=bookings.filter(b=>{
-    if(b.status==='cancelled') return false;
-    return bkIsCoach(b,myId); // 月曆/週量只看我的課
-  });
-  // 全店當日預約（未取消）：供「當日排課表」依場地容量判斷座位（含別人的課）
-  const allView2=bookings.filter(b=>b.status!=='cancelled');
-
-  window._coachCalData={visible,memMap,coachMap,typeMap,allView:false,myId,allBk:allView2};
-
   // ── 電腦版：共用後台行事曆元件（週/日時間軸、點空格新增、拖曳改期、點課卡）──
   //    opts.me=myId → renderCalendar 內部只顯示我的課，別人的課遮蔽為「已預約」、不可點、不顯示姓名；
   //    新增預約時教練欄位自動帶自己（openBookingModal 內 isMobile/_calMineOnly 之外，另由 _bkPrefillCoach 控制）。
   if(!isMobile){
+    /* 2026-11-06（Mango第三次行事曆黑畫面）：這一段（整表bookings／member_tickets／
+       ticket_types／training_logs＋window._coachCalData）原本在isMobile判斷「之前」就
+       無條件執行——手機版若coachCalV2()失敗落到這條回退路徑，一樣會整表硬抓一次
+       （10,938筆），跟首頁那次是同一種手法。
+       逐一核對過：window._coachCalData只被coach-month/coach-cal/coach-3day/coach-week/
+       coach-daylist這幾支讀取，全部只在這個!isMobile分支裡的renderCalendar()才會用到；
+       手機版走的renderCoachAgenda()完整讀過一遍，沒有依賴這裡的任何一個變數
+       （它自己用dbBookingsRange/dbBookingsForCoach，ticket_types/member_tickets也有
+       自己的dbPeek防呆）。搬進這個分支，手機版回退時完全不會執行到這段。 */
+    const[bookings,members,coaches]=await Promise.all([dbGetAll('bookings'),dbGetAll('members'),dbGetAll('coaches')]);
+    try{ window._allTkCache=await dbGetAll('member_tickets'); }catch(_){ window._allTkCache=[]; }
+    try{ window._ttCache=await dbGetAll('ticket_types'); }catch(_){ window._ttCache=[]; }
+    try{ const tlogs=await dbGetAll('training_logs'); window._tlogBids=new Set(tlogs.map(l=>l.booking_id)); }catch(_){ window._tlogBids=new Set(); }
+    const memMap=memNameMap(members);
+    const coachMap=Object.fromEntries(coaches.map(c=>[c.id,coachDisp(c)]));
+    const typeMap={};
+    const visible=bookings.filter(b=>{
+      if(b.status==='cancelled') return false;
+      return bkIsCoach(b,myId); // 月曆/週量只看我的課
+    });
+    // 全店當日預約（未取消）：供「當日排課表」依場地容量判斷座位（含別人的課）
+    const allView2=bookings.filter(b=>b.status!=='cancelled');
+
+    window._coachCalData={visible,memMap,coachMap,typeMap,allView:false,myId,allBk:allView2};
+
     // 電腦版：週曆，可排課/改期/拖曳（訓練紀錄不放，點課卡進課程明細）
     window._coachReadonly=false;
     window._calMineOnly=true;            // 新增預約預設帶自己

@@ -117,9 +117,13 @@ ok('★ 先落 _calDataCache 再校驗（_calRevalidate 沒有它會直接跳出
 ok('★ 背景校驗連名單三張表一起帶（否則剛新增的會員在行事曆上沒有名字）',
    /dbGetAll\('coaches'\)\.catch\(\(\)=>cached\.coaches\),/.test(src)
    && /coaches:cos\|\|cached\.coaches, members:mems\|\|cached\.members, types:tys\|\|cached\.types, _t:Date\.now\(\)\}/.test(src));
-ok('★ 手機 agenda 也 peek 先畫，stale 才背景校驗',
-   /const _cagPk=\['bookings','members','coaches'\]\.map\(t=>dbPeek\(t\)\);/.test(src)
-   && /if\(_cagPk\.some\(p=>p\.stale\)\) _cagRevalidate\(_calSigBk\(bookings\)\);/.test(src));
+/* 2026-11-03（MANGO手機行事曆黑畫面）：bookings這一份不再走peek-先畫/背景校驗這套——
+   改用dbBookingsRange/dbBookingsForCoach直連查詢，每次都是即時資料，不會「stale」，
+   也就不需要校驗。members/coaches還是小表，維持原本peek行為，斷言改成只認這兩張。 */
+ok('★ 手機 agenda：members/coaches 走 peek 先畫（bookings 已改走範圍查詢，不再peek）',
+   /const _cagPk=\['members','coaches'\]\.map\(t=>dbPeek\(t\)\);/.test(src));
+ok('　　bookings 改用日期範圍查詢，不進 _dbCache，所以不需要再校驗',
+   /dbBookingsRange\(ymd\(_rgStart\),ymd\(_rgEnd\)\),\s*\n\s*dbBookingsForCoach\(myId,/.test(src));
 ok('　　手機的大表（member_tickets／ticket_types）也走 peek',
    /const _tkPk=dbPeek\('member_tickets'\);/.test(src)
    && /const _tt=dbPeek\('ticket_types'\);/.test(src));

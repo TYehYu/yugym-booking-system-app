@@ -459,9 +459,12 @@ console.log('① 同系列後續場次的判斷（grpSeriesOf 實跑）');
     /* 2026-08-06：「找不到票」與「找到票但餘額護欄擋下沒扣到」都要算進警告 */
     /* 2026-08-29：同一張票扣第二格時要帶 multi:true —— 不帶的話重複扣護欄會回 true
        但沒真的扣，名額就白站在名單上（許佳慈 9/4 三格同票，只扣到 1 堂）。 */
-    ok('★ 名單儲存記下扣不到票的名額數（含護欄擋下沒扣到的）',   // 2026-08-20 取消教練招待：扣不到票改為不寫入名單
-       /const _ded = tk \? await deductTicket\(tk,b\.id,SESSION\.id,\s*\n\s*_used\.has\(String\(tk\.id\)\)\?\{multi:true\}:undefined\) : false;/.test(src)
-       && /if\(!_ded\)\{ \(_noTk\[mid\]=\(_noTk\[mid\]\|\|0\)\+1\); _failed\.add\(String\(mid\)\); continue; \}/.test(src));
+    /* 2026-11-01（2d-3）：規劃階段挑不到票直接算 _noTk（!tk 分支）；真的扣票/
+       護欄擋下沒扣到（RPC 判定失敗）則是規劃完送出後、按 RPC 回傳的失敗結果併入
+       _noTk（見 _plan.forEach 那段）。兩段都要有，才算完整涵蓋「含護欄擋下沒扣到的」。 */
+    ok('★ 名單儲存記下扣不到票的名額數（含 RPC 護欄擋下沒扣到的）',   // 2026-08-20 取消教練招待：扣不到票改為不寫入名單
+       /if\(!tk\)\{ \(_noTk\[mid\]=\(_noTk\[mid\]\|\|0\)\+1\); _failed\.add\(String\(mid\)\); continue; \}/.test(src)
+       && /\(_noTk\[p\.mid\]=\(_noTk\[p\.mid\]\|\|0\)\+1\);/.test(src));
     ok('★ 有漏就擋明確視窗（列出誰、幾個名額），不再只 toast 帶過',
        /if\(Object\.keys\(_noTk\)\.length\)\{/.test(src)
        && /⚠ 有名額沒有加入/.test(src)

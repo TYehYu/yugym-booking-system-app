@@ -28,8 +28,10 @@ ok('★★ confirmCancelBooking 不再呼叫 refundLegacyBooking',
 ok('★ 退場理由寫在原地（含 7/26 基線口徑）',
    /「沒綁票就回頭找一張票退」的備援（refundLegacyBooking）2026-08-14 退場/.test(src)
    && /7\/26 基線改成「預約中不預扣」後/.test(src));
+/* 2026-11-07 Phase1修正：改成先接住成功與否分類進 refunded/refund_failed，
+   refundTicket 本身呼叫方式沒變 —— 見 cancelrefundclassifytest.js */
 ok('★ 有綁票的取消照常退（refundTicket 路徑沒動）',
-   /refundedCount=\(await refundTicket\(b\.ticket_id,b\.id,SESSION\.id\)\)\?1:0;/.test(src));
+   /const _ok=await refundTicket\(b\.ticket_id,b\.id,SESSION\.id\);\s*\n\s*refundedCount=_ok\?1:0;/.test(src));
 ok('★ 團課有 deduct 帳本的照常退',
    /if\(await refundTicket\(log\.ticket_id,b\.id,SESSION\.id\)\) refundedCount\+\+;/.test(src));
 

@@ -18,7 +18,7 @@ const ok=(n,c,x)=>{ if(c){pass++;console.log('  ✓ '+n);} else {fail++;console.
 const CFM=src.slice(src.indexOf('async function confirmCancelBooking(id){'),
                     src.indexOf('/* 2026-07-29 使用者定案（取消政策三修）'));
 const CB=src.slice(src.indexOf('async function cancelBooking(id, refundMode, opts){'),
-                   src.indexOf('let refundedCount=0, refundMissed=false;')+2000);
+                   src.indexOf('let refundedCount=0;')+5000);
 
 console.log('畫面：不再問「退回票券／扣課不退」');
 ok('★★ 綁了票但帳本沒扣過 → 也算 noTicket（原本只看 !b.ticket_id）',
@@ -41,7 +41,10 @@ console.log('\n寫入：再擋一次');
    而且「查得到、真的沒扣過」那條路從 console.warn 升級成警示帳＋吐司。 */
 ok('★★ 真的要退之前先問帳本，沒淨扣就不退',
    /const _net=await bkNetDeductDB\(b\.id, b\.ticket_id\);/.test(CB)
-   && /\}else if\(_net>0\)\{\s*\n\s*refundedCount=\(await refundTicket\(b\.ticket_id,b\.id,SESSION\.id\)\)\?1:0;/.test(CB)
+   /* 2026-11-07 Phase1修正：這裡改成先接住 refundTicket 的成功與否，
+      分類進 refunded/refund_failed（見 cancelrefundclassifytest.js），
+      不再是「呼叫了就當作已退」的單行三元 */
+   && /\}else if\(_net>0\)\{\s*\n\s*const _ok=await refundTicket\(b\.ticket_id,b\.id,SESSION\.id\);\s*\n\s*refundedCount=_ok\?1:0;/.test(CB)
    && /console\.warn\('取消未退課：這一堂在該票券上沒有淨扣課紀錄'/.test(CB));
 ok('★★ 問不到（null）不等於沒扣過 —— 保守起見照退，不要吃掉客人一堂',
    /if\(_net===null\)\{/.test(CB) && /保守起見照退/.test(CB));
