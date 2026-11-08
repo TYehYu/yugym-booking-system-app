@@ -3,11 +3,17 @@
    使用者 1025：「可以把課卡做成ＡＢ面　Ａ面就是我們平常看到的資訊　Ｂ面是滑鼠滑上去
    的時候顯示」。1026 一條一條談完：
 
-     A 面　底色＝課程色、左色條＝教練色
+     A 面　底色＝課程色、左色條＝教練色（2026-11-08 使用者再次指示對調，見下方）
            第一列　出席章（最左）・〔友善〕・〔警示〕（最右）
            第二列　姓名 ＋ 時間（字級跟著卡片長大）
            第三列　場地（只有非預設場地才有）・右下角教練膠囊（150px 以上）
-     B 面　底色＝教練色、左色條＝課程色　←—— 跟 A 面對調
+     B 面　底色＝教練色、左色條＝課程色　←—— 跟 A 面對調（1026 版本，已於下方對調）
+
+   2026-11-08 使用者再次指示整組對調：A 面底色改教練色、B 面底色改課程色——
+   跟上面 1026 定的方向剛好相反。兩面的文字顏色也跟著各自的新底色調整
+   （A 面文字吃教練配對色 --co-fg，B 面文字固定深色），確保每位教練（含深底
+   白字的 Mango/Barry/石頭、以及底色偏深的小曾）都量過 WCAG ≥4.5:1。
+   下面 ④ 的斷言已更新成對調後的版本；這裡的敘述保留當歷史紀錄。
            教練／進度（後接繳費標籤）／場地；團課把「進度」換成會員
            窄卡（<112px）只寫「教練縮寫＋場地」兩行置中
      翻牌　rotateX（上下翻）、延遲 0.15 秒、離開立刻翻回來、桌機限定
@@ -173,10 +179,10 @@ ok('★★★ 有標籤的窄卡換成壓縮版的進度（沒有標籤的照樣
 ok('　　量到的數字寫在原地', /完整版「第 4 \/ 12 堂」62px ＋ 標籤 28px ＝ 95px，可用寬只有 94px/.test(src));
 ok('　　為什麼要標籤不是改字色（深底教練上紅字會變白字）',
    /標籤自己帶底色，所以淡底深底都讀得到/.test(css));
-ok('★★★ 底色＝教練色、字色成對（深底的兩位要白字）',
-   /background:var\(--co-bg,var\(--course-soft\)\);color:var\(--co-fg,var\(--text\)\);/.test(css));
-ok('★★★ 左色條＝課程色（跟 A 面對調）',
-   /\.cal-ev\.cal-ev-std \.evc-back::before\{content:'';position:absolute;left:0;top:0;bottom:0;\s*\n?\s*width:3px;background:var\(--course-accent,#3D7039\);\}/.test(css));
+ok('★★★ 2026-11-08對調：底色＝課程色，固定深字（課程色沒有深底反轉配色，不必分教練）',
+   /background:var\(--course-soft,#EAF3EF\);color:var\(--text\);/.test(css));
+ok('★★★ 2026-11-08對調：左色條＝教練色（跟 A 面互換角色）',
+   /\.cal-ev\.cal-ev-std \.evc-back::before\{content:'';position:absolute;left:0;top:0;bottom:0;\s*\n?\s*width:3px;background:var\(--coach-bar, var\(--course-accent,#3D7039\)\);\}/.test(css));
 ok('★★ 圓角跟著卡片（border-radius:inherit）',
    /\.cal-ev\.cal-ev-std \.evc-back\{[\s\S]{0,200}border-radius:inherit;/.test(css));
 ok('★★ 180px 以下收欄位名、150px 以下縮字',

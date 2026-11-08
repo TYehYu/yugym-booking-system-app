@@ -260,20 +260,22 @@ ok('★★ 中文 Noto Sans TC / PingFang TC、英文與數字 Inter',
 ok('★ Inter 併進既有那一條 Google Fonts 請求（不多開）',
    /family=Cormorant\+Garamond[^"]*&family=Inter:wght@400;500;600;700&family=Noto\+Sans\+TC/.test(src)
    && (src.match(/fonts\.googleapis\.com\/css2/g)||[]).length===1);
-ok('★★ 字級不放大：日期欄 13px、時間 10px、課別 9px（教練由既有 clamp 管）',
+ok('★★ 字級不放大：日期欄 13px、時間 10px、課別 9px（2026-11-08 對調後文字改吃 --co-fg，字級/字重不變）',
    /body\.ink \.cal-daycol-head \.cd-line\{font-weight:600;font-size:13px;/.test(src)
-   && /body\.ink \.cal-ev\.cal-ev-std \.evc-time\{color:var\(--t3\);font-weight:500;font-size:10px;/.test(src)
-   && /body\.ink \.cal-ev\.cal-ev-std \.evc-sub\{color:var\(--t2\);font-weight:500;font-size:9px;/.test(src));
-ok('★★ 姓名是主角（墨色、加粗），不是靠字級撐大',
-   /body\.ink \.cal-ev\.cal-ev-std \.evc-name\{color:var\(--text\);font-weight:700;/.test(src));
+   && /body\.ink \.cal-ev\.cal-ev-std \.evc-time\{color:var\(--co-fg,var\(--t3\)\);font-weight:500;font-size:10px;/.test(src)
+   && /body\.ink \.cal-ev\.cal-ev-std \.evc-sub\{color:var\(--co-fg,var\(--t2\)\);font-weight:500;font-size:9px;/.test(src));
+ok('★★ 姓名是主角（加粗不變；2026-11-08 對調後顏色改吃 --co-fg，沒有教練時退回原本的墨色）',
+   /body\.ink \.cal-ev\.cal-ev-std \.evc-name\{color:var\(--co-fg,var\(--text\)\) !important;font-weight:700;/.test(src));
 
-console.log('\n④-2 兩套獨立的顏色對應（使用者第 3～5 點）');
-ok('★★ 課卡底色由「課程類型」決定：同色底（course-soft 混出來；2026-09-28 濃度 30%→80%）',
-   /background:color-mix\(in srgb, var\(--course-soft,#EAF3EF\) 80%, #FFFDF8\) !important;/.test(src));
-/* ⚠ 2026-10-18：左色條改吃教練色（使用者從四種對照裡選 C），課程色退成 var() 的預設值。
-   Ink 這條權重高過一般那條，兩邊都要改 —— 只改一邊的話開 Ink 的人看不到變化。 */
-ok('★★ 左側 3px 色條：教練色優先，沒有就退回 course-accent',
-   /body\.ink \.cal-ev\.cal-ev-std \.evc-body::before\{width:3px;border-radius:0;\s*\n\s*background:var\(--coach-bar, var\(--course-accent,#3D7039\)\);\}/.test(src));
+console.log('\n④-2 兩套獨立的顏色對應（使用者第 3～5 點，2026-11-08 使用者再次指示整組對調，另見 abfacetest.js/coachbartest.js）');
+/* ⚠ 2026-11-08：使用者明確要求 A 面底色改由「教練」決定、B 面底色改由「課程類型」決定——
+   跟這一段 2026-08-26 定的方向相反。沒有讓兩套顏色「同一個元素互相混色」：
+   body 仍然只吃一種語意（現在是教練），色條與 B 面則吃另一種（課程）——
+   只是對調哪個語意配哪個視覺槽位，不是把兩套合併成一套。 */
+ok('★★ 2026-11-08對調：課卡底色改由「教練」決定（沒有教練時退回課程色，行為不變）',
+   /background:var\(--co-bg, var\(--course-soft,#EAF3EF\)\) !important;/.test(src));
+ok('★★ 2026-11-08對調：左側 3px 色條改回課程色（教練身分搬到底色，色條不用再講一次）',
+   /body\.ink \.cal-ev\.cal-ev-std \.evc-body::before\{width:3px;border-radius:0;\s*\n\s*background:var\(--course-accent,#3D7039\);\}/.test(src));
 ok('★★ 教練顏色只上在名字文字：底、內距、框全部拿掉',
    /body\.ink \.cal-ev\.cal-ev-std \.evc-coach:not\(\.evc-leavetag\)\{\s*\n\s*background:transparent !important;padding:0 !important;border-radius:0;border:none;/.test(src));
 ok('★★ 教練色仍由 renderCalendar 的 inline color 帶（Ink 沒有自己訂一套教練色）',
@@ -284,8 +286,8 @@ ok('★★ 兩套不互相覆蓋：課卡底色沒有吃到任何教練色變數
 ok('★ 請假標籤保留紅底（白字，底拿掉會看不見）',
    /<span class="evc-coach evc-leavetag" style="background:#7A2E28;color:#F4F1E8;">請假<\/span>/.test(src)
    && /body\.ink \.cal-ev\.cal-ev-std \.evc-leavetag\{border-radius:2px;/.test(src));
-ok('★ 姓名不再整塊吃課程色（顏色留給色條與淡底）',
-   /body\.ink \.cal-ev\.cal-ev-std \.evc-txt\{color:var\(--text\);\}/.test(src));
+ok('★ 2026-11-08對調：姓名不再整塊吃課程色，改吃教練配對色（沒有教練時退回墨色）',
+   /body\.ink \.cal-ev\.cal-ev-std \.evc-txt\{color:var\(--co-fg,var\(--text\)\);\}/.test(src));
 ok('★ 數字等寬（tabular-nums），時間才對得齊',
    /font-variant-numeric:tabular-nums;/.test(RULES));
 ok('★ 減少圓角與卡片感（課卡 3px、按鈕 4px）',
