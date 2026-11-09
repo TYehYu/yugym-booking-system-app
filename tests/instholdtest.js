@@ -111,16 +111,36 @@ ok('　　_bkInstHold 整段留著（日後要退回不必重寫）',
 ok('★ 回報建立堂數（含跳過）', /已建立 \$\{ok\} 堂分期保留/.test(src));
 
 console.log('\n④ 待簽約整串轉正（2026-08-04 使用者指示）：「先約 12 堂先繳 4 堂 → 後面 8 堂\n   直接轉分期繳費保留」「只簽約 8 堂 → 直接取消後面佔位子的 4 堂」');
+/* ⚠ 2026-11-09（施佩怡Fix C）推翻「超過總堂數取消」這個方向：合約12堂不代表
+   會員只能有12筆未來預約，很多人會先卡住固定時段等續約，原本「超出→自動取消」
+   會把這些卡位直接釋出給別人、無法復原。改成「超出範圍→保留原狀，完全不碰」，
+   第三段只計數、不再寫 status/note、不再呼叫 dbPut。
+   下面兩條斷言照新行為改寫；①②⑤維持原樣（蒐集範圍、avail/lockedLeft算法沒動）。
+   ⚠ 原本②的「取消多出的 ${dropped} 堂」字樣其實是巧合匹配到另一支完全無關的
+     「補扣待繳欠款」函式（約55433行，那支是使用者主動按紅色按鈕才會取消，
+     本次沒有動它）——這裡改成只在 _doConvertPending 原始碼片段內比對，不會再誤判。 */
 ok('★ 同名同手機同票種的未來卡位視為同一串、照日期序處理',
    /x\.pending_contract && !x\.member_id && x\.status==='booked'\n\s*&& String\(x\.trial_name\|\|''\)===String\(b\.trial_name\|\|''\)/.test(src));
-ok('★ 三段式：開通額度內扣課 → 分期未開通轉保留 → 超過總堂數取消',
+ok('★ 三段式：開通額度內扣課 → 分期未開通轉保留 → 超出範圍保留原狀（不自動取消）',
    /if\(avail>0\)\{/.test(src)
    && /\}else if\(lockedLeft>0\)\{/.test(src)
    && /hb\.note='分期待繳費保留（收款後自動補扣）';/.test(src)
-   && /hb\.note=\(hb\.note\?hb\.note\+'｜':''\)\+'簽約堂數不含此堂，轉正時自動取消';/.test(src));
-ok('★ 結果回報三個數字（扣課/轉保留/取消）',
-   /已轉正式預約：扣課 \$\{bound\} 堂/.test(src) && /轉分期保留 \$\{held\} 堂/.test(src) && /取消多出的 \$\{dropped\} 堂/.test(src));
-ok('　　非分期票 lockedLeft＝0 → 超出的直接取消（只簽 8 堂的情境）',
+   && /kept\+\+;/.test(src)
+   && !/hb\.status='cancelled'; hb\.cancelled_at=new Date\(\)\.toISOString\(\);\s*\n\s*hb\.note=\(hb\.note\?hb\.note\+'｜':''\)\+'簽約堂數不含此堂，轉正時自動取消';/.test(src));
+{
+  const i=src.indexOf("async function _doConvertPending(memberId, tkId, mode){");
+  const j=src.indexOf('\nasync function ', i+10);
+  const fnSrc=src.slice(i,j<0?i+6000:j);
+  const toastIdx=fnSrc.indexOf('已轉正式預約：扣課');
+  const toastTail=fnSrc.slice(toastIdx, fnSrc.indexOf(');', toastIdx));
+  ok('★ 結果回報三個數字（扣課/轉保留/保留原狀），且不再出現「取消」字樣',
+     toastIdx>=0
+     && /已轉正式預約：扣課 \$\{bound\} 堂/.test(toastTail)
+     && /轉分期保留 \$\{held\} 堂/.test(toastTail)
+     && /保留原狀（超出範圍）\$\{kept\} 堂/.test(toastTail)
+     && !/取消/.test(toastTail));
+}
+ok('　　非分期票 lockedLeft＝0 → 超出的部分保留原狀（只簽 8 堂的情境，一樣不自動取消）',
    /let lockedLeft=isInst\?Math\.max\(0,\(Number\(tk\.sessions_total\)\|\|0\)-\(Number\(tk\.unlocked_sessions\)\|\|0\)\):0;/.test(src));
 
 console.log(`\n${pass} 通過 / ${fail} 失敗`);
