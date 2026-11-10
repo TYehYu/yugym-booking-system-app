@@ -66,7 +66,7 @@ const MARK = '分期待繳費保留（收款後自動補扣）';
 const TODAY_STR = '2026-11-10';
 
 const REAL = ['bkInstMs', 'bkInstTkSig', 'bkInstBkSig', 'bkInstCandidates', 'bkCardPayKind', 'bkEnsureTtCache', 'bkInstLoad', 'bkInstNames', 'bkTopUpFromCard', '_bkTopUpFromCard',
-  'ashInstNext', '_ashInstNext', 'bkInstTkHtml', 'bkInstPickModal', 'bkInstInfoModal', 'bkInstConfirm', '_bkInstConfirm',
+  'ashInstNext', '_ashInstNext', 'bkInstDotsOf', 'bkInstTkHtml', 'bkInstPickModal', 'bkInstInfoModal', 'bkInstConfirm', '_bkInstConfirm',
   'tkUsableBy', 'tkSharedIds', 'tkIsInstall', 'bkTypeIdOf', 'bkTicketTypeOk', 'bkIsMergedPT', 'bkIsPtVoucherType', 'bkIsInstHold', 'bkNoteSplit', 'bkNoteJoin', 'escH',
   'tkUnlockedLeft', 'bindHeldBookings'];
 
@@ -101,6 +101,10 @@ function mk(o) {
     deductTicket: async (t, bid) => { log.deducts.push([t.id, bid]); return true; },
     _actBusy: {}, console: { log: console.log, warn: () => {}, error: () => {} },
     BK_NOTE_SEP: '｜備註：',
+    /* 圓形卡（與會員票券頁同源）夾具：walletCtx／buildWallet／ticketTokens 以可檢查的標記取代，驗證 UI 有呼叫、且傳的是這張票 */
+    walletCtx: async () => { if (st.walletFails) throw new Error('wallet down'); return { typeMap: {} }; },
+    buildWallet: () => ({ of: id => ({ used: 3 }), stampsOf: () => [], useDatesOf: () => [], selfBk: new Set() }),
+    ticketTokens: (t, stamps, tm, used) => `<span class="mck-dots-stub" data-tk="${t.id}" data-used="${used}" data-total="${t.sessions_total}" data-unlocked="${t.unlocked_sessions}"></span>`,
   };
   // onceAct：預設直通（讓同一個測試能連續呼叫同一個動作）；st.realOnce=true 時用真正的 onceAct（驗連點）
   const realOnce = instantiate(grabFn('onceAct'), env, log.unknown);
@@ -162,9 +166,11 @@ const bookingOf = h => h.tables.bookings.BK1;
     ok('（備註 ' + JSON.stringify(note) + '）點擊後只顯示確認視窗：沒有寫入、沒有收款、沒有開銷售視窗',
        h.log.modals.length === 1 && h.log.puts.length === 0 && h.log.installNext.length === 0 && h.log.topUp.length === 0, [h.log.modals.length, h.log.puts.length, h.log.installNext, h.log.topUp]);
     if (note === null) {
-      ok('★ 視窗列出：持有人、方案名稱、票券識別碼、已繳期數、總期數、未開通堂數、效期',
-         /測試會員/.test(html) && /分期方案/.test(html) && /TK-1/.test(html) && /已繳期數/.test(html) && /總期數/.test(html) && /未開通堂數：<b>4<\/b>/.test(html) && /2027-09-15/.test(html), html.slice(0, 120));
-      ok('　　視窗說明「還沒有標記」、「不會建立新票券」', /還沒有<\/b>分期保留標記/.test(html) && /不會建立新票券/.test(html));
+      ok('★ 視窗列出：持有人、方案名稱、票券識別碼、已繳期數／總期數、效期（不再有統計圓環）',
+         /測試會員/.test(html) && /分期方案/.test(html) && /TK-1/.test(html) && /已繳 <b>2<\/b> ／ 3 期/.test(html) && /2027-09-15/.test(html) && !/conic-gradient/.test(html), html.slice(0, 120));
+      ok('★★ 一堂課一個圓形卡：圓形卡由票券夾（與會員票券頁同源的 ticketTokens）依這張票產生，沒有寫死／推算', /data-tk="TK-1"/.test(html) && /data-total="12"/.test(html) && /data-unlocked="8"/.test(html) && /data-used="3"/.test(html) && /mck-dots2/.test(html));
+      ok('　　沒有可靠的下一期金額（inst.amounts 缺）就不顯示金額', !/下一期/.test(html));
+      ok('　　視窗提醒：先標記分期待繳費保留、再進原票券收款、未付款仍保留、不建立新票券', /先標記「分期待繳費保留」/.test(html) && /原票券收款/.test(html) && /未付款仍保留標記/.test(html) && /不建立新票券/.test(html));
     }
     h.st.pick = 'TK-1';
     await h.f.bkInstConfirm('BK1');
@@ -189,6 +195,26 @@ const bookingOf = h => h.tables.bookings.BK1;
     h.st.pick = 'TK-NEW';
     await h.f.bkInstConfirm('BK1');
     ok('★★★ 即使指定 TK-NEW 直接呼叫確認 → 仍被擋，不收款、不寫入', h.log.installNext.length === 0 && h.log.puts.length === 0, h.log.installNext);
+  }
+
+  console.log('\n═══ ③b 圓形卡資料（與會員票券頁同源）═══');
+  {
+    let h = mk({ bookings: [bk()], tickets: [tk('TK-1', { installment: { count: 3, current: 2, amounts: [10000, 8000, 6000] } })] });
+    await h.f.ashInstNext('BK1');
+    const html = h.log.modals[0] || '';
+    ok('★ 下一期金額取自 inst.amounts[current]（與 openInstallNext 同一個來源）', /下一期 <b>NT\$ 6,000<\/b>/.test(html), html.slice(-300));
+    ok('　　票券識別碼傳遞不變：選項值＝TK-1，確認鈕仍呼叫 bkInstConfirm', /value="TK-1"/.test(html) && /bkInstConfirm\('BK1'\)/.test(html));
+  }
+
+  {
+    const h = mk({ bookings: [bk()], tickets: [tk('TK-1')], st: { walletFails: true } });
+    await h.f.ashInstNext('BK1');
+    const html = h.log.modals[0] || '';
+    ok('★★ 票券夾讀不到 → 不畫圓圈（不編造日期），顯示「無法載入」；票券資訊與確認／取消鈕照常', /圓形卡無法載入/.test(html) && !/data-tk=/.test(html) && /TK-1/.test(html) && /bkInstConfirm\('BK1'\)/.test(html) && /closeModal\(\)/.test(html));
+    const hm = mk({ bookings: [bk()], tickets: [tk('TK-1'), tk('TK-2')] });
+    await hm.f.ashInstNext('BK1');
+    const hh = hm.log.modals[0] || '';
+    ok('★★★ 多候選查核畫面：每張票都有圓形卡，但沒有選票鈕、沒有確認收款鈕', /data-tk="TK-1"/.test(hh) && /data-tk="TK-2"/.test(hh) && !/inst-pick/.test(hh) && !/bkInstConfirm\(/.test(hh));
   }
 
   console.log('\n═══ ④ 已標記的保留課也要過同樣的安全檢查 ═══');

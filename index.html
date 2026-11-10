@@ -15632,8 +15632,8 @@ function tbl(s){return TABLE_ALIAS[s]||s;}
 let sb=null;
 // ── 版本號（日期+時間格式：年後兩碼+月+日.時分，例 26620.1058 = 26年6/20 10:58）──
 // 每次改版手動更新這一行即可，畫面與 title 會一起更新
-const APP_VERSION = '261110.1736';
-const APP_VERSION_LABEL = 'v261110.1736';
+const APP_VERSION = '261110.2232';
+const APP_VERSION_LABEL = 'v261110.2232';
 const CLOUD = !!(window.YUGYM_CONFIG && window.YUGYM_CONFIG.url && window.YUGYM_CONFIG.anonKey);
 if(CLOUD){ sb = supabase.createClient(window.YUGYM_CONFIG.url, window.YUGYM_CONFIG.anonKey); }
 
@@ -41971,13 +41971,28 @@ async function _ashInstNext(bid){
     return await bkInstPickModal(b, cls);                                         // 未標記／多張／有疑點 → 櫃檯確認
   }catch(e){ showToast('無法開啟分期（已停止，不會開新方案）：'+((e&&e.message)||e), 7000); }
 }
+/* 分期票資訊（2026-11-10）：與會員票券頁同一套「一堂課一個圓形卡」——
+   直接用票券夾（walletCtx／buildWallet）＋ ticketTokens（已用堂數＝W.of(id).used，與會員票券頁的 tkUsedCount 同式），與會員票券頁（openMemberDetail）逐字同源：
+   已開通＝實心＋原有日期、尚未開通＝虛線＋🔒，日期與狀態都由 ticketTokens 依票券資料算出，這裡不推算、不寫死。
+   讀不到票券夾就整排不畫（寧可沒有圓圈也不編造日期），其餘資訊照常顯示。 */
+async function bkInstDotsOf(t, mid){
+  try{
+    const ctx=await walletCtx();
+    const W=buildWallet(mid, ctx);
+    if(!W || !W.of || !W.of(t.id)) return '';
+    return ticketTokens(t, W.stampsOf(t.id), ctx.typeMap||{}, (W.of(t.id).used)||0, null, mid, W.selfBk, null, {useDates:W.useDatesOf(t.id)}) || '';
+  }catch(e){ return ''; }
+}
 function bkInstTkHtml(t, o){
   const inst=(t.installment&&typeof t.installment==='object')?t.installment:{};
-  const total=Number(t.sessions_total)||0, unlocked=(t.unlocked_sessions==null)?total:Number(t.unlocked_sessions);
-  const info=`<div style="font-size:12px;color:var(--t2);line-height:1.8;margin-top:4px;">
-      持有人：<b>${escH(o.owner||'—')}</b>　票券識別碼：<b>${escH(t.id)}</b><br>
-      已繳期數：<b>${Number(inst.current||1)}</b> ／ 總期數 <b>${Number(inst.count)||'—'}</b>　未開通堂數：<b>${Math.max(0,total-unlocked)}</b>（已開通 ${unlocked}／共 ${total} 堂）<br>
-      效期：<b>${escH(t.expire_date?String(t.expire_date).slice(0,10):'未設定')}</b>　購買日：${escH(String(t.created_at||'').slice(0,10)||'—')}</div>`;
+  const cnt=Number(inst.count)||0, cur=Number(inst.current||1);
+  const nextAmt=(cnt>cur && Array.isArray(inst.amounts)) ? Number(inst.amounts[cur]) : NaN;   // 與 openInstallNext 同一個來源（inst.amounts[current]）
+  const dots=o.dots ? `<div class="mck-dots2" style="margin:8px 0 6px;">${o.dots}</div>`
+                    : `<div style="font-size:11px;color:var(--t3);margin:6px 0;">（圓形卡無法載入，不顯示堂數圓圈）</div>`;
+  const info=`${dots}<div style="font-size:12px;color:var(--t2);line-height:1.7;word-break:break-all;">
+      已繳 <b>${cur}</b> ／ ${cnt||'—'} 期${(Number.isFinite(nextAmt)&&nextAmt>0)?`　·　下一期 <b>NT$ ${nextAmt.toLocaleString()}</b>`:''}<br>
+      票券識別碼：<b>${escH(t.id)}</b>　效期：<b>${escH(t.expire_date?String(t.expire_date).slice(0,10):'未設定')}</b></div>
+    <div style="font-size:11px;color:var(--t3);line-height:1.6;margin-top:2px;">持有人 ${escH(o.owner||'—')}　·　購買日 ${escH(String(t.created_at||'').slice(0,10)||'—')}</div>`;
   const head=`<b>${escH(t.plan_name||'分期票券')}</b>`;
   if(o.selectable) return `<label style="display:block;border:1px solid var(--bd);border-radius:10px;padding:10px 12px;margin-bottom:8px;cursor:pointer;"><input type="radio" name="inst-pick" value="${escH(t.id)}" ${o.checked?'checked':''}> ${head}${info}</label>`;
   return `<div style="border:1px dashed var(--bd);border-radius:10px;padding:10px 12px;margin-bottom:8px;opacity:.9;">${head}${info}<div style="color:var(--danger,#b5372e);font-size:12px;margin-top:4px;">不可操作：${(o.reasons||[]).map(r=>escH(BK_INST_REASON[r]||r)).join('；')}</div></div>`;
@@ -41985,23 +42000,23 @@ function bkInstTkHtml(t, o){
 async function bkInstPickModal(b, cls){
   const names=await bkInstNames();
   const marked=bkIsInstHold(b);
+  const dm={}; for(const t of cls.strict.concat(cls.review.map(r=>r.t))) dm[t.id]=await bkInstDotsOf(t, b.member_id);
   window._bkInstCtx={ bid:b.id, bsig:bkInstBkSig(b),
     ids:cls.strict.map(t=>t.id).concat(cls.review.map(r=>r.t.id)).sort().join(','),
     sigs:Object.fromEntries(cls.strict.map(t=>[t.id, bkInstTkSig(t)])) };
-  const strictHtml=cls.strict.map(t=>bkInstTkHtml(t,{selectable:true, checked:cls.strict.length===1, owner:names[t.member_id]})).join('');
-  const reviewHtml=cls.review.map(r=>bkInstTkHtml(r.t,{selectable:false, reasons:r.reasons, owner:names[r.t.member_id]})).join('');
+  const strictHtml=cls.strict.map(t=>bkInstTkHtml(t,{selectable:true, checked:cls.strict.length===1, owner:names[t.member_id], dots:dm[t.id]})).join('');
+  const reviewHtml=cls.review.map(r=>bkInstTkHtml(r.t,{selectable:false, reasons:r.reasons, owner:names[r.t.member_id], dots:dm[r.t.id]})).join('');
   showModal(`<div class="modal-title">分期（待確認）・確認原分期票券</div>
     <div class="ash-eihead">${escH(String(b.date).replace(/-/g,'/'))} ${escH(String(b.start_time).slice(0,5))}　·　${escH(names[b.member_id]||'')}　·　${escH(b.category||'')}</div>
-    <div style="font-size:12.5px;color:var(--t2);line-height:1.8;margin:8px 0;">${marked
-      ? '這張預約已標為分期保留。確認後進入所選票券的<b>下一期收款</b>；<b>不會建立新票券</b>。'
-      : '這張預約目前<b>還沒有</b>分期保留標記。確認後會先把它標為「分期待繳費保留」（保留原備註），再進入所選票券的<b>下一期收款</b>；<b>不會建立新票券</b>。'}
-      ${cls.strict.length>1?'<br>有多張符合的分期票，請自己選擇，系統不會自動挑。':''}</div>
+    <div style="font-size:12px;color:var(--t2);line-height:1.7;margin:8px 0;background:var(--card2,#f7f5f1);border-radius:8px;padding:8px 10px;">
+      確認後先標記「分期待繳費保留」${marked?'（這張已標記）':''}，再進入原票券收款；未付款仍保留標記；不建立新票券。${cls.strict.length>1?'<br>有多張符合的分期票，請自己選擇，系統不會自動挑。':''}</div>
     ${strictHtml}${reviewHtml?`<div style="font-size:12px;color:var(--t3);margin:6px 0;">以下票券需要查核，不能在這裡操作：</div>${reviewHtml}`:''}
     <div class="modal-foot"><button class="btn btn-ghost" onclick="closeModal()">取消</button>
       <button class="btn btn-green" onclick="bkInstConfirm('${escH(b.id)}')">確認並進入收款</button></div>`);
 }
 async function bkInstInfoModal(b, cls){
   const names=await bkInstNames();
+  const dm={}; for(const t of cls.strict.concat(cls.review.map(r=>r.t))) dm[t.id]=await bkInstDotsOf(t, b.member_id);
   const hasExpired=cls.review.some(r=>r.reasons.includes('expired'));
   const hasShared=cls.review.some(r=>r.reasons.includes('shared'));
   showModal(`<div class="modal-title">分期票券需要查核</div>
@@ -42009,8 +42024,8 @@ async function bkInstInfoModal(b, cls){
     <div style="font-size:12.5px;color:var(--t2);line-height:1.8;margin:8px 0;">這位會員有同票種的分期票尚有未開通堂數，但目前<b>不能直接開通</b>，也<b>不會轉入新方案銷售</b>。
       ${hasExpired?'<br>有票券已過期或效期早於這堂預約：請先到會員票券處理效期。':''}
       ${hasShared?'<br>共享票券只提示查核：不會自動選票、不會開通、不會寫入標記。':''}</div>
-    ${cls.strict.map(t=>bkInstTkHtml(t,{selectable:false, reasons:['multi'], owner:names[t.member_id]})).join('')}
-    ${cls.review.map(r=>bkInstTkHtml(r.t,{selectable:false, reasons:r.reasons, owner:names[r.t.member_id]})).join('')}
+    ${cls.strict.map(t=>bkInstTkHtml(t,{selectable:false, reasons:['multi'], owner:names[t.member_id], dots:dm[t.id]})).join('')}
+    ${cls.review.map(r=>bkInstTkHtml(r.t,{selectable:false, reasons:r.reasons, owner:names[r.t.member_id], dots:dm[r.t.id]})).join('')}
     <div class="modal-foot"><button class="btn btn-ghost" onclick="closeModal()">關閉</button>
       <button class="btn btn-green" onclick="closeModal();openMemberDetail('${escH(b.member_id)}')">查看會員票券</button></div>`);
 }

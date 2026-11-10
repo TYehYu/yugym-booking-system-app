@@ -63,7 +63,7 @@ const REAL = ['expandBkCard', 'evoBtn', 'bkIsInstHold', 'mids', 'bkIsCoachLeave'
   'tkUsableBy', 'tkSharedIds', 'tkIsInstall', 'bkTypeIdOf', 'bkTicketTypeOk', 'bkIsMergedPT', 'bkIsPtVoucherType', 'categoryOfTypeId', 'ticketCategoryOf', 'tkTimeOk', 'tkOverBooked',
   'tkTypeOkFor', 'tkFitsBooking', 'tkUnlockedLeft', 'tkIsTimeRestricted', 'parseYmd', 'timeToMin', 'listUsableTickets',
   'bkInstMs', 'bkInstTkSig', 'bkInstBkSig', 'bkInstCandidates', 'bkCardPayKind', 'bkEnsureTtCache', 'bkInstLoad', 'bkInstNames', 'bkTopUpFromCard', '_bkTopUpFromCard',
-  'ashInstNext', '_ashInstNext', 'bkInstTkHtml', 'bkInstPickModal', 'bkInstInfoModal', 'bkInstConfirm', '_bkInstConfirm',
+  'ashInstNext', '_ashInstNext', 'bkInstDotsOf', 'bkInstTkHtml', 'bkInstPickModal', 'bkInstInfoModal', 'bkInstConfirm', '_bkInstConfirm',
   'ppTopUp', 'bkIsInstHold', 'bkNoteSplit', 'bkNoteJoin', 'escH', 'bindHeldBookings', 'bkIsOpenHold'];
 const ALL_UNKNOWN = [];
 
@@ -102,6 +102,10 @@ function mk(o) {
     promoteHeldBooking: async () => { log.promote.push(1); },
     deductTicket: async (t, bid) => { log.deducts.push([t.id, bid]); return true; },
     console: { log: console.log, warn: () => {}, error: () => {} }, BK_NOTE_SEP: '｜備註：',
+    /* 圓形卡（與會員票券頁同源）夾具：walletCtx／buildWallet／ticketTokens 以可檢查的標記取代，驗證 UI 有呼叫、且傳的是這張票 */
+    walletCtx: async () => ({ typeMap: {} }),
+    buildWallet: () => ({ of: id => ({ used: 3 }), stampsOf: () => [], useDatesOf: () => [], selfBk: new Set() }),
+    ticketTokens: (t, stamps, tm, used) => `<span class="mck-dots-stub" data-tk="${t.id}" data-used="${used}" data-total="${t.sessions_total}" data-unlocked="${t.unlocked_sessions}"></span>`,
   };
   env.BK_INST_MARK = new Function(grabConst('BK_INST_MARK') + '; return BK_INST_MARK;')();
   env.BK_INST_REASON = new Function(grabConst('BK_INST_REASON') + '; return BK_INST_REASON;')();
