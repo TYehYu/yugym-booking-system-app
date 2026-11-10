@@ -15632,8 +15632,8 @@ function tbl(s){return TABLE_ALIAS[s]||s;}
 let sb=null;
 // ── 版本號（日期+時間格式：年後兩碼+月+日.時分，例 26620.1058 = 26年6/20 10:58）──
 // 每次改版手動更新這一行即可，畫面與 title 會一起更新
-const APP_VERSION = '261110.1507';
-const APP_VERSION_LABEL = 'v261110.1507';
+const APP_VERSION = '261110.1736';
+const APP_VERSION_LABEL = 'v261110.1736';
 const CLOUD = !!(window.YUGYM_CONFIG && window.YUGYM_CONFIG.url && window.YUGYM_CONFIG.anonKey);
 if(CLOUD){ sb = supabase.createClient(window.YUGYM_CONFIG.url, window.YUGYM_CONFIG.anonKey); }
 
@@ -39775,19 +39775,34 @@ async function expandBkCard(el, id){
              一律先走「分期」（開通下一期），徹底不會再被_hasTk蓋過去。
            ⚠ _hasTk 的 listUsableTickets() 呼叫搬到 _isInst 為 false 時才做——
              分期保留那支不需要這個查詢結果，省一次非必要的票券查表。 */
+        /* ⚠ 2026-11-10 Phase 2A（負責人確認的業務規則）——**順序改成：轉正 → 分期 → 儲值**，
+             取代上面 2026-11-09「_isInst 優先」的寫法（那段說明保留當歷史）：
+             ① 有符合預約、已開通且可用的堂數（_hasTk）→「轉正」，已標記的分期保留課也一樣；
+             ② 沒有可用堂數，但會員有同票種（含相容）的原分期票尚有未開通堂數 →「分期」
+                ——未標記或候選不唯一時顯示「分期（待確認）」，點下去由櫃檯確認原票券，
+                **不可顯示能直接開新方案的「儲值」**；
+             ③ 兩者都沒有才「儲值」，而且點擊時會再檢查一次（bkTopUpFromCard）。
+             顯示與點擊用同一個 bkInstCandidates／bkCardPayKind；顯示≠已證實這張預約屬於哪張票，
+             預約與票券之間沒有任何欄位相連，所以任何標記寫入都要櫃檯在確認視窗明確按下去。 */
         const _isInst=(typeof bkIsInstHold==='function') && bkIsInstHold(b);
-        let _hasTk=false;
-        if(!_isInst){
-          try{ _hasTk=((await listUsableTickets(b.member_id, bkTypeIdOf(b), b.date, b.start_time))||[]).length>0; }catch(_){}
+        let _hasTk=false, _tkErr=false;
+        try{ _hasTk=((await listUsableTickets(b.member_id, bkTypeIdOf(b), b.date, b.start_time))||[]).length>0; }catch(_){ _tkErr=true; }
+        let _instCls=null;
+        if(!_hasTk){
+          try{
+            if(_tkErr || !(await bkEnsureTtCache())) _instCls={strict:[],review:[],error:true};
+            else _instCls=bkInstCandidates(b, (await dbGetAll('member_tickets'))||[], ymd(TODAY));
+          }catch(_){ _instCls={strict:[],review:[],error:true}; }   // 算不出來就不給「儲值」，點進去再重算
         }
+        const _pk=bkCardPayKind(_hasTk, _isInst, _instCls);
         /* ashBackArm 要在 collapseBkCard 之前（它記的是目前展開的那張卡的 DOM 參照，
            收起來就抓不到了）——有它，轉正視窗的「返回」才會回到課卡，而不是已經退役的
            預約明細（2026-08-21 使用者回報：「這裡的返回又會回到預約明細視窗」）。 */
-        btns += _isInst
-          ? evoBtn('evo-r2','evo-gold',`collapseBkCard();ashInstNext('${id}')`,'plus','分期')
-          : (_hasTk
-             ? evoBtn('evo-r2','evo-primary',`ashBackArm('${id}');collapseBkCard();openConvertPending('${id}')`,'check','轉正')   /* 請假/異常狀態不給轉正（2026-08-14） */
-             : evoBtn('evo-r2','evo-gold',`collapseBkCard();ppTopUp('${b.member_id}')`,'plus','儲值'));
+        btns += _pk.kind==='convert'
+          ? evoBtn('evo-r2','evo-primary',`ashBackArm('${id}');collapseBkCard();openConvertPending('${id}')`,'check','轉正')   /* 請假/異常狀態不給轉正（2026-08-14） */
+          : (_pk.kind==='inst'
+             ? evoBtn('evo-r2','evo-gold',`collapseBkCard();ashInstNext('${id}')`,'plus',_pk.label)
+             : evoBtn('evo-r2','evo-gold',`collapseBkCard();bkTopUpFromCard('${id}')`,'plus','儲值'));
         /* 〔調課〕（2026-10-08 使用者指示）：沒有可用票、但**後面有綁了票的課**時才出現 ——
            那種情況不是「沒買」，是票被未來的課先佔走了，叫櫃檯去儲值是錯的方向。
            ⚠⚠ **不要在這裡 await**（2026-10-08 二修，使用者：「今天點行事曆的課卡跳出都有點慢」）——
@@ -41831,21 +41846,209 @@ async function openBkFamChange(bid, backTo){
 /* 分期保留 →「開通下一期」（2026-08-21）——openInstallNext 吃的是票券 id，
    而課卡手上只有預約，所以要先找出這位會員那張「還有未開通堂數」的分期票。
    判斷與建立預約步驟 2 的 _instOk 同一套（installment 物件＋票種吻合＋未開通>0）。 */
-async function ashInstNext(bid){
- try{
-  const b=await dbGet('bookings',bid); if(!b||!b.member_id){ showToast('這筆沒有綁會員'); return; }
-  const tks=(await dbGetAll('member_tickets').catch(()=>[]))||[];
-  const hit=tks.filter(x=>x && tkUsableBy(x,b.member_id) && x.status==='usable'
-      && x.installment && typeof x.installment==='object'
-      && bkTicketTypeOk(x, b.ticket_type_id)
-      && ((Number(x.sessions_total)||0)-(Number(x.unlocked_sessions)||0))>0)
-    .sort((x,y)=>String(x.purchase_date||x.created_at||'').localeCompare(String(y.purchase_date||y.created_at||'')));
-  if(!hit.length){
-    showToast('找不到還有未開通堂數的分期票券，改用儲值');
-    return ppTopUp(b.member_id);
+/* ═══ 分期預約卡（2026-11-10 Phase 2A；上面那段是舊版的說明，邏輯已整個換掉）═══
+   業務規則（負責人確認）：
+   ① 優先順序：有符合條件的已開通可用堂數 →「轉正」；否則同票種（含相容）原分期票尚有未開通堂數 →「分期」；
+      兩者都沒有 →「儲值」。只有真的沒有適用票券、也沒有分期候選，預約卡才允許進入新方案銷售。
+   ② 分期繳費一律用「櫃檯確認的那一張原 member_tickets.id」，不得建立新票券。
+   ③ 多張嚴格符合 → 櫃檯從合格清單手動選；共享票券、票種只是相容、已過期、對應不明 → 只提示查核，
+      不自動選票、不開通、不寫標記；過期的分期票禁止直接開通。
+   ④ 顯示「分期」≠ 已證實這張預約屬於哪張票：預約與票券之間沒有任何欄位相連（預約只有 member_id＋ticket_type_id），
+      所以候選唯一也不默默改寫預約；標記只在櫃檯於確認視窗明確按下去之後才寫。
+   ⑤ 顯示（expandBkCard）與點擊（ashInstNext／bkTopUpFromCard／確認）共用 bkInstCandidates，條件不會不一致；
+      點擊與確認時重讀預約與票券，變動就停止，不收款。
+   ⑥ 標記與收款的先後：標記必須先寫——bindHeldBookings 只認有標記的保留課，收款後才標記就綁不到這一堂。
+      代價：標記寫入後若櫃檯關掉收款視窗，這張預約會維持「分期保留（待繳費）」狀態、沒有收錢，也沒有動任何票券。
+   不動 bindHeldBookings／openInstallNext／cancelBooking／promoteHeldBooking；沒有資料庫變更。 */
+const BK_INST_MARK='分期待繳費保留（收款後自動補扣）';   // bkIsInstHold 認的就是這個字樣
+const BK_INST_REASON={
+  shared:'共享票券（持有人不是這位會員）——只提示查核，不會自動選用、開通或標記',
+  expired:'票券已過期，或效期早於這堂預約——請先處理效期，不會轉入新方案',
+  type_compatible:'票種只是「相容」、不完全相同，需要查核',
+  type_unknown:'這張預約沒有票種，無法比對',
+  bad_structure:'分期資料不完整或期數異常',
+  ticket_created_after_booking:'票券建立時間晚於這張預約，無法確認對應',
+  status_suspect:'票券狀態異常（不是可用，也不是已過期），需要查核',
+  multi:'同會員有兩張以上可能對應的分期票，歸屬不明——不能從預約卡選票或收款，請到會員票券頁對「明確選定的原票券」收款'
+};
+function bkInstMs(x){ const v=Date.parse(String(x||'').replace(' ','T')); return Number.isFinite(v)?v:null; }
+function bkInstTkSig(t){
+  const i=(t&&t.installment&&typeof t.installment==='object')?t.installment:{};
+  return [t&&t.status, t&&t.sessions_total, t&&t.sessions_remaining, t&&t.unlocked_sessions, i.current, i.count,
+          t&&t.expire_date, t&&t.member_id, t&&t.ticket_type_id].join('|');
+}
+function bkInstBkSig(b){ return [b.status, b.pending_contract, b.ticket_id||'', b.note||'', b.member_id||'', b.ticket_type_id||'', b.date, b.start_time].join('|'); }
+/* 這張預約的「同票種（含相容）原分期票」候選：
+   strict＝預約會員本人持有＋票種完全相等＋有效＋usable＋分期結構正常＋current<count＋確實有未開通堂數＋沒有其他疑點；
+   review＝相關但不可自動操作的（共享／相容但不等／已過期／票種不明／結構異常／票券比預約晚建立），附原因。
+   不同票種且不相容的分期票不算（不擋儲值）。純函式：不讀資料、不寫資料。 */
+function bkInstCandidates(b, tks, todayYmd){
+  const out={strict:[], review:[]};
+  if(!b || !b.member_id) return out;
+  const mid=String(b.member_id), type=bkTypeIdOf(b), bdate=String(b.date||'').slice(0,10);
+  (tks||[]).forEach(t=>{
+    if(!t || !tkIsInstall(t)) return;
+    if(['refunded','void','cancelled'].includes(t.status)) return;   // 已結束的票不算；其他狀態（含沒見過的）一律當候選，狀態怪就列為查核
+    if(!tkUsableBy(t, mid)) return;
+    const total=Number(t.sessions_total)||0;
+    const unlocked=(t.unlocked_sessions==null)?total:Number(t.unlocked_sessions);
+    if(!(total-unlocked>0)) return;                       // 沒有未開通堂數 → 不是待處理分期票
+    const strictType=!!type && t.ticket_type_id===type;
+    const compatType=!!type && !strictType && bkTicketTypeOk(t, type);
+    if(type && !strictType && !compatType) return;        // 不同票種也不相容 → 不相關
+    const reasons=[];
+    if(String(t.member_id)!==mid) reasons.push('shared');
+    if(!type) reasons.push('type_unknown'); else if(compatType) reasons.push('type_compatible');
+    const exp=t.expire_date?String(t.expire_date).slice(0,10):'';
+    if(t.status==='expired' || (exp && (exp<bdate || exp<todayYmd))) reasons.push('expired');
+    if(t.status!=='usable' && t.status!=='expired') reasons.push('status_suspect');
+    const inst=t.installment, cnt=Number(inst.count), cur=Number(inst.current||1);
+    if(!(cnt>0) || !Number.isFinite(cur) || !(cur<cnt) || !Number.isFinite(unlocked) || unlocked<0 || unlocked>total) reasons.push('bad_structure');
+    const bm=bkInstMs(b.created_at), tm=bkInstMs(t.created_at);
+    if(bm!=null && tm!=null && tm>bm) reasons.push('ticket_created_after_booking');
+    if(reasons.length) out.review.push({t, reasons}); else out.strict.push(t);
+  });
+  return out;
+}
+/* 按鈕決策（純函式）：轉正 → 分期 → 儲值。cls 算不出來（error）時絕不給「儲值」。 */
+function bkCardPayKind(hasTk, isInst, cls){
+  if(hasTk) return {kind:'convert', label:'轉正'};
+  if(!cls || cls.error) return {kind:'inst', label:'分期（待確認）'};
+  if(cls.strict.length+cls.review.length>0){
+    const direct = !!isInst && cls.strict.length===1 && cls.review.length===0;   // 已標記＋唯一＋沒有其他疑點才算「已確認」
+    return {kind:'inst', label: direct ? '分期' : '分期（待確認）'};
   }
-  openInstallNext(hit[0].id);
- }catch(e){ showToast('開啟失敗：'+((e&&e.message)||e)); }
+  return {kind:'topup', label:'儲值'};
+}
+async function bkEnsureTtCache(){
+  if(!Array.isArray(window._ttCache) || !window._ttCache.length){ try{ window._ttCache=await dbGetAll('ticket_types'); }catch(_){} }
+  return Array.isArray(window._ttCache) && window._ttCache.length>0;
+}
+/* 重讀預約與票券（fresh=true 先讓票券快取過期，走簽章校驗），回傳 {b,tks,hasTk,cls} 或 {err} */
+async function bkInstLoad(bid, fresh){
+  const b=await dbGet('bookings',bid);
+  if(!b || !b.member_id) return {err:'這筆沒有綁會員'};
+  if(b.status!=='booked' || !b.pending_contract || b.ticket_id) return {err:'這筆預約的狀態已改變（已不是待簽約卡），請重新整理後再操作'};
+  if(!(await bkEnsureTtCache())) return {err:'票種資料載入失敗，無法確認分期票券，已停止（不會開新方案）'};
+  if(fresh) dbCacheClear(['member_tickets']);
+  const tks=(await dbGetAll('member_tickets'))||[];
+  let hasTk=false;
+  try{ hasTk=((await listUsableTickets(b.member_id, bkTypeIdOf(b), b.date, b.start_time))||[]).length>0; }
+  catch(e){ return {err:'無法確認可用堂數，已停止：'+((e&&e.message)||e)}; }
+  return {b, tks, hasTk, cls:bkInstCandidates(b, tks, ymd(TODAY))};
+}
+async function bkInstNames(){ const m={}; try{ ((await dbGetAll('members'))||[]).forEach(x=>{ if(x&&x.id) m[x.id]=x.name; }); }catch(_){} return m; }
+/* 預約卡的「儲值」：點擊當下再檢查一次——有可用堂數就請改按轉正、有分期候選就不開銷售視窗 */
+async function bkTopUpFromCard(bid){ return onceAct('topupcard:'+bid, ()=>_bkTopUpFromCard(bid)); }
+async function _bkTopUpFromCard(bid){
+  try{
+    if(!isDeskLike()){ showToast('儲值／發放票券需要櫃檯以上權限'); return; }
+    const L=await bkInstLoad(bid, true);
+    if(L.err){ showToast(L.err, 6000); return; }
+    if(L.hasTk){ showToast('這位會員已有符合的已開通可用堂數，請改按「轉正」（重新展開這張卡）', 6000); return; }
+    if(L.cls.strict.length+L.cls.review.length>0){ showToast('這位會員有同票種的分期票尚有未開通堂數，請按「分期」處理，這裡不會開新方案', 7000); return; }
+    return ppTopUp(L.b.member_id);
+  }catch(e){ showToast('無法確認分期票券，已停止（不會開新方案）：'+((e&&e.message)||e), 7000); }
+}
+/* 預約卡的「分期」：不再自動選票、找不到也不再退回儲值 */
+async function ashInstNext(bid){ return onceAct('instcard:'+bid, ()=>_ashInstNext(bid)); }
+async function _ashInstNext(bid){
+  try{
+    if(!isDeskLike()){ showToast('只有管理員或櫃台可開通分期'); return; }
+    const L=await bkInstLoad(bid, true);
+    if(L.err){ showToast(L.err, 6000); return; }
+    if(L.hasTk){ showToast('這位會員已有符合的已開通可用堂數，請改按「轉正」（重新展開這張卡）', 6000); return; }
+    const {b, cls}=L;
+    if(!cls.strict.length && !cls.review.length){
+      showToast('這位會員目前沒有同票種、尚有未開通堂數的分期票，請重新展開這張卡再操作（這裡不會開新方案）', 7000); return;
+    }
+    /* Phase 2E：兩張以上「可能對應」的票（嚴格符合＋共享／相容／過期／狀態可疑，全部算進去）→ 只列清單，
+       沒有選票也沒有確認收款鈕；已標記的保留課也一樣，不能因為某張票「不符合自動開通資格」就把它的歸屬疑慮忽略掉 */
+    if(cls.strict.length+cls.review.length>=2) return await bkInstInfoModal(b, cls);
+    if(!cls.strict.length) return await bkInstInfoModal(b, cls);                 // 只有需要查核的候選
+    if(bkIsInstHold(b) && cls.strict.length===1 && !cls.review.length)            // 已標記＋唯一＋沒有其他疑點
+      return await openInstallNext(cls.strict[0].id);                             // 傳入的就是這張原票券的 id
+    return await bkInstPickModal(b, cls);                                         // 未標記／多張／有疑點 → 櫃檯確認
+  }catch(e){ showToast('無法開啟分期（已停止，不會開新方案）：'+((e&&e.message)||e), 7000); }
+}
+function bkInstTkHtml(t, o){
+  const inst=(t.installment&&typeof t.installment==='object')?t.installment:{};
+  const total=Number(t.sessions_total)||0, unlocked=(t.unlocked_sessions==null)?total:Number(t.unlocked_sessions);
+  const info=`<div style="font-size:12px;color:var(--t2);line-height:1.8;margin-top:4px;">
+      持有人：<b>${escH(o.owner||'—')}</b>　票券識別碼：<b>${escH(t.id)}</b><br>
+      已繳期數：<b>${Number(inst.current||1)}</b> ／ 總期數 <b>${Number(inst.count)||'—'}</b>　未開通堂數：<b>${Math.max(0,total-unlocked)}</b>（已開通 ${unlocked}／共 ${total} 堂）<br>
+      效期：<b>${escH(t.expire_date?String(t.expire_date).slice(0,10):'未設定')}</b>　購買日：${escH(String(t.created_at||'').slice(0,10)||'—')}</div>`;
+  const head=`<b>${escH(t.plan_name||'分期票券')}</b>`;
+  if(o.selectable) return `<label style="display:block;border:1px solid var(--bd);border-radius:10px;padding:10px 12px;margin-bottom:8px;cursor:pointer;"><input type="radio" name="inst-pick" value="${escH(t.id)}" ${o.checked?'checked':''}> ${head}${info}</label>`;
+  return `<div style="border:1px dashed var(--bd);border-radius:10px;padding:10px 12px;margin-bottom:8px;opacity:.9;">${head}${info}<div style="color:var(--danger,#b5372e);font-size:12px;margin-top:4px;">不可操作：${(o.reasons||[]).map(r=>escH(BK_INST_REASON[r]||r)).join('；')}</div></div>`;
+}
+async function bkInstPickModal(b, cls){
+  const names=await bkInstNames();
+  const marked=bkIsInstHold(b);
+  window._bkInstCtx={ bid:b.id, bsig:bkInstBkSig(b),
+    ids:cls.strict.map(t=>t.id).concat(cls.review.map(r=>r.t.id)).sort().join(','),
+    sigs:Object.fromEntries(cls.strict.map(t=>[t.id, bkInstTkSig(t)])) };
+  const strictHtml=cls.strict.map(t=>bkInstTkHtml(t,{selectable:true, checked:cls.strict.length===1, owner:names[t.member_id]})).join('');
+  const reviewHtml=cls.review.map(r=>bkInstTkHtml(r.t,{selectable:false, reasons:r.reasons, owner:names[r.t.member_id]})).join('');
+  showModal(`<div class="modal-title">分期（待確認）・確認原分期票券</div>
+    <div class="ash-eihead">${escH(String(b.date).replace(/-/g,'/'))} ${escH(String(b.start_time).slice(0,5))}　·　${escH(names[b.member_id]||'')}　·　${escH(b.category||'')}</div>
+    <div style="font-size:12.5px;color:var(--t2);line-height:1.8;margin:8px 0;">${marked
+      ? '這張預約已標為分期保留。確認後進入所選票券的<b>下一期收款</b>；<b>不會建立新票券</b>。'
+      : '這張預約目前<b>還沒有</b>分期保留標記。確認後會先把它標為「分期待繳費保留」（保留原備註），再進入所選票券的<b>下一期收款</b>；<b>不會建立新票券</b>。'}
+      ${cls.strict.length>1?'<br>有多張符合的分期票，請自己選擇，系統不會自動挑。':''}</div>
+    ${strictHtml}${reviewHtml?`<div style="font-size:12px;color:var(--t3);margin:6px 0;">以下票券需要查核，不能在這裡操作：</div>${reviewHtml}`:''}
+    <div class="modal-foot"><button class="btn btn-ghost" onclick="closeModal()">取消</button>
+      <button class="btn btn-green" onclick="bkInstConfirm('${escH(b.id)}')">確認並進入收款</button></div>`);
+}
+async function bkInstInfoModal(b, cls){
+  const names=await bkInstNames();
+  const hasExpired=cls.review.some(r=>r.reasons.includes('expired'));
+  const hasShared=cls.review.some(r=>r.reasons.includes('shared'));
+  showModal(`<div class="modal-title">分期票券需要查核</div>
+    <div class="ash-eihead">${escH(String(b.date).replace(/-/g,'/'))} ${escH(String(b.start_time).slice(0,5))}　·　${escH(names[b.member_id]||'')}</div>
+    <div style="font-size:12.5px;color:var(--t2);line-height:1.8;margin:8px 0;">這位會員有同票種的分期票尚有未開通堂數，但目前<b>不能直接開通</b>，也<b>不會轉入新方案銷售</b>。
+      ${hasExpired?'<br>有票券已過期或效期早於這堂預約：請先到會員票券處理效期。':''}
+      ${hasShared?'<br>共享票券只提示查核：不會自動選票、不會開通、不會寫入標記。':''}</div>
+    ${cls.strict.map(t=>bkInstTkHtml(t,{selectable:false, reasons:['multi'], owner:names[t.member_id]})).join('')}
+    ${cls.review.map(r=>bkInstTkHtml(r.t,{selectable:false, reasons:r.reasons, owner:names[r.t.member_id]})).join('')}
+    <div class="modal-foot"><button class="btn btn-ghost" onclick="closeModal()">關閉</button>
+      <button class="btn btn-green" onclick="closeModal();openMemberDetail('${escH(b.member_id)}')">查看會員票券</button></div>`);
+}
+/* 櫃檯按下「確認並進入收款」：重新檢查預約與票券最新狀態，任何變動、無法確定或寫入失敗都停止（不收款） */
+async function bkInstConfirm(bid){ return onceAct('instconfirm:'+bid, ()=>_bkInstConfirm(bid)); }
+async function _bkInstConfirm(bid){
+  try{
+    if(!isDeskLike()){ showToast('只有管理員或櫃台可開通分期'); return; }
+    const ctx=window._bkInstCtx;
+    if(!ctx || ctx.bid!==bid){ showToast('資料已過期，請關閉後重新按「分期」', 6000); return; }
+    const el=(typeof document!=='undefined') ? document.querySelector('input[name="inst-pick"]:checked') : null;
+    const tid=el && el.value;
+    if(!tid){ showToast('請先選擇要使用的原分期票券'); return; }
+    const L=await bkInstLoad(bid, true);
+    if(L.err){ showToast(L.err+'；未進入收款', 6000); return; }
+    if(L.hasTk){ showToast('這位會員現在已有可用堂數，請改按「轉正」；未進入收款', 6000); return; }
+    const {b, cls}=L;
+    if(cls.strict.length+cls.review.length>=2){ showToast('這位會員有兩張以上可能對應的分期票，歸屬不明，已停止；請到會員票券頁對明確選定的原票券收款', 8000); return; }
+    if(bkInstBkSig(b)!==ctx.bsig){ showToast('預約資料在你確認前已經變動，已停止，請重新按「分期」', 7000); return; }
+    const ids=cls.strict.map(t=>t.id).concat(cls.review.map(r=>r.t.id)).sort().join(',');
+    if(ids!==ctx.ids){ showToast('這位會員的分期票券候選有變動，已停止，請重新按「分期」', 7000); return; }
+    const t=cls.strict.find(x=>x.id===tid);
+    if(!t){ showToast('所選票券已不符合條件，已停止', 7000); return; }
+    const fresh=await dbGet('member_tickets', tid);
+    if(!fresh || bkInstTkSig(fresh)!==ctx.sigs[tid] || bkInstTkSig(fresh)!==bkInstTkSig(t)){ showToast('票券資料在你確認前已經變動，已停止，請重新按「分期」', 7000); return; }
+    if(!bkIsInstHold(b)){                                   // 未標記 → 明確確認後才標記（只標一次，保留原備註）
+      const sp=bkNoteSplit(b.note);
+      const nb=Object.assign({}, b);
+      nb.note=bkNoteJoin((sp.sys?sp.sys+'／':'')+BK_INST_MARK, sp.user);
+      await dbPut('bookings', nb);
+      const chk=await dbGet('bookings', bid);
+      if(!chk || !bkIsInstHold(chk) || chk.ticket_id || chk.status!=='booked' || !chk.pending_contract){
+        showToast('標記寫入後檢查不符，已停止收款，請到預約明細確認這張預約', 9000); return;
+      }
+    }
+    closeModal();
+    await openInstallNext(tid);                              // 傳入的就是櫃檯確認的同一張 member_tickets.id
+  }catch(e){ showToast('已停止，未進入收款：'+((e&&e.message)||e), 9000); }
 }
 /* 確認視窗（2026-08-21）：講清楚改成誰、以及這個動作只改「誰來上課」，不動票券。 */
 async function ashFamConfirm(bid, name, backTo){

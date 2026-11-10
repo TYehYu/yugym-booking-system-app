@@ -119,7 +119,7 @@ ok('★★ 沒綁會員的卡位給「安排會員／綁定會員」，不是「
    && /走的是這條「待簽約」早退分支/.test(src));
 ok('★ 已綁會員且有票才給轉正（沒票先給儲值）',
    /evoBtn\('evo-r2','evo-primary',`ashBackArm\('\$\{id\}'\);collapseBkCard\(\);openConvertPending\('\$\{id\}'\)`,'check','轉正'\)/.test(src)
-   && /evoBtn\('evo-r2','evo-gold',`collapseBkCard\(\);ppTopUp\('\$\{b\.member_id\}'\)`,'plus','儲值'\)/.test(src));
+   && /evoBtn\('evo-r2','evo-gold',`collapseBkCard\(\);bkTopUpFromCard\('\$\{id\}'\)`,'plus','儲值'\)/.test(src));   // 2026-11-10 Phase 2A：儲值改經 bkTopUpFromCard
 ok('　　openBindPending 本來就吃「待簽約＋沒綁會員」',
    /if\(!b\|\|!b\.pending_contract\|\|b\.member_id\)\{ showToast\('這筆不是未綁定的待簽約卡位'\); return; \}/.test(src));
 

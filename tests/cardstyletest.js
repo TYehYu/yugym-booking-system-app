@@ -514,12 +514,14 @@ ok('★ 「會員」鈕拿掉（點會員卡本來就會進會員資料）',
 ok('★★ 沒排人 → 安排會員，而且是接到新的［＋新增］',
    /btns \+= bkIsOpenHold\(b\)\s*\n\s*\? evoBtn\('evo-r2','evo-gold',`collapseBkCard\(\);bkAddMemberOpen\('\$\{id\}'\)`,'plus','安排會員'\)/.test(src));
 /* 2026-08-21：分期保留走「分期」，一般待簽約才走「儲值」 */
-ok('★ 有人沒票 → 儲值（開銷售視窗，會員已預選）',
-   /: evoBtn\('evo-r2','evo-gold',`collapseBkCard\(\);ppTopUp\('\$\{b\.member_id\}'\)`,'plus','儲值'\)\);/.test(src)
+/* 2026-11-10 Phase 2A：預約卡的「儲值」改經 bkTopUpFromCard（點擊當下再檢查有沒有可用堂數／分期候選）才開銷售視窗 */
+ok('★ 沒票也沒分期候選 → 儲值（經 bkTopUpFromCard 再檢查，才開銷售視窗，會員已預選）',
+   /: evoBtn\('evo-r2','evo-gold',`collapseBkCard\(\);bkTopUpFromCard\('\$\{id\}'\)`,'plus','儲值'\)\);/.test(src)
+   && /return ppTopUp\(L\.b\.member_id\);/.test(src)
    /* 0823：ppTopUp 前面多了 isDeskLike 守門 */
    && /function ppTopUp\(mid\)\{\s*\n\s*if\(!isDeskLike\(\)\)[\s\S]{0,90}window\._salesPreMember=mid;/.test(src));
-ok('★ 有票沒綁 → 轉正',
-   /_hasTk\s*\n?\s*\? evoBtn\('evo-r2','evo-primary',`ashBackArm\('\$\{id\}'\);collapseBkCard\(\);openConvertPending/.test(src));
+ok('★ 有可用堂數 → 轉正（順序：轉正 → 分期 → 儲值）',
+   /btns \+= _pk\.kind==='convert'\s*\n\s*\? evoBtn\('evo-r2','evo-primary',`ashBackArm\('\$\{id\}'\);collapseBkCard\(\);openConvertPending/.test(src));
 /* ⚠ 2026-10-06：票種改走 bkTypeIdOf(b) —— 場租建立時多半沒寫 ticket_type_id，
    直接讀 b.ticket_type_id 會永遠判定「沒有票」，課卡就只給〔儲值〕（見 frconverttest）。 */
 ok('★ 有無票券用既有的 listUsableTickets 判（與步驟 2 挑票同一支）',
@@ -565,17 +567,21 @@ ok('　　成因寫在程式裡（拿脫離 DOM 的元素量會全拿到 0）',
    /拿一個已脫離 DOM 的元素去 getBoundingClientRect\(\) 會全部拿到 0/.test(src));
 
 console.log('\n分期保留要走「開通下一期」而不是「儲值」（使用者：這堂其實是分期）');
-ok('★ 用 bkIsInstHold 分辨（靠建立保留時寫的 note 標記）',
+ok('★ 分期鈕：有分期候選才給（已標記＋唯一＋無其他疑點顯示「分期」，其餘「分期（待確認）」），標記仍用 bkIsInstHold 分辨',
    /const _isInst=\(typeof bkIsInstHold==='function'\) && bkIsInstHold\(b\);/.test(src)
-   && /_isInst\s*\n?\s*\? evoBtn\('evo-r2','evo-gold',`collapseBkCard\(\);ashInstNext\('\$\{id\}'\)`,'plus','分期'\)/.test(src));
+   && /\? evoBtn\('evo-r2','evo-gold',`collapseBkCard\(\);ashInstNext\('\$\{id\}'\)`,'plus',_pk\.label\)/.test(src));
 ok('★ 副標也分得出來（分期待繳費 vs 待簽約，且待簽約再分有票／沒票）',
    /\? '分期待繳費・尚未綁定票券'/.test(src)
    && /'待簽約・客人尚未購票（收款後按「轉正」）'/.test(src));
-ok('★ openInstallNext 吃票券 id，所以要先從預約找出那張分期票',
+ok('★ openInstallNext 吃票券 id：用共用的 bkInstCandidates 找候選，由櫃檯確認的那張 id 傳進去（不再自動挑最舊）',
    /async function ashInstNext\(bid\)\{/.test(src)
-   && /&& \(\(Number\(x\.sessions_total\)\|\|0\)-\(Number\(x\.unlocked_sessions\)\|\|0\)\)>0\)/.test(src));
-ok('　　找不到分期票就退回儲值，不留死路',
-   /showToast\('找不到還有未開通堂數的分期票券，改用儲值'\);\s*\n\s*return ppTopUp\(b\.member_id\);/.test(src));
+   && /function bkInstCandidates\(b, tks, todayYmd\)\{/.test(src)
+   && /await openInstallNext\(cls\.strict\[0\]\.id\)/.test(src)
+   && /await openInstallNext\(tid\);/.test(src)
+   && !/localeCompare\(String\(y\.purchase_date/.test(src.slice(src.indexOf('async function _ashInstNext'), src.indexOf('async function _bkInstConfirm'))));
+ok('　　Phase 2A：找不到分期票不再退回儲值（不留自動進新方案的路）',
+   !/改用儲值/.test(src.slice(src.indexOf('async function _ashInstNext'), src.indexOf('async function _bkInstConfirm')))
+   && !/ppTopUp\(/.test(src.slice(src.indexOf('async function _ashInstNext'), src.indexOf('async function _bkInstConfirm'))));
 
 console.log('\n團課名單：5 人要完整顯示、請假卡不突兀');
 ok('★ 取消請假搬到右邊圓鈕（卡片內不再塞長按鈕）',
