@@ -34,7 +34,7 @@ function mk(over) {
     window: { _ttCache: over.noTT ? [] : TYPES.map(t => Object.assign({}, t)) }, escH: s => String(s).replace(/[&<>]/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;' }[c])),
     ticketTokens: (t, stamps, tm, used, curId, mid, selfBk) => { calls.push({ t, stamps, used, curId, mid }); return '<span class="tok-stub" data-tk="' + t.id + '" data-used="' + used + '" data-cur="' + String(curId) + '"></span>'; },
   };
-  ['bkInstMs', 'bkInstCandidates', 'bkTypeIdOf', 'bkTicketTypeOk', 'tkUsableBy', 'tkSharedIds', 'tkIsInstall', 'bkIsMergedPT', 'bkIsPtVoucherType', 'tkUnlockedLeft', 'bkHoldCircleCard'].forEach(n => { env[n] = instantiate(grabFn(n), env); });
+  ['bkInstMs', 'bkInstCandidates', 'bkTypeIdOf', 'bkTicketTypeOk', 'tkUsableBy', 'tkSharedIds', 'tkIsInstall', 'bkIsMergedPT', 'bkIsPtVoucherType', 'tkUnlockedLeft', 'bkHoldCircleCard', 'bkCardPayKind'].forEach(n => { env[n] = instantiate(grabFn(n), env); });
   const W = over.noW ? null : { of: id => (over.noOf ? null : { used: 5 }), stampsOf: id => ['STAMP-' + id], selfBk: new Set() };
   const wctx = over.noCtx ? null : { tickets: over.tickets || [], typeMap: {} };
   return { f: env.bkHoldCircleCard, calls, W, wctx, env };
@@ -97,11 +97,46 @@ for (const [name, o] of [['票券夾沒載入（wctx=null）', { noCtx: true }],
 console.log('\n═══ ⑤ bkCardPop 接線（原始碼檢查）═══');
 {
   const pop = grabFn('bkCardPop');
-  ok('★ 只有「沒有票（_noTkSub）＋待簽約」分支呼叫備援；有可用堂數（_n>0）時不啟用（轉正優先）', /const _hc=\(_n>0\)\?\{state:'skip'\}:bkHoldCircleCard\(b, _wctx, _walOf\(r\.mid\), ymd\(TODAY\), cc==='pt'\);/.test(pop));
+  ok('★ 只有「沒有票（_noTkSub）＋待簽約」分支呼叫備援；有可用堂數（_n>0）時不啟用（轉正優先）', /const _hc=\(_n>0\)\?\{state:'skip'\}:bkHoldCircleCard\(b, _wctx, _walOf\(r\.mid\), ymd\(TODAY\), b\.category==='私人教練'\);/.test(pop) && !/bkHoldCircleCard\([^)]*cc==='pt'/.test(pop));
   ok('★ single 才改 _tk 並用副標；multi／unknown 只換提示；其他維持原本三種提示', /if\(_hc\.state==='single'\)\{ _tk=_hc\.html; _noTkSub=escH\(_hc\.sub\); \}\s*else if\(_hc\.state==='multi' \|\| _hc\.state==='unknown'\)\{ _noTkSub=escH\(_hc\.sub\); \}\s*else\s*_noTkSub=/.test(pop) && /待簽約・客人尚未購票（收款後按「轉正」）/.test(pop) && /分期待繳費・尚未綁定票券/.test(pop));
   const helper = grabFn('bkHoldCircleCard');
   ok('★ helper 沒有任何寫入／呼叫資料層（dbPut／dbGet／dbDel／sb.from／deductTicket／bindHeldBookings）', !/dbPut|dbGet|dbDel|sb\.from|deductTicket|bindHeldBookings|ticket_id\s*=[^=]/.test(helper));
   ok('★ helper 呼叫 ticketTokens 時 curId 固定 null', /ticketTokens\(t, W\.stampsOf\(t\.id\), wctx\.typeMap\|\|\{\}, sl\.used\|\|0, null, b\.member_id, W\.selfBk\)/.test(helper));
+}
+
+console.log('\n═══ ⑤b 分類判斷：用預約 category==="私人教練"（一般／友善／VIP 都涵蓋；自主／團課／體驗／場租排除）═══');
+{
+  const pop = grabFn('bkCardPop');
+  const m = pop.match(/bkHoldCircleCard\(b, _wctx, _walOf\(r\.mid\), ymd\(TODAY\), ([^)]*)\)/);
+  ok('取得 bkCardPop 實際傳給 helper 的第五個參數運算式', !!m && m[1] === "b.category==='私人教練'", m && m[1]);
+  const isPT = b => new Function('b', 'return (' + m[1] + ');')(b);
+  const cats = { '私人教練': true, '自主訓練': false, '小班肌力': false, '體驗': false, '場租': false };
+  for (const c in cats) ok('category=' + c + ' → isPT=' + cats[c], isPT({ category: c }) === cats[c]);
+  // 票種：一般／友善／VIP 的教練課預約 category 都是「私人教練」→ 都啟用
+  const TY = [{ id: 'TT-A', name: '一般教練課', category: '私人教練', color: 'pt' }, { id: 'TT-F', name: '友善教練課', category: '私人教練', color: 'friendly' }, { id: 'TT-VIP', name: 'VIP教練課', category: '私人教練', color: 'vip' }];
+  const bkCC = src => { /* 舊判斷：看票種顏色 */ const t = TY.find(x => x.id === src); return t && t.color === 'pt' ? 'pt' : 'other'; };
+  for (const [name, tt] of [['一般教練課', 'TT-A'], ['友善教練課', 'TT-F'], ['VIP教練課', 'TT-VIP']]) {
+    const tkts = [tk('TK-1', { ticket_type_id: tt })];
+    const b = bk({ ticket_type_id: tt });
+    const h = mk({ tickets: tkts }); h.env.window._ttCache = TY.map(x => Object.assign({}, x));
+    const r = h.f(b, h.wctx, h.W, TODAY, isPT(b));
+    const cls = h.env.bkInstCandidates(b, tkts, TODAY);
+    ok('（' + name + '）唯一安全候選 → 畫原票圓形卡（舊的顏色判斷對非一般票種會跳過：' + (bkCC(tt) === 'pt' ? '此票種舊判斷本來就通過' : '舊判斷會 skip') + '）', r.state === 'single' && cls.strict.length === 1 && cls.review.length === 0, r);
+    if (name === '友善教練課') ok('★ 溫怡婷情境（友善教練課、唯一原分期票）：舊判斷 cc!=="pt" 會跳過，新判斷畫圓形卡', bkCC(tt) !== 'pt' && r.state === 'single' && /data-tk="TK-1"/.test(r.html));
+    const h2 = mk({ tickets: [tk('TK-1', { ticket_type_id: tt }), tk('TK-2', { ticket_type_id: tt })] }); h2.env.window._ttCache = TY.map(x => Object.assign({}, x));
+    const r2 = h2.f(b, h2.wctx, h2.W, TODAY, isPT(b));
+    ok('（' + name + '）兩張候選 → 不任挑一張，不畫任何圓形卡', r2.state === 'multi' && !r2.html && h2.calls.length === 0, r2);
+    const h3 = mk({ tickets: [tk('TK-1', { ticket_type_id: tt }), tk('TK-S', { ticket_type_id: tt, member_id: 'M2', shared_with: ['M1'] })] }); h3.env.window._ttCache = TY.map(x => Object.assign({}, x));
+    const r3 = h3.f(b, h3.wctx, h3.W, TODAY, isPT(b));
+    ok('（' + name + '）有 review（共享）候選 → 不畫圓形卡', r3.state === 'multi' && !r3.html && h3.calls.length === 0, r3);
+    // 與「分期」按鈕一致：按鈕為分期 ⇔ 有候選；有候選時圓形卡一定不是舊的 none/skip
+    const kind = (() => { const f = h.env.bkCardPayKind; return f ? f(false, false, cls).label : null; })();
+    ok('（' + name + '）按鈕為「分期」時，圓形卡不會落回舊提示（state 不是 none/skip）', kind === '分期' && r.state !== 'none' && r.state !== 'skip', [kind, r.state]);
+  }
+  for (const c of ['自主訓練', '小班肌力', '體驗', '場租']) {
+    const b = bk({ category: c }); const h = mk({ tickets: [tk('TK-1')] });
+    ok('（' + c + '）isPT=false → skip，維持原本卡片行為', h.f(b, h.wctx, h.W, TODAY, isPT(b)).state === 'skip');
+  }
 }
 
 console.log('\n═══ ⑥ 不該被動到的函式（以正式版 2e53f78 的雜湊釘住）═══');
