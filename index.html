@@ -15632,8 +15632,8 @@ function tbl(s){return TABLE_ALIAS[s]||s;}
 let sb=null;
 // ── 版本號（日期+時間格式：年後兩碼+月+日.時分，例 26620.1058 = 26年6/20 10:58）──
 // 每次改版手動更新這一行即可，畫面與 title 會一起更新
-const APP_VERSION = '261110.2301';
-const APP_VERSION_LABEL = 'v261110.2301';
+const APP_VERSION = '261110.2322';
+const APP_VERSION_LABEL = 'v261110.2322';
 const CLOUD = !!(window.YUGYM_CONFIG && window.YUGYM_CONFIG.url && window.YUGYM_CONFIG.anonKey);
 if(CLOUD){ sb = supabase.createClient(window.YUGYM_CONFIG.url, window.YUGYM_CONFIG.anonKey); }
 
@@ -40236,6 +40236,12 @@ async function bkCardPop(el, b, btns, acts){
         else if(b.category==='場租') _noTkSub=`場地租借${_ph?`　·　${escH(fmtPhone(_ph))}`:''}`;
         else if(b.pending_contract){
           const _n=Number(_pendTk[r.mid])||0;
+          /* 2026-11-11：有原分期票（沒有可用堂數、仍有未開通堂數）→ 畫那張票的圓形卡，不再說「客人尚未購票」；
+             多張／待查核／讀不到 → 只提示、不任挑一張；沒有候選且資料完整 → 維持原本提示（見下） */
+          const _hc=(_n>0)?{state:'skip'}:bkHoldCircleCard(b, _wctx, _walOf(r.mid), ymd(TODAY), cc==='pt');
+          if(_hc.state==='single'){ _tk=_hc.html; _noTkSub=escH(_hc.sub); }
+          else if(_hc.state==='multi' || _hc.state==='unknown'){ _noTkSub=escH(_hc.sub); }
+          else
           _noTkSub=(typeof bkIsInstHold==='function'&&bkIsInstHold(b))
             ? '分期待繳費・尚未綁定票券'
             : (_n>0
@@ -41919,6 +41925,30 @@ function bkCardPayKind(hasTk, isInst, cls){
     return {kind:'inst', label:'分期'};
   }
   return {kind:'topup', label:'儲值'};
+}
+/* 待簽約／分期保留預約卡的「原分期票券圓形卡」備援顯示（2026-11-11，只產生 HTML，不寫任何資料）：
+   預約沒有 ticket_id（W.ticketOf(b.id) 查不到）時，卡上原本只有一行「客人尚未購票」文字。
+   這裡用 bkInstCandidates 找原分期票，只有「strict 恰一張、review 零張」才畫那張票的圓形卡（ticketTokens，curId=null：
+   本次預約不會被畫成已扣／已轉正／已簽到；已用堂數＝W.of(id).used）。多張、有待查核候選、資料讀不到 → 絕不任挑一張。
+   回傳 {state:'skip'|'none'|'single'|'multi'|'unknown', html, sub}；skip／none 由呼叫端維持原本的提示。 */
+function bkHoldCircleCard(b, wctx, W, todayYmd, isPT){
+  try{
+    if(!isPT || !b || !b.pending_contract || b.ticket_id || !b.member_id) return {state:'skip'};
+    if(!wctx || !Array.isArray(wctx.tickets) || !Array.isArray(window._ttCache) || !window._ttCache.length || !W || typeof W.of!=='function')
+      return {state:'unknown', sub:'票券狀態暫時無法確認'};
+    const cls=bkInstCandidates(b, wctx.tickets, todayYmd);
+    if(!cls.strict.length && !cls.review.length) return {state:'none'};
+    if(cls.strict.length!==1 || cls.review.length>0) return {state:'multi', sub:'有多張或待查核的分期票券，請確認'};
+    const t=cls.strict[0];
+    if(!t || String(t.member_id)!==String(b.member_id) || !bkTicketTypeOk(t, bkTypeIdOf(b))) return {state:'multi', sub:'有多張或待查核的分期票券，請確認'};
+    const sl=W.of(t.id);
+    if(!sl || typeof ticketTokens!=='function') return {state:'unknown', sub:'票券狀態暫時無法確認'};
+    const total=Number(t.sessions_total)||0, unlocked=(t.unlocked_sessions==null)?total:Number(t.unlocked_sessions);
+    const locked=Math.max(0, total-unlocked);
+    const html=`<div class="ash-mtkname">${escH(t.plan_name||'票券')}</div>`
+      +`<div class="ash-tk">${ticketTokens(t, W.stampsOf(t.id), wctx.typeMap||{}, sl.used||0, null, b.member_id, W.selfBk)}</div>`;
+    return {state:'single', html, sub:`原分期票券・尚有 ${locked} 堂未開通`};
+  }catch(e){ return {state:'unknown', sub:'票券狀態暫時無法確認'}; }
 }
 async function bkEnsureTtCache(){
   if(!Array.isArray(window._ttCache) || !window._ttCache.length){ try{ window._ttCache=await dbGetAll('ticket_types'); }catch(_){} }
