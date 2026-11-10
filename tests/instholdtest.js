@@ -40,8 +40,10 @@ console.log('① 圓形卡：保留課不畫超約紅圈（實跑 ticketTokens�
 }
 
 console.log('\n② 取消退回 → 保留課自動遞補');
-ok('★ cancelBooking 退回成功後呼叫 promoteHeldBooking',
-   /if\(refundedCount>0 && b\.ticket_id && b\.member_id\)\{\n\s*try\{ await promoteHeldBooking\(b\.member_id, b\.ticket_id\); \}/.test(src));
+/* 2026-11-10 Phase 5A.1（業務規則 B）：取消後的自動補扣已停用——cancelBooking 不再呼叫
+   promoteHeldBooking（也不靠旗標）；函式本體保留。是否真的不會呼叫由 tests/cancelnopromotetest.js 實際執行驗證。 */
+ok('★ cancelBooking 不再呼叫 promoteHeldBooking（Phase 5A.1 停用），函式本體仍保留',
+   !/await promoteHeldBooking\(/.test(src) && /async function promoteHeldBooking\(memberId, ticketId\)\{/.test(src));
 ok('★ 前提：開通段還有多出的額度（used<unlocked 且 remain>0）',
    /if\(used>=unlocked \|\| remain<=0\) return;   \/\/ 開通段沒有多出的額度/.test(src));
 ok('★ 挑同會員同課種最早的保留課、補綁＋扣課＋清旗標',
