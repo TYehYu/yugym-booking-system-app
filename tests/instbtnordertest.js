@@ -66,10 +66,10 @@ console.log('\n④ bkCardPayKind 真值表（實際執行原始碼裡的函式�
      k(true, false, none).kind === 'convert' && k(true, true, none).kind === 'convert' && k(true, true, strict1).kind === 'convert' && k(true, false, null).kind === 'convert');
   ok('★★★ 施佩怡 11/20 的情境（標記的保留課＋票還剩已開通額度）依新規則 → 轉正', k(true, true, strict1).label === '轉正');
   ok('★★ 沒有可用堂數＋已標記＋唯一嚴格符合＋沒有其他疑點 → 「分期」', k(false, true, strict1).kind === 'inst' && k(false, true, strict1).label === '分期');
-  ok('★★ 未標記＋唯一嚴格符合 → 「分期（待確認）」', k(false, false, strict1).label === '分期（待確認）');
-  ok('★★ 多張嚴格符合 → 「分期（待確認）」（已標記也一樣）', k(false, false, strict2).label === '分期（待確認）' && k(false, true, strict2).label === '分期（待確認）');
-  ok('★★ 只有需要查核的候選（共享／過期…）→ 「分期（待確認）」，不是儲值', k(false, true, reviewOnly).kind === 'inst' && k(false, false, reviewOnly).label === '分期（待確認）');
-  ok('★★ 已標記＋唯一嚴格符合，但還有需要查核的候選 → 「分期（待確認）」（不算已確認）', k(false, true, strict1Review).label === '分期（待確認）');
+  ok('★★ 未標記＋唯一嚴格符合 → 「分期」（文字一律「分期」，kind 仍是 inst）', k(false, false, strict1).kind === 'inst' && k(false, false, strict1).label === '分期');
+  ok('★★ 多張嚴格符合 → 「分期」（已標記也一樣；擋收款在點擊後的查核畫面）', k(false, false, strict2).label === '分期' && k(false, true, strict2).label === '分期' && k(false, true, strict2).kind === 'inst');
+  ok('★★ 只有需要查核的候選（共享／過期…）→ 「分期」，不是儲值', k(false, true, reviewOnly).kind === 'inst' && k(false, false, reviewOnly).label === '分期');
+  ok('★★ 已標記＋唯一嚴格符合，但還有需要查核的候選 → 「分期」（kind 仍是 inst，不是儲值）', k(false, true, strict1Review).label === '分期' && k(false, true, strict1Review).kind === 'inst');
   ok('★★★ 候選算不出來（error 或沒有資料）→ 絕不給「儲值」', k(false, false, err).kind === 'inst' && k(false, true, null).kind === 'inst' && k(false, false, undefined).kind === 'inst');
   ok('★★★ 沒有可用堂數、也沒有任何分期候選 → 儲值（一般新客）', k(false, false, none).kind === 'topup' && k(false, true, none).kind === 'topup');
 }

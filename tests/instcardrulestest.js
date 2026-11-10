@@ -169,7 +169,7 @@ const bookingOf = h => h.tables.bookings.BK1;
       ok('★ 視窗列出：持有人、方案名稱、票券識別碼、已繳期數／總期數、效期（不再有統計圓環）',
          /測試會員/.test(html) && /分期方案/.test(html) && /TK-1/.test(html) && /已繳 <b>2<\/b> ／ 3 期/.test(html) && /2027-09-15/.test(html) && !/conic-gradient/.test(html), html.slice(0, 120));
       ok('★★ 一堂課一個圓形卡：圓形卡由票券夾（與會員票券頁同源的 ticketTokens）依這張票產生，沒有寫死／推算', /data-tk="TK-1"/.test(html) && /data-total="12"/.test(html) && /data-unlocked="8"/.test(html) && /data-used="3"/.test(html) && /mck-dots2/.test(html));
-      ok('　　沒有可靠的下一期金額（inst.amounts 缺）就不顯示金額', !/下一期/.test(html));
+      ok('　　沒有可靠的下一期金額（inst.amounts 缺）→ 顯示「預計金額未設定」，不顯示金額', /預計金額未設定/.test(html) && !/NT\$/.test(html));
       ok('　　視窗提醒：先標記分期待繳費保留、再進原票券收款、未付款仍保留、不建立新票券', /先標記「分期待繳費保留」/.test(html) && /原票券收款/.test(html) && /未付款仍保留標記/.test(html) && /不建立新票券/.test(html));
     }
     h.st.pick = 'TK-1';
@@ -202,7 +202,16 @@ const bookingOf = h => h.tables.bookings.BK1;
     let h = mk({ bookings: [bk()], tickets: [tk('TK-1', { installment: { count: 3, current: 2, amounts: [10000, 8000, 6000] } })] });
     await h.f.ashInstNext('BK1');
     const html = h.log.modals[0] || '';
-    ok('★ 下一期金額取自 inst.amounts[current]（與 openInstallNext 同一個來源）', /下一期 <b>NT\$ 6,000<\/b>/.test(html), html.slice(-300));
+    ok('★ 下一期應收取自 inst.amounts[current]，獨立大字顯示並標第 N／M 期', /下一期應收・第 <b>3<\/b>／3 期/.test(html) && /font-size:30px[^>]*>NT\$ 6,000</.test(html), html.slice(-400));
+    ok('★ 確認視窗標題為「確認原分期票券」（不再有「分期（待確認）」字樣）；未標記時仍有「先標記分期待繳費保留」提醒', /modal-title">確認原分期票券</.test(html) && !/分期（待確認）/.test(html) && /先標記「分期待繳費保留」/.test(html));
+    ok('★ 確認畫面隱藏票券識別碼文字，但 radio value 仍是原票券 id', !/票券識別碼/.test(html) && !/>TK-1</.test(html) && /value="TK-1"/.test(html));
+    for (const [label, amounts] of [['缺 amounts', undefined], ['金額 0', [10000, 8000, 0]], ['金額負數', [1, 2, -5]], ['金額非數字', [1, 2, 'abc']]]) {
+      const cur = 2;
+      const hx = mk({ bookings: [bk()], tickets: [tk('TK-1', { installment: { count: 3, current: cur, amounts } })] });
+      await hx.f.ashInstNext('BK1');
+      const hh = hx.log.modals[0] || '';
+      ok('　　' + label + ' → 顯示「預計金額未設定」（沒有假金額、沒有 NT$）；其他資訊與確認鈕照常（不擋收款）', /預計金額未設定/.test(hh) && !/NT\$/.test(hh) && !/font-size:30px/.test(hh) && /bkInstConfirm\('BK1'\)/.test(hh) && /value="TK-1"/.test(hh));
+    }
     ok('　　票券識別碼傳遞不變：選項值＝TK-1，確認鈕仍呼叫 bkInstConfirm', /value="TK-1"/.test(html) && /bkInstConfirm\('BK1'\)/.test(html));
   }
 
@@ -214,6 +223,7 @@ const bookingOf = h => h.tables.bookings.BK1;
     const hm = mk({ bookings: [bk()], tickets: [tk('TK-1'), tk('TK-2')] });
     await hm.f.ashInstNext('BK1');
     const hh = hm.log.modals[0] || '';
+    ok('★★ 多候選查核畫面仍保留票券識別碼（用來分辨不同票券）', /票券識別碼：<b>TK-1<\/b>/.test(hh) && /票券識別碼：<b>TK-2<\/b>/.test(hh));
     ok('★★★ 多候選查核畫面：每張票都有圓形卡，但沒有選票鈕、沒有確認收款鈕', /data-tk="TK-1"/.test(hh) && /data-tk="TK-2"/.test(hh) && !/inst-pick/.test(hh) && !/bkInstConfirm\(/.test(hh));
   }
 

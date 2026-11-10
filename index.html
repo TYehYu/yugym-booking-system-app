@@ -15632,8 +15632,8 @@ function tbl(s){return TABLE_ALIAS[s]||s;}
 let sb=null;
 // ── 版本號（日期+時間格式：年後兩碼+月+日.時分，例 26620.1058 = 26年6/20 10:58）──
 // 每次改版手動更新這一行即可，畫面與 title 會一起更新
-const APP_VERSION = '261110.2232';
-const APP_VERSION_LABEL = 'v261110.2232';
+const APP_VERSION = '261110.2301';
+const APP_VERSION_LABEL = 'v261110.2301';
 const CLOUD = !!(window.YUGYM_CONFIG && window.YUGYM_CONFIG.url && window.YUGYM_CONFIG.anonKey);
 if(CLOUD){ sb = supabase.createClient(window.YUGYM_CONFIG.url, window.YUGYM_CONFIG.anonKey); }
 
@@ -39779,7 +39779,7 @@ async function expandBkCard(el, id){
              取代上面 2026-11-09「_isInst 優先」的寫法（那段說明保留當歷史）：
              ① 有符合預約、已開通且可用的堂數（_hasTk）→「轉正」，已標記的分期保留課也一樣；
              ② 沒有可用堂數，但會員有同票種（含相容）的原分期票尚有未開通堂數 →「分期」
-                ——未標記或候選不唯一時顯示「分期（待確認）」，點下去由櫃檯確認原票券，
+                ——按鈕文字一律「分期」；未標記或候選不唯一時，點下去由櫃檯確認原票券，
                 **不可顯示能直接開新方案的「儲值」**；
              ③ 兩者都沒有才「儲值」，而且點擊時會再檢查一次（bkTopUpFromCard）。
              顯示與點擊用同一個 bkInstCandidates／bkCardPayKind；顯示≠已證實這張預約屬於哪張票，
@@ -41913,10 +41913,10 @@ function bkInstCandidates(b, tks, todayYmd){
 /* 按鈕決策（純函式）：轉正 → 分期 → 儲值。cls 算不出來（error）時絕不給「儲值」。 */
 function bkCardPayKind(hasTk, isInst, cls){
   if(hasTk) return {kind:'convert', label:'轉正'};
-  if(!cls || cls.error) return {kind:'inst', label:'分期（待確認）'};
+  if(!cls || cls.error) return {kind:'inst', label:'分期'};
   if(cls.strict.length+cls.review.length>0){
-    const direct = !!isInst && cls.strict.length===1 && cls.review.length===0;   // 已標記＋唯一＋沒有其他疑點才算「已確認」
-    return {kind:'inst', label: direct ? '分期' : '分期（待確認）'};
+    /* 2026-11-10：按鈕文字一律「分期」（只改文字；已標記／唯一／疑點的判斷仍在 _ashInstNext 與確認視窗，kind 與阻擋都沒變） */
+    return {kind:'inst', label:'分期'};
   }
   return {kind:'topup', label:'儲值'};
 }
@@ -41989,9 +41989,18 @@ function bkInstTkHtml(t, o){
   const nextAmt=(cnt>cur && Array.isArray(inst.amounts)) ? Number(inst.amounts[cur]) : NaN;   // 與 openInstallNext 同一個來源（inst.amounts[current]）
   const dots=o.dots ? `<div class="mck-dots2" style="margin:8px 0 6px;">${o.dots}</div>`
                     : `<div style="font-size:11px;color:var(--t3);margin:6px 0;">（圓形卡無法載入，不顯示堂數圓圈）</div>`;
-  const info=`${dots}<div style="font-size:12px;color:var(--t2);line-height:1.7;word-break:break-all;">
-      已繳 <b>${cur}</b> ／ ${cnt||'—'} 期${(Number.isFinite(nextAmt)&&nextAmt>0)?`　·　下一期 <b>NT$ ${nextAmt.toLocaleString()}</b>`:''}<br>
-      票券識別碼：<b>${escH(t.id)}</b>　效期：<b>${escH(t.expire_date?String(t.expire_date).slice(0,10):'未設定')}</b></div>
+  /* 下一期應收金額獨立顯示（inst.amounts[current] 是有效正數才畫金額；缺資料或無效 → 顯示「預計金額未設定」，不顯示假金額；只是提示，不擋收款，彈性收款規則不變） */
+  const hasAmt=Number.isFinite(nextAmt)&&nextAmt>0;
+  const amtBlock=hasAmt?`<div style="margin:8px 0 6px;padding:10px 12px;border-radius:10px;background:var(--card2,#f7f5f1);text-align:center;">
+      <div style="font-size:12px;color:var(--t2);">下一期應收・第 <b>${cur+1}</b>／${cnt} 期</div>
+      <div style="font-size:30px;font-weight:700;line-height:1.25;color:var(--green);font-family:var(--num,inherit);word-break:break-all;">NT$ ${nextAmt.toLocaleString()}</div></div>`
+    :`<div style="margin:8px 0 6px;padding:10px 12px;border-radius:10px;background:var(--card2,#f7f5f1);text-align:center;">
+      <div style="font-size:12px;color:var(--t2);">下一期應收</div>
+      <div style="font-size:15px;font-weight:600;line-height:1.5;color:var(--t3);">預計金額未設定</div></div>`;
+  /* 票券識別碼：可選票的確認畫面不顯示（內部仍用 radio value＝ticket id 傳遞）；多候選查核畫面要靠它分辨不同票券，保留 */
+  const idPart=o.selectable?'':`<br>票券識別碼：<b>${escH(t.id)}</b>`;
+  const info=`${dots}${amtBlock}<div style="font-size:12px;color:var(--t2);line-height:1.7;word-break:break-all;">
+      已繳 <b>${cur}</b> ／ ${cnt||'—'} 期　效期：<b>${escH(t.expire_date?String(t.expire_date).slice(0,10):'未設定')}</b>${idPart}</div>
     <div style="font-size:11px;color:var(--t3);line-height:1.6;margin-top:2px;">持有人 ${escH(o.owner||'—')}　·　購買日 ${escH(String(t.created_at||'').slice(0,10)||'—')}</div>`;
   const head=`<b>${escH(t.plan_name||'分期票券')}</b>`;
   if(o.selectable) return `<label style="display:block;border:1px solid var(--bd);border-radius:10px;padding:10px 12px;margin-bottom:8px;cursor:pointer;"><input type="radio" name="inst-pick" value="${escH(t.id)}" ${o.checked?'checked':''}> ${head}${info}</label>`;
@@ -42006,7 +42015,7 @@ async function bkInstPickModal(b, cls){
     sigs:Object.fromEntries(cls.strict.map(t=>[t.id, bkInstTkSig(t)])) };
   const strictHtml=cls.strict.map(t=>bkInstTkHtml(t,{selectable:true, checked:cls.strict.length===1, owner:names[t.member_id], dots:dm[t.id]})).join('');
   const reviewHtml=cls.review.map(r=>bkInstTkHtml(r.t,{selectable:false, reasons:r.reasons, owner:names[r.t.member_id], dots:dm[r.t.id]})).join('');
-  showModal(`<div class="modal-title">分期（待確認）・確認原分期票券</div>
+  showModal(`<div class="modal-title">確認原分期票券</div>
     <div class="ash-eihead">${escH(String(b.date).replace(/-/g,'/'))} ${escH(String(b.start_time).slice(0,5))}　·　${escH(names[b.member_id]||'')}　·　${escH(b.category||'')}</div>
     <div style="font-size:12px;color:var(--t2);line-height:1.7;margin:8px 0;background:var(--card2,#f7f5f1);border-radius:8px;padding:8px 10px;">
       確認後先標記「分期待繳費保留」${marked?'（這張已標記）':''}，再進入原票券收款；未付款仍保留標記；不建立新票券。${cls.strict.length>1?'<br>有多張符合的分期票，請自己選擇，系統不會自動挑。':''}</div>

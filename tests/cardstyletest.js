@@ -567,7 +567,7 @@ ok('　　成因寫在程式裡（拿脫離 DOM 的元素量會全拿到 0）',
    /拿一個已脫離 DOM 的元素去 getBoundingClientRect\(\) 會全部拿到 0/.test(src));
 
 console.log('\n分期保留要走「開通下一期」而不是「儲值」（使用者：這堂其實是分期）');
-ok('★ 分期鈕：有分期候選才給（已標記＋唯一＋無其他疑點顯示「分期」，其餘「分期（待確認）」），標記仍用 bkIsInstHold 分辨',
+ok('★ 分期鈕：有分期候選才給，文字一律「分期」，標記仍用 bkIsInstHold 分辨',
    /const _isInst=\(typeof bkIsInstHold==='function'\) && bkIsInstHold\(b\);/.test(src)
    && /\? evoBtn\('evo-r2','evo-gold',`collapseBkCard\(\);ashInstNext\('\$\{id\}'\)`,'plus',_pk\.label\)/.test(src));
 ok('★ 副標也分得出來（分期待繳費 vs 待簽約，且待簽約再分有票／沒票）',

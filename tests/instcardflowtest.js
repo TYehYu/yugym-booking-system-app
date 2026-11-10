@@ -130,7 +130,7 @@ function mk(o) {
   h.noNewPlan = () => h.log.sales.length === 0 && !h.log.puts.some(p => p.store === 'member_tickets') && Object.keys(h.tables.member_tickets).length === o.tickets.length;
   return h;
 }
-const PAY = ['轉正', '分期', '分期（待確認）', '儲值'];
+const PAY = ['轉正', '分期', '分期', '儲值'];
 const payLabels = h => h.labels().filter(l => PAY.includes(l));
 const bookingOf = h => h.tables.bookings.BK1;
 
@@ -144,13 +144,13 @@ const bookingOf = h => h.tables.bookings.BK1;
     ok('　　點「轉正」→ 進轉正流程（openConvertPending），沒有收款、沒有銷售視窗、沒有寫入', JSON.stringify(h.log.convert) === '["BK1"]' && h.noEffect(), [h.log.convert, h.log.installNext, h.log.sales]);
   }
 
-  console.log('\n═══ 情境 2＋12＋15＋16：無可用堂數、唯一有效原分期票 → 分期（待確認）→ 確認後用同一張票 ═══');
+  console.log('\n═══ 情境 2＋12＋15＋16：無可用堂數、唯一有效原分期票 → 分期→ 確認後用同一張票 ═══');
   {
     const h = mk({ bookings: [bk()], tickets: [tk('TK-1')] });
     await h.render();
-    ok('★ 只顯示「分期（待確認）」，沒有「儲值」、沒有「轉正」', JSON.stringify(payLabels(h)) === '["分期（待確認）"]', h.labels());
+    ok('★ 只顯示「分期」，沒有「儲值」、沒有「轉正」', JSON.stringify(payLabels(h)) === '["分期"]', h.labels());
     ok('　　渲染本身零寫入', h.log.puts.length === 0);
-    await h.click('分期（待確認）');
+    await h.click('分期');
     ok('★ 點擊 → 顯示原票券資訊視窗；此時沒有寫入、沒有收款、沒有銷售視窗', h.log.modals.length === 1 && /TK-1/.test(h.log.modals[0]) && /分期方案/.test(h.log.modals[0]) && h.noEffect(), h.log.modals.length);
     // 情境 12：櫃檯在確認前取消（關掉視窗）→ 什麼都不會發生
     h.env.closeModal();
@@ -174,8 +174,8 @@ const bookingOf = h => h.tables.bookings.BK1;
   {
     const h = mk({ bookings: [bk()], tickets: [tk('TK-OLD', { created_at: '2026-07-01T00:00:00+00:00' }), tk('TK-NEW', { created_at: '2026-08-20T00:00:00+00:00', plan_name: '較新方案' })] });
     await h.render();
-    ok('★ 顯示「分期（待確認）」，沒有儲值', JSON.stringify(payLabels(h)) === '["分期（待確認）"]', h.labels());
-    await h.click('分期（待確認）');
+    ok('★ 顯示「分期」，沒有儲值', JSON.stringify(payLabels(h)) === '["分期"]', h.labels());
+    await h.click('分期');
     ok('★ 清單列出兩張，且沒有預先勾選；點擊當下沒有收款', /TK-OLD/.test(h.log.modals[0]) && /TK-NEW/.test(h.log.modals[0]) && !/checked/.test(h.log.modals[0]) && h.log.installNext.length === 0);
     await h.f.bkInstConfirm('BK1');
     ok('★ 兩張以上：清單沒有確認鈕；直接呼叫確認 → 擋下，沒有寫入、沒有收款', !/bkInstConfirm\(/.test(h.log.modals[0]) && h.log.installNext.length === 0 && h.log.puts.length === 0);
@@ -188,8 +188,8 @@ const bookingOf = h => h.tables.bookings.BK1;
   for (const [name, o2] of [['效期早於預約日', { expire_date: '2026-11-05' }], ['狀態 expired', { status: 'expired' }]]) {
     const h = mk({ bookings: [bk()], tickets: [tk('TK-E', o2)] });
     await h.render();
-    ok('（' + name + '）顯示「分期（待確認）」而不是「儲值」', JSON.stringify(payLabels(h)) === '["分期（待確認）"]', h.labels());
-    await h.click('分期（待確認）');
+    ok('（' + name + '）顯示「分期」而不是「儲值」', JSON.stringify(payLabels(h)) === '["分期"]', h.labels());
+    await h.click('分期');
     ok('　　點擊 → 查核視窗，明講先處理效期、不會轉入新方案；沒有收款、沒有寫入、沒有銷售視窗',
        h.log.modals.length === 1 && /先到會員票券處理效期/.test(h.log.modals[0]) && /不會轉入新方案/.test(h.log.modals[0]) && h.noEffect(), h.log.modals.length);
     h.st.pick = 'TK-E';
@@ -201,8 +201,8 @@ const bookingOf = h => h.tables.bookings.BK1;
   for (const note of [null, MARK]) {
     const h = mk({ bookings: [bk({ note })], tickets: [tk('TK-S', { member_id: 'M2', shared_with: ['M1'] })] });
     await h.render();
-    ok('（' + (note ? '已標記' : '未標記') + '）顯示「分期（待確認）」，沒有儲值', JSON.stringify(payLabels(h)) === '["分期（待確認）"]', h.labels());
-    await h.click('分期（待確認）');
+    ok('（' + (note ? '已標記' : '未標記') + '）顯示「分期」，沒有儲值', JSON.stringify(payLabels(h)) === '["分期"]', h.labels());
+    await h.click('分期');
     ok('　　查核視窗註明共享、不可操作；沒有選票、沒有收款、沒有標記、沒有銷售視窗', /共享/.test(h.log.modals[0]) && !/radio/.test(h.log.modals[0]) && h.noEffect());
   }
 
@@ -215,15 +215,15 @@ const bookingOf = h => h.tables.bookings.BK1;
     ok('　　且沒有對那兩張票開通任何一期', h.log.installNext.length === 0 && h.log.sales.length === 1);
     h = mk({ bookings: [bk()], tickets: [tk('TK-C', { ticket_type_id: 'TT-VIP' })] });
     await h.render();
-    ok('★ 僅相容（VIP 票上一般課）→ 顯示「分期（待確認）」，不是儲值', JSON.stringify(payLabels(h)) === '["分期（待確認）"]', h.labels());
-    await h.click('分期（待確認）');
+    ok('★ 僅相容（VIP 票上一般課）→ 顯示「分期」，不是儲值', JSON.stringify(payLabels(h)) === '["分期"]', h.labels());
+    await h.click('分期');
     ok('　　不自動選、不自動開通：查核視窗＋沒有收款／標記／銷售', /相容/.test(h.log.modals[0]) && !/radio/.test(h.log.modals[0]) && h.noEffect());
   }
 
   console.log('\n═══ 情境 8：期數異常、未開通為 0、void／refunded → 不進入下一期收款 ═══');
   {
     let h = mk({ bookings: [bk()], tickets: [tk('TK-B', { installment: { count: 3, current: 3 } })] });
-    await h.render(); await h.click('分期（待確認）');
+    await h.render(); await h.click('分期');
     ok('★ current>=count 但還有未開通堂數 → 查核視窗，不收款、不寫入、不開銷售', /分期資料不完整或期數異常/.test(h.log.modals[0]) && h.noEffect());
     for (const [name, o2] of [['未開通堂數為 0（已全開通）', { unlocked_sessions: 12 }], ['void', { status: 'void' }], ['refunded', { status: 'refunded' }]]) {
       h = mk({ bookings: [bk()], tickets: [tk('TK-X', o2)] });
@@ -235,11 +235,11 @@ const bookingOf = h => h.tables.bookings.BK1;
     }
   }
 
-  console.log('\n═══ 情境 9：未標記歷史預約有候選 → 「分期（待確認）」，不得直接 ppTopUp ═══');
+  console.log('\n═══ 情境 9：未標記歷史預約有候選 → 「分期」，不得直接 ppTopUp ═══');
   {
     const h = mk({ bookings: [bk({ note: null })], tickets: [tk('TK-1')] });
     await h.render();
-    ok('★★★ 畫面上完全沒有「儲值」鈕', !h.labels().includes('儲值') && h.labels().includes('分期（待確認）'), h.labels());
+    ok('★★★ 畫面上完全沒有「儲值」鈕', !h.labels().includes('儲值') && h.labels().includes('分期'), h.labels());
     // 即使舊畫面殘留一顆儲值鈕（展開後票券狀態才改變），點下去也不會開銷售視窗
     await h.f.bkTopUpFromCard('BK1');
     ok('★★★ 直接呼叫儲值入口（模擬殘留的舊按鈕）→ 提示改按「分期」，沒有開銷售視窗', h.log.sales.length === 0 && h.log.toasts.some(t => /不會開新方案/.test(t)), h.log.toasts);
@@ -255,14 +255,14 @@ const bookingOf = h => h.tables.bookings.BK1;
     ok('★★★ 點「儲值」時發現已有同票種分期票 → 不開銷售視窗（不能建立新方案），提示改按分期', h.log.sales.length === 0 && h.log.toasts.some(t => /不會開新方案/.test(t)), h.log.toasts);
     h = mk({ bookings: [bk()], tickets: [tk('TK-1')] });
     await h.render();
-    ok('（先決）展開時只有「分期（待確認）」', JSON.stringify(payLabels(h)) === '["分期（待確認）"]');
+    ok('（先決）展開時只有「分期」', JSON.stringify(payLabels(h)) === '["分期"]');
     h.tables.member_tickets['TK-1'].sessions_remaining = 6;      // 展開之後，這位會員有了已開通可用堂數（已用 6、已開通 8）
-    await h.click('分期（待確認）');
+    await h.click('分期');
     ok('★ 點「分期」時發現已有可用堂數 → 提示改按轉正，不跳確認視窗、不收款', h.log.modals.length === 0 && h.noEffect() && h.log.toasts.some(t => /轉正/.test(t)), h.log.toasts);
     h = mk({ bookings: [bk()], tickets: [tk('TK-1')] });
     await h.render();
     h.tables.member_tickets['TK-1'].unlocked_sessions = 12;      // 展開之後，票券被別人全部開通（未開通 0）
-    await h.click('分期（待確認）');
+    await h.click('分期');
     ok('★ 點「分期」時發現票券已不是待處理分期票 → 只提示，不收款、不寫入、不開銷售視窗', h.noEffect() && h.log.modals.length === 0, h.log.toasts);
   }
 
@@ -289,7 +289,7 @@ const bookingOf = h => h.tables.bookings.BK1;
 
   console.log('\n═══ 情境 13：確認後資料變動、標記寫入失敗 → 停止收款 ═══');
   {
-    const open = async extra => { const h = mk(Object.assign({ bookings: [bk()], tickets: [tk('TK-1')] }, extra || {})); await h.render(); await h.click('分期（待確認）'); h.st.pick = 'TK-1'; return h; };
+    const open = async extra => { const h = mk(Object.assign({ bookings: [bk()], tickets: [tk('TK-1')] }, extra || {})); await h.render(); await h.click('分期'); h.st.pick = 'TK-1'; return h; };
     const stopped = h => h.log.installNext.length === 0 && h.log.puts.length === 0 && h.log.sales.length === 0;
     let h = await open(); h.tables.bookings.BK1.status = 'cancelled'; await h.f.bkInstConfirm('BK1');
     ok('預約在確認前被取消 → 停止', stopped(h));
@@ -315,19 +315,19 @@ const bookingOf = h => h.tables.bookings.BK1;
   {
     for (const [note, expected] of [[null, MARK], ['靠窗', MARK + '｜備註：靠窗'], ['舊系統匯入', '舊系統匯入／' + MARK], ['第一行\n第二行', MARK + '｜備註：第一行\n第二行']]) {
       const h = mk({ bookings: [bk({ note })], tickets: [tk('TK-1')] });
-      await h.render(); await h.click('分期（待確認）'); h.st.pick = 'TK-1'; await h.f.bkInstConfirm('BK1');
+      await h.render(); await h.click('分期'); h.st.pick = 'TK-1'; await h.f.bkInstConfirm('BK1');
       ok('備註 ' + JSON.stringify(note) + ' → ' + JSON.stringify(bookingOf(h).note), bookingOf(h).note === expected && (bookingOf(h).note.match(/分期待繳費保留/g) || []).length === 1, bookingOf(h).note);
     }
     let h = mk({ bookings: [bk()], tickets: [tk('TK-1')], st: { realOnce: true } });
-    await h.render(); await h.click('分期（待確認）'); h.st.pick = 'TK-1';
+    await h.render(); await h.click('分期'); h.st.pick = 'TK-1';
     await Promise.all([h.f.bkInstConfirm('BK1'), h.f.bkInstConfirm('BK1')]);
     ok('★ 連點確認（真正的 onceAct）→ 只寫一次標記、只進一次收款', h.log.puts.length === 1 && h.log.installNext.length === 1);
     h = mk({ bookings: [bk()], tickets: [tk('TK-1')] });
-    await h.render(); await h.click('分期（待確認）'); h.st.pick = 'TK-1';
+    await h.render(); await h.click('分期'); h.st.pick = 'TK-1';
     await h.f.bkInstConfirm('BK1'); await h.f.bkInstConfirm('BK1');
     ok('★ 分開兩次確認 → 第二次因預約已變動而停止：標記只有一個', h.log.puts.length === 1 && h.log.installNext.length === 1 && (bookingOf(h).note.match(/分期待繳費保留/g) || []).length === 1);
     h = mk({ bookings: [bk({ note: MARK })], tickets: [tk('TK-1'), tk('TK-2')] });
-    await h.render(); await h.click('分期（待確認）'); h.st.pick = 'TK-2'; await h.f.bkInstConfirm('BK1');
+    await h.render(); await h.click('分期'); h.st.pick = 'TK-2'; await h.f.bkInstConfirm('BK1');
     ok('★ 已標記的卡（多張時）：確認被擋，不寫入、不收款', h.log.puts.length === 0 && h.log.installNext.length === 0);
   }
 
@@ -336,7 +336,7 @@ const bookingOf = h => h.tables.bookings.BK1;
     const picks = [['單張', [tk('TK-ONLY')], 'TK-ONLY']];
     for (const [name, tks, pick] of picks) {
       const h = mk({ bookings: [bk()], tickets: tks });
-      await h.render(); await h.click('分期（待確認）'); h.st.pick = pick; await h.f.bkInstConfirm('BK1');
+      await h.render(); await h.click('分期'); h.st.pick = pick; await h.f.bkInstConfirm('BK1');
       ok('（' + name + '）選 ' + pick + ' → openInstallNext 收到同一個 id；沒有新 member_tickets、沒有銷售視窗、沒有寫入 member_tickets',
          JSON.stringify(h.log.installNext) === JSON.stringify([pick]) && h.noNewPlan() && h.log.sales.length === 0, h.log.installNext);
     }
@@ -353,7 +353,7 @@ const bookingOf = h => h.tables.bookings.BK1;
   {
     // 確認視窗開著時，使用者權限被降成非櫃檯（或換了人）→ 確認不得執行
     const h = mk({ bookings: [bk()], tickets: [tk('TK-1')] });
-    await h.render(); await h.click('分期（待確認）');
+    await h.render(); await h.click('分期');
     h.env.SESSION.role = 'coach'; h.st.pick = 'TK-1';
     await h.f.bkInstConfirm('BK1');
     ok('★ 確認視窗開著時角色變成非櫃檯 → 確認被擋：不寫入、不收款', h.noEffect() && bookingOf(h).note === null, h.log.toasts);
@@ -374,7 +374,7 @@ const bookingOf = h => h.tables.bookings.BK1;
     ok('★ 一般預約卡（已綁票、不是待簽約）：可正常展開，且沒有分期／儲值／轉正鈕', err === null && payLabels(h).length === 0, err && String(err));
     // 付款後綁定：確認並標記的卡在收款開通後，被綁到同一張票（bindHeldBookings 本身未修改）
     h = mk({ bookings: [bk({ note: '靠窗' })], tickets: [tk('TK-1')] });
-    await h.render(); await h.click('分期（待確認）'); h.st.pick = 'TK-1'; await h.f.bkInstConfirm('BK1');
+    await h.render(); await h.click('分期'); h.st.pick = 'TK-1'; await h.f.bkInstConfirm('BK1');
     h.tables.member_tickets['TK-1'].unlocked_sessions = 12;   // 模擬櫃檯在收款視窗完成收款：已開通 8 → 12
     const n = await h.f.bindHeldBookings('TK-1', 1);
     ok('★★★ 收款後：確認過的預約被綁到同一張票 TK-1，標記清除、員工備註保留', n === 1 && bookingOf(h).ticket_id === 'TK-1' && bookingOf(h).pending_contract === false && bookingOf(h).note === '靠窗', [n, bookingOf(h)]);
