@@ -15632,8 +15632,8 @@ function tbl(s){return TABLE_ALIAS[s]||s;}
 let sb=null;
 // ── 版本號（日期+時間格式：年後兩碼+月+日.時分，例 26620.1058 = 26年6/20 10:58）──
 // 每次改版手動更新這一行即可，畫面與 title 會一起更新
-const APP_VERSION = '261110.2347';
-const APP_VERSION_LABEL = 'v261110.2347';
+const APP_VERSION = '261112.1212';
+const APP_VERSION_LABEL = 'v261112.1212';
 const CLOUD = !!(window.YUGYM_CONFIG && window.YUGYM_CONFIG.url && window.YUGYM_CONFIG.anonKey);
 if(CLOUD){ sb = supabase.createClient(window.YUGYM_CONFIG.url, window.YUGYM_CONFIG.anonKey); }
 
@@ -16471,8 +16471,15 @@ function dbFriendlyError(e, store, op){
   const code = (e && e.code) || '';
   const label = DB_LABEL[store] || DB_LABEL[tbl(store)] || '';
   const where = label ? `（${label}）` : '';
-  let msg;
-  if(/row-level security|violates row-level/i.test(raw) || code==='42501'){
+  let msg, _hmCode='';
+  if(/HOLD\.MONTH_LIMIT/.test(raw)){
+    /* 無票券卡位月份限制（2026-11-11，資料庫 trigger fn_hold_month_guard）：這是規則拒絕，不是系統錯誤——
+       講清楚可預約到哪一天；呼叫端只會看到這個錯誤，沒有任何「改走其他寫入路徑」的退路。 */
+    const _m=raw.match(/HOLD\.MONTH_LIMIT:(\d{4})-(\d{2})-(\d{2})/);
+    msg = '沒有符合資格票券的卡位目前只能預約到 '+(_m?(_m[1]+'/'+_m[2]+'/'+_m[3]):'本月底（或已開放的下個月）')
+        +'；每月最後一個星期一起開放下個月。請改選日期，或先購買票券';
+    _hmCode='HOLD.MONTH_LIMIT';
+  }else if(/row-level security|violates row-level/i.test(raw) || code==='42501'){
     // 權限被 RLS 擋下。這是設定問題，不是使用者做錯事 —— 別讓他以為是自己的操作有問題。
     msg = `權限不足，系統無法${op||'寫入'}這筆資料${where}。這通常是設定問題，請聯絡管理員協助`;
   }else if(code==='23505' || /duplicate key|already exists/i.test(raw)){
@@ -16492,7 +16499,7 @@ function dbFriendlyError(e, store, op){
   }
   const err = new Error(msg);
   err.rawMessage = raw;      // 原始訊息保留，供除錯
-  err.code = code;
+  err.code = _hmCode || code;
   err.cause = e;
   console.error(`[db] ${op||'操作'}失敗${where}：`, raw, e);   // 原始錯誤仍完整進 console
   return err;
@@ -24247,6 +24254,7 @@ function spaceForBooking(category){
 }
 // RPC 錯誤碼 → 中文提示
 function rpcBookingErrMsg(code){
+  if(String(code||'').indexOf('HOLD.MONTH_LIMIT')===0) code='HOLD.MONTH_LIMIT';
   const M={
     'BOOKING.TIME_CONFLICT':'教練該時段已有課',
     'BOOKING.SPACE_FULL':'一般區該時段已滿（上限 3）',
@@ -24260,6 +24268,7 @@ function rpcBookingErrMsg(code){
     // 指定票券的專屬錯誤（2026-08-01）：講清楚是「你選的那一張」不能用，而不是籠統的沒票
     'TICKET.NOT_FOUND':'找不到您選的那張票券（可能剛被刪除），請重新整理後再試',
     'TICKET.NOT_YOURS':'您選的那張票券不屬於這位會員（也不在他的共享名單裡）',
+    'HOLD.MONTH_LIMIT':'沒有符合資格票券的卡位只能預約當月；每月最後一個星期一起開放下個月',
   };
   return M[code]||('建立失敗：'+(code||'未知錯誤'));
 }
