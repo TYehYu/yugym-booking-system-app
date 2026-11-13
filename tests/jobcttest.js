@@ -336,26 +336,33 @@ ok('★★★ 每一份契約的每個「第N條」都認得出來', api.JOB_CON
 }), api.JOB_CONTRACTS.map(c=>c.body.split('\n').filter(l=>/^第/.test(l)).length));
 
 console.log('\n⑥ 權限與接線');
-ok('★★★ 職務契約只給管理員／店長（櫃檯直接開會員合約）',
-   /function openContractQuickView\(\)\{\s*if\(typeof isManagerUp!=='function' \|\| !isManagerUp\(\)\)\{ openMemberContractView\(\); return; \}/.test(src));
+/* 2026-11-13 使用者指示：櫃檯可看「兼職教練聘僱契約書」(part)。舊斷言「櫃檯直接開會員合約」
+   改為：櫃檯顯示選單（會員服務合約＋part）；教練、會員仍直接開會員合約；管理員／店長維持原選單。
+   權限邊界沒有降低：可見性集中在 jobCtCanView（管理員／店長＝非草稿全部；櫃檯＝只有 JOB_CT_DESK_IDS）。 */
+ok('★★★ 職務契約：管理員／店長看全部非草稿，櫃檯只有 part，教練與會員直接開會員合約',
+   /function openContractQuickView\(\)\{\s*\/\*[^*]*\*\/\s*const _jobCts=JOB_CONTRACTS\.filter\(jobCtCanView\);\s*if\(!_jobCts\.length && \(typeof isManagerUp!=='function' \|\| !isManagerUp\(\)\)\)\{ openMemberContractView\(\); return; \}/.test(src)
+   && /const JOB_CT_DESK_IDS=\['part'\];/.test(src)
+   && /function jobCtCanView\(c\)\{\s*if\(!c \|\| c\.draft\) return false;\s*if\(typeof isManagerUp==='function' && isManagerUp\(\)\) return true;[\s\S]{0,200}SESSION\.role==='front_desk' && JOB_CT_DESK_IDS\.indexOf\(c\.id\)>=0/.test(src));
 ok('★★★ 首頁的［查看合約］還是叫 openContractQuickView',
    src.indexOf('onclick="openContractQuickView()"><svg')>=0);
 ok('★★ 會員合約被拆成自己的一支（選單才叫得動它）', src.indexOf('function openMemberContractView()')>=0);
 ok('★★ 四支入口都在', ['function openJobContractView(','function openJobContractPrint(',
    'function jobCtGet(','function jobCtSignBlock('].every(x=>src.indexOf(x)>=0));
-ok('★★★ 選單分成「職務契約」與「人事表單」兩組',
-   /grp!=='form' && !c\.draft\)\.map\(c=>row\(/.test(src)
-   && /grp==='form' && !c\.draft\)\.map\(c=>row\(/.test(src)
+ok('★★★ 選單分成「職務契約」與「人事表單」兩組（以 jobCtCanView 過濾可見契約）',
+   /JOB_CONTRACTS\.filter\(jobCtCanView\)/.test(src)
+   && /_jobCts\.filter\(c=>c\.grp!=='form'\)\.map\(c=>row\(/.test(src)
+   && /_jobCts\.filter\(c=>c\.grp==='form'\)\.map\(c=>row\(/.test(src)
    && src.indexOf('人事表單　<span')>0);
 /* ⚠ 2026-10-18 使用者：「先上承攬契約跟離職單　其他正職　兼職　工讀　主管
    先不要上　我還沒細看」。條文留在 JOB_CONTRACTS 裡不刪，只是掛 draft:true 不列出來 ——
    看完把旗標拿掉就上架。這一條盯的是「沒有人把未定稿的偷偷放出去」。 */
-ok('★★★ 只有承攬與離職單會出現在選單',
-   api.JOB_CONTRACTS.filter(c=>!c.draft).map(c=>c.id).sort().join()==='coop,quit',
+ok('★★★ 已上架（非草稿）的只有兼職教練、承攬與離職單（part、coop、quit）',
+   api.JOB_CONTRACTS.filter(c=>!c.draft).map(c=>c.id).sort().join()==='coop,part,quit',
    api.JOB_CONTRACTS.filter(c=>!c.draft).map(c=>c.id));
-ok('★★★ 未定稿的五份條文還在（只是不上架，不是刪掉）',
-   ['full','desk','part','intern','mgr'].every(id=>{
-     const c=byId(id); return c && c.draft===true && c.body.length>800; }));
+ok('★★★ 仍未定稿的四份條文還在（只是不上架，不是刪掉）：full、desk、intern、mgr',
+   ['full','desk','intern','mgr'].every(id=>{
+     const c=byId(id); return c && c.draft===true && c.body.length>800; })
+   && api.JOB_CONTRACTS.filter(c=>c.draft).map(c=>c.id).sort().join()==='desk,full,intern,mgr');
 ok('★★ 選單用 .bk-opt（名字在左、說明靠右的定版列）',
    /openContractQuickView[\s\S]{0,1200}class="bk-opt"/.test(src));
 ok('★★ 列印走既有的 ctPrintOpen／ctBodyHTML（不另寫版型）',

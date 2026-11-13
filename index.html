@@ -15632,8 +15632,8 @@ function tbl(s){return TABLE_ALIAS[s]||s;}
 let sb=null;
 // ── 版本號（日期+時間格式：年後兩碼+月+日.時分，例 26620.1058 = 26年6/20 10:58）──
 // 每次改版手動更新這一行即可，畫面與 title 會一起更新
-const APP_VERSION = '261113.2100';
-const APP_VERSION_LABEL = 'v261113.2100';
+const APP_VERSION = '261113.2338';
+const APP_VERSION_LABEL = 'v261113.2338';
 const CLOUD = !!(window.YUGYM_CONFIG && window.YUGYM_CONFIG.url && window.YUGYM_CONFIG.anonKey);
 if(CLOUD){ sb = supabase.createClient(window.YUGYM_CONFIG.url, window.YUGYM_CONFIG.anonKey); }
 
@@ -75789,7 +75789,7 @@ const JOB_CONTRACTS=[
 1. 本契約沒寫到的，依勞基法與相關法令。
 2. 要改契約，要用書面。
 3. 打官司時，雙方同意以臺灣新北地方法院為第一審管轄法院。`},
-  {id:'part',draft:true,name:'兼職教練聘僱契約書',sub:'部分工時勞工　適用勞動基準法',tag:'兼職',why:'按堂計酬・仍是員工',right:'無底薪・課費 600／堂<br>勞保・勞退・特休按比例',pages:'3 頁',
+  {id:'part',name:'兼職教練聘僱契約書',sub:'部分工時勞工　適用勞動基準法',tag:'兼職',why:'按堂計酬・仍是員工',right:'無底薪・課費 600／堂<br>勞保・勞退・特休按比例',pages:'3 頁',
    sum:[['','<b>沒有底薪</b>。教練課 600／堂、團課 200／人次、值班 200／小時'],['','每週 ＿＿ 天、約 ＿＿ 小時，時段每月 ＿＿ 號前跟公司排好'],['','特休<b>按工時比例</b>給，沒休完要折現'],['','公司幫你保<b>勞保、職災</b>，另提繳 6% 勞退。健保在別處保要給證明'],['','預告期間與資遣費都依勞基法']],
    body:`公司：筋實堂　統一編號 91788490　負責人 余東曄
 地址：新北市新莊區後港一路28巷3弄2號1樓
@@ -76072,6 +76072,20 @@ function jobCtGet(id){
   for(var i=0;i<JOB_CONTRACTS.length;i++){ if(JOB_CONTRACTS[i].id===id) return JOB_CONTRACTS[i]; }
   return null;
 }
+/* 職務契約可見性（2026-11-13 使用者指示：櫃檯可查看／列印／另存 PDF「兼職教練聘僱契約書」空白範本）——
+   ・管理員、店長（isManagerUp）：全部「非草稿」的職務契約
+   ・櫃檯（front_desk）：只有 JOB_CT_DESK_IDS 名單內的（目前只有 part）
+   ・教練、會員：沒有職務契約權限（維持原樣，按［查看合約］直接開會員服務合約）
+   ⚠ 這是介面層的限制，不是伺服器端安全邊界：契約全文是前端常數、隨 index.html 發佈
+     （repo 與正式站皆公開），沒有任何資料表／RPC／Storage 可以設 RLS。
+   ⚠ 職務契約沒有新增／編輯／刪除功能（純常數）；這裡只決定「誰看得到」。
+   ⚠ 獨立判斷，不改 isManagerUp／isDeskLike 的定義（兩者另有他處在用）。 */
+const JOB_CT_DESK_IDS=['part'];
+function jobCtCanView(c){
+  if(!c || c.draft) return false;
+  if(typeof isManagerUp==='function' && isManagerUp()) return true;
+  return !!(typeof SESSION!=='undefined' && SESSION && SESSION.role==='front_desk' && JOB_CT_DESK_IDS.indexOf(c.id)>=0);
+}
 /* 職務契約的簽名區：會員合約那支（ctSignBlock）寫的是「會員簽名／教練簽名」，
    這裡要的是甲方（雇主）／乙方。沿用同一組 class，版面與會員合約一致。 */
 function jobCtSignBlock(c){
@@ -76118,7 +76132,9 @@ function jobCtSumHTML(c, forPrint){
     +'</div>';
 }
 function openContractQuickView(){
-  if(typeof isManagerUp!=='function' || !isManagerUp()){ openMemberContractView(); return; }
+  /* 沒有任何可看的職務契約（教練、會員）→ 照舊直接開會員服務合約；櫃檯因為有 part 會看到選單 */
+  const _jobCts=JOB_CONTRACTS.filter(jobCtCanView);
+  if(!_jobCts.length && (typeof isManagerUp!=='function' || !isManagerUp())){ openMemberContractView(); return; }
   /* 名字放大在左、說明靠右（.bk-opt，見 0930／1003 定版），與挑票券那幾張視窗同一套列。 */
   const row=(fn,label,why,right,tag)=>`<button type="button" class="bk-opt" onclick="${fn}">
     <span class="bk-opt-l"><b class="bk-opt-t">${label}</b>${tag?`<em class="bk-opt-tag">${tag}</em>`:''}${why?`<em class="bk-opt-why">${why}</em>`:''}</span>
@@ -76131,10 +76147,10 @@ function openContractQuickView(){
          混在契約清單裡會讓人以為它也是要「簽約」的東西。 */''}
     ${/* draft:true＝還沒定稿，不列出來（2026-10-18 使用者：「其他正職　兼職　工讀　主管
          先不要上　我還沒細看」）。條文留在 JOB_CONTRACTS 裡不刪 —— 看完拿掉旗標就上架。 */''}
-    <div style="font-size:12px;font-weight:700;color:var(--green);margin:14px 0 8px;">職務契約　<span style="font-weight:400;color:var(--t3);">聘僱教練時簽</span></div>
-    ${JOB_CONTRACTS.filter(c=>c.grp!=='form' && !c.draft).map(c=>row(`closeModal();openJobContractView('${c.id}')`,c.name,c.why,c.right,c.tag)).join('')}
-    <div style="font-size:12px;font-weight:700;color:var(--gold-d);margin:14px 0 8px;">人事表單　<span style="font-weight:400;color:var(--t3);">離職、異動時用</span></div>
-    ${JOB_CONTRACTS.filter(c=>c.grp==='form' && !c.draft).map(c=>row(`closeModal();openJobContractView('${c.id}')`,c.name,c.why,c.right,c.tag)).join('')}
+    ${_jobCts.some(c=>c.grp!=='form')?`<div style="font-size:12px;font-weight:700;color:var(--green);margin:14px 0 8px;">職務契約　<span style="font-weight:400;color:var(--t3);">聘僱教練時簽</span></div>`:''}
+    ${_jobCts.filter(c=>c.grp!=='form').map(c=>row(`closeModal();openJobContractView('${c.id}')`,c.name,c.why,c.right,c.tag)).join('')}
+    ${_jobCts.some(c=>c.grp==='form')?`<div style="font-size:12px;font-weight:700;color:var(--gold-d);margin:14px 0 8px;">人事表單　<span style="font-weight:400;color:var(--t3);">離職、異動時用</span></div>`:''}
+    ${_jobCts.filter(c=>c.grp==='form').map(c=>row(`closeModal();openJobContractView('${c.id}')`,c.name,c.why,c.right,c.tag)).join('')}
     <div style="font-size:11.5px;color:var(--t3);line-height:1.8;margin-top:10px;">
       ※ 均為空白範本，不帶員工資料；條文請以會計師複核後的版本為準。</div>
     <div class="modal-foot"><button class="btn btn-ghost" onclick="closeModal()">關閉</button></div>`);
@@ -76153,6 +76169,7 @@ function openMemberContractView(){
    與會員合約看起來是同一份東西。 */
 function openJobContractView(id){
   const c=jobCtGet(id); if(!c){ showToast('找不到這份契約'); return; }
+  if(!jobCtCanView(c)){ showToast('沒有查看這份契約的權限'); return; }
   const esc=x=>String(x).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
   showModal(`<div class="ctr-a4">
       <div class="ctr-h1">${c.name}</div>
@@ -76164,6 +76181,7 @@ function openJobContractView(id){
 }
 function openJobContractPrint(id){
   const c=jobCtGet(id); if(!c){ showToast('找不到這份契約'); return; }
+  if(!jobCtCanView(c)){ showToast('沒有列印這份契約的權限'); return; }
   ctPrintOpen(ctPdfName(['筋實堂',c.name,'空白',JOB_CT_VERSION]),
     `<h1>${c.name}</h1>
      <div class="sub">${c.sub}</div>
