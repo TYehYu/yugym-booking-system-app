@@ -1,4 +1,4 @@
-/* 櫃檯可查看／列印「兼職教練聘僱契約書」空白範本（id='part'）回歸測試（2026-11-13）
+/* 櫃檯可查看／列印「兼職教練聘僱契約書」(id='part')與「承攬契約書」(id='coop'，2026-11-14 加入) 空白範本 回歸測試（2026-11-13）
 
    需求：櫃檯（front_desk）可查看、列印、另存 PDF 兼職教練契約；不可新增／修改／刪除；
          其他職務契約的權限維持不變；不動 isManagerUp／isDeskLike；不動會員服務合約。
@@ -68,7 +68,7 @@ const optLabels = (html) => [...html.matchAll(/<b class="bk-opt-t">([^<]+)<\/b>/
 
 (async () => {
   const probe = mkApp(ROLES.admin).api;
-  const NAME = { part: probe.jobCtGet('part').name };
+  const NAME = { part: probe.jobCtGet('part').name, coop: probe.jobCtGet('coop').name };
 
   console.log('\nT8／T9 草稿與條文');
   {
@@ -92,9 +92,9 @@ const optLabels = (html) => [...html.matchAll(/<b class="bk-opt-t">([^<]+)<\/b>/
     api.openContractQuickView();
     const html = calls.modal[0] || '';
     ok('★ T1 前台按［查看合約］出現選單（不是直接開會員合約）', calls.modal.length === 1 && /<div class="modal-title">查看合約/.test(html));
-    ok('★★ T1 選單只有「會員服務合約」「兼職教練聘僱契約書」', JSON.stringify(optLabels(html)) === JSON.stringify(['會員服務合約', NAME.part]), JSON.stringify(optLabels(html)));
+    ok('★★ T1 選單只有「會員服務合約」「兼職教練聘僱契約書」「承攬契約書」', JSON.stringify(optLabels(html)) === JSON.stringify(['會員服務合約', NAME.part, NAME.coop]), JSON.stringify(optLabels(html)));
     ok('  沒有「人事表單」分組（櫃檯看不到離職申請書）', !/人事表單/.test(html));
-    ok('  選單裡只有 part 的職務契約入口 openJobContractView(\'part\')', (html.match(/openJobContractView\('([a-z]+)'\)/g) || []).join() === "openJobContractView('part')");
+    ok('  選單裡只有 part、coop 的職務契約入口', (html.match(/openJobContractView\('([a-z]+)'\)/g) || []).join() === "openJobContractView('part'),openJobContractView('coop')");
   }
 
   console.log('\nT2／T3 櫃檯查看與列印 part');
@@ -109,8 +109,22 @@ const optLabels = (html) => [...html.matchAll(/<b class="bk-opt-t">([^<]+)<\/b>/
     ok('  沒有任何 toast 拒絕訊息', calls.toast.length === 0);
   }
 
+  console.log('\nT2c／T3c 櫃檯查看與列印 coop（承攬契約書，合作教練；2026-11-14 加入）');
+  {
+    const { api, calls } = mkApp(ROLES.front_desk);
+    api.openJobContractView('coop');
+    ok('★ T2c 可查看 coop（彈窗顯示契約名稱與條文）', calls.modal.length === 1 && calls.modal[0].includes(NAME.coop) && calls.modal[0].includes('公司：筋實堂'), calls.toast.join());
+    ok('  查看畫面按鈕只有「換一份」「下載 PDF / 列印」（沒有新增／編輯／刪除）', (calls.modal[0].match(/<button[^>]*>([^<]*)<\/button>/g) || []).map(x => x.replace(/<[^>]+>/g, '')).join('|') === '← 換一份|下載 PDF / 列印');
+    api.openJobContractPrint('coop');
+    ok('★ T3c 可列印 coop（呼叫 ctPrintOpen，內容含條文與簽名區）', calls.print.length === 1 && calls.print[0].html.includes(NAME.coop) && /ct-sign|sig-line/.test(calls.print[0].html));
+    ok('★ T3c 另存 PDF：檔名含「承攬契約書」與版本', /承攬契約書/.test(calls.print[0].title) && /2026-v1/.test(calls.print[0].title), calls.print[0].title);
+    ok('  沒有任何 toast 拒絕訊息', calls.toast.length === 0);
+    const app2 = mkApp(ROLES.front_desk); app2.api.openContractQuickView();
+    ok('  櫃檯選單沒有「人事表單」分組（離職申請書 quit 仍看不到）', !/人事表單/.test(app2.calls.modal[0]) && !/openJobContractView\('quit'\)/.test(app2.calls.modal[0]));
+  }
+
   console.log('\nT4 櫃檯不可看／印其他契約');
-  for (const id of ['full', 'desk', 'intern', 'mgr', 'coop', 'quit']) {
+  for (const id of ['full', 'desk', 'intern', 'mgr', 'quit']) {
     const { api, calls } = mkApp(ROLES.front_desk);
     api.openJobContractView(id); api.openJobContractPrint(id);
     ok('★ T4 櫃檯 ' + id + '：查看與列印都被擋（不彈窗、不開列印、有拒絕訊息）', calls.modal.length === 0 && calls.print.length === 0 && calls.toast.length === 2, JSON.stringify({ m: calls.modal.length, p: calls.print.length, t: calls.toast }));
@@ -163,7 +177,7 @@ const optLabels = (html) => [...html.matchAll(/<b class="bk-opt-t">([^<]+)<\/b>/
     ok('★ 沒有 jobCt* 的 Save／Edit／Delete／Add／Create 函式', !/function jobCt(Save|Edit|Delete|Del|Add|Create|New|Update|Remove)\w*\(/.test(src));
     const fd = mkApp(ROLES.front_desk); fd.api.openContractQuickView(); fd.api.openJobContractView('part');
     ok('★ 櫃檯看到的選單與契約畫面沒有「新增／編輯／刪除／修改」', fd.calls.modal.every(h => !/新增|編輯|刪除|修改/.test(h.replace(/[^<>]*條文[^<>]*/g, '').replace(/<div class="ctr-a4">[\s\S]*?<\/div>\s*<div class="modal-foot"/, '<div class="modal-foot"'))), 'modal');
-    ok('  新增的可見性名單只有 part', /const JOB_CT_DESK_IDS=\['part'\];/.test(src));
+    ok('  櫃檯可見性名單只有 part、coop', /const JOB_CT_DESK_IDS=\['part','coop'\];/.test(src));
   }
 
   console.log('\nT13 語法');
@@ -188,6 +202,7 @@ const optLabels = (html) => [...html.matchAll(/<b class="bk-opt-t">([^<]+)<\/b>/
     ok('★ T14 建置後沒有混入 B 模式（contractHoldB／grantCancelRpc／fn_grant_cancel）', !/contractHoldB|grantCancelRpc|fn_grant_cancel/.test(built));
     ok('  建置後仍含 jobCtCanView 與 part（上架）', built.includes('function jobCtCanView(') && /\{id:'part',name:/.test(built));
     ok('  建置後 part 不再帶 draft', !/\{id:'part',draft/.test(built));
+    ok('  建置後 coop 上架（不帶 draft）且櫃檯名單含 coop', !/\{id:'coop',draft/.test(built) && /const JOB_CT_DESK_IDS=\['part','coop'\];/.test(built));
     fs.rmSync(tmp, { recursive: true, force: true });
   }
 

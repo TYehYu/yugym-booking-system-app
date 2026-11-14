@@ -339,9 +339,9 @@ console.log('\n⑥ 權限與接線');
 /* 2026-11-13 使用者指示：櫃檯可看「兼職教練聘僱契約書」(part)。舊斷言「櫃檯直接開會員合約」
    改為：櫃檯顯示選單（會員服務合約＋part）；教練、會員仍直接開會員合約；管理員／店長維持原選單。
    權限邊界沒有降低：可見性集中在 jobCtCanView（管理員／店長＝非草稿全部；櫃檯＝只有 JOB_CT_DESK_IDS）。 */
-ok('★★★ 職務契約：管理員／店長看全部非草稿，櫃檯只有 part，教練與會員直接開會員合約',
+ok('★★★ 職務契約：管理員／店長看全部非草稿，櫃檯只有 part 與 coop，教練與會員直接開會員合約',
    /function openContractQuickView\(\)\{\s*\/\*[^*]*\*\/\s*const _jobCts=JOB_CONTRACTS\.filter\(jobCtCanView\);\s*if\(!_jobCts\.length && \(typeof isManagerUp!=='function' \|\| !isManagerUp\(\)\)\)\{ openMemberContractView\(\); return; \}/.test(src)
-   && /const JOB_CT_DESK_IDS=\['part'\];/.test(src)
+   && /const JOB_CT_DESK_IDS=\['part','coop'\];/.test(src)
    && /function jobCtCanView\(c\)\{\s*if\(!c \|\| c\.draft\) return false;\s*if\(typeof isManagerUp==='function' && isManagerUp\(\)\) return true;[\s\S]{0,200}SESSION\.role==='front_desk' && JOB_CT_DESK_IDS\.indexOf\(c\.id\)>=0/.test(src));
 ok('★★★ 首頁的［查看合約］還是叫 openContractQuickView',
    src.indexOf('onclick="openContractQuickView()"><svg')>=0);
