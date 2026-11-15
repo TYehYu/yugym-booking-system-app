@@ -15632,8 +15632,8 @@ function tbl(s){return TABLE_ALIAS[s]||s;}
 let sb=null;
 // ── 版本號（日期+時間格式：年後兩碼+月+日.時分，例 26620.1058 = 26年6/20 10:58）──
 // 每次改版手動更新這一行即可，畫面與 title 會一起更新
-const APP_VERSION = '261114.1056';
-const APP_VERSION_LABEL = 'v261114.1056';
+const APP_VERSION = '261115.2000';
+const APP_VERSION_LABEL = 'v261115.2000';
 const CLOUD = !!(window.YUGYM_CONFIG && window.YUGYM_CONFIG.url && window.YUGYM_CONFIG.anonKey);
 if(CLOUD){ sb = supabase.createClient(window.YUGYM_CONFIG.url, window.YUGYM_CONFIG.anonKey); }
 
@@ -36097,11 +36097,67 @@ function bkNeedCoach(t){
 /* ── 場地租借（2026-07-21 商業規則三）：$200/次、不扣票、不發點、不列教練堂數、列場租收入。
    用途＝員工帶長輩使用場地：booking.category='場租'、trial_name=使用人、coach_id=經手員工（佔用其時段）。 */
 const BK_FACILITY_TYPE={id:'__facility',name:'場地租借',category:'場租',color:'self'};
-async function bkStep2Facility(pDate,pTime){
+/* ══ 場租的場地（2026-11-16 曹子安 11/17 15:00 場租存成「沒有場地」）══════════════
+   根因：場租走的是 bkStep2Facility → showModal 把步驟 1 的畫面（含 bk-venue）整個換掉，
+   送出時 _submitFacilityBooking 再去讀 bk-venue —— 已經不在了，讀不到就寫 null；
+   而且這條送出路徑完全沒呼叫場地分配（allocateVenue），null 的場租不佔任何場地，別人照樣約得到同一格。
+   修法：① 換頁**之前**先把場地存進 _bkWizard.venue，第二頁畫出來給人看（唯讀或下拉）；
+         ② 送出前用「最新」的當天預約，走既有的 allocateVenue（指定場地、逐 30 分鐘檢查整個租借時段），
+            拿到真正的場地**單位**（group_1…），不是把場地類別（group）直接寫進去；
+         ③ 場地空白、這個場地不能排場租、或時段已滿 → 停止建立、提示重選，**不得默默換場地**。
+   ⚠ 兩個入口共用：預約視窗（步驟 1 已選場地）、銷售彈窗（沒有步驟 1，第二頁自己挑場地）。
+   ⚠ 這是前端檢查，不是資料庫鎖：兩個人同時搶最後一格，檢查與寫入之間仍有空窗（見回報）。 */
+/* 純判斷（可在沙箱單獨執行）：sameDay＝當天未取消的預約。回傳 {unit} 或 {error}。 */
+function bkFacilityVenueCheck(sameDay, time, vid, dur){
+  const v=String(vid||'');
+  if(!v) return { error:'請選擇場地' };
+  const nm=(getVenues().find(x=>x.id===v)||{}).name||v;
+  const ns=timeToMin(String(time||'').slice(0,5)), ne=ns+(Number(dur)||60);
+  const a=allocateVenue('場租', sameDay||[], ns, ne, null, v);   // 指定場地：守課別規則、逐 30 分鐘時點、清場規則
+  if(a.error){
+    const why=a.catBlock?`${nm}不能排場地租借`:a.hardFull?`${nm}這個時段已滿`:a.error;
+    return { error:`${why}，請重新選擇場地（沒有建立）` };
+  }
+  if(a.toVid!==v) return { error:`${nm}無法排入，請重新選擇場地（沒有建立）` };   // 防呆：指定場地不可被換成別處
+  return { unit:a.unit };
+}
+/* 送出前呼叫：先丟掉預約的快取、重抓當天，再判斷。讀不到就丟錯，呼叫端不得往下寫入。 */
+async function bkFacilityAllocate(date, time, vid, dur){
+  /* ⚠ 一定要用 fresh 選項，不能只 dbCacheClear 再讀：dbCacheClear 只是把快取標成過期，
+     接著的 dbGetAll 若遇到「更早開始、還沒回來的查詢」（_dbInflight）會沿用那一份——
+     那份是在別人寫入之前就發出去的，場地剛被占走也看不到，檢查等於白做。
+     fresh 這條路會跳過沿用、直接開一次「現在才開始」的查詢（見 dbGetAll），這是專案既有的可靠讀法。 */
+  const all=await dbGetAll('bookings',{fresh:true});
+  const day=(all||[]).filter(x=>x && x.date===date && x.status!=='cancelled');
+  return bkFacilityVenueCheck(day, time, vid, dur);
+}
+/* 第二頁的場地欄（預約視窗：唯讀＋隱藏欄位；銷售彈窗：下拉，不能用的場地淡化寫原因） */
+async function bkFacilityVenueRowHtml(date, time, venue, fromSales){
+  const st=await bkVenueStatus(date, time, 60, null);
+  const stOf=id=>(st||[]).find(x=>x.id===id);
+  const why=id=>{ const c=venueCatWhy(id,'場租'); if(c) return c; const s=stOf(id); return (s&&!s.ok)?s.why:''; };
+  if(venue && !fromSales){
+    const nm=(getVenues().find(x=>x.id===venue)||{}).name||venue; const w=why(venue);
+    return `<div class="form-row" id="fr-venue-row"><label><i class="req">＊</i>場地</label>
+      <div class="form-ro">${escH(nm)}<i>上一步選的，要換場地請按「← 上一步」</i></div>
+      <input type="hidden" id="fr-venue" value="${escH(venue)}">
+      ${w?`<div class="adp-badnote" id="fr-venue-bad">${escH(nm)}${escH(w)}，請按「← 上一步」重新選擇場地</div>`:''}</div>`;
+  }
+  const opts=getVenues().map(v=>{ const w=why(v.id);
+    return `<option value="${v.id}" ${w?'disabled':''} ${v.id===venue?'selected':''}>${escH(v.name)}${w?'（'+escH(w)+'）':''}</option>`; }).join('');
+  return `<div class="form-row" id="fr-venue-row"><label><i class="req">＊</i>場地</label>
+    <select id="fr-venue"><option value="">請選擇場地</option>${opts}</select></div>`;
+}
+async function bkStep2Facility(pDate,pTime,pVenue){
   /* 2026-07-21 銷售彈窗入口：直接帶日期/時間參數（無預約視窗步驟 1 的欄位可讀） */
   const date=pDate||document.getElementById('bk-date').value;
   const time=(pTime||document.getElementById('bk-time').value).slice(0,5);
   if(!date||!time){showToast('請選擇日期與時間');return;}
+  /* ⚠ 場地一定要在 showModal 之前讀（那一行會把步驟 1 的 DOM 整個換掉，bk-venue 就沒了）。
+     銷售入口沒有步驟 1：只認呼叫端明講的 pVenue，不可沿用上一次預約視窗留在 _bkWizard 的舊值。 */
+  const _venue=String(pDate ? (pVenue||'') : (((document.getElementById('bk-venue')||{}).value)||_bkWizard.venue||''));
+  _bkWizard.venue=_venue;
+  const _venueRow=await bkFacilityVenueRowHtml(date,time,_venue,!!pDate);
   /* 經手員工要沿用步驟 1 挑的那位（2026-10-06 使用者：「為什麼選了ANN 結果變RANDY」）——
      原本下面的 opts 一律把 SESSION.id 標成 selected，步驟 1 選的教練就被悄悄換成操作的人。
      這一欄不是備註：場租的 coach_id ＝ 誰的時段被佔用，換人等於排到別人的班表上。
@@ -36137,6 +36193,7 @@ async function bkStep2Facility(pDate,pTime){
     <div style="font-size:11.5px;color:var(--t2);margin-bottom:12px;background:var(--card2);padding:10px 12px;border-radius:9px;">現場收費、先卡位之後再收，或用會員的場租票券折抵（效期以票券上標示為準）。</div>
     <div class="form-row"><label>場租票折抵（選填）</label><select id="fr-ticket" onchange="frTicketPick()"><option value="">不使用票券（現場收費）</option>${await frVenueTicketOpts()}</select></div>
     <div class="form-row"><label>使用人姓名（必填）</label><input id="fr-name" placeholder="例：王媽媽"></div>
+    ${_venueRow}
     ${_empRow}
     ${/* ══ 先卡位、之後再收（2026-09-22 使用者指示）══
          場租原本一律「建立當下就收錢」，但教練幫自己的會員身分卡位時常常是
@@ -36246,6 +36303,14 @@ async function _submitFacilityBooking(){
      ⚠ 用票券折抵時一律不算先卡位 —— 票已經是付過的錢（frSyncMode 也擋著，這裡再夾一次：
        表單狀態與送出的判斷不可以只靠畫面，畫面可能被上一筆的殘留值帶壞）。 */
   const hold=!!window._frHold && !frTkId;
+  /* 場地（2026-11-16）：第二頁的欄位優先，其次是換頁前存進去的 _bkWizard.venue；都沒有＝空白，一律不建立。
+     送出前用最新的當天預約重新分配，取得真正的場地單位；空白／已滿／被占用都停止，不默默換場地。 */
+  const _venueSel=String(((document.getElementById('fr-venue')||{}).value)||(_bkWizard&&_bkWizard.venue)||'');
+  if(!_venueSel){ showToast('請先選擇場地',4000); return; }
+  let _al;
+  try{ _al=await bkFacilityAllocate(date,time,_venueSel,60); }
+  catch(e){ console.error('場租場地檢查失敗',e); showToast('無法確認場地是否還有位，請稍後再試（沒有建立）',4500); return; }
+  if(_al.error){ showToast(_al.error,4500); return; }
   const fee=(frTkId||hold)?0:Math.max(0,Number(document.getElementById('fr-fee').value)||0);
   const method=document.getElementById('fr-method').value||'cash';
   /* 2026-08-02 曾因「發票還沒串聯」把這裡的發票區拿掉、值一律記 'none'。
@@ -36264,7 +36329,7 @@ async function _submitFacilityBooking(){
        原本一律寫 null，那是「入口只在銷售視窗」時代的寫法（那條路沒有場地欄位）。
        寫 null 會讓這筆場租不佔任何場地，別人照樣約得到同一台。 */
     date,start_time:time,duration:60,status:'booked',recurring:false,
-    venue_unit:((document.getElementById('bk-venue')||{}).value)||null,
+    venue_unit:_al.unit,   /* 分配出來的場地單位（如 group_1），不是場地類別、也不是 null */
     created_by:SESSION.id,created_at:new Date().toISOString()};
   await dbPut('bookings',bk);
   if(frTkId){   // 場租票折抵：扣 1 次
