@@ -13,9 +13,10 @@ ok('　　仍失敗 → 整個不做並提示重按', src.includes("if(!_silent)
 ok('② 備援先讀票券、讀不到就中止（不先取消）',
   /if\(b\.ticket_id && !bkIsGroup\(b\) && refundMode!=='none'\)\{\s*\n\s*const _preTk=await dbGet\('member_tickets',b\.ticket_id\)\.catch\(\(\)=>null\);/.test(src)
   && src.indexOf('const _preTk=await dbGet') < src.indexOf("b.status='cancelled';\n  b.cancelled_at=new Date().toISOString();"));
-ok('③ refundTicket 讀不到票留警示帳＋警告',
-  src.includes("'⚠ 退課失敗：讀不到票券資料，未退回（請人工補退）'")
-  && src.includes("showToast('⚠ 退課沒有成功（讀不到票券），請到會員票券頁確認補退')"));
+ok('③ refundTicket 退不成功時不無聲：警告＋提示到會員票券頁補退（2026-11 起退款走資料庫 RPC：讀不到票由 REFUND.NO_TICKET、連線失敗由例外處理）',
+  src.includes("_warn('退課沒有成功（連線失敗），請到會員票券頁確認補退')")
+  && src.includes("'REFUND.NO_TICKET':'找不到票券，沒有退款'")
+  && src.includes("_warn('退課沒有成功（缺少票券或預約資料），請到會員票券頁確認補退')"));
 
 console.log(`\n${pass} 過 / ${fail} 敗`);
 process.exit(fail?1:0);

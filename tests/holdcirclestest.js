@@ -139,9 +139,9 @@ console.log('\n═══ ⑤b 分類判斷：用預約 category==="私人教練"
   }
 }
 
-console.log('\n═══ ⑥ 不該被動到的函式（以正式版 2e53f78 的雜湊釘住）═══');
+console.log('\n═══ ⑥ 不該被動到的函式（以正式版 2e53f78 的雜湊釘住；deductTicket／cancelBooking 因 P0-E 刻意修改，已改釘 P0-E 版 2026-11-17，保留的保護由 deductrpctest／cancelnopromotetest 的行為測試驗證）═══');
 {
-  const pins = { findRefundTargetTicket: 'f1788b71501afa7ffb259d1cb5555ff0', bindHeldBookings: '136cc284a4ef8120aea33db3d8487d55', deductTicket: '8597b36ae0a8d9c1158955cc1c5fcd97', cancelBooking: '89e199065f169e0e2bcb1b3c0573e5b3', promoteHeldBooking: '828611bf1bf3122b5bfd978cc9035508', confirmInstallNext: 'd6e92517058299f95bc32e070b7977f2', _confirmInstallNext: '65770d74cf14477beb8ab182c2c73bc4', openInstallNext: 'c8c315b79b2ee277d08fab0161fac353', bkInstCandidates: '97626eb30efc9faec10845cd892feb75', bkCardPayKind: 'fa59c97db3672a082cf118cb990f9016', ticketTokens: '4f27f68a696f2548a0cddeeb8ad7127d', _ashInstNext: '0b354b4d1fb5e42d2804d094de209e1e', _bkInstConfirm: 'f1d6f6024cccb60faf169aeb61916a44', expandBkCard: 'b4b7aafb30dbe157c70a9a7d1e6cd31f' };
+  const pins = { findRefundTargetTicket: 'f1788b71501afa7ffb259d1cb5555ff0', bindHeldBookings: '136cc284a4ef8120aea33db3d8487d55', deductTicket: 'eeae7e48bb859f2f4e02292999594c9a', cancelBooking: '0dfa692fbdd548b964c16c4b8a9a530a', promoteHeldBooking: '828611bf1bf3122b5bfd978cc9035508', confirmInstallNext: 'd6e92517058299f95bc32e070b7977f2', _confirmInstallNext: '65770d74cf14477beb8ab182c2c73bc4', openInstallNext: 'c8c315b79b2ee277d08fab0161fac353', bkInstCandidates: '97626eb30efc9faec10845cd892feb75', bkCardPayKind: 'fa59c97db3672a082cf118cb990f9016', ticketTokens: '8ed450c8f0b8327f58f5230d6809640d', _ashInstNext: '0b354b4d1fb5e42d2804d094de209e1e', _bkInstConfirm: 'f1d6f6024cccb60faf169aeb61916a44', expandBkCard: 'b4b7aafb30dbe157c70a9a7d1e6cd31f' };
   const bad = Object.keys(pins).filter(n => md5(grabFn(n)) !== pins[n]);
   ok('★★★ 收款／轉正／扣票／綁票／取消／遞補／分期確認／findRefundTargetTicket／預約明細(expandBkCard，含 tkCircleHtml)／ticketTokens 都與正式版逐字相同', bad.length === 0, bad);
 }

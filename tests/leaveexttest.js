@@ -1,7 +1,9 @@
 /* 教練請假 → 幫會員展延票券效期（2026-07-31 使用者定案）
 
    「因為我們的課程有使用期限，如果遇到教練請假，應該要幫客人展延期限。」
-   定案：每被請假一堂，效期往後推 7 天（一週一堂的節奏，對得上實際損失）。
+   定案（2026-11 改版）：同一會員、同一張票、同一個週一～週日自然週最多延 7 天；不同週累加；
+   同週全部有效請假撤銷後撤回該週 7 天。寫入一律由資料庫 RPC fn_coach_leave_comp 原子完成，
+   前端 extendForCoachLeave 只是 RPC 的包裝（沒有先讀後寫）。
 
    原本的教練請假流程：課卡保留（status=coach_leave）＋退回 1 堂票＋通知會員。
    這次在退票之後補上展延，順序不能反 —— refundTicket 有可能把效期退回未開通
@@ -19,107 +21,88 @@ const ok=(n,c,x)=>{ if(c){pass++;console.log('  ✓ '+n);} else {fail++;console.
 const eq=(n,a,e)=>ok(n,JSON.stringify(a)===JSON.stringify(e),`得到 ${JSON.stringify(a)}，預期 ${JSON.stringify(e)}`);
 const g=(a,b)=>{const i=src.indexOf(a);return src.slice(i,src.indexOf(b,i)+b.length);};
 
-/* 實跑 extendForCoachLeave：把 dbGet/dbPut/logTicket 換成假的 */
-function mk(tk){
-  const saved=[], logs=[];
-  /* 2026-08-30：同一週只延一次 —— 那條判斷會去讀 ticket_logs，沙箱要一起帶
-     leaveWeekKey／leaveExtDoneThisWeek 與一份假帳本（預設空的＝這週還沒延過）。 */
-  const hist=(tk&&tk._logs)||[];
-  const fn=new Function('dbGet','dbPut','logTicket','parseYmd','ymd','TODAY','dbGetAll',
+/* 實跑 extendForCoachLeave：把 sb.rpc 換成假的（記下呼叫參數、回傳預先排好的結果）。
+   沙箱裡刻意不提供 dbGet／dbPut／logTicket——前端若還在先讀後寫，呼叫就會丟錯、結果變 null。 */
+function mk(rpcRes){
+  const calls=[]; let cleared=null;
+  const sbf={ rpc: async(name,args)=>{ calls.push({name,args}); if(rpcRes instanceof Error) throw rpcRes; return rpcRes; } };
+  const fn=new Function('sb','CLOUD','dbCacheClear','parseYmd','ymd','dbGetAll',
     'const COACH_LEAVE_EXTEND_DAYS=7;\n'
     +g('function leaveWeekKey(dstr){','\n}\n')
+    +g('function leaveExtNet(logs, ticket_id){','\n}\n')
     +g('async function leaveExtDoneThisWeek(ticket_id, dateStr){','\n}\n')
+    +g('const COACH_LEAVE_COMP_MSG={','};\n')
+    +g('async function coachLeaveComp(booking, ticketIds){','\n}\n')
     +g('async function extendForCoachLeave(ticket_id, booking, operator){','\n}\n')
-    +'\nreturn {extendForCoachLeave, leaveWeekKey};')(
-    async()=>tk?Object.assign({},tk):null,
-    async(_t,o)=>{ saved.push(o); },
-    async(...a)=>{ logs.push(a); },
+    +'\nreturn {extendForCoachLeave, coachLeaveComp, leaveWeekKey, leaveExtNet, leaveExtDoneThisWeek};')(
+    sbf, true, t=>{ cleared=t; },
     ds=>{const m=/^(\d{4})-(\d{2})-(\d{2})/.exec(String(ds||''));return m?new Date(+m[1],+m[2]-1,+m[3]):null;},
     d=>{const p=n=>String(n).padStart(2,'0');return d.getFullYear()+'-'+p(d.getMonth()+1)+'-'+p(d.getDate());},
-    new Date(2026,6,31),   // TODAY：沒帶 booking.date 時備註會用今天
-    async()=>hist);
-  return {fn:fn.extendForCoachLeave, wk:fn.leaveWeekKey, saved, logs};
+    async()=>[]);
+  return {fn:fn.extendForCoachLeave, comp:fn.coachLeaveComp, wk:fn.leaveWeekKey, net:fn.leaveExtNet, done:fn.leaveExtDoneThisWeek, calls, cleared:()=>cleared};
 }
+const R=(...results)=>({data:{ok:true,week:'2026-08-03',results},error:null});
 
 (async()=>{
-console.log('展延天數');
+console.log('展延（走資料庫 RPC，前端不再先讀後寫）');
 {
-  const a=mk({id:'T1',expire_date:'2026-09-30'});
-  /* 2026-08-30：回傳從字串改成物件（要分辨「延了」「同週已延」「沒到期日」三種） */
-  eq('★ 9/30 ＋7 天 → 10/07', (await a.fn('T1',{id:'B1',date:'2026-08-05'},'U')).to, '2026-10-07');
-  eq('　　票券真的被寫回去', a.saved[0].expire_date, '2026-10-07');
-
-  const b=mk({id:'T1',expire_date:'2026-10-07'});
-  eq('★ 再請假一堂就再 ＋7（不同週才會累加）', (await b.fn('T1',{id:'B2',date:'2026-08-12'},'U')).to, '2026-10-14');
-
-  const c=mk({id:'T1',expire_date:'2026-12-28'});
-  eq('　　跨月、跨年都算得對', (await c.fn('T1',{},'U')).to, '2027-01-04');
-  const d=mk({id:'T1',expire_date:'2026-02-25'});
-  eq('　　二月也算得對', (await d.fn('T1',{},'U')).to, '2026-03-04');
-  ok('★ 天數是常數，日後要改只改一個地方', /const COACH_LEAVE_EXTEND_DAYS=7;/.test(src));
+  const a=mk(R({ticket_id:'T1',action:'grant',week:'2026-08-03',from:'2026-09-30',to:'2026-10-07'}));
+  const r=await a.fn('T1',{id:'B1',date:'2026-08-05'},'U');
+  eq('★ 展延結果：9/30 → 10/07', [r.to,r.from,r.action], ['2026-10-07','2026-09-30','grant']);
+  eq('★ 呼叫的是 fn_coach_leave_comp，帶預約 id 與票券清單', a.calls, [{name:'fn_coach_leave_comp',args:{p_booking_id:'B1',p_tickets:['T1']}}]);
+  eq('　 RPC 繞過 dbPut → 票券與帳本快取要丟掉', a.cleared(), ['member_tickets','ticket_logs']);
+  const body=g('async function extendForCoachLeave(ticket_id, booking, operator){','\n}\n')+g('async function coachLeaveComp(booking, ticketIds){','\n}\n');
+  const code=body.replace(/\/\/[^\n]*/g,'');
+  ok('★★ 補償路徑沒有 dbPut／dbGet／logTicket（沒有前端先讀後寫）', !/dbPut|dbGet\(|logTicket|expire_date\s*=/.test(code), code.match(/dbPut|dbGet\(|logTicket|expire_date\s*=/));
+  ok('★★ 沒有失敗後的備援寫入路徑', !/catch\([^)]*\)\{[^}]*dbPut/.test(code));
+  ok('★ 天數常數仍在（顯示用）', /const COACH_LEAVE_EXTEND_DAYS=7;/.test(src));
 }
 
-console.log('\n同一週只延一次（2026-08-30 使用者定案）');
+console.log('\n同一週只延一次（資料庫判斷；前端只對應結果）');
 {
-  /* 「同一週的教練請假 只會展延一次7天　不然同一週如果安排5堂課
-      教練請假一週　課程期限就會多5週　不合理」
-     ⚠ 看的是**上課那一天**（週一起算），不是按下去那一天 —— 補登時兩者差很多。 */
-  const w=mk({id:'T1',expire_date:'2026-09-30'}).wk;
+  const dup=mk(R({ticket_id:'T1',action:'none',week:'2026-08-03',reason:'week_done'}));
+  eq('★★★ 同一週第二堂：RPC 回 week_done → {skipped:week}', await dup.fn('T1',{id:'B2',date:'2026-08-07'},'U'), {skipped:'week', week:'2026-08-03'});
+  eq('★★ 沒有任何票券寫入呼叫（只打了一次 RPC）', dup.calls.length, 1);
+  const nx=mk(R({ticket_id:'T1',action:'grant',from:'2026-10-07',to:'2026-10-14'}));
+  eq('★★★ 下一週再請假：RPC 回 grant → +7', (await nx.fn('T1',{id:'B3',date:'2026-08-11'},'U')).to, '2026-10-14');
+  const w=mk(R()).wk;
   eq('★★ 週一起算：週二 8/04 與 週五 8/07 是同一週', [w('2026-08-04'), w('2026-08-07')], ['2026-08-03','2026-08-03']);
-  eq('★★ 週日算前一週（不是下一週的開始）', w('2026-08-09'), '2026-08-03');
+  eq('★★ 週日算前一週', w('2026-08-09'), '2026-08-03');
   eq('★★ 下週一就換一週', w('2026-08-10'), '2026-08-10');
-
-  /* 週二先延過了 → 週五那堂不再延 */
-  const hist=[{ticket_id:'T1',note:'2026-08-04 教練請假展延 7 天（2026/09/30 → 2026/10/07）'}];
-  const dup=mk({id:'T1',expire_date:'2026-10-07',_logs:hist});
-  eq('★★★ 同一週的第二堂不再延，而且說得出原因',
-     await dup.fn('T1',{id:'B2',date:'2026-08-07'},'U'), {skipped:'week', week:'2026-08-03'});
-  eq('★★★ 而且真的沒有寫回票券（效期原封不動）', dup.saved.length, 0);
-  eq('　 也沒有多留一筆帳本', dup.logs.length, 0);
-
-  /* 下一週的請假照樣延 */
-  const nx=mk({id:'T1',expire_date:'2026-10-07',_logs:hist});
-  eq('★★★ 下一週再請假就照樣 ＋7', (await nx.fn('T1',{id:'B3',date:'2026-08-11'},'U')).to, '2026-10-14');
-
-  /* 一週排五堂、教練整週請假 → 只會延一次，不是五次 */
-  let exp='2026-09-30', logs2=[], n=0;
-  for(const d of ['2026-08-04','2026-08-05','2026-08-06','2026-08-07','2026-08-08']){
-    const m=mk({id:'T1',expire_date:exp,_logs:logs2.slice()});
-    const r=await m.fn('T1',{id:'B'+(++n),date:d},'U');
-    if(r&&r.to){ exp=r.to; logs2.push({ticket_id:'T1',note:`${d} 教練請假展延 7 天（x → y）`}); }
-  }
-  eq('★★★ 一週五堂全請假 → 只延 7 天（不是 35 天）', exp, '2026-10-07');
-  eq('★★★ 帳本只留一筆展延', logs2.length, 1);
 }
 
-console.log('\n教練請假的補償不可以被後面的「櫃檯展延」複利（2026-08-30）');
+console.log('\n撤銷：RPC 回 revoke');
 {
-  /* 使用者問：「這種因為教練請假展延的方案 如果之後要啟動課程展延(不退費)會怎麼計算」
-     ——舊算法是「到期日 − 起始日」＝方案天數，而教練請假只改 expire_date、
-     刻意不寫 extended_from，所以補償的天數會被算進方案長度，展延時再送一次。 */
-  const g2=(a,b)=>{const i=src.indexOf(a);return src.slice(i,src.indexOf(b,i)+b.length);};
-  const days=new Function('parseYmd','window',
-    g2('function tkPlanDays(t){','\n}\n')+'\nreturn tkPlanDays;')(
-    ds=>{const m=/^(\d{4})-(\d{2})-(\d{2})/.exec(String(ds||''));return m?new Date(+m[1],+m[2]-1,+m[3]):null;},
-    {_ttCache:[]});
-  /* 鄭宇涵的實際形狀：07/06 起、原本 55 天到 08/30，兩次教練請假延到 09/13 */
-  const zyh={id:'T',start_date:'2026-07-06',expire_date:'2026-09-13',valid_days:55};
-  eq('★★★ 有 valid_days → 照合約天數 55（不是被墊高的 69）', days(zyh), 55);
-  eq('　 沒有 valid_days 的舊票只能回推（會被墊高，所以下面要補寫 valid_days）',
-     days({id:'T',start_date:'2026-07-06',expire_date:'2026-09-13'}), 69);
-  eq('★★ valid_days 排在回推之前（順序就是這一條規則本身）',
-     days({id:'T',start_date:'2026-07-06',expire_date:'2026-09-13',valid_days:365}), 365);
+  const rv=mk(R({ticket_id:'T1',action:'revoke',week:'2026-08-03',from:'2026-10-07',to:'2026-09-30'}));
+  eq('★ 同週全部有效請假撤銷 → {action:revoke,to}', await rv.fn('T1',{id:'B1',date:'2026-08-05'},'U'), {to:'2026-09-30',action:'revoke'});
+}
 
-  /* 展延當下把方案天數固定下來，之後就不會再被墊高 */
-  const m2=mk({id:'T1',start_date:'2026-07-06',expire_date:'2026-08-30'});
-  await m2.fn('T1',{id:'B',date:'2026-08-24'},'U');
-  eq('★★★ 教練請假展延時，順手把 valid_days 補成原本的方案天數（55）',
-     m2.saved[0].valid_days, 55);
-  eq('★★ 效期照樣 ＋7', m2.saved[0].expire_date, '2026-09-06');
+console.log('\n什麼情況不延／失敗');
+{
+  eq('★ 沒到期日 → {skipped:noexp}', await mk(R({ticket_id:'T1',action:'none',reason:'noexp'})).fn('T1',{id:'B'},'U'), {skipped:'noexp'});
+  eq('　　RPC 結果裡沒有這張票 → null', await mk(R({ticket_id:'X',action:'grant'})).fn('T1',{id:'B'},'U'), null);
+  eq('★★ RPC 拋錯 → null，不會爆、也不會改寫票券', await mk(new Error('net')).fn('T1',{id:'B'},'U'), null);
+  eq('★★ RPC 回 error → null', await mk({data:null,error:{message:'x'}}).fn('T1',{id:'B'},'U'), null);
+  const den=await mk({data:{ok:false,error_code:'COMP.FORBIDDEN'},error:null}).fn('T1',{id:'B'},'U');
+  ok('★ 被拒絕：回 skipped:error 並帶中文原因', den&&den.skipped==='error'&&den.error==='COMP.FORBIDDEN'&&/自己課堂/.test(den.message), den);
+  eq('　　沒帶預約 id → null（不打 RPC）', await mk(R()).fn('T1',null,'U'), null);
+}
 
-  const m3=mk({id:'T1',start_date:'2026-07-06',expire_date:'2026-08-30',valid_days:365});
-  await m3.fn('T1',{id:'B',date:'2026-08-24'},'U');
-  eq('★★★ 已經有 valid_days 就不覆蓋（賣票時談好的天數最大）', m3.saved[0].valid_days, 365);
+console.log('\n帳本淨額（週為單位）：顯示與資料庫同一套規則');
+{
+  const L=(d,k,extra)=>Object.assign({ticket_id:'T1',action:'adjust',created_at:'2026-08-0'+k,note:d+' 教練請假展延 7 天（x → y）'},extra||{});
+  const V=(d,k)=>({ticket_id:'T1',action:'adjust',created_at:'2026-09-0'+k,note:d+' 教練請假展延已收回 7 天（y → x）'});
+  const m=mk(R());
+  eq('★ 一筆展延 → 1 筆有效', m.net([L('2026-08-04',1)],'T1').length, 1);
+  eq('★ 展延＋同週收回 → 0 筆（撤回）', m.net([L('2026-08-04',1),V('2026-08-06',1)],'T1').length, 0);
+  eq('★★ 展延、收回、再展延 → 1 筆（同週重請不重複補償）', m.net([L('2026-08-04',1),V('2026-08-04',1),L('2026-08-05',2)],'T1').length, 1);
+  eq('★ 不同週累加 → 2 筆', m.net([L('2026-08-04',1),L('2026-08-11',2)],'T1').length, 2);
+  eq('★ 收回只抵銷「同一週」那一筆', m.net([L('2026-08-04',1),L('2026-08-11',2),V('2026-08-12',1)],'T1').map(x=>x.note.slice(0,10)), ['2026-08-04']);
+  eq('★ 0830 的「校正」舊紀錄不算', m.net([L('2026-08-04',1,{note:'2026-08-04 教練請假展延 7 天（校正：舊紀錄）'})],'T1').length, 0);
+  eq('　　別張票的紀錄不算', m.net([L('2026-08-04',1,{ticket_id:'T2'})],'T1').length, 0);
+  eq('　　週日屬前一週：週二展延、同週週日收回 → 抵銷', m.net([L('2026-08-04',1),V('2026-08-09',1)],'T1').length, 0);
+  const dd=mk(R()); dd.net; // 沙箱的 dbGetAll 回空帳本 → 本週還沒延過
+  eq('　　leaveExtDoneThisWeek：空帳本 → false', await dd.done('T1','2026-08-05'), false);
 }
 
 console.log('\n櫃檯展延的起點與長度是兩回事（2026-08-30 使用者定版）');
@@ -145,33 +128,6 @@ console.log('\n櫃檯展延的起點與長度是兩回事（2026-08-30 使用者
      extTo(zyh)==='2026-11-21', false);
   eq('　 沒被教練請假動過的票照舊：08/30 ＋ 55 → 10/24',
      extTo({id:'T',start_date:'2026-07-06',expire_date:'2026-08-30',valid_days:55}), '2026-10-24');
-}
-
-console.log('\n什麼情況不延');
-{
-  /* 2026-08-30：回傳改物件，三種「沒延」要分得出來 —— 櫃檯的提示要講對原因 */
-  eq('★ 永久有效（沒有到期日）→ 不延，而且說得出是「沒到期日」',
-     await mk({id:'T1',expire_date:null}).fn('T1',{},'U'), {skipped:'noexp'});
-  eq('★ 退票時效期被退回未開通（expire_date 變 null）→ 不延',
-     await mk({id:'T1',expire_date:''}).fn('T1',{},'U'), {skipped:'noexp'});
-  eq('　　找不到票 → 不延，也不會爆', await mk(null).fn('T1',{},'U'), {skipped:'noexp'});
-  eq('　　到期日格式壞掉 → 不延', await mk({id:'T1',expire_date:'—'}).fn('T1',{},'U'), null);
-}
-
-console.log('\n留下紀錄');
-{
-  const a=mk({id:'T1',expire_date:'2026-09-30',note:'舊備註'});
-  await a.fn('T1',{id:'B1',date:'2026-08-05'},'EMP1');
-  ok('★ 票券備註寫一行，原本的備註不覆蓋',
-     /^舊備註\n2026-08-05 教練請假展延 7 天（2026\/09\/30 → 2026\/10\/07）$/.test(a.saved[0].note), a.saved[0].note);
-  const b=mk({id:'T1',expire_date:'2026-09-30'});
-  await b.fn('T1',{id:'B1',date:'2026-08-05'},'EMP1');
-  ok('　　原本沒備註時不會多一個空行', !/^\n/.test(b.saved[0].note));
-  const L=b.logs[0];
-  ok('★ 帳本記一筆 adjust、delta 0（不動堂數，只記效期）', L[1]==='adjust' && L[2]===0);
-  ok('★ 帳本帶得到是哪一筆預約、誰做的', L[3]==='B1' && L[4]==='EMP1');
-  ok('　　帳本說明與票券備註同一句', L[5]===b.saved[0].note);
-  ok('　　用 adjust（ticket_log_action 既有的值，不必動 enum）', /logTicket\(ticket_id,'adjust',0,/.test(src));
 }
 
 console.log('\n接進教練請假流程（2026-08-14 改版：延後釋出堂數——請假當下不退票，簽到或取消時才退）');

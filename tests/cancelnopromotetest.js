@@ -69,10 +69,11 @@ console.log('\n═══ ① 呼叫點（靜態）：全檔沒有任何 promoteH
   const CBcode = CB.replace(/\/\*[\s\S]*?\*\//g, '').replace(/\/\/[^\n]*/g, '');
   ok('★★★ cancelBooking 的程式碼（去掉註解）不含 promoteHeldBooking', !/promoteHeldBooking/.test(CBcode));
   const seq = ["b.status='cancelled';", "await dbPut('bookings',b);", 'await revokeRewardOnCancel(b)', 'await revokeMakeupOnCancel(b)', 'showToast(`已取消預約，退回'];
-  const ps = seq.map(s => CB.indexOf(s));
+  const CBL = CB.slice(CB.indexOf('備援路徑先讀後寫'));   // 前端舊邏輯段（只有沒有雲端連線的本機 demo／測試替身才會走；雲端一律走伺服器單一交易，見 deskcancelrpctest）
+  const ps = seq.map(s => CBL.indexOf(s));
   ok('★★ 取消流程順序不變：狀態→寫入→收回贈點→收回補課券→提示', ps.every(p => p >= 0) && ps.every((p, i) => i === 0 || p > ps[i - 1]), ps);
   ok('★★ 退票邏輯沒被動到（refundTicket 呼叫與 refundedCount 賦值都還在）',
-     /refundedCount=\(await refundTicket\(b\.ticket_id,b\.id,SESSION\.id\)\)\?1:0;/.test(CB));
+     /const _ok=await refundTicket\(b\.ticket_id,b\.id,SESSION\.id\);\s*refundedCount=_ok\?1:0;/.test(CB));   // P0-E／2026-11-07 Phase1：改成先取結果再依成敗標 _cancelOutcome
   ok('★★★ 收款開通後仍會呼叫 bindHeldBookings（_confirmInstallNext 沒被動到）',
      /try\{ bound=await bindHeldBookings\(t\.id, n\); \}/.test(src));
 }
@@ -81,8 +82,9 @@ console.log('\n═══ ① 呼叫點（靜態）：全檔沒有任何 promoteH
 const NOTE = '分期待繳費保留（收款後自動補扣）';
 function makeEnv(o) {
   o = Object.assign({ legacyFlag: false, refundOk: true, net: 1, putFailsOn: null, role: 'front_desk', rpc: null, bookings: [], tickets: [] }, o || {});
-  const log = { toasts: [], puts: [], refunds: [], promotes: [], deducts: [], rpcs: [], modals: [], navs: 0, unknown: [] };
-  const tables = { bookings: {}, member_tickets: {} };
+  const log = { toasts: [], puts: [], refunds: [], promotes: [], deducts: [], rpcs: [], modals: [], navs: 0, unknown: [], logs: [] };
+  const tables = { bookings: {}, member_tickets: {}, ticket_logs: {} };
+  (o.logsRows || []).forEach((l, i) => { tables.ticket_logs['L' + i] = Object.assign({ id: 'L' + i }, l); });
   o.bookings.forEach(b => { tables.bookings[b.id] = clone(b); });
   o.tickets.forEach(t => { tables.member_tickets[t.id] = clone(t); });
   const flags = { createBookingRpc: true, cancelBookingRpc: true, checkinBookingRpc: true };
@@ -103,10 +105,10 @@ function makeEnv(o) {
       if (tables[s]) tables[s][obj.id] = clone(obj);
       return obj;
     },
-    bkIsGroup: () => false, hoursUntilStart: () => 200,
+    bkIsGroup: () => !!o.group, hoursUntilStart: () => 200,
     bkNetDeductDB: async () => o.net, bkWasDeducted: async () => true,
-    refundTicket: async (tid, bid, op) => { log.refunds.push([tid, bid, op]); return o.refundOk; },
-    logTicket: async () => {}, revokeRewardOnCancel: async () => ({}), revokeMakeupOnCancel: async () => 0,   // RPC 成功路徑會讀 _rv.removed，所以回傳物件
+    refundTicket: async (tid, bid, op) => { log.refunds.push([tid, bid, op]); return (o.refundOkBy && tid in o.refundOkBy) ? o.refundOkBy[tid] : o.refundOk; },
+    logTicket: async (tid, action, delta, bid, op, note) => { log.logs.push({ tid, action, delta, bid, note }); }, BK_REFUND_FAILED_NOTE: '⚠ 取消・退票失敗（系統未能退回，待校正）', BK_REFUND_PARTIAL_NOTE: '⚠ 取消・部分退款（這張票的退票失敗，待校正）', revokeRewardOnCancel: async () => ({}), revokeMakeupOnCancel: async () => 0,   // RPC 成功路徑會讀 _rv.removed，所以回傳物件
     rewardToastText: () => '', showToast: m => { log.toasts.push(String(m)); },
     closeModal: () => {}, navTo: () => { log.navs++; }, dbCacheClear: () => {},
     promoteHeldBooking: async (m, t) => { log.promotes.push([m, t]); },
@@ -153,11 +155,89 @@ const holdUntouched = (tables, id, note) => {
     let err = null; try { await cancelBooking('BK-C', 'force', {}); } catch (e) { err = e; }
     const w = log.puts.filter(p => p.store === 'bookings').map(p => p.obj)[0] || {};
     ok('沒有拋例外', err === null, err && String(err));
-    ok('預約仍被取消；基準在 doRefund 為真時 refund_waived 為 false（基準行為，與本修改無關）', w.status === 'cancelled' && w.refund_waived === false, w);
+    ok('預約仍被取消；退票失敗時 refund_waived 為 true（2026-11-07 Phase1：outcome=refund_failed 讓櫃檯看得到「補退」鈕，P0-E 版的刻意行為）', w.status === 'cancelled' && w.refund_waived === true, w);
     ok('確實嘗試過退票（refundTicket 1 次，回傳 false）', log.refunds.length === 1, log.refunds);
     ok('★★★ promoteHeldBooking 沒被呼叫', log.promotes.length === 0);
     ok('分期保留預約維持原狀', holdUntouched(tables, 'BK-H1'));
     ok('提示不是「退回 1 堂票券」', !log.toasts.some(t => /退回 1 堂票券/.test(t)), log.toasts);
+  }
+  console.log('\n═══ ③b 退款失敗與「人員選擇不退」必須能分辨（2026-11-17）═══');
+  {
+    const { env, log } = makeEnv({ bookings: [target()], tickets: [TK], refundOk: false });
+    await instReal('cancelBooking', env, log)('BK-C', 'force', {});
+    ok('退款失敗：留一筆「取消・退票失敗」稽核標記（adjust／delta 0／對到這一堂與這張票）', log.logs.length === 1 && log.logs[0].action === 'adjust' && log.logs[0].delta === 0 && log.logs[0].tid === 'TK-A' && log.logs[0].bid === 'BK-C' && /取消・退票失敗/.test(log.logs[0].note), log.logs);
+    ok('提示講的是「退款未成功／取消未退」，不是「24 小時內扣課不退」', log.toasts.some(t => /退款未成功/.test(t)) && !log.toasts.some(t => /24 小時內，扣課不退/.test(t)), log.toasts);
+    ok('標記只寫稽核帳，沒有動票券（沒有 member_tickets 寫入）', !log.puts.some(p => p.store === 'member_tickets'));
+  }
+  {
+    const { env, log } = makeEnv({ bookings: [target()], tickets: [TK], refundOk: true, net: 1 });
+    await instReal('cancelBooking', env, log)('BK-C', 'none', {});
+    ok('人員選擇扣課不退：寫的是「取消・扣課不退（櫃檯選擇…）」，沒有退票失敗標記，也沒有嘗試退票', log.logs.some(l => /取消・扣課不退/.test(l.note)) && !log.logs.some(l => /退票失敗/.test(l.note)) && log.refunds.length === 0, [log.logs, log.refunds]);
+  }
+  {
+    const { env, log } = makeEnv({ bookings: [target()], tickets: [TK], refundOk: true, net: 1 });
+    await instReal('cancelBooking', env, log)('BK-C', 'force', {});
+    ok('退款成功：不寫任何標記、refund_waived 為 false', log.logs.length === 0 && log.puts.filter(p => p.store === 'bookings').every(p => p.obj.refund_waived === false), [log.logs, log.puts.map(p => p.obj.refund_waived)]);
+  }
+  {
+    const tables = [
+      { booking_id: 'B1', action: 'adjust', delta: 0, note: '⚠ 取消・退票失敗（系統未能退回，待校正）' },
+      { booking_id: 'B2', action: 'adjust', delta: 0, note: '取消・扣課不退（櫃檯選擇，票視同已使用）' },
+      { booking_id: 'B3', action: 'deduct', delta: -1, note: '預約扣課' },
+    ];
+    const kindFn = instReal('bkWaiveKind', { dbGetAll: async () => tables }, { unknown: [] });
+    const textFn = instReal('bkWaiveText', {}, { unknown: [] });
+    const k1 = await kindFn({ id: 'B1' }), k2 = await kindFn({ id: 'B2' }), k3 = await kindFn({ id: 'B3' });
+    ok('畫面分類：B1＝failed、B2＝chosen、B3（舊資料無標記）＝unknown', k1 === 'failed' && k2 === 'chosen' && k3 === 'unknown', [k1, k2, k3]);
+    ok('failed 的說法是「退票沒有成功…請用校正補退」，不說 24 小時內取消', /退票沒有成功/.test(textFn('failed')) && /校正/.test(textFn('failed')) && !/24 小時/.test(textFn('failed')), textFn('failed'));
+    ok('chosen 的說法是「選了扣課不退」；unknown 不亂編原因', /選了<b>扣課不退/.test(textFn('chosen')) && /沒有留下原因/.test(textFn('unknown')) && !/24 小時/.test(textFn('unknown')));
+  }
+
+  console.log('\n═══ ③c 團課多名額：部分退成功、部分失敗＝「部分退款，尚有待處理」，不能算已完成（2026-11-17）═══');
+  {
+    const G = Object.assign(target(), { category: '小班肌力', ticket_id: null });
+    const rows = [{ booking_id: 'BK-C', ticket_id: 'TK-A', action: 'deduct', delta: -1 }, { booking_id: 'BK-C', ticket_id: 'TK-B', action: 'deduct', delta: -1 }];
+    const { env, log } = makeEnv({ bookings: [G], tickets: [TK], group: true, logsRows: rows, refundOkBy: { 'TK-A': true, 'TK-B': false }, refundOk: true });
+    await instReal('cancelBooking', env, log)('BK-C', 'force', {});
+    const w = log.puts.filter(p => p.store === 'bookings').map(p => p.obj)[0] || {};
+    ok('嘗試退兩張票（一張成功、一張失敗）', log.refunds.length === 2, log.refunds);
+    ok('預約取消、refund_waived=true（保持可見、可補退）', w.status === 'cancelled' && w.refund_waived === true, w);
+    ok('★★★ 只有失敗的那張票留「部分退款」標記，成功的不留', log.logs.length === 1 && log.logs[0].tid === 'TK-B' && /取消・部分退款/.test(log.logs[0].note), log.logs);
+    ok('★★★ 提示是「部分退款…尚有待處理」，不是「退回 N 堂」就結束', log.toasts.some(t => /部分退款/.test(t) && /尚有待處理/.test(t) && /已退回 1 堂/.test(t)) && !log.toasts.some(t => /^已取消預約，退回 1 堂票券/.test(t)), log.toasts);
+  }
+  {
+    const G = Object.assign(target(), { category: '小班肌力', ticket_id: null });
+    const rows = [{ booking_id: 'BK-C', ticket_id: 'TK-A', action: 'deduct', delta: -1 }, { booking_id: 'BK-C', ticket_id: 'TK-B', action: 'deduct', delta: -1 }];
+    const { env, log } = makeEnv({ bookings: [G], tickets: [TK], group: true, logsRows: rows, refundOk: true });
+    await instReal('cancelBooking', env, log)('BK-C', 'force', {});
+    const w = log.puts.filter(p => p.store === 'bookings').map(p => p.obj)[0] || {};
+    ok('全部退成功：refund_waived=false、不留標記、提示退回 2 堂', w.refund_waived === false && log.logs.length === 0 && log.toasts.some(t => /退回 2 堂票券/.test(t)), [w.refund_waived, log.logs, log.toasts]);
+  }
+  {
+    const G = Object.assign(target(), { category: '小班肌力', ticket_id: null });
+    const rows = [{ booking_id: 'BK-C', ticket_id: 'TK-A', action: 'deduct', delta: -1 }, { booking_id: 'BK-C', ticket_id: 'TK-B', action: 'deduct', delta: -1 }];
+    const { env, log } = makeEnv({ bookings: [G], tickets: [TK], group: true, logsRows: rows, refundOk: false });
+    await instReal('cancelBooking', env, log)('BK-C', 'force', {});
+    ok('團課全部失敗＝「退票失敗」（不是部分）：兩張都留失敗標記、提示退款未成功', log.logs.length === 2 && log.logs.every(l => /取消・退票失敗/.test(l.note)) && log.toasts.some(t => /退款未成功/.test(t)), [log.logs, log.toasts]);
+  }
+
+  console.log('\n═══ ③d 圓點 tooltip 分辨：系統退票失敗／部分退款／人員選擇不退／原因不明 ═══');
+  {
+    const logs = [
+      { booking_id: 'B1', action: 'adjust', delta: 0, note: '⚠ 取消・退票失敗（系統未能退回，待校正）' },
+      { booking_id: 'B2', action: 'adjust', delta: 0, note: '取消・扣課不退（櫃檯選擇，票視同已使用）' },
+      { booking_id: 'B3', action: 'adjust', delta: 0, note: '⚠ 取消・部分退款（這張票的退票失敗，待校正）' },
+    ];
+    const env = { dbPeek: () => logs, _wkIdx: undefined };
+    const g = grabFn;
+    const code = 'let _wkIdx={src:null,map:{}};\n' + g('bkWaiveKindSync') + '\n' + g('bkWaiveTip') + '\n;return {bkWaiveTip};';
+    const tip = new Function('dbPeek', code)(env.dbPeek).bkWaiveTip;
+    ok('B1 系統退票失敗', /系統退票失敗/.test(tip({ id: 'B1' })), tip({ id: 'B1' }));
+    ok('B2 人員選擇不退', /選了扣課不退/.test(tip({ id: 'B2' })), tip({ id: 'B2' }));
+    ok('B3 部分退款', /部分退款，尚有待處理/.test(tip({ id: 'B3' })), tip({ id: 'B3' }));
+    ok('B9 沒有標記＝原因不明（不亂編成「選擇不退」）', /原因不明/.test(tip({ id: 'B9' })) && !/選了扣課不退/.test(tip({ id: 'B9' })), tip({ id: 'B9' }));
+    const noCache = new Function('dbPeek', code)(() => null).bkWaiveTip;
+    ok('帳本快取還沒載入：原因不明（不報錯）', /原因不明/.test(noCache({ id: 'B1' })));
   }
 
   console.log('\n═══ ④ 取消失敗：不觸發 promoteHeldBooking ═══');
@@ -281,8 +361,8 @@ const holdUntouched = (tables, id, note) => {
 
     r = mk({ rpc: async () => ({ data: { ok: false, error_code: 'X.UNKNOWN' }, error: null }) });
     await instReal('cancelBooking', r.env, r.log)('BK-C', 'auto', {});
-    ok('RPC 回未知業務錯誤 → 回退前端舊邏輯：取消並退 1 堂，仍不遞補',
-       r.tables.bookings['BK-C'].status === 'cancelled' && r.log.refunds.length === 1 && noPromoteAndHoldKept(r), [r.log.refunds, r.log.promotes]);
+    ok('★★★ RPC 回未知業務錯誤 → **不再回退前端兩步**（B1）：不取消、不退票、不寫入、提示「取消未執行…沒有任何資料被更動」',
+       r.tables.bookings['BK-C'].status === 'booked' && r.log.refunds.length === 0 && r.log.puts.length === 0 && r.log.toasts.some(t => /取消未執行/.test(t)) && noPromoteAndHoldKept(r), [r.tables.bookings['BK-C'].status, r.log.refunds, r.log.puts.length, r.log.toasts]);
   }
 
   console.log('\n結果：' + pass + ' 通過 / ' + fail + ' 失敗');

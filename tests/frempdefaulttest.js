@@ -11,7 +11,7 @@ const src=fs.readFileSync(process.env.HOME+'/Projects/yugym-booking-system-app/i
 let pass=0,fail=0;
 const ok=(n,c,x)=>{ if(c){pass++;console.log('  ✓ '+n);} else {fail++;console.log('  ✗ '+n+(x!==undefined?'  → '+JSON.stringify(x):''));} };
 const g=(a,b)=>{const i=src.indexOf(a); if(i<0) throw new Error('找不到 '+a); return src.slice(i, src.indexOf(b,i));};
-const FN=g('async function bkStep2Facility(pDate,pTime){','\nasync function frVenueTicketOpts');
+const FN=g('async function bkStep2Facility(pDate,pTime,pVenue){','\nasync function frVenueTicketOpts');   // 2026-11-16 加了第三個參數 pVenue（場租場地），只改錨點，斷言不變
 
 console.log('① 預設帶出步驟 1 選的教練');
 ok('★★★ 下拉的 selected 看 _defEmp，不再寫死 SESSION.id',

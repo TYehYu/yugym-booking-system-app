@@ -28,7 +28,7 @@ ok('★★ 兩條路寫的是同一句備註（不要各寫一份，日後改文
    && (F.match(/operator,_note\)/g)||[]).length===1);
 ok('★★ 效期由前端算好再帶進去（規則在 activateTicketIfNeeded／termExpire，不搬進 SQL）',
    /p_start_date:ticket\.start_date\|\|null, p_expire_date:ticket\.expire_date\|\|null,\s*\n\s*p_activated_at:ticket\.activated_at\|\|null/.test(F)
-   && /const newExpire=await activateTicketIfNeeded\(ticket,booking_id\);/.test(F));
+   && /const newExpire=null;/.test(F));   // P0-E：預約扣課不再啟用效期，newExpire 恆為 null（日期欄位仍照樣帶進 RPC，只是預約路徑不會算出新值）
 
 console.log('\n② 失敗時不能留下假象');
 ok('★★★ 沒扣成要把記憶體裡先減掉的餘額還原',

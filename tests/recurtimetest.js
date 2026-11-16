@@ -59,7 +59,7 @@ ok('★ 引擎逐筆用自己的時間（建立、驗證、RPC 都是）',
    /const ds=_slot\.date, ts=_slot\.time;/.test(src)
    && /date:ds, start_time:ts, duration:dur, status:'booked',/.test(src))
 ok('　　衝堂驗證用那一筆的時間', /const verr=await validateBooking\(bk, ds, ts, dur\);/.test(src));
-ok('　　RPC 也帶那一筆的時間', /const rr=await createBookingViaRpc\(o, tk, ds, ts\);/.test(src)
+ok('　　RPC 也帶那一筆的時間', /const rr=await createBookingViaRpc\(o, tk, ds, ts, idemKey\);/.test(src)
    && /p_date:ds, p_start_time:ts\|\|o\.time,/.test(src));
 ok('★ 挑票也用那一筆的時間（友善課限平日 18:00 前，晚上那天不能挑到）',
    /const findTk = o\.findTicketFn \|\| \(async\(mid,ds,ts\)=>\{ const c=await listUsableTickets\(mid,o\.type_id,ds,ts\|\|o\.time\); return c\[0\]\|\|null; \}\);/.test(src)

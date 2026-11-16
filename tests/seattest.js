@@ -108,8 +108,15 @@ ok('★ 票券剩餘推算（grpTicketAlloc）也逐名額',
    && /if\(at\[k\]==='checked_in' \|\| at\[k\]==='leave'\) return;/.test(src));
 ok('　　整堂「有人簽到」的判斷不受影響（仍看 Object.values）',
    /const anyIn=Object\.values\(att\)\.some\(s=>s==='checked_in'\);/.test(src));
-ok('★ 存名單時清掉沒有對應名額的孤兒出席鍵',
-   /const _att=attObj\(b\), _live=new Set\(seatKeys\(b\)\);\s*\n\s*Object\.keys\(_att\)\.forEach\(k=>\{ if\(!_live\.has\(k\)\) delete _att\[k\]; \}\);/.test(src));
+/* 2026-11-01（2d-3）：「管理名單」那條路不再自己用 _live=new Set(seatKeys(b)) 濾
+   attendance——寫入收進 fn_group_save_members RPC，在鎖裡用同一套 seatKeys() 名額鍵
+   規則清（SQL 版本，真連線測試見 /yugym-race-test/grpsave-2d3-attendance-test.js）。
+   這裡改成確認：_saveGroupMembers 已經交給 RPC，不是自己漏做了這段。 */
+ok('★ 存名單時的孤兒出席鍵清理交給 fn_group_save_members RPC（不是前端自己漏做）',
+   (()=>{ const i=src.indexOf("async function _saveGroupMembers(id){");
+     const j=src.indexOf("\n/* 警告視窗按「知道了」",i);
+     const body=src.slice(i,j);
+     return /sb\.rpc\('fn_group_save_members'/.test(body) && !/_live=new Set\(seatKeys\(b\)\)/.test(body); })());
 ok('　　孤兒鍵的危害寫在程式裡（會讓「整堂有沒有人簽到」失準）',
    /孤兒鍵會讓判斷失準/.test(src));
 ok('　　原因寫在程式裡', /兩個名額不能分開處理/.test(src));
@@ -140,9 +147,11 @@ eq('　　空名單不會爆', api.seatKeysDisplay(B([])), []);
 ok('★ 名單與課卡快捷簽到面板都改用顯示順序',
    /const _seatKeys=seatKeysDisplay\(b\);   \/\/ 同一個人的名額排在一起/.test(src)
    && /rows = seatKeysDisplay\(b\)\.map\(sk=>\{   \/\/ 同一個人的名額排在一起/.test(src));
+/* 2026-11-01：第二個條件原本也檢查 _saveGroupMembers 的孤兒清理用同一套 seatKeys()——
+   那段搬進 RPC 了（見上面那條新斷言），這裡只需要確認 doGroupCancelSeat（單一名額
+   取消，完全沒改動）仍然用 seatKeys().indexOf 對齊索引。 */
 ok('★ 取消名額仍用原順序（indexOf 要對得上 member_ids 的索引）',
-   /const idx=seatKeys\(b\)\.indexOf\(sk\);/.test(src)
-   && /const _att=attObj\(b\), _live=new Set\(seatKeys\(b\)\);/.test(src));
+   /const idx=seatKeys\(b\)\.indexOf\(sk\);/.test(src));
 ok('　　為什麼不能直接改 seatKeys，寫在程式裡',
    /seatReindexAfterRemove／doGroupCancelSeat 是用 indexOf 去 splice member_ids 的/.test(src));
 

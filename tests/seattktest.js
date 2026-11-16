@@ -68,14 +68,19 @@ console.log('\n② 票券夾優先採用這個事實');
 console.log('\n③ 接線');
 /* 2026-08-29：同一段順便記下「這一格扣到哪位使用人的票」（_addFam），
    連續預約要照那位的餘額算，不是整個帳號的。 */
-ok('★ 加名單扣課成功才記歸屬（逐名額鍵）',
-   /if\(_ded\)\{ const _sk=\(_i>0\)\?\(mid\+'#'\+\(_i\+1\)\):mid;\n\s*b\.seat_tickets=Object\.assign\(\{\}, b\.seat_tickets\|\|\{\}, \{\[_sk\]:tk\.id\}\);/.test(src)
-   && /const _f=String\(tk\.family_user\|\|''\);\s*\n\s*if\(_addFam\[mid\]===undefined\) _addFam\[mid\]=_f;\s*\n\s*else if\(_addFam\[mid\]!==_f\) _addFam\[mid\]=null;/.test(src)
-   /* 2026-08-29：連「挑了哪一張」也記下來 —— 連續預約的堂數要照那一張算 */
-   && /if\(_addTk\[mid\]===undefined\) _addTk\[mid\]=String\(tk\.id\);\s*\n\s*else if\(_addTk\[mid\]!==String\(tk\.id\)\) _addTk\[mid\]=null; \}/.test(src));
-ok('★ 移除名額時歸屬跟著移除／重編',
+/* 2026-11-01（2d-3）：逐名額鍵→票券 id 的 seat_tickets 寫入收進 fn_group_save_members
+   RPC（同一套名額鍵規則，SQL 版本）；前端只在 RPC 回傳「這個 add 成功了」之後，
+   才記 _addFam／_addTk（給連續預約沿用同一位使用人/同一張票），邏輯沒變，
+   只是從「_ded 成立就記」換成「RPC 回傳這筆 ok 就記」。 */
+ok('★ 加名單扣課成功才記歸屬（seat_tickets 交給 RPC，_addFam/_addTk 看 RPC 回傳）',
+   /sb\.rpc\('fn_group_save_members'/.test(src)
+   && /if\(r && r\.ok\)\{\s*\n\s*const _f=String\(p\.tk\.family_user\|\|''\);\s*\n\s*if\(_addFam\[p\.mid\]===undefined\) _addFam\[p\.mid\]=_f; else if\(_addFam\[p\.mid\]!==_f\) _addFam\[p\.mid\]=null;/.test(src)
+   && /if\(_addTk\[p\.mid\]===undefined\) _addTk\[p\.mid\]=String\(p\.tk\.id\); else if\(_addTk\[p\.mid\]!==String\(p\.tk\.id\)\) _addTk\[p\.mid\]=null;/.test(src));
+/* 2026-11-01：「管理名單」那條路的 seat_tickets 移除重編搬進 RPC（同名額鍵規則），
+   doGroupCancelSeat（單一名額取消，完全沒改動）仍然用 seatTkReindexAfterRemove。 */
+ok('★ 移除名額時歸屬跟著移除／重編（單一名額取消路未受影響；管理名單路交給 RPC）',
    /b\.seat_tickets=seatTkReindexAfterRemove\(b, i\);/.test(src)
-   && /const _ks=Object\.keys\(_st\)\.filter\(k=>seatMid\(k\)===String\(mid\)\);/.test(src));
+   && /p_removes:removed/.test(src));
 ok('★ 分配時先看事實、沒有才用近似法（2026-08-07 改兩段式，見 ⑤）',
    /const w=_seatTk && _seatTk\[k\];\n\s*if\(w && \(_left\[w\]\|\|0\)>0\)\{ _fix\[i\]=w; _left\[w\]--; \}/.test(src)
    && /const logged=_fix\[i\]\|\|slots\[_si\+\+\]\|\|null;/.test(src));

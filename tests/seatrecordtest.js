@@ -19,8 +19,15 @@ const grabFn=n=>{let i=src.indexOf('function '+n+'(');if(src.slice(i-6,i)==='asy
 
 console.log('① 三條會扣團課票的路，都要記下名額歸屬');
 {
+  /* 2026-11-01（2d-3）：「管理名單」那條路（_saveGroupMembers）不再自己
+     seat_tickets=Object.assign(...)——寫入收進 fn_group_save_members RPC，
+     在鎖裡用同一套名額鍵規則（mid／mid#N）寫。只剩「建立團課」與「連續預約補位」
+     還是前端直接寫，所以這裡改成 2 處 JS 直寫＋1 處確認走 RPC。 */
   const writes=(src.match(/seat_tickets=Object\.assign\(/g)||[]).length;
-  ok('★ 至少三處會寫 seat_tickets（建立團課／連續預約補位／管理名單）', writes>=3, writes);
+  ok('★ 兩處還在 JS 直寫 seat_tickets（建立團課／連續預約補位）', writes===2, writes);
+  const _sgm=grabFn('_saveGroupMembers')||'';
+  ok('★ 管理名單那條路改成交給 fn_group_save_members RPC 寫（同一套名額鍵規則）',
+     /sb\.rpc\('fn_group_save_members'/.test(_sgm) && !/seat_tickets=Object\.assign\(/.test(_sgm));
 }
 
 console.log('\n② 建立團課（含連續預約開課）');

@@ -63,9 +63,14 @@ ok('　　原本的實作改名成 _ / __，沒有留下兩份',
 
 console.log('\n④ 取消本身的行為沒有被改到');
 ok('　　扣課不退仍然不退票券', /else if\(refundMode==='none'\) doRefund=false;/.test(src));
-/* 2026-09-01：旗標多夾一個「這一堂真的扣過票嗎」—— 沒扣過的課沒有東西可以「不退」 */
+/* 2026-09-01：旗標多夾一個「這一堂真的扣過票嗎」—— 沒扣過的課沒有東西可以「不退」
+   2026-11-07 Phase1修正：旗標改成依「實際結果分類」寫一次（operator_waived／refund_failed
+   才算true），但「沒扣過就不算」這條判準沒變——只是現在這條判準在算 _cancelOutcome 時做
+   （bkWasDeducted(b) ? 'operator_waived' : 'no_deduction'），而不是直接寫進旗標的算式裡。
+   見 cancelrefundclassifytest.js 的完整分類測試。 */
 ok('　　仍會記錄「扣課不退」供補課券判斷（且只在真的扣過時才記）',
-   /b\.refund_waived = \(!doRefund\) && \(await bkWasDeducted\(b\)\);/.test(src));
+   /_cancelOutcome = \(await bkWasDeducted\(b\)\) \? 'operator_waived' : 'no_deduction';/.test(src)
+   && /b\.refund_waived = \(_cancelOutcome==='operator_waived' \|\| _cancelOutcome==='refund_failed'\);/.test(src));
 ok('　　取消通知已退場（2026-08-14 使用者指示：課程變動不通知會員）',
    !/pushNotification\(b\.member_id,'cancel','預約已取消'/.test(src));
 ok('　　連續取消仍逐筆顯示進度', /取消中…（'\+\(done\+fail\)\+'\//.test(src));

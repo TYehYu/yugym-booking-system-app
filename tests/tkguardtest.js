@@ -120,35 +120,24 @@ console.log('\n② 扣課護欄：餘額 0 就不再扣（R3）');
   }
 }
 
-console.log('\n③ 退課護欄：不退超過總堂數（R3）');
+console.log('\n③ 退課護欄：不退超過總堂數（R3）——2026-11 起由資料庫 fn_tk_refund_once（經 fn_refund_ticket）把關');
 {
-  const mk=(tk)=>{ const L=[],T=[];
-    const fn=new Function('dbGet','dbPut','logTicket','showToast','CLOUD','sb',
-      grabFn('refundTicket')+'\nreturn refundTicket;')(
-      async()=>tk, async(_,o)=>{T.push(JSON.parse(JSON.stringify(o)));}, async(...a)=>{L.push(a);},
-      m=>L.push(['toast',m]), false, null);
-    return {fn,L,T}; };
-  {
-    const tk={id:'T1',plan_name:'團體課',sessions_remaining:1,sessions_total:4};
-    const {fn,L}=mk(tk);
-    eq('★ 還沒滿 → 照退，回傳 true', await fn('T1','B1','u1'), true);
-    eq('　　餘額加一', tk.sessions_remaining, 2);
-    ok('　　寫的是 refund +1', L.some(a=>a[1]==='refund'&&a[2]===1));
-  }
-  {
-    const tk={id:'T1',plan_name:'團體課',sessions_remaining:4,sessions_total:4};
-    const {fn,L,T}=mk(tk);
-    eq('★ 已經滿了 → 不退，回傳 false', await fn('T1','B1','u1'), false);
-    eq('★ 餘額不會超過總堂數', tk.sessions_remaining, 4);
-    ok('★ 留下警示紀錄', L.some(a=>a[1]==='adjust'&&a[2]===0&&/已阻擋：餘額 4\/4 已滿/.test(String(a[5]))));
-    ok('★ 當面提示櫃檯', L.some(a=>a[0]==='toast'&&/沒有再退回/.test(String(a[1]))));
-    ok('　　沒有動到票券', T.length===0);
-  }
-  {
-    const tk={id:'T1',sessions_remaining:2,sessions_total:0};
-    const {fn}=mk(tk);
-    eq('　　沒有總堂數的舊票不套用封頂（維持原行為）', await fn('T1','B1','u1'), true);
-  }
+  const fs=require('fs');
+  const rf=fs.readFileSync(process.env.HOME+'/Projects/yugym-booking-system-app/docs/migrations/20261118_fn_refund_ticket.sql','utf8');
+  const core=rf.slice(rf.indexOf('create or replace function public.fn_tk_refund_once'), rf.indexOf('create or replace function public.fn_refund_ticket'));
+  ok('★ 資料庫核心：餘額已 ≥ 總堂數 → 不退、留 delta 0 警示帳（與舊前端護欄同一規則）', /sessions_remaining, 0\) >= t\.sessions_total/.test(core) && /已阻擋：餘額已滿/.test(core));
+  ok('★ 資料庫核心：沒有總堂數的舊票不套用封頂（維持原行為）', /coalesce\(t\.sessions_total, 0\) > 0 and/.test(core));
+  ok('★ 還沒滿 → 退 1 堂、寫 refund +1（餘額與帳在同一個函式內）', /sessions_remaining = coalesce\(sessions_remaining, 0\) \+ 1/.test(core) && /'refund', 1/.test(core));
+  const mkR=(resp)=>{ const L=[]; const fn=new Function('sb','CLOUD','dbCacheClear','showToast','refundTicketDateRevertOnly','console',
+      grabFn('refundTicket').replace(/^/,'')+'\nreturn refundTicket;');
+    return null; };
+  const MSGSRC=src.slice(src.indexOf('const REFUND_MSG={'), src.indexOf(' };\n', src.indexOf('const REFUND_MSG={'))+4);
+  const run=async(resp)=>{ const T=[]; const f=new Function('sb','CLOUD','dbCacheClear','showToast','refundTicketDateRevertOnly','console',
+      MSGSRC+grabFn('refundTicket')+'\nreturn refundTicket;')({rpc:async()=>resp},true,()=>{},m=>T.push(m),async()=>{},{error(){}}); return {r:await f('T1','B1','u1'),T}; };
+  { const x=await run({data:{ok:false,error_code:'REFUND.BALANCE_FULL'},error:null});
+    eq('★ 已經滿了（資料庫回 BALANCE_FULL）→ 前端不假裝退成功，回 false', x.r, false);
+    ok('★ 當面提示櫃檯', x.T.length===1 && /堂數已是滿的/.test(x.T[0])); }
+  { const x=await run({data:{ok:true,refunded:true},error:null}); eq('　　還沒滿 → 資料庫退了，前端回 true', x.r, true); }
 }
 
 /* 2026-08-24 劉雪珠 8/31 案例：原本只要「掛著票、沒取消」就算佔一格，不管那一堂的

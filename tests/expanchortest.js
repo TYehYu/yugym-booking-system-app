@@ -8,9 +8,9 @@ const ok=(n,c)=>{ if(c){pass++;console.log('  ✓ '+n);} else {fail++;console.lo
 const grabFn=n=>{let i=src.indexOf('function '+n+'(');if(i<0)return '';if(src.slice(i-6,i)==='async ')i-=6;
   let d=0;for(let k=src.indexOf('{',i);k<src.length;k++){if(src[k]==='{')d++;else if(src[k]==='}'){d--;if(!d)return src.slice(i,k+1);}}};
 
-console.log('① 單人課：refundTicket');
+console.log('① 單人課：效期自癒（2026-11 起由 refundTicketDateRevertOnly 負責；餘額與帳本的退款在資料庫 RPC fn_refund_ticket）');
 {
-  const F=grabFn('refundTicket');
+  const F=grabFn('refundTicketDateRevertOnly');
   /* 0822：查詢搬到 tkHoldingBookings（單人課看 bookings.ticket_id、團課看帳本），
      回傳的是照日期排好的清單，所以「最早剩餘預約」＝ rest[0]。 */
   ok('★★ 拿最早的剩餘預約（rest 已照日期排序）而不只查有沒有',
@@ -35,7 +35,7 @@ console.log('① 單人課：refundTicket');
   ok('★★ 取消的是首堂且新首堂較晚 → 重錨（start_date＋valid_days−1）',
      /String\(cb\.date\)\.slice\(0,10\)===String\(t\.start_date\)\.slice\(0,10\) && ns>String\(t\.start_date\)\.slice\(0,10\)/.test(F)
      && /de\.setDate\(de\.getDate\(\)\+\(Number\(t\.valid_days\)\|\|0\)-1\)/.test(F));
-  ok('★ 全取消仍退回未開通（原行為不變）', /t\.activated_at=null; t\.start_date=null; t\.expire_date=null; reverted=true;/.test(F));
+  ok('★ 全取消仍退回未開通（原行為不變）', /t\.activated_at=null; t\.start_date=null; t\.expire_date=null; changed=true;/.test(F));
   ok('　　票上留一行說明', /首堂取消，效期改依新首堂/.test(F));
 }
 console.log('\n② 團課名額取消');

@@ -133,9 +133,12 @@ console.log('\n③b refund_waived 只在「真的扣過、而且選擇不退」�
   /* 使用者：「為什麼今天有兩位教練操作都扣課　是系統視窗設定錯誤　還是真的人為操作失誤」
      → 是系統。「這一堂帳本查不到扣課」那條路只有一顆「確定取消」、沒問過人，
        卻用 mode='none' 收掉，於是蓋上 refund_waived=true、下游算成用掉一堂。 */
+  /* 2026-11-07 Phase1修正：判準搬進 _cancelOutcome 分類（operator_waived 只在
+     bkWasDeducted(b) 為真時才成立），寫法變了但「沒扣過不能蓋旗標」這條判準沒變
+     ——見 cancelrefundclassifytest.js 的完整分類測試 */
   ok('★★★ 沒扣過的課不蓋旗標（沒有東西可以「不退」）',
-     /b\.refund_waived = \(!doRefund\) && \(await bkWasDeducted\(b\)\);/.test(src)
-     && /旗標只在「真的扣過、而且這次選擇不退」時才成立/.test(src));
+     /_cancelOutcome = \(await bkWasDeducted\(b\)\) \? 'operator_waived' : 'no_deduction';/.test(src)
+     && /旗標是否算「操作人員選擇」要看真的扣過課/.test(src));
 /* 2026-09-07：bkWasDeducted 改走 bkNetDeductDB（直接問資料庫）——
    語意不變，只是資料來源從整表快取換成資料庫；問不到時回 null，一律當成「沒扣過」。 */
   ok('★★★ 判準與 0826 那條同源：有帳本且淨扣 > 0 才算扣過',
@@ -145,8 +148,8 @@ console.log('\n③b refund_waived 只在「真的扣過、而且選擇不退」�
   ok('★★ delta 0 的 deduct 是「補連結」，不算這次扣的',
      /lg\.filter\(l=>l\.action==='deduct'&&Number\(l\.delta\)!==0\)\.length/.test(src));
   ok('★★★ 成因寫在原地（兩位教練同一天各中一次，不是人為失誤）',
-     /只有一顆「確定取消」、從頭到尾沒問過人/.test(src)
-     && /客人於是平白少一堂 —— 而那一堂根本沒被扣過/.test(src));
+     /沒扣過的課，沒有東西可以『不退』/.test(src)
+     && /2026-09-01 王錫昌\/吳美芳案例/.test(src));
   /* 實跑四種組合（判定式照抄，來源由上面的字面斷言釘住） */
   const flag=(doRefund, wasDeducted)=>(!doRefund) && wasDeducted;
   eq('★★★ 沒扣過 ＋ 不退 → 不蓋旗標（王錫昌 9/03 的形狀）', flag(false,false), false);

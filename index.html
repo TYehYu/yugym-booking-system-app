@@ -15632,8 +15632,8 @@ function tbl(s){return TABLE_ALIAS[s]||s;}
 let sb=null;
 // ── 版本號（日期+時間格式：年後兩碼+月+日.時分，例 26620.1058 = 26年6/20 10:58）──
 // 每次改版手動更新這一行即可，畫面與 title 會一起更新
-const APP_VERSION = '261115.2000';
-const APP_VERSION_LABEL = 'v261115.2000';
+const APP_VERSION = '261118.2300';
+const APP_VERSION_LABEL = 'v261118.2300';
 const CLOUD = !!(window.YUGYM_CONFIG && window.YUGYM_CONFIG.url && window.YUGYM_CONFIG.anonKey);
 if(CLOUD){ sb = supabase.createClient(window.YUGYM_CONFIG.url, window.YUGYM_CONFIG.anonKey); }
 
@@ -16466,6 +16466,17 @@ const DB_LABEL={
   course_plans:'課程方案', purchases:'交易紀錄', purchase_applications:'購買申請',
   notifications:'通知',
 };
+/* 分期額度不足（資料庫觸發器 trg_tk_quota_guard，決策 A）：raise 'TICKET.INSTALLMENT_LOCKED'（沿用 benefit_consume 既有代碼），DETAIL＝'used=9 unlocked=8'。
+   所有扣課入口共用同一個把關，前端只負責把它翻成人話；回傳空字串＝不是這個錯誤。 */
+function tkQuotaMsg(raw){
+  /* raw 可以是字串、Error 或 PostgREST error（message＋details）；沒有任何一欄含這個代碼就回空字串 */
+  const t=(raw&&typeof raw==='object')?(String(raw.message||'')+' '+String(raw.details||'')):String(raw==null?'':raw);
+  if(!/TICKET\.(INSTALLMENT_LOCKED|QUOTA_EXCEEDED)/.test(t)) return '';
+  const u=t.match(/unlocked=(\d+)/)||t.match(/TICKET\.QUOTA_EXCEEDED:\d+:(\d+)/);
+  return u
+    ? '這張分期票目前只開通 '+u[1]+' 堂，已用滿（含已簽到與已預約扣課），無法再預約或扣課；請先收款並開通下一期後再預約'
+    : '分期票尚未繳費的堂數不可預約或扣課，請先收款並開通下一期';
+}
 function dbFriendlyError(e, store, op){
   const raw = String((e && (e.message || e.msg)) || e || '');
   const code = (e && e.code) || '';
@@ -16479,6 +16490,16 @@ function dbFriendlyError(e, store, op){
     msg = '沒有符合資格票券的卡位目前只能預約到 '+(_m?(_m[1]+'/'+_m[2]+'/'+_m[3]):'本月底（或已開放的下個月）')
         +'；每月最後一個星期一起開放下個月。請改選日期，或先購買票券';
     _hmCode='HOLD.MONTH_LIMIT';
+  }else if(/TICKET\.(INSTALLMENT_LOCKED|QUOTA_EXCEEDED)/.test(raw+' '+String((e&&e.details)||''))){
+    msg = tkQuotaMsg((e&&typeof e==='object')?e:raw) || '這張分期票的已開通堂數已用滿，無法再扣課';
+    _hmCode='TICKET.INSTALLMENT_LOCKED';
+  }else if(/TKWIN\.OUT_OF_WINDOW/.test(raw)){
+    /* P0-E 預約窗口（資料庫 trigger fn_tk_window_check）：尚未啟用的票，預約日期跨度不得超過效期天數。
+       也是規則拒絕，不是系統錯誤——講清楚最晚可預約到哪一天。 */
+    const _w=raw.match(/TKWIN\.OUT_OF_WINDOW:(\d{4}-\d{2}-\d{2}):(\d{4}-\d{2}-\d{2})/);
+    msg = '這張票尚未啟用，預約日期需落在最早一堂起的效期天數內'+(_w?('（最晚 '+_w[2].replace(/-/g,'/')+'）'):'')
+        +'；首次簽到後才正式起算效期。請改選日期';
+    _hmCode='TKWIN.OUT_OF_WINDOW';
   }else if(/row-level security|violates row-level/i.test(raw) || code==='42501'){
     // 權限被 RLS 擋下。這是設定問題，不是使用者做錯事 —— 別讓他以為是自己的操作有問題。
     msg = `權限不足，系統無法${op||'寫入'}這筆資料${where}。這通常是設定問題，請聯絡管理員協助`;
@@ -17508,7 +17529,9 @@ function tkExtInfo(t, logs){
     if(x.indexOf('校正')>=0 || x.indexOf('收回')>=0 || x.indexOf('已收回')>=0) return false;
     /* 2026-09-29 起第三種：主管展延（天數自填、不限次數、**不影響退費**） */
     return x.indexOf('教練請假展延')>=0 || x.indexOf('展延一次')>=0 || x.indexOf('主管展延')>=0; };
-  const mine=(logs||[]).filter(l=>l && String(l.ticket_id)===String(t.id) && _isExt(l.note))
+  const _clvOk=new Set(leaveExtNet(logs, t.id));   // 教練請假展延：撤銷（收回）後抵銷掉的不算
+  const mine=(logs||[]).filter(l=>l && String(l.ticket_id)===String(t.id) && _isExt(l.note)
+      && (String(l.note||'').indexOf('教練請假展延')<0 || _clvOk.has(l)))
     .sort((a,b)=>String(a.created_at||'').localeCompare(String(b.created_at||'')));
   if(!mine.length) return null;
   const pick=n=>{ const m=String(n||'').match(/(\d{4}[-\/]\d{2}[-\/]\d{2})\s*→\s*(\d{4}[-\/]\d{2}[-\/]\d{2})/);
@@ -17797,14 +17820,15 @@ async function mtkEatUndo(tkId, bkId){
   if(b.refund_waived!==true){ showToast('這一堂沒有「扣課不退」的標記，不需要更正'); return; }
   const rem=Math.max(0,Number(t.sessions_remaining)||0);
   const _d=String(b.date||'').slice(5).replace('-','/')+(b.start_time?('　'+String(b.start_time).slice(0,5)):'');
+  const _wk=await bkWaiveKind(b);   // failed＝系統沒退成；chosen＝取消時選了扣課不退；unknown＝舊資料
   showModal(`<div class="modal-title">把這一堂退回票券</div>
     <div style="font-size:13px;color:var(--text);line-height:1.95;margin-bottom:10px;">
       ${String(t.plan_name||'票券').replace(/</g,'&lt;')}　<b>${_d}</b><br>
-      這一堂在取消時選了「<b>扣課不退</b>」，所以票券少了一堂。</div>
+      ${_wk==='partial'?'這一堂取消時<b>只退回部分票券</b>（部分退款，尚有待處理），這張票少了一堂。':_wk==='failed'?'這一堂取消時<b>退票沒有成功</b>（系統問題，不是選擇不退），所以票券少了一堂。':_wk==='chosen'?'這一堂在取消時選了「<b>扣課不退</b>」，所以票券少了一堂。':'這一堂取消後票券沒有退回（舊資料，沒有留下原因），所以票券少了一堂。'}</div>
     <div style="background:#fff;border:1px solid var(--bd);border-radius:10px;padding:10px 12px;font-size:12.5px;line-height:1.9;margin-bottom:12px;">
       改成退回之後：剩餘堂數 <b class="num">${rem}</b> → <b class="num">${rem+1}</b> 堂，
       圓形卡上那顆金色的「扣課」會消失。<br>
-      <span style="color:var(--t3);font-size:11.5px;">效期不會變動；之後真的要扣，重新走一次取消流程再選「扣課不退」即可。</span></div>
+      <span style="color:var(--t3);font-size:11.5px;">效期不會變動；${_wk==='chosen'?'之後真的要扣，重新走一次取消流程再選「扣課不退」即可。':'這是補退，不影響其他紀錄。'}</span></div>
     <div class="modal-foot"><button class="btn btn-ghost" onclick="closeModal()">取消</button>
       <button class="btn btn-primary" onclick="mtkEatUndoDo('${tkId}','${bkId}')">退回這一堂</button></div>`);
 }
@@ -18335,6 +18359,19 @@ async function _tkTidyDo(){
   const C=tkTidyCheck();
   if(!C.ok){ showToast(C.msg); return; }
   const add=C.add, del=C.del, n=C.n, rem=C.rem, why=C.why, mu=C.mu;
+  /* 分期已開通額度（決策 A，2026-11-15）：校正工具不得繞過額度。**先檢查、再動任何資料**——
+     否則預約改綁與痕跡帳寫完之後，才在最後一步寫餘額時被資料庫觸發器擋下，會留下改綁完成但餘額沒更新的半套。
+     使用量變少或不變（退回、回調）一律放行；特殊歷史資料修復需另行設計受控流程，不能靠放寬這裡。 */
+  {
+    const _t0=await dbGet('member_tickets',S.tkId);
+    if(_t0){
+      const _tot=Number(_t0.sessions_total)||0, _unl=_t0.unlocked_sessions;
+      const _usedNew=_tot-Number(rem), _usedOld=_tot-(Number(_t0.sessions_remaining)||0);
+      if(_unl!=null && _unl<_tot && _usedNew>_unl && _usedNew>_usedOld){
+        showToast(tkQuotaMsg('TICKET.INSTALLMENT_LOCKED unlocked='+_unl)+'（校正沒有執行，沒有任何資料被更動）'); return;
+      }
+    }
+  }
   const _busy=uiBusy('校正中…');
   const _d=r=>String(r.date).slice(0,10);
   for(const r of add){
@@ -18507,7 +18544,7 @@ function tkVoidNoteHtml(t, logs){
   return n?`<div class="tkc-void">${escH(n)}</div>`:'';
 }
 function fmtExpire(d,t){
-  if(!d && t && t.valid_days && !t.activated_at) return `未開通（首堂課後 ${t.valid_days} 天）`;
+  if(!d && t && t.valid_days && !t.activated_at) return `未啟用（首次簽到後 ${t.valid_days} 天）`;
   return d || '永久有效';
 }
 
@@ -23275,7 +23312,8 @@ async function tkNetDeductOn(ticket_id, booking_id){
   }catch(_){ return 0; }
 }
 async function deductTicket(ticket,booking_id,operator,opts){
-  const _multi=!!(opts&&opts.multi);
+  const _opKey=(opts&&opts.opKey)?String(opts.opKey):null;   // 合法多堂：每一次扣課帶一把「穩定的操作識別」（重送／重新整理／重試都沿用同一把）
+  const _multi=!!(opts&&(opts.multi||opts.opKey));
   if(!_multi && booking_id && ticket && ticket.id){
     const _net=await tkNetDeductOn(ticket.id, booking_id);
     if(_net>0){
@@ -23296,7 +23334,9 @@ async function deductTicket(ticket,booking_id,operator,opts){
   // 注意：預約扣課只代表「已被預約」，不代表「已上完」。
   //  不在此設 used_up（否則約滿但還沒上的票會被誤判用畢、反灰）。
   //  真正的「用畢」由簽到完成後（markTicketUsedIfDone）或前端依已簽到數判斷。
-  const newExpire=await activateTicketIfNeeded(ticket,booking_id);   // 首堂預約 → 開通並起算效期
+  /* P0-E（2026-11-14 業務定案）：預約扣堂不啟用效期——首次「實際簽到」才由資料庫觸發器 trg_tk_checkin_activate 啟用。
+     activateTicketIfNeeded 保留（舊測試與歷史說明引用），但預約路徑不再呼叫。 */
+  const newExpire=null;
   const _note='預約扣課'+(newExpire?`（首堂開通，效期至 ${newExpire}）`:'');
   /* 教練沒有 member_tickets／ticket_logs 的寫入權限（RLS 只給 is_staff_desk）——
      2026-09-03 使用者回報：Zoe 用手機幫曾香瑾排 9/11 14:00，一直跳「扣課失敗，
@@ -23318,7 +23358,8 @@ async function deductTicket(ticket,booking_id,operator,opts){
     if(error || !data || data.ok!==true){
       ticket.sessions_remaining+=1;   // 沒扣成就把記憶體裡的餘額還原，別讓畫面先減了
       const _code=(data&&data.error_code)||'';
-      const _msg={NOT_STAFF:'沒有權限扣課', NO_BOOKING:'找不到這筆預約',
+      const _qm=tkQuotaMsg(error&&error.message);
+      const _msg=_qm||{NOT_STAFF:'沒有權限扣課', NO_BOOKING:'找不到這筆預約',
         NOT_YOUR_BOOKING:'只能扣自己課堂的票（請櫃檯協助）',
         NO_TICKET:'找不到票券', NO_REMAINING:'票券已無剩餘堂數'}[_code]||('扣課失敗'+(_code?'：'+_code:''));
       try{ if(typeof showToast==='function') showToast('⚠ '+_msg); }catch(_){}
@@ -23326,8 +23367,32 @@ async function deductTicket(ticket,booking_id,operator,opts){
     }
     return true;
   }
-  await dbPut('member_tickets',ticket);
-  await logTicket(ticket.id,'deduct',-1,booking_id,operator,_note);
+  /* 櫃檯路徑的餘額＋帳本（2026-11-17，扣堂原子性）：原本是「整列 dbPut 回寫餘額」＋「另一個請求寫 ticket_logs」——
+     ①舊物件蓋掉別人剛改的餘額／其他欄位 ②扣了堂卻沒記帳（兩次請求，第二次失敗就半套）③同預約重複送出靠前端查帳本，不保證冪等。
+     改走資料庫函式 fn_desk_deduct_ticket（階段 08）：同一個交易內「鎖票券列→驗狀態→冪等→驗餘額→扣堂→寫帳」，任何一步失敗（含額度觸發器）整個回滾；
+     前端不再另外寫帳、也不做任何補償寫入。multi＝同一預約合法扣多次（團課一人多名額／自主訓練多點）。
+     ⚠ 需先套用 docs/migrations/20261117_fn_desk_deduct_ticket.sql 才能發布這版前端。 */
+  if(opts&&opts.multi&&!_opKey){   // 沒有穩定識別的「多堂」＝無法分辨重送，寧可不扣
+    ticket.sessions_remaining+=1;
+    try{ if(typeof showToast==='function') showToast('⚠ 缺少操作識別，為避免重複扣課已停止（這一堂沒有扣到票）'); }catch(_){}
+    return false;
+  }
+  const {data:_dd,error:_de}=await sb.rpc('fn_desk_deduct_ticket',{
+    p_ticket_id:ticket.id, p_booking_id:booking_id||null, p_note:_note, p_op_key:_opKey });
+  dbCacheClear(['member_tickets','ticket_logs']);
+  if(_de){
+    ticket.sessions_remaining+=1;   // 沒扣成：還原記憶體餘額；錯誤（含 TICKET.INSTALLMENT_LOCKED）往上丟，呼叫端本來就會接
+    throw dbFriendlyError(_de,'member_tickets','扣課');
+  }
+  if(!_dd || _dd.ok!==true){
+    ticket.sessions_remaining+=1;
+    const _code=(_dd&&_dd.error_code)||'';
+    const _msg={NOT_STAFF:'沒有權限扣課', NOT_DESK:'沒有權限扣課', NO_BOOKING:'找不到這筆預約', BOOKING_CANCELLED:'這筆預約已取消，不能扣課', NO_TICKET:'找不到票券',
+      NO_REMAINING:'票券已無剩餘堂數', UNKNOWN_OP:'這次扣課操作沒有登記，已停止', STALE_OP:'這次扣課操作已過期（期間這一堂的名額、時長或退款有變動），已停止，請重新操作', TICKET_NOT_USABLE:'這張票券已退款、作廢或用畢，不能扣課'}[_code]||('扣課失敗'+(_code?'：'+_code:''));
+    try{ if(typeof showToast==='function') showToast('⚠ '+((ticket&&ticket.plan_name)||'票券')+'：'+_msg); }catch(_){}
+    return false;
+  }
+  if(typeof _dd.remaining==='number') ticket.sessions_remaining=_dd.remaining;   // 以資料庫回傳的最新餘額為準
   return true;
 }
 // 退一堂
@@ -23423,57 +23488,76 @@ async function tkHoldingBookings(ticket_id, excludeId){
   return Object.keys(out).map(id=>({id,date:out[id]}))
     .sort((a,b)=>String(a.date).localeCompare(String(b.date)));
 }
+/* 退一堂（2026-11 原子化）：一律走資料庫 RPC fn_refund_ticket——鎖預約＋鎖票券、依帳本判斷、餘額＋帳本在同一個交易內完成。
+   ⚠ 不再「讀票券 → 餘額 +1 → 整列 dbPut → 另外寫帳」：那會與資料庫的原子扣課互相覆蓋（lost update），
+     也擋不住同一預約被重複取消而雙退。沒有任何備援的直寫路徑（RPC 故障就留警示、不退，交給人工補退）。
+   判斷由資料庫負責（使用者 2026-11-15 確認）：有實際淨扣課→退 1 堂；已完全退款→不再退（回 false）；
+     無扣課／只有退款／只有調整／超額退款／餘額已滿→拒絕自動退款並提示人工查核。
+   「不退堂」的取消（櫃檯明確選扣課不退）呼叫端根本不會呼叫本函式，規則不變。
+   回傳 true＝這次真的退了 1 堂；false＝沒有退（原因已提示）。 */
+const REFUND_MSG={ 'REFUND.NO_DEDUCT':'這一堂在這張票上沒有扣課紀錄，系統不自動退款，請人工查核',
+  'REFUND.ONLY_ADJUST':'這一堂在這張票上只有調整紀錄（沒有扣課），系統不自動退款，請人工查核',
+  'REFUND.ONLY_REFUND':'這一堂在這張票上只有退款紀錄（沒有扣課），系統不自動退款，請人工查核',
+  'REFUND.OVER_REFUNDED':'這一堂在這張票上已經退得比扣得多，系統不再退款，請人工查核',
+  'REFUND.BALANCE_FULL':'這張票的堂數已是滿的，這一筆沒有再退回，請人工查核',
+  'REFUND.NO_TICKET':'找不到票券，沒有退款','REFUND.NO_BOOKING':'找不到這筆預約，沒有退款',
+  'REFUND.FORBIDDEN':'只能處理自己課堂的退款（請櫃檯協助）','AUTH.FORBIDDEN':'沒有權限退款',
+  'REFUND.BUSY':'系統忙碌中，退款沒有完成，請稍後重試','REFUND.BAD_ARGS':'退款參數不完整',
+  'REFUND.INTERNAL_ERROR':'退款沒有完成（資料沒有被更動），請稍後重試或請管理員協助' };
 async function refundTicket(ticket_id,booking_id,operator){
-  const t=await dbGet('member_tickets',ticket_id);
-  if(!t){
-    /* 讀不到票（連線抖動等）＝退不了課。以前這裡默默 return（2026-08-19 黃柏桓案例：
-       取消兩堂、退課消失、無任何紀錄，圓形卡多出兩顆幽靈 ✓）——
-       現在留一筆 delta 0 警示帳＋跳警告，櫃檯當下就知道要補退。 */
-    try{ await logTicket(ticket_id,'adjust',0,booking_id,operator||'system','⚠ 退課失敗：讀不到票券資料，未退回（請人工補退）'); }catch(_){}
-    try{ if(typeof showToast==='function') showToast('⚠ 退課沒有成功（讀不到票券），請到會員票券頁確認補退'); }catch(_){}
-    return false;
-  }
-  /* 護欄（2026-08-06 稽核 R3）：退不超過總堂數 —— 重複取消／重跑批次會讓餘額
-     大於總堂數，變成憑空多出來的堂數。同樣不動餘額、留下警示紀錄。 */
-  const _tot=Number(t.sessions_total)||0;
-  if(_tot>0 && (Number(t.sessions_remaining)||0) >= _tot){
-    try{ await logTicket(ticket_id,'adjust',0,booking_id,operator||'system',
-      '⚠ 已阻擋：餘額 '+(Number(t.sessions_remaining)||0)+'/'+_tot+' 已滿，未再退課'); }catch(_){}
-    try{ if(typeof showToast==='function') showToast('⚠ '+(t.plan_name||'票券')+' 的堂數已是滿的，這一筆沒有再退回'); }catch(_){}
-    return false;
-  }
-  t.sessions_remaining+=1;
-  if(t.status==='used_up'&&t.sessions_remaining>0) t.status='usable';
-  /* 效期退回未開通（2026-07-24 使用者定案）：這張票若已無任何有效預約，
-     把開通標記清掉、效期歸零，等下次預約再重新起算 —— 避免「約了又取消」
-     白白燒掉效期。只對有 valid_days 的新制票生效，舊票不動。 */
-  let reverted=false;
-  if(t.valid_days && t.activated_at && CLOUD && sb){
-    /* 這裡只需回答「還有沒有其他有效預約」—— 用 tkHoldingBookings（單人課看 bookings.ticket_id、
-       團課看帳本），不整張大表拉下來。回傳 null＝查詢失敗，什麼都不動：
-       寧可保守不退效期，也不要誤清。 */
-    const rest=await tkHoldingBookings(ticket_id, booking_id);
-    if(rest && rest.length===0){
-      t.activated_at=null; t.start_date=null; t.expire_date=null; reverted=true;
-    }else if(rest && rest.length && t.start_date){
-      /* 取消的是首堂（2026-08-14 魏婉倫案例：8/18 取消後到期日仍是 8/18+28）——
-         效期錨點跟著挪到最早的剩餘預約重算，會員不會平白少掉幾天。 */
-      try{
-        const cb=booking_id?await dbGet('bookings',booking_id):null;
-        const ns=String(rest[0].date).slice(0,10);
-        if(cb && String(cb.date).slice(0,10)===String(t.start_date).slice(0,10) && ns>String(t.start_date).slice(0,10)){
-          const d0=parseYmd(ns);
-          if(d0){ const de=new Date(d0); de.setDate(de.getDate()+(Number(t.valid_days)||0)-1);
-            t.start_date=ns; t.expire_date=ymd(de);
-            const line=`${ymd(TODAY)} 首堂取消，效期改依新首堂 ${ns.replace(/-/g,'/')} 起算（→ ${ymd(de).replace(/-/g,'/')}）`;
-            t.note=String(t.note||'').trim()?String(t.note).trim()+'\n'+line:line; }
-        }
-      }catch(_){}
-    }
-  }
-  await dbPut('member_tickets',t);
-  await logTicket(ticket_id,'refund',1,booking_id,operator,'取消退課'+(reverted?'（已無有效預約，效期退回未開通）':''));
+  const _warn=m=>{ try{ if(typeof showToast==='function') showToast('⚠ '+m); }catch(_){} };
+  if(!ticket_id || !booking_id || !(CLOUD && typeof sb!=='undefined' && sb)){ _warn('退課沒有成功（缺少票券或預約資料），請到會員票券頁確認補退'); return false; }
+  let res;
+  try{ res=await sb.rpc('fn_refund_ticket',{p_ticket_id:String(ticket_id),p_booking_id:String(booking_id)}); }
+  catch(e){ console.error('退課 RPC 失敗',e); _warn('退課沒有成功（連線失敗），請到會員票券頁確認補退'); return false; }
+  dbCacheClear(['member_tickets','ticket_logs']);   // RPC 繞過 dbPut：票券與帳本快取要丟掉
+  const d=res&&res.data;
+  if(res&&res.error){ console.error('退課 RPC 錯誤',res.error); _warn('退課沒有成功（'+(res.error.message||'連線失敗')+'），請到會員票券頁確認補退'); return false; }
+  if(!d || d.ok!==true){ _warn(REFUND_MSG[(d&&d.error_code)||'']||('退課沒有成功'+((d&&d.error_code)?'：'+d.error_code:''))); return false; }
+  if(d.refunded!==true) return false;                // 已完全退款：冪等，不重複退、不再提示
+  /* 舊制（預約時啟用）票的「效期退回未開通」後處理（2026-07-24 使用者定案）：只處理 activation_mode 不是 checkin 的票；
+     只動效期欄位的窄更新，不碰餘額。失敗不影響已完成的退款（事後校正，不是金額紅線）。 */
+  try{ await refundTicketDateRevertOnly(ticket_id, booking_id); }catch(e){ console.error('退票效期校正失敗',e); }
   return true;
+}
+/* 退票的「效期退回未開通」校正，單獨抽出來給走 fn_group_save_members 那條路用
+   （2026-11-01，2d-3）——餘額＋帳本的退票已經由 RPC 在鎖裡做完，這支只補
+   refundTicket 原本後半段那段系統範圍的效期自癒檢查（tkHoldingBookings），
+   不再碰 sessions_remaining／ticket_logs，避免跟 RPC 重複處理。
+   ⚠ 刻意留在前端、刻意不要求原子——這段是事後校正，不是金額/名額的正確性紅線
+     （見 YUGYM_HANDOFF.md 第3.4節的說明）。 */
+async function refundTicketDateRevertOnly(ticket_id, booking_id){
+  if(!ticket_id) return;
+  const t=await dbGet('member_tickets',ticket_id);
+  if(!t || !t.valid_days || !t.activated_at || !(CLOUD && sb)) return;
+  /* P0-E：activation_mode='checkin'（首次簽到由資料庫觸發器啟用）的票，效期歸資料庫管——取消不得清除或重算它。
+     這支只處理舊制（預約時啟用）的票（規則 8：歷史資料不批次改動）。 */
+  if(t.activation_mode==='checkin') return;
+  let changed=false;
+  const rest=await tkHoldingBookings(ticket_id, booking_id);
+  if(rest && rest.length===0){
+    t.activated_at=null; t.start_date=null; t.expire_date=null; changed=true;
+  }else if(rest && rest.length && t.start_date){
+    try{
+      const cb=booking_id?await dbGet('bookings',booking_id):null;
+      const ns=String(rest[0].date).slice(0,10);
+      if(cb && String(cb.date).slice(0,10)===String(t.start_date).slice(0,10) && ns>String(t.start_date).slice(0,10)){
+        const d0=parseYmd(ns);
+        if(d0){ const de=new Date(d0); de.setDate(de.getDate()+(Number(t.valid_days)||0)-1);
+          t.start_date=ns; t.expire_date=ymd(de);
+          const line=`${ymd(TODAY)} 首堂取消，效期改依新首堂 ${ns.replace(/-/g,'/')} 起算（→ ${ymd(de).replace(/-/g,'/')}）`;
+          t.note=String(t.note||'').trim()?String(t.note).trim()+'\n'+line:line; changed=true; }
+      }
+    }catch(_){}
+  }
+  if(changed) await tkPatchDates(t);
+}
+/* 效期欄位的「窄更新」（2026-11 原子退票）：只寫 activated_at／start_date／expire_date／note 四欄。
+   ⚠ 不能再用 dbPut 整列回寫——整列會把 sessions_remaining 也寫回讀取當時的舊值，蓋掉資料庫 RPC 剛做的扣／退（lost update）。 */
+async function tkPatchDates(t){
+  const {error}=await sb.from('member_tickets').update({activated_at:t.activated_at||null,start_date:t.start_date||null,expire_date:t.expire_date||null,note:t.note||null}).eq('id',t.id);
+  if(error) throw dbFriendlyError(error,'member_tickets','更新效期');
+  dbCacheClear(['member_tickets']);
 }
 /* ══ 匯入預約的退堂 fallback（2026-07-25 使用者指示）══════════════════════
    舊系統匯入的預約 ticket_id 為 null（歷史上課沒有逐筆對應到票券），取消時 refundTicket
@@ -24237,8 +24321,7 @@ async function refundLegacyBooking(b,operator){
     const tk=findRefundTargetTicket(all,mid,b.ticket_type_id,b.category,b.format);
     if(!tk) continue;
     done.add(mid);
-    await refundTicket(tk.id,b.id,operator);
-    n++;
+    if(await refundTicket(tk.id,b.id,operator)) n++;   // 2026-11：原子退款對沒有扣課帳的預約會拒絕（改人工查核），只算真的退成功的
   }
   return n;
 }
@@ -24255,6 +24338,12 @@ function spaceForBooking(category){
 // RPC 錯誤碼 → 中文提示
 function rpcBookingErrMsg(code){
   if(String(code||'').indexOf('HOLD.MONTH_LIMIT')===0) code='HOLD.MONTH_LIMIT';
+  if(/^TICKET\.(INSTALLMENT_LOCKED|QUOTA_EXCEEDED)/.test(String(code||''))) return tkQuotaMsg(code)||'這張分期票的已開通堂數已用滿';
+  /* P0-E 預約窗口：TKWIN.OUT_OF_WINDOW:最早日:最晚可預約日 */
+  if(String(code||'').indexOf('TKWIN.OUT_OF_WINDOW')===0){
+    const _p=String(code).split(':');
+    return '這張票尚未啟用，預約日期需落在最早一堂起的效期天數內'+(_p[2]?('（最晚 '+_p[2].replace(/-/g,'/')+'）'):'')+'；首次簽到後才正式起算效期';
+  }
   const M={
     'BOOKING.TIME_CONFLICT':'教練該時段已有課',
     'BOOKING.SPACE_FULL':'一般區該時段已滿（上限 3）',
@@ -24269,11 +24358,13 @@ function rpcBookingErrMsg(code){
     'TICKET.NOT_FOUND':'找不到您選的那張票券（可能剛被刪除），請重新整理後再試',
     'TICKET.NOT_YOURS':'您選的那張票券不屬於這位會員（也不在他的共享名單裡）',
     'HOLD.MONTH_LIMIT':'沒有符合資格票券的卡位只能預約當月；每月最後一個星期一起開放下個月',
+    // 2026-11-02：同一次操作重試時解析出不同票券，故意回衝突而不是誤扣（風險②修正的安全失敗模式）
+    'IDEMPOTENCY.CONFLICT':'這筆預約的內容跟剛才送出的不一致，請重新確認後再試一次',
   };
   return M[code]||('建立失敗：'+(code||'未知錯誤'));
 }
 // 呼叫 fn_create_booking；回傳 {ok:true} 或 {ok:false, reason}
-async function createBookingViaRpc(o, tk, ds, ts){
+async function createBookingViaRpc(o, tk, ds, ts, idemKey){
   const bt=benefitTypeOfTypeId((tk&&tk.ticket_type_id)||o.type_id);
   if(!bt) return { ok:false, reason:'無法判斷票券類型（benefit_type）' };  // 保險：回報而非誤扣
   const sp=spaceForBooking(o.category);
@@ -24290,7 +24381,8 @@ async function createBookingViaRpc(o, tk, ds, ts){
     p_category:o.category, p_benefit_type:bt,
     p_date:ds, p_start_time:ts||o.time, p_duration:o.duration||60,
     p_space_id:sp.space, p_resource_id:sp.resource, p_note:null,
-    p_ticket_id:(tk&&tk.id)||null
+    p_ticket_id:(tk&&tk.id)||null,
+    p_idempotency_key:idemKey||null   // 2026-11-01：同一次操作重試/網路重送不會建出第二筆
   });
   // RPC 在 DB 端會動 bookings / member_tickets / ticket_logs / notifications 多張表，
   // 且不經過 dbPut → 必須自行清快取，否則行事曆會顯示不到剛建立的課。
@@ -24307,19 +24399,7 @@ async function createBookingViaRpc(o, tk, ds, ts){
        指定的使用人優先，其次票券的預設使用人（member_tickets.family_user）。 */
     const _fam=(o.trial_name==null ? ((tk&&tk.family_user)||null) : (o.trial_name||null));
     if(_fam){ try{ await sb.from('bookings').update({trial_name:_fam}).eq('id',data.booking_id); dbCacheClear('bookings'); }catch(_){} }
-    /* 首堂開通（2026-08-04 蕭育筑案例：效期一直顯示「未開通」）——
-       RPC 在 DB 端扣課，前端 deductTicket 的 activateTicketIfNeeded 從沒跑到。
-       建立成功後補跑同一支：重讀票券（RPC 已改過餘額，不能用舊物件）再開通。 */
-    if(tk && tk.valid_days && !tk.activated_at){
-      try{
-        const fresh=await dbGet('member_tickets', tk.id);
-        if(fresh && fresh.valid_days && !fresh.activated_at){
-          const nd=await activateTicketIfNeeded(fresh, data.booking_id);
-          if(nd){ await dbPut('member_tickets', fresh);
-            await logTicket(fresh.id,'adjust',0,data.booking_id,SESSION&&SESSION.id||'system',`首堂開通（RPC 路徑補跑），效期至 ${nd}`); }
-        }
-      }catch(_){}
-    }
+    /* P0-E：不再於預約後補跑開通——效期改由首次簽到的資料庫觸發器啟用（原 2026-08-04 蕭育筑案例的補跑已移除）。 */
     return { ok:true, booking_id:data.booking_id };
   }
   return { ok:false, reason:rpcBookingErrMsg(data && data.error_code) };
@@ -24632,7 +24712,7 @@ async function doGroupCancelSeat(bid,seatKey){
         /* 取消的是首堂 → 效期跟著新首堂重算（2026-08-14 魏婉倫案例）。
            團課的票不在 bookings.ticket_id，用帳本淨扣課回推剩餘的堂在哪幾天。 */
         try{
-          if(tk.valid_days && tk.start_date && !tkIsMakeup(tk)
+          if(tk.valid_days && tk.start_date && !tkIsMakeup(tk) && tk.activation_mode!=='checkin'   /* P0-E：簽到啟用的票效期歸資料庫管 */
              && String(b.date).slice(0,10)===String(tk.start_date).slice(0,10)){
             const lgs=(await dbGetAll('ticket_logs')).filter(l=>l&&l.ticket_id===tkId&&l.booking_id);
             const dcnt={}; lgs.forEach(l=>{ dcnt[l.booking_id]=(dcnt[l.booking_id]||0)+(l.action==='deduct'?1:l.action==='refund'?-1:0); });
@@ -35677,6 +35757,8 @@ async function bkStep1Next(){
 }
 async function openBookingModal(){
   window._bkFamUser=null;   // 家庭成員使用人旗標只作用單筆（2026-08-03）
+  window._bkOpId=null;      // 2026-11-01 idempotency：每次「重新打開」視窗才算新操作，換新 id（上一步/視窗內重試不走這裡）
+  window._bkOpFingerprint=null;   // 2026-11-02：內容指紋也一併歸零，新開的視窗不該沿用上一次的指紋
   const[coaches,types,_bkMemsAll]=await Promise.all([dbGetAll('coaches'),dbGetAll('ticket_types'),dbGetAll('members')]);
   window._bkAllMembers=_bkMemsAll.filter(m=>m.status==='active').sort((a,b)=>(a.name||'').localeCompare(b.name||''));
   const isCoach=SESSION.role==='coach' && !SESSION.is_manager;   // 店長比照櫃台（2026-07-27）
@@ -38874,52 +38956,89 @@ function mvRender(){
       <button id="mv-go" class="btn btn-green" onclick="doBkMoveTicket()">確定調課</button></div>`);
 }
 async function doBkMoveTicket(){ return onceAct('bkmove:'+(window._mvBid||''), _doBkMoveTicket); }
+/* 調課錯誤碼 → 繁中訊息（P0-C fn_move_booking_ticket；P0-E 預約窗口 TKWIN.*）。
+   ⚠ 這裡只負責「說清楚」，不改變任何結果：錯誤一律停止調課、不退回舊的寫入流程、不自動換成「取消那一堂」。 */
+function moveErrMsg(code){
+  const c=String(code||'');
+  if(c.indexOf('HOLD.MONTH_LIMIT')===0){
+    const d=c.split(':')[1]||'';
+    return '沒有符合資格票券的卡位只能預約到'+(d?(' '+d.replace(/-/g,'/')):'當月')+'；這一堂超出可保留的日期，可改選「取消那一堂」（原課取消、票移過來）';
+  }
+  if(c.indexOf('TKWIN.OUT_OF_WINDOW')===0){
+    const p=c.split(':');
+    return '調課後這張票的預約日期會超出效期窗口'+(p[2]?('（最晚 '+p[2].replace(/-/g,'/')+'）'):'')+'；票券尚未啟用，預約需落在最早一堂起的效期天數內，首次簽到後才正式起算效期';
+  }
+  if(c.indexOf('CONTRACT.')===0) return '這是合約保留卡位，不能用調課處理（'+c+'）';
+  const M={
+    'AUTH.FORBIDDEN':'沒有權限調課',
+    'MOVE.BAD_MODE':'調課方式不正確，請重新整理後再試',
+    'MOVE.BAD_ARGS':'調課的預約資料不完整，請重新整理後再試',
+    'MOVE.NOT_FOUND':'找不到預約，請重新整理後再試',
+    'MOVE.FORBIDDEN':'只能調整自己的課（其他教練的課請櫃檯協助）',
+    'MOVE.NOT_SAME_MEMBER':'兩堂課不是同一位會員，不能調課',
+    'MOVE.BAD_TIME':'預約的日期或時間不完整，不能調課',
+    'MOVE.GROUP_UNSUPPORTED':'團課不支援調課',
+    'MOVE.SHADOW_CARD':'這堂課有跑步機第二台的影子卡，請先處理影子卡再調課',
+    'MOVE.CONTRACT_HOLD':'這是合約保留卡位，不能用調課處理',
+    'MOVE.FROM_STATE':'那一堂的票剛剛被搬走，或已簽到／取消，請重新挑選',
+    'MOVE.TO_STATE':'這一堂已經不是待簽約了，請重新整理',
+    'MOVE.TARGET_PAST':'這一堂的時間已經過了，不能調課',
+    'MOVE.ORDER':'被挑中的那一堂必須比這一堂更晚',
+    'MOVE.PARTNER_CONFLICT':'兩堂課的 1V2 夥伴不同，不能調課',
+    'MOVE.TICKET_STATE':'這張票現在不能使用（狀態或持有人不符）',
+    'MOVE.TICKET_EXPIRED':'這張票在這一堂當天已經過期',
+    'MOVE.TICKET_NOT_STARTED':'這張票在這一堂當天還沒到起始日',
+    'MOVE.TIME_RESTRICTED':'這張票不能用在這個時段（限平日 18:00 前下課）',
+    'MOVE.TYPE_UNKNOWN':'這一堂的票種不明，不能調課',
+    'MOVE.TYPE_MISMATCH':'這張票的票種不能用在這一堂',
+    'MOVE.LEDGER_MISSING':'那一堂沒有扣課紀錄，無法自動調課，請洽管理員（請勿重試）',
+    'MOVE.LEDGER_UNSUPPORTED':'那一堂的扣課帳本不符合調課條件，請洽管理員（請勿重試）',
+    'MOVE.TO_LEDGER_DIRTY':'這一堂的帳本有殘留紀錄，無法自動調課，請洽管理員（請勿重試）',
+    'MOVE.WRITE_CONFLICT':'資料剛被別人修改，請重新整理後再試',
+    'MOVE.BUSY':'系統忙碌中，請稍後再按一次',
+    'MOVE.INTERNAL_ERROR':'調課失敗，資料沒有被更動；請稍後再試，持續發生請洽管理員'
+  };
+  return M[c]||('調課失敗：'+(c||'未知錯誤'));
+}
 async function _doBkMoveTicket(){
   const toId=window._mvBid, fromId=window._mvPick, mode=(window._mvMode==='cancel')?'cancel':'hold';
   if(!toId||!fromId){ showToast('請先選一堂'); return; }
   const _btn=document.getElementById('mv-go'), _tx=_btn?_btn.textContent:'';
   if(_btn){ _btn.disabled=true; _btn.textContent='處理中…'; }
   /* ⚠⚠ 一定要 try/finally 還原按鈕（2026-10-08 二修，使用者附截圖「這邊也卡住」）——
-     初版的驗證失敗是 early return，按鈕就永遠停在「處理中…」，看起來像當掉，
-     其實只是跳了一個 toast 就結束了。凡是中途 return 的流程都要用 finally 收尾。
-     ⚠ 成功那條會 closeModal，按鈕早就不在了，還原也不會怎樣。 */
+     中途 return 的流程都要用 finally 收尾，否則按鈕會永遠停在「處理中…」。 */
   let _ok=false;
   try{
-    const to=await dbGet('bookings',toId), from=await dbGet('bookings',fromId);
-    if(!to||!from){ showToast('找不到預約'); return; }
-    /* 畫面可能是舊的（別人剛改過、或你自己上一次調課剛把這一堂的票搬走）——
-       送出前把條件再驗一次，不能只信畫面。 */
-    if(to.status!=='booked'||!to.pending_contract){ showToast('這一堂已經不是待簽約了，請重新整理'); return; }
-    if(from.status!=='booked'||!from.ticket_id){
-      /* ⚠ 不要只丟一個 toast 就結束（2026-10-08）：候選清單是開視窗那一刻算的，
-         連續調課第二次很容易挑到「剛剛已經被搬走」的那一堂。
-         重算一次候選、把視窗重畫出來，讓人直接改挑，不必從頭點一次課卡。 */
-      showToast('那一堂的票剛剛被搬走了，已重新整理可選的課');
-      try{
-        const _re=await bkMoveCandidates(to);
-        if(!_re.length){ closeModal(); showToast('後面沒有可以調過來的課了'); return; }
-        window._mvList=_re; window._mvTo=to; window._mvPick=_re[0].bk.id; mvRender();
-      }catch(_){}
+    /* P0-C（2026-11）：調課改走資料庫端單一交易 fn_move_booking_ticket。
+       原本前端直寫 bookings.ticket_id 又另外寫一筆 adjust 帳，扣退堂帳本沒有跟著搬 —— 之後取消新預約時
+       「這一筆在這張票上的扣退淨額」是 0，被判定沒扣過而不退堂（鄭超元 2026-11-14）。
+       規則（身分、狀態、票種、時段、帳本驗證、影子卡、1V2 的 partner_id）全部由 RPC 驗證，前端不再重複寫一份。
+       ⚠ 沒有任何備援路徑：RPC 失敗就停止，不退回直寫 bookings／ticket_logs（那條正是會讓帳本對不上的舊路徑）。 */
+    if(!(CLOUD && typeof sb!=='undefined' && sb)){ showToast('目前未連線雲端，無法調課'); return; }
+    let res;
+    try{ res=await sb.rpc('fn_move_booking_ticket',{p_from_booking:fromId, p_to_booking:toId, p_mode:mode}); }
+    catch(e){ res={error:e}; }
+    dbCacheClear(['bookings','member_tickets','ticket_logs']);   // RPC 動到的表（繞過 dbPut 的寫入必須清快取）
+    if(res && res.error){
+      /* 傳輸層失敗：不自動重試（重送若上一次其實已成功，會回 FROM_STATE／TO_STATE，不會重複搬帳，但仍讓人先確認）。 */
+      showToast('⚠ 連線不穩，調課結果不確定——請先重新整理確認這兩堂課，再決定是否重做');
       return;
     }
-    const tk=await dbGet('member_tickets',from.ticket_id);
-    if(!tk){ showToast('找不到那張票券'); return; }
-    if(!tkOkForSlot(tk,to)){ showToast('這張票不能用在這個時段（效期或限平日 18:00 前）'); return; }
-    to.ticket_id=from.ticket_id;
-    to.ticket_type_id=to.ticket_type_id||from.ticket_type_id||tk.ticket_type_id||null;
-    to.pending_contract=false;
-    from.ticket_id=null;
-    if(mode==='cancel'){
-      from.status='cancelled'; from.cancelled_at=new Date().toISOString(); from.cancelled_by=SESSION.id;
-    }else{
-      from.pending_contract=true;
+    const d=res&&res.data;
+    if(!d||d.ok!==true){
+      const code=(d&&d.error_code)||'';
+      showToast(moveErrMsg(code));
+      /* 候選清單是開視窗那一刻算的：那一堂的票剛被搬走或已簽到／取消 → 重算候選、重畫視窗，不必從頭點一次課卡。 */
+      if(code==='MOVE.FROM_STATE'){
+        try{
+          const to=await dbGet('bookings',toId);
+          const _re=to?await bkMoveCandidates(to):[];
+          if(!_re.length){ closeModal(); showToast('後面沒有可以調過來的課了'); return; }
+          window._mvList=_re; window._mvTo=to; window._mvPick=_re[0].bk.id; mvRender();
+        }catch(_){}
+      }
+      return;
     }
-    await dbPut('bookings',to);
-    await dbPut('bookings',from);
-    await logTicket(tk.id,'adjust',0,to.id,SESSION.id,
-      `調課：${from.date} ${String(from.start_time||'').slice(0,5)} → ${to.date} ${String(to.start_time||'').slice(0,5)}`
-      + (mode==='cancel'?'（原課取消）':'（原課改為待簽約）'));
-    dbCacheClear(['bookings','ticket_logs']);
     _ok=true;
     closeModal();
     showToast('已調課');
@@ -39197,6 +39316,9 @@ async function submitBooking(){
      建立期間鎖住，按鈕顯示進度。 */
   if(window._bkSubmitting){ showToast('建立中，請稍候…'); return; }
   window._bkSubmitting=true;
+  /* 2026-11-01 idempotency：同一次操作（含網路逾時後使用者再按一次）沿用同一組 id；
+     openBookingModal() 開視窗時已經清成 null，這裡第一次送出才會真的產生新的。 */
+  window._bkOpId = window._bkOpId || uid('IDEM');
   try{ await _submitBookingInner(); } finally{ window._bkSubmitting=false; }
 }
 async function _submitBookingInner(){
@@ -39307,6 +39429,10 @@ async function _submitBookingInner(){
         max_heads:gmax,
         date:dW,start_time:tW,duration:60,status:'booked',recurring:repeatN>1,venue_unit:vbk.venue_unit||null,
         created_by:SESSION.id,created_at:new Date().toISOString()};
+      /* 先把（空名單的）班存起來，再逐名額扣票（2026-11-17）：櫃檯扣課改走資料庫函式 fn_desk_deduct_ticket，
+         它在同一個交易裡先鎖預約（確認預約存在且沒被取消）再鎖票券，所以預約必須先存在。
+         班本來就可以先開著空位（見下方說明）；名額成功後下方會再存一次完整名單。 */
+      await dbPut('bookings',bk);
       /* 先扣票再寫名單（2026-08-20 取消教練招待）：扣到票的名額才進 member_ids，
          沒票的整格不加入（原本是照加、由教練負責——0820 林婉華案例的洞就從這種
          無票名額開始）。班可以先開著空位，之後儲值完再從名單加入。 */
@@ -39336,7 +39462,7 @@ async function _submitBookingInner(){
         /* multi:true —— 團課一人可佔多個名額（許佳慈 4 個名額＝扣 4 堂），
            同一張票、同一堂課合法地扣多次；次數由這個逐名額迴圈控制（2026-08-27）。
            ⚠ 只在「真的只剩同一張」時才會走到重複，見上面的 _wUsed。 */
-        if(tk && await deductTicket(tk,bk.id,SESSION.id,{multi:true})){ charged++;
+        if(tk && await tkDeductUnit(tk,bk.id,SESSION.id,'gcr:'+bk.id+':'+mid+':'+((_okCnt[mid]||0)+1))){ charged++;
           _wUsed.add(String(tk.id));
           bk.member_ids.push(mid);
           /* 逐名額記下用了哪張票（2026-08-07 許佳慈案例：「今天只是新儲值一堂，
@@ -39430,6 +39556,18 @@ async function _submitBookingInner(){
     }
     if(!(await confirmVenueOverflow(vbkChk))) return; // 教練取消
   }
+  /* 2026-11-01 idempotency 風險修正②（2026-11-02）：使用者在視窗沒關的情況下
+     改了日期/時間/教練/會員/課程，原本的 opId 卻原封不動沿用，會讓送出的新內容
+     跟 fn_create_booking 裡那把 key 綁的舊內容對不上，直接撞 IDEMPOTENCY.CONFLICT——
+     使用者合理地改了預約內容，卻收到一個看不懂的衝突錯誤，等於擋住了正常編輯重送。
+     做法：送出前比對這次內容的指紋，指紋變了才換新 opId；指紋沒變（真的是網路逾時
+     後再按一次、或「調課重送」原封不動再跑一次）才沿用舊的，維持原本的冪等效果。
+     ⚠ 指紋只需要跟「送進 fn_create_booking 的那幾欄」同一組即可，不用含票券 id——
+       票券是 runRecurringBooking 逐堂才解析出來的，但課程/會員/教練/日期任一個變了，
+       解析出來的票券本來就會跟著變，後端的 ticket_id 比對（風險①修正）會接住。 */
+  const _bkFp=JSON.stringify([member_id,coach_id,t.category,type_id,date,time,
+    recurring?_rc.dows:[], recurring?_rc.times:null, recurring?_rc.count:1]);
+  if(window._bkOpFingerprint!==_bkFp){ window._bkOpId=uid('IDEM'); window._bkOpFingerprint=_bkFp; }
   /* 參數抽成一包（2026-08-14 調課功能）：票券不足時的「調課重送」要原封不動再跑一次 */
   const _rrOpts={
     member_id, coach_id, substitute_coach_id:null,
@@ -39442,6 +39580,7 @@ async function _submitBookingInner(){
     count: recurring ? _rc.count : 1,   // 2026-07-29：改由「次數」決定（上限＝可約堂數）
     until: null,
     findTicketFn: bkFindTk,
+    opId: window._bkOpId||null,   // 2026-11-01 idempotency：同一次操作的識別碼，逐堂再各自組專屬 key
     onProgress:(cur,total)=>{   // 逐堂進度寫回按鈕（2026-07-28：長連續預約不再像當機）
       const btn=[...document.querySelectorAll('#modal-bg .btn.btn-green')].pop();
       if(btn){ btn.disabled=true; btn.textContent=`建立中 ${cur} / ${total}…`; }
@@ -39638,7 +39777,12 @@ async function runRecurringBooking(opts){
          （教室幾號／跑步機）沒了，顯示與改期都會錯。場地邏輯只在前端，走原路徑。 */
       if(window.FEATURE_FLAGS&&FEATURE_FLAGS.createBookingRpc&&CLOUD&&!noDeduct&&tk&&!holdOnly&&!o.venue_pref&&!bkIsSelf(bk)){
         // ── Sprint 3：改由後端 RPC 單一交易建立＋扣票（旗標開啟時）──
-        const rr=await createBookingViaRpc(o, tk, ds, ts);
+        /* 2026-11-01 idempotency：同一次操作的 opId 固定，這裡逐堂各自接上日期/時間組成
+           專屬 key——同一次操作重試時，同一堂課算出來的 key 一樣（冪等）；
+           不同堂課（連續預約的不同日期）key 不一樣，不會被誤判成同一筆。
+           o.opId 沒有值（這支引擎被其他呼叫端呼叫、沒傳 opId）就不帶 key，行為跟改之前一樣。 */
+        const idemKey = o.opId ? (o.opId+':'+ds+'@'+ts) : null;
+        const rr=await createBookingViaRpc(o, tk, ds, ts, idemKey);
         if(rr.ok){ ok++; results.push({date:ds,ok:true,bkId:rr.booking_id||null,tkId:tk?tk.id:null,tkName:tk?(tk.plan_name||'票券'):''}); }
         else { skipped++; results.push({date:ds,ok:false,reason:rr.reason}); }
       } else {
@@ -40587,6 +40731,7 @@ async function undoCheckinDirect(id){
   b.status='booked';
   b.checked_in_at=null;
   await dbPut('bookings',b);
+  dbCacheClear(['member_tickets','ticket_logs']);   // P0-E：簽到／撤銷由資料庫觸發器啟用或重算票券效期、並寫痕跡帳——前端票券快取要丟掉才看得到
   await revokeCheckinReward(b);   // 收回券（內含沒用刪除/用過保留提示，並清 reward_issued）
   closeModal();
   navTo(CUR_PAGE);
@@ -40652,6 +40797,7 @@ async function bkRosterToggle(key, baseId){
     else { b.status='checked_in'; b.checked_in_at=new Date().toISOString(); }
     await dbPut('bookings',b);
   }
+  dbCacheClear(['member_tickets','ticket_logs']);   // P0-E：簽到／撤銷由資料庫觸發器啟用或重算票券效期、並寫痕跡帳——前端票券快取要丟掉才看得到
   window._rosterDirty = true;
   bkOrbitRoster(baseId);   // 原地重畫名單
 }
@@ -40951,46 +41097,73 @@ function leaveWeekKey(dstr){
   x.setDate(x.getDate()-((x.getDay()+6)%7));   // 退到那一週的週一
   return ymd(x);
 }
-/* 這張票在「這一週」是不是已經因為教練請假延過了 */
+/* 這張票目前「有效」的教練請假補償紀錄（2026-11 定案：同一會員、同一張票、同一個週一～週日的自然週最多延 7 天；
+   不同週累加；撤銷同週全部有效請假後撤回該週的 7 天）——
+   帳本是補償的唯一依據，以「週」為單位淨額：展延 = `YYYY-MM-DD 教練請假展延 7 天…`、收回 = `YYYY-MM-DD 教練請假展延已收回 …`，
+   日期是上課日；同一週的展延與收回互相抵銷，抵銷後仍留著的展延才算數。校正／被標記收回的舊紀錄（0830 的做法）不算。
+   ⚠ 寫入由資料庫 RPC fn_coach_leave_comp 原子完成；前端這支只負責「顯示」（確認視窗預告、展延標籤），
+     資料庫端 fn_tk_leave_comp_weeks／fn_tk_leave_comp_days 用同一套規則算已核准補償，兩邊判斷必須一致。 */
+function leaveExtNet(logs, ticket_id){
+  const rows=(logs||[]).filter(l=>l && String(l.ticket_id)===String(ticket_id) && String(l.action||'adjust')==='adjust'
+      && /^\d{4}-\d{2}-\d{2} 教練請假展延/.test(String(l.note||'')))
+    .map((l,i)=>({l,i}))
+    .sort((a,b)=>String(a.l.created_at||'').localeCompare(String(b.l.created_at||'')) || a.i-b.i)
+    .map(x=>x.l);
+  const eff=[];
+  rows.forEach(l=>{
+    const n=String(l.note||'');
+    const wk=leaveWeekKey(n.slice(0,10));
+    if(/^\d{4}-\d{2}-\d{2} 教練請假展延已收回/.test(n)){            // 收回：抵銷同一週最近一筆有效展延
+      for(let k=eff.length-1;k>=0;k--){ if(leaveWeekKey(String(eff[k].note).slice(0,10))===wk){ eff.splice(k,1); break; } }
+    }else if(n.indexOf('收回')<0 && n.indexOf('校正')<0){ eff.push(l); }
+  });
+  return eff;
+}
+/* 這張票在「這一週」是不是已經因為教練請假延過了（週一～週日為一週，看上課那一天；撤銷到沒有有效請假後算沒延過） */
 async function leaveExtDoneThisWeek(ticket_id, dateStr){
   const wk=leaveWeekKey(dateStr); if(!wk) return false;
   try{
     const logs=await dbGetAll('ticket_logs').catch(()=>[]);
-    return (logs||[]).some(l=>{
-      if(!l || String(l.ticket_id)!==String(ticket_id)) return false;
-      if(String(l.note||'').indexOf('教練請假展延')<0) return false;
+    return leaveExtNet(logs, ticket_id).some(l=>{
       const m=String(l.note||'').match(/^(\d{4}-\d{2}-\d{2})/);
       return m ? leaveWeekKey(m[1])===wk : false;
     });
   }catch(_){ return false; }
 }
-/* 回傳：{to:'YYYY-MM-DD'} 成功／{skipped:'week'} 同一週已延過／{skipped:'noexp'} 沒到期日／null 失敗 */
-async function extendForCoachLeave(ticket_id, booking, operator){
+/* 教練請假補償（2026-11 定案）：同一會員、同一張票、同一個週一～週日自然週最多延 7 天、不同週累加、不增堂數；
+   同週全部有效請假撤銷後撤回該週的 7 天。
+   ⚠ 一律走資料庫 RPC fn_coach_leave_comp（原子）：它依「這一週還有沒有有效請假」與帳本淨額決定要不要延長／撤回，
+     可重複呼叫、同時呼叫也不會重複延長。前端不再「先讀票券再寫回」——那條路在連點、兩台機器同時按時會重複延長。
+   ⚠ 呼叫前，這一堂的請假狀態（coach_leave 旗標／status）必須已經寫進 bookings；復原請假則要在還原寫回之後呼叫。
+   回傳：{to,from,action:'grant'} 延長了／{skipped:'week'} 這一週已延過／{skipped:'noexp'} 沒到期日／
+        {action:'revoke',to} 撤回了／{skipped:其他原因}／null 失敗（沒有任何備援路徑）。 */
+const COACH_LEAVE_COMP_MSG={ 'AUTH.FORBIDDEN':'沒有權限處理效期補償', 'COMP.FORBIDDEN':'只能處理自己課堂的請假補償（請櫃檯協助）',
+  'COMP.NOT_FOUND':'找不到這堂預約', 'COMP.BAD_ARGS':'補償參數不完整', 'COMP.BUSY':'系統忙碌中，效期補償稍後再試',
+  'COMP.INTERNAL_ERROR':'效期補償失敗，資料沒有被更動' };
+async function coachLeaveComp(booking, ticketIds){
   try{
-    const t=await dbGet('member_tickets',ticket_id);
-    if(!t || !t.expire_date) return {skipped:'noexp'};
-    const _bd=(booking&&booking.date)||ymd(TODAY);
-    if(await leaveExtDoneThisWeek(ticket_id,_bd)) return {skipped:'week', week:leaveWeekKey(_bd)};
-    const from=String(t.expire_date).slice(0,10);
-    const d=parseYmd(from); if(!d) return null;
-    /* 動效期之前先把「方案本來有幾天」固定下來（2026-08-30）——
-       之後櫃檯要展延時是照方案天數再給一次；如果沒有 valid_days，
-       那邊只能用「到期日 − 起始日」回推，而到期日已經被這次補償墊高了。
-       ⚠ 只在原本是空的時候寫，不覆蓋賣票時談好的天數。 */
-    if(!(Number(t.valid_days)>0)){
-      const _st=t.start_date||t.purchase_date;
-      if(_st){ const _d0=parseYmd(String(_st).slice(0,10));
-        if(_d0){ const _n=Math.round((parseYmd(from)-_d0)/86400000); if(_n>0) t.valid_days=_n; } }
-    }
-    d.setDate(d.getDate()+COACH_LEAVE_EXTEND_DAYS);
-    const to=ymd(d);
-    const line=`${(booking&&booking.date)||ymd(TODAY)} 教練請假展延 ${COACH_LEAVE_EXTEND_DAYS} 天（${from.replace(/-/g,'/')} → ${to.replace(/-/g,'/')}）`;
-    t.expire_date=to;
-    t.note=String(t.note||'').trim() ? String(t.note).trim()+'\n'+line : line;
-    await dbPut('member_tickets',t);
-    try{ await logTicket(ticket_id,'adjust',0,booking&&booking.id,operator,line); }catch(_){}
-    return {to};
-  }catch(_){ return null; }
+    if(!(CLOUD && typeof sb!=='undefined' && sb) || !booking || !booking.id) return null;
+    const args={p_booking_id:booking.id};
+    if(Array.isArray(ticketIds)) args.p_tickets=ticketIds.map(String);
+    const res=await sb.rpc('fn_coach_leave_comp', args);
+    dbCacheClear(['member_tickets','ticket_logs']);   // RPC 繞過 dbPut：票券與帳本快取要丟掉
+    if(res && res.error){ console.error('教練請假補償 RPC 失敗',res.error); return null; }
+    const d=res&&res.data;
+    if(!d || d.ok!==true){ console.error('教練請假補償被拒絕', d&&d.error_code); return {error:(d&&d.error_code)||'', message:COACH_LEAVE_COMP_MSG[(d&&d.error_code)||'']||'效期補償未完成'}; }
+    return d;
+  }catch(e){ console.error('教練請假補償失敗',e); return null; }
+}
+async function extendForCoachLeave(ticket_id, booking, operator){
+  const d=await coachLeaveComp(booking, [ticket_id]);
+  if(!d) return null;
+  if(d.error) return {skipped:'error', error:d.error, message:d.message};
+  const r=(d.results||[]).find(x=>String(x.ticket_id)===String(ticket_id));
+  if(!r) return null;
+  if(r.action==='grant') return {to:r.to, from:r.from, action:'grant'};
+  if(r.action==='revoke') return {to:r.to, action:'revoke'};
+  if(r.reason==='week_done') return {skipped:'week', week:r.week};
+  if(r.reason==='noexp') return {skipped:'noexp'};
+  return {skipped:r.reason||'none'};
 }
 /* 教練請假（2026-07-21 商業規則二；2026-07-31 使用者補充定案）：
    ①有扣票→退回 1 堂（refund 帳本）
@@ -41438,21 +41611,10 @@ async function _bkCoachLeaveUndo(id){
       .sort((a,c)=>String(a.created_at||'').localeCompare(String(c.created_at||''))).pop();
     const tid=rf&&rf.ticket_id;
     /* 新制（2026-08-14）：請假當下不退堂、票還掛在預約上 → 沒有 refund 帳可回沖，
-       復原只需還原課種/狀態＋效期回調，票券完全不用動。 */
-    const _keepTk=!tid && !!b.ticket_id;
+       復原只需還原課種/狀態，票券堂數完全不用動。
+       效期補償（2026-11）：不在這裡動——還原寫回 bookings 之後，由資料庫 RPC 依「這一週還有沒有有效請假」決定要不要撤回 7 天。 */
     let revertTo=null;
-    if(_keepTk){
-      const t=await dbGet('member_tickets',b.ticket_id);
-      const ext=logs.find(l=>l.action==='adjust' && /教練請假展延/.test(l.note||''));
-      if(t && ext && t.expire_date){
-        const d0=parseYmd(String(t.expire_date).slice(0,10));
-        if(d0){ d0.setDate(d0.getDate()-COACH_LEAVE_EXTEND_DAYS); revertTo=ymd(d0); t.expire_date=revertTo;
-          const line=`${ymd(TODAY)} 復原教練請假：效期回調 −${COACH_LEAVE_EXTEND_DAYS} 天（→ ${revertTo.replace(/-/g,'/')}）`;
-          t.note=String(t.note||'').trim()?String(t.note).trim()+'\n'+line:line;
-          await dbPut('member_tickets',t); }
-      }
-    }
-    else if(tid){
+    if(tid){
       const t=await dbGet('member_tickets',tid);
       if(!t){ done(); showToast('當時退回的票券已不存在，無法自動復原，請手動處理'); return; }
       if(t.status==='refunded' || (Number(t.sessions_remaining)||0)<1){
@@ -41460,15 +41622,8 @@ async function _bkCoachLeaveUndo(id){
       }
       t.sessions_remaining=(Number(t.sessions_remaining)||0)-1;
       if(t.sessions_remaining<=0 && t.status==='usable') t.status='used_up';
-      const ext=logs.find(l=>l.action==='adjust' && /教練請假展延/.test(l.note||''));
-      if(ext && t.expire_date){
-        const d0=parseYmd(String(t.expire_date).slice(0,10));
-        if(d0){ d0.setDate(d0.getDate()-COACH_LEAVE_EXTEND_DAYS); revertTo=ymd(d0); t.expire_date=revertTo;
-          const line=`${ymd(TODAY)} 復原教練請假：效期回調 −${COACH_LEAVE_EXTEND_DAYS} 天（→ ${revertTo.replace(/-/g,'/')}）`;
-          t.note=String(t.note||'').trim()?String(t.note).trim()+'\n'+line:line; }
-      }
       await dbPut('member_tickets',t);
-      await logTicket(tid,'deduct',-1,b.id,SESSION.id,'復原教練請假：扣回 1 堂'+(revertTo?`、效期回調至 ${revertTo.replace(/-/g,'/')}`:''));   /* delta 對齊扣課慣例 −1（2026-08-14） */
+      await logTicket(tid,'deduct',-1,b.id,SESSION.id,'復原教練請假：扣回 1 堂');   /* delta 對齊扣課慣例 −1（2026-08-14） */
     }
     const _m=String(b.note||'').match(/（原：([^）]+)）/g);
     const orig=_m?_m[_m.length-1].replace(/（原：|）/g,'').split('；')[0]:'私人教練';   /* 括號內混到其他說明時只取課種（2026-08-14） */
@@ -41477,6 +41632,10 @@ async function _bkCoachLeaveUndo(id){
     const line=`${ymd(TODAY)} 復原教練請假（誤按），本堂恢復為${orig}`;
     b.note=String(b.note||'').trim()?String(b.note).trim()+'\n'+line:line;
     await dbPut('bookings',b);
+    /* 教練請假補償（2026-11）：還原寫回之後才同步。同一週還有其他有效請假 → 不撤回；全部撤銷 → 撤回該週的 7 天（原子，可重複呼叫） */
+    const _cp=await coachLeaveComp(b, b.ticket_id?[b.ticket_id]:null);
+    const _cr=_cp&&(_cp.results||[]).find(x=>x.action==='revoke');
+    if(_cr) revertTo=_cr.to;
 /* 課程變動不通知會員（2026-08-14 使用者指示：只留上課前的開課通知） */
     dbCacheClear(['bookings','member_tickets','ticket_logs','notifications']);
     collapseBkCard();
@@ -42372,6 +42531,7 @@ async function openBookingDetail(id){
     }
   }
   const b=await dbGet('bookings',id);
+  const _waiveKind=(b&&b.status==='cancelled'&&b.refund_waived)?await bkWaiveKind(b):'unknown';   // 2026-11-17：區分「人員選扣課不退」與「退票失敗」
   /* 2026-07-31：別人的課也看得到明細（唯讀）。修改元件全部綁 ownByCoach／
      staffCanCheckin／editable，那三個對非自己的課一律 false。 */
   // 舊匯入團課相容：一堂被拆成多筆（每人一筆）。若本筆是小班肌力且無 member_ids，
@@ -42861,7 +43021,7 @@ async function openBookingDetail(id){
     ${/* 時間列已統一為各分支的第二列（2026-08-03 排列定版），下方的「調整時間」
          與重複的場地區塊退場 —— ed-date/ed-time/ed-dur 同一組 id，saveBookingTime 照讀。 */''}
     ${b.coach_leave&&b.status==='cancelled'?`<div style="margin-top:12px;padding:10px;background:#fbe9e7;border-radius:8px;font-size:12px;color:#b5372e;line-height:1.8;">因<b>教練請假</b>整堂取消：票券已退回，使用期限各延長 ${COACH_LEAVE_EXTEND_DAYS} 天。依規定<b>不補發補課券</b>（補課券是會員自己請假的補償）。</div>`:''}
-    ${b.status==='cancelled'&&b.refund_waived?`<div style="margin-top:12px;padding:10px;background:#f7efe0;border-radius:8px;font-size:12px;color:#8a5e28;">此預約於開課 24 小時內取消，未退回票券。${b.makeup_granted?'（已補發補課券）':''}</div>`:''}
+    ${b.status==='cancelled'&&b.refund_waived?`<div style="margin-top:12px;padding:10px;background:#f7efe0;border-radius:8px;font-size:12px;color:#8a5e28;">${bkWaiveText(_waiveKind,b.makeup_granted)}</div>`:''}
     ${bkNoteBlock(b, isMemberView, ownByCoach)}
     <div class="modal-foot">
       <button class="btn btn-ghost" onclick="closeModal()">關閉</button>
@@ -43524,6 +43684,7 @@ async function _undoCheckin(id){
   b.status='booked';
   b.checked_in_at=null;
   await dbPut('bookings',b);
+  dbCacheClear(['member_tickets','ticket_logs']);   // P0-E：簽到／撤銷由資料庫觸發器啟用或重算票券效期、並寫痕跡帳——前端票券快取要丟掉才看得到
   await revokeCheckinReward(b);   // 收回券（內含沒用刪除/用過保留提示，並清 reward_issued）
   closeModal();
   navTo(CUR_PAGE);
@@ -43579,6 +43740,7 @@ async function _checkInBooking(id, opts){  opts=opts||{};
   /* 票券連結保留（2026-08-14 二修：圓形卡要顯示「課種色填滿＋紅圈」的紀錄）——
      堂數靠 refund 歸零釋出，錢包的已用計算會排除這種淨額 0 的堂。 */
   await dbPut('bookings',b);
+  dbCacheClear(['member_tickets','ticket_logs']);   // P0-E：簽到／撤銷由資料庫觸發器啟用或重算票券效期、並寫痕跡帳——前端票券快取要丟掉才看得到
   if(_clvTk){ try{ await refundTicket(_clvTk,b.id,SESSION.id); }catch(e){ console.error('請假堂簽到退課失敗',e); } }
   await markTicketUsedIfDone(b.ticket_id);   // 若這張票所有堂都已簽到完 → 設 used_up
   const granted=await grantCheckinReward(b);     // 回傳是否發點
@@ -44042,6 +44204,7 @@ async function submitMakeup(id){
   b.checked_in_at=new Date().toISOString();
   b.makeup=true; b.makeup_date=b.date; b.makeup_time=b.start_time;
   await dbPut('bookings',b);
+  dbCacheClear(['member_tickets','ticket_logs']);   // P0-E：簽到／撤銷由資料庫觸發器啟用或重算票券效期、並寫痕跡帳——前端票券快取要丟掉才看得到
   const _rw=await grantCheckinReward(b);  // 補簽也發自主訓練點數（效期自課程當天起算）
   closeModal();
   showToast(_rw?'補簽完成，已發放自主訓練點數':'補簽完成');
@@ -44304,7 +44467,7 @@ async function _saveBookingTime(id){
         /* multi:true —— 自主訓練 120 分鐘扣 2 點，同一筆預約本來就要扣多次，
            次數由這個迴圈控制，不走 deductTicket 的冪等檢查（2026-08-27）。 */
         if(diff>0){ for(let k=0;k<diff;k++){ const tk=await dbGet('member_tickets',b.ticket_id);
-            if(!tk || !(await deductTicket(tk,b.id,SESSION.id,{multi:true}))) break; } }   // 扣不到就停（2026-08-06）
+            if(!tk || !(await tkDeductUnit(tk,b.id,SESSION.id,'st:'+b.id+':'+ndur+':'+(k+1)))) break; } }   // 扣不到就停（2026-08-06）
         else { for(let k=0;k<-diff;k++) await refundTicket(b.ticket_id,b.id,SESSION.id); }
         showToast(diff>0?`時長增加，已加扣 ${diff} 點`:`時長縮短，已退回 ${-diff} 點`);
       }catch(e){ console.error('時長點數調整失敗:',e); showToast('點數調整失敗，請至會員票券手動處理'); }
@@ -44605,12 +44768,16 @@ async function _saveGroupMembers(id){
       return false;
     }
   }
-  // 新加入的有票就扣、移除的退回（依該 booking 的票券類型）
+  /* 新增/移除的實際寫入一律走 fn_group_save_members（2d-3，2026-11-01）——
+     原本這裡逐筆呼叫 deductTicket／refundTicket、最後一次性 dbPut('bookings',b) 整列覆蓋，
+     會跟會員自己報名那條路（fn_member_join_group）互相蓋掉名額。改成：下面「挑哪張票、
+     要不要 multi」整段業務邏輯完全不動（照抄，只是改成規劃成 _plan 而不是立刻扣），
+     規劃完才一次性送進 RPC，由 RPC 在鎖住這一堂的同一個交易裡重新驗證、真的寫入。
+     詳見 YUGYM_HANDOFF.md 第3.4節。 */
   const _seatIdx={};   // 逐名額挑票（2026-08-05）：新名額接在既有名額後面，索引從已有數量起算
-  const _addFam={};    // 會員 → 這次加的名額扣到哪位使用人的票（null＝混用，不限定）
-  const _addTk={};     // 會員 → 這次加的名額扣到「哪一張」票（null＝混用，不限定）
-  const _noTk={};      // 會員 → 這次加入但扣不到票的名額數
-  const _failed=new Set();   // 扣不到票的會員：後續名額直接跳過，名額鍵才不會跳號（2026-08-20）
+  const _noTk={};      // 會員 → 這次加入但扣不到票（含 RPC 判定失敗）的名額數
+  const _failed=new Set();   // 規劃階段就挑不到票的會員：後續名額直接跳過，名額鍵才不會跳號（2026-08-20）
+  const _plan=[];      // 規劃好、真的要送進 RPC 的 add 項目：{mid, tk, multi}
   /* 這一堂已經被某個名額用掉的票（2026-08-29 使用者附截圖：「這三個會員卡是同一張票券吧?」）
 
      許佳慈 9/4 20:00 的三個名額全指到 TK-mte3pejgah8w：那天稍早取消過一次，
@@ -44661,56 +44828,69 @@ async function _saveGroupMembers(id){
     }
     // 真的沒有別張了 → 回頭用已經扣過的那張（一張票扣多格，合法，見上面）
     if(!tk) tk=await findUsableTicket(mid,b.ticket_type_id,b.date,b.start_time);
-    /* 2026-08-06：deductTicket 的餘額護欄會回 false（沒扣到）——
-       這時要跟「找不到票」一樣算進警告，不能讓名額靜靜地沒付錢。
+    /* 2026-08-06：找不到票的話要跟「沒票」一樣算進警告，不能讓名額靜靜地沒付錢。
        2026-08-29：走到「同一張票扣第二格」時要明講 multi，否則重複扣護欄會回 true
-       卻沒真的扣，名額就白站在名單上（許佳慈 9/4 就是這樣）。 */
-    const _ded = tk ? await deductTicket(tk,b.id,SESSION.id,
-      _used.has(String(tk.id))?{multi:true}:undefined) : false;
-    if(_ded) _used.add(String(tk.id));
-    /* 取消教練招待（2026-08-20 使用者定案）：扣不到票的名額不再寫入名單——
-       前面已先擋過一次，走到這裡是「驗票後、扣票前」被別的操作用掉的競態。 */
-    if(!_ded){ (_noTk[mid]=(_noTk[mid]||0)+1); _failed.add(String(mid)); continue; }
-    /* 逐名額記下用了哪張票（2026-08-06 使用者指示：「團課的預約沒有地方可以紀錄，
-       不能新增一個地方給他紀錄嗎？」）—— bookings.seat_tickets 是名額鍵 → 票券 id。
-       有了這個事實，票券夾就不必再靠先進先出推算。 */
-    if(_ded){ const _sk=(_i>0)?(mid+'#'+(_i+1)):mid;
-      b.seat_tickets=Object.assign({}, b.seat_tickets||{}, {[_sk]:tk.id});
-      /* 這一格扣到誰的票（2026-08-29 使用者回報：「我用了許佳慈(姐姐)　這邊卻跑出11票
-         可是姐姐應該只有四張」）—— 連續預約要照這位使用人的餘額算，不是整個帳號的。
-         同一位會員這次加的幾格若扣到不同使用人，就記 null（不限定）。 */
-      const _f=String(tk.family_user||'');
-      if(_addFam[mid]===undefined) _addFam[mid]=_f;
-      else if(_addFam[mid]!==_f) _addFam[mid]=null;
-      /* 連前一步「用哪一個方案？」挑的那一張也記下來（2026-08-29 使用者：
-         「我在前一步選了其中一份票券而已　這邊應該只要顯示該票券的4堂」）——
-         同一位使用人可能有好幾張（本人＝補課券＋兩張優惠團課），選了哪張就只算哪張。 */
-      if(_addTk[mid]===undefined) _addTk[mid]=String(tk.id);
-      else if(_addTk[mid]!==String(tk.id)) _addTk[mid]=null; }
+       卻沒真的扣，名額就白站在名單上（許佳慈 9/4 就是這樣）。
+       ⚠ 2026-11-01 起這裡不再立刻扣票——只規劃好要送進 RPC 的內容，真的扣票/驗證
+       在 fn_group_save_members 裡進行，_used 在這裡先樂觀標記只是給同一次呼叫裡
+       後續名額判斷「這張是不是已經排給別人了」用。
+       取消教練招待（2026-08-20）：扣不到票的名額不再寫入名單——規劃階段就挑不到票
+       直接算進 _noTk，根本不會送進 p_adds，RPC 那邊也不會知道有這個人要加。 */
+    if(!tk){ (_noTk[mid]=(_noTk[mid]||0)+1); _failed.add(String(mid)); continue; }
+    const multi=_used.has(String(tk.id));
+    _used.add(String(tk.id));
+    /* P0-E（2026-11）：預約與扣堂不再啟用效期——首次實際簽到才由資料庫起算（trg_tk_checkin_activate）。
+       這裡原本在規劃階段就呼叫 activateTicketIfNeeded，會讓團課預約一加名額就開通效期，與規則衝突，已移除；
+       p_adds 的 start_date／expire_date／activated_at 照傳票券目前的值（未啟用＝null，RPC 用 coalesce 不會寫入）。 */
+    _plan.push({mid, tk, multi});
   }
-  for(const mid of removed){
-    /* 找該會員因這堂課「還有淨扣課」的票退回（2026-08-03 修：原本抓第一筆扣課紀錄，
-       同一人兩個名額扣在不同票上時會退錯張／退兩次同一張）。
-       refundTicket 內的 dbPut 會清快取，迴圈下一輪能看到剛寫入的退回紀錄。 */
-    const tkid=await grpNetDeductTicket(b.id, mid);
-    if(tkid) await refundTicket(tkid,b.id,SESSION.id);
-    /* 名額歸屬也要跟著移除（2026-08-06）：退掉的是這個人最後一個名額 */
-    if(b.seat_tickets){ const _st=Object.assign({},b.seat_tickets);
-      const _ks=Object.keys(_st).filter(k=>seatMid(k)===String(mid));
-      if(_ks.length){ delete _st[_ks[_ks.length-1]]; b.seat_tickets=_st; } }
+
+  const p_adds=_plan.map(p=>({
+    member_id:p.mid, ticket_id:p.tk.id, multi:p.multi,
+    start_date:p.tk.start_date||null, expire_date:p.tk.expire_date||null, activated_at:p.tk.activated_at||null
+  }));
+  /* remove 不需要前端先挑票——fn_group_save_members 在鎖裡用當下最新的帳本
+     即時找「這個人這堂淨扣>0」的那張票，比前端先查好再傳更安全（見 HANDOFF 3.4節）。
+     attendance 孤兒鍵清理（2026-07-30 發現：移出名單的人狀態留在 attendance 會變成
+     孤兒鍵，「整堂有沒有人簽到」是看 Object.values(attendance)，孤兒鍵會讓判斷失準）
+     也一併交給 RPC 用同一套 seatKeys() 名額鍵規則清——理由沒變，只是搬了地方。 */
+  const {data:_rpcRes, error:_rpcErr} = await sb.rpc('fn_group_save_members', {
+    p_booking_id:b.id, p_max_heads:gmax, p_ticket_type_fix:b.ticket_type_id||null,
+    p_adds, p_removes:removed
+  });
+  dbCacheClear(['bookings','member_tickets','ticket_logs']);
+  if(_rpcErr || !_rpcRes || _rpcRes.ok!==true){
+    showToast('⚠ 名單儲存失敗：'+(tkQuotaMsg(_rpcErr&&_rpcErr.message)||(_rpcRes&&_rpcRes.error_code)||(_rpcErr&&_rpcErr.message)||'未知錯誤'));
+    return;
   }
-  /* 沒扣到票的名額從名單移除（2026-08-20 取消教練招待：名額＝一定有票） */
-  Object.entries(_noTk).forEach(([mid,n])=>{ for(let i=0;i<n;i++){
-    const j=next.map(String).lastIndexOf(String(mid)); if(j>=0) next.splice(j,1); } });
-  b.member_ids=next;
-  /* 名額變動後清掉沒有對應名額的出席狀態（2026-07-30 發現）——
-     原本只更新 member_ids，被移出名單的人狀態會留在 attendance 變成孤兒鍵
-     （7/31 11:00 那堂就留著一位已不在名單的 booked），
-     而「整堂有沒有人簽到」是看 Object.values(attendance)，孤兒鍵會讓判斷失準。 */
-  const _att=attObj(b), _live=new Set(seatKeys(b));
-  Object.keys(_att).forEach(k=>{ if(!_live.has(k)) delete _att[k]; });
-  b.attendance=_att;
-  await dbPut('bookings',b);
+  const _addFam={}, _addTk={};   // 會員 → 這次加的名額扣到哪位使用人／哪一張票（null＝混用，不限定）
+  const _results=_rpcRes.results||[];
+  const _addResults=_results.filter(r=>r.op==='add');
+  const _rmResults=_results.filter(r=>r.op==='remove');
+  /* RPC 按送進去的順序一筆對一筆回結果，用索引對齊回 _plan 就知道哪個名額真的成功。
+     成功才記 _addFam／_addTk（同原本只在 _ded 成立時才記的規則）；失敗併入 _noTk，
+     跟規劃階段就找不到票的情況用同一份警示視窗處理。
+     逐名額記下用了哪張票（2026-08-06 使用者指示：「團課的預約沒有地方可以紀錄，
+     不能新增一個地方給他紀錄嗎？」）——寫入本身（seat_tickets）2026-11-01 起
+     交給 RPC 做，這裡記的 _addFam／_addTk 是給後續「連續預約」沿用同一位
+     使用人/同一張票用。 */
+  _plan.forEach((p,i)=>{
+    const r=_addResults[i];
+    if(r && r.ok){
+      const _f=String(p.tk.family_user||'');
+      if(_addFam[p.mid]===undefined) _addFam[p.mid]=_f; else if(_addFam[p.mid]!==_f) _addFam[p.mid]=null;
+      if(_addTk[p.mid]===undefined) _addTk[p.mid]=String(p.tk.id); else if(_addTk[p.mid]!==String(p.tk.id)) _addTk[p.mid]=null;
+    }else{
+      (_noTk[p.mid]=(_noTk[p.mid]||0)+1);
+    }
+  });
+  /* 退票的效期自癒校正——餘額／帳本／名額已經由 RPC 在交易裡做完，這裡只補
+     refundTicket 原本後半段那段系統範圍檢查，失敗不影響名單本身（見函式註解）。 */
+  for(const r of _rmResults){
+    if(r.ok && r.refunded_ticket_id){
+      try{ await refundTicketDateRevertOnly(r.refunded_ticket_id, b.id); }catch(e){ console.error('退票效期校正失敗',e); }
+    }
+  }
   showToast('名單已更新');
   /* 開課後補位的連續預約（2026-08-03 使用者指示）：「團體課已經開課後，新加入的
      會員要有重複預約的能力」「先開了 10 堂 10 週，新會員只買了 4 堂 → 可以重複預約 4 堂」。
@@ -45352,7 +45532,7 @@ async function _grpFollowRun(mids2){
               || ((!_wtk&&(_wf===undefined||_wf===null))?await findUsableTicket(w.mid, x.ticket_type_id, x.date, x.start_time):null);
         if(!tk){ noTk=true; break; }
         const _dup=_used.has(String(tk.id));
-        if(!(await deductTicket(tk, x.id, SESSION.id, _dup?{multi:true}:undefined))){ noTk=true; break; }   // 護欄擋下＝沒扣到（2026-08-06）
+        if(!(await (_dup ? tkDeductUnit(tk, x.id, SESSION.id, 'fol:'+x.id+':'+w.mid+':'+(_mine+addedSeats+1)) : deductTicket(tk, x.id, SESSION.id)))){ noTk=true; break; }   // 護欄擋下＝沒扣到（2026-08-06）
         _used.add(String(tk.id));
         /* 逐名額記下用了哪張票（2026-08-07）—— 連續預約補位原本只寫 member_ids，
            歸屬要靠近似法重算，之後只要這位會員新買一張票，圓點就會整排位移。 */
@@ -46060,6 +46240,47 @@ function grpSeatAttCount(b, memberId){
    原本不進戳記，於是圓形卡多出一顆沒有日期的「✓」，誰也看不出那一格用在哪。
    收進戳記、畫成紅色（與請假同一個語彙：票用掉了，人沒上到課）。 */
 function bkEatenCancel(b){ return !!(b && b.status==='cancelled' && b.refund_waived); }
+/* refund_waived=true 的兩種來源（2026-11-17）：chosen＝人員取消時選了「扣課不退」；failed＝該退但退票沒成功（系統問題，要補退）；
+   unknown＝舊資料沒有任何標記帳。以帳本裡的稽核標記分辨（不改資料表結構）。 */
+const BK_REFUND_FAILED_NOTE='⚠ 取消・退票失敗（系統未能退回，待校正）';
+const BK_REFUND_PARTIAL_NOTE='⚠ 取消・部分退款（這張票的退票失敗，待校正）';
+async function bkWaiveKind(b){
+  try{
+    const logs=(await dbGetAll('ticket_logs')).filter(l=>l && String(l.booking_id||'')===String(b&&b.id) && l.action==='adjust' && Number(l.delta)===0);
+    if(logs.some(l=>String(l.note||'').indexOf('取消・部分退款')>=0)) return 'partial';
+    if(logs.some(l=>String(l.note||'').indexOf('取消・退票失敗')>=0)) return 'failed';
+    if(logs.some(l=>String(l.note||'').indexOf('取消・扣課不退')>=0)) return 'chosen';
+  }catch(_){}
+  return 'unknown';
+}
+/* 同步版（圓點 tooltip 用；ticketTokens 是同步函式）：從已載入的 ticket_logs 快取（dbPeek）建一份「預約→分類」索引，快取沒載入就回 unknown */
+let _wkIdx={src:null,map:{}};
+function bkWaiveKindSync(b){
+  try{
+    const logs=(typeof dbPeek==='function')?dbPeek('ticket_logs'):null;
+    if(!Array.isArray(logs)||!b) return 'unknown';
+    if(_wkIdx.src!==logs){
+      const m={};
+      logs.forEach(l=>{ if(!l||l.action!=='adjust'||Number(l.delta)!==0||!l.booking_id) return; const n=String(l.note||'');
+        if(n.indexOf('取消・部分退款')>=0) m[l.booking_id]='partial';
+        else if(n.indexOf('取消・退票失敗')>=0){ if(m[l.booking_id]!=='partial') m[l.booking_id]='failed'; }
+        else if(n.indexOf('取消・扣課不退')>=0){ if(!m[l.booking_id]) m[l.booking_id]='chosen'; } });
+      _wkIdx={src:logs,map:m};
+    }
+    return _wkIdx.map[b.id]||'unknown';
+  }catch(_){ return 'unknown'; }
+}
+function bkWaiveTip(b){
+  const k=bkWaiveKindSync(b);
+  return k==='failed'?'取消未退（系統退票失敗，待補退）':k==='partial'?'部分退款，尚有待處理（這張票的退票失敗，待補退）':k==='chosen'?'取消未退（取消時選了扣課不退）':'取消未退（原因不明：舊資料沒有留下標記）';
+}
+function bkWaiveText(kind, madeup){
+  const mk=madeup?'（已補發補課券）':'';
+  if(kind==='partial') return '此預約取消時<b>只退回部分票券</b>（部分退款，尚有待處理）：退票失敗的那幾張票少了一堂，請到各票券卡用「校正」補退。'+mk;
+  if(kind==='failed') return '此預約取消時<b>退票沒有成功</b>（系統問題，不是選擇不退），票券目前少了一堂。請到票券卡用「校正」補退。'+mk;
+  if(kind==='chosen') return '此預約取消時選了<b>扣課不退</b>，未退回票券。'+mk;
+  return '此預約取消後票券沒有退回（舊資料，沒有留下原因）。若不應該扣，請到票券卡用「校正」處理。'+mk;
+}
 /* 這位會員在這堂團課「請假」的名額數（2026-08-06 使用者定案）——
    「團課的請假，對會員來說算一堂簽到」：本堂票券照扣不退、另發補課券，
    所以票券夾要把它算成已用掉的一格（只是畫成紅色，見 ticketTokens）。 */
@@ -46180,6 +46401,7 @@ async function _toggleGroupAttend(bid,mid){
   const anyIn=Object.values(att).some(s=>s==='checked_in');
   if(b.status!=='completed'&&b.status!=='cancelled') b.status = anyIn?'checked_in':'booked';
   await dbPut('bookings',b);
+  dbCacheClear(['member_tickets','ticket_logs']);   // P0-E：簽到／撤銷由資料庫觸發器啟用或重算票券效期、並寫痕跡帳——前端票券快取要丟掉才看得到
   openBookingDetail(bid);
 }
 // 距開課剩餘小時數（<0 表示已過開課時間）
@@ -46862,6 +47084,34 @@ async function bkNetDeductDB(bookingId, ticketId){
          - data.filter(l=>l.action==='refund').length;
   }catch(_){ return null; }
 }
+/* 多堂扣課的「操作登記」（2026-11-18 rev3）：
+   多堂扣課（團課一人多名額、自主訓練多點）每一次都先向資料庫 fn_desk_op_begin 登記一筆「真正的使用者操作」，
+   拿回伺服器發的操作識別（slot:e世代）再扣課：
+   ・重試／重新整理：只要這張票在這一堂沒有新的退款、預約沒取消，登記會回傳**同一把**識別（持久在資料庫，不靠前端記憶）→ 已扣過的回 already，不重扣；
+   ・退款（移除名額、縮短時長）或取消之後：舊識別作廢（STALE_OP／BOOKING_CANCELLED）——**即使那個舊請求從未成功寫過帳，延遲到達也不能扣**；新的合法操作登記時伺服器會發新世代；
+   ・沒登記過的識別一律拒絕（UNKNOWN_OP）。
+   登記失敗（連線／預約已取消／預約版本已變…）＝不扣、看得到、可重試。base 是固定資料（預約＋會員＋第幾個名額…），不含時間或亂數。 */
+async function tkDeductUnit(tk, bookingId, operator, base){
+  let key=null, _why='';
+  try{
+    /* 先讀「預約版本」（名單／座位票／時長／狀態…的指紋），登記時一併帶上：伺服器在鎖住預約後比對，
+       不符＝這個請求是舊的（名額已被移除、時長已改、已取消…），不登記。 */
+    const rv=await sb.rpc('fn_desk_booking_rev',{p_booking_id:bookingId});
+    if(rv.error || !rv.data || rv.data.ok!==true){ _why=(rv.data&&rv.data.error_code)||'REV'; }
+    else{
+      const {data,error}=await sb.rpc('fn_desk_op_begin',{p_slot:base,p_ticket_id:tk&&tk.id,p_booking_id:bookingId,p_expect_rev:rv.data.rev});
+      if(!error && data && data.ok===true) key=data.op_key; else _why=(data&&data.error_code)||'BEGIN';
+    }
+  }catch(_){ _why='NET'; }
+  if(!key){
+    const _m=_why==='BOOKING_CANCELLED'?'這筆預約已取消，不能扣課'
+      :_why==='REV_MISMATCH'?'這一堂剛被更動（名額或時長已變），為避免重複扣課已停止，請重新整理後再操作'
+      :'無法登記這次扣課操作（連線不穩或無權限），為避免重複扣課已停止，請重試';
+    try{ if(typeof showToast==='function') showToast('⚠ '+_m); }catch(_){}
+    return false;
+  }
+  return deductTicket(tk, bookingId, operator, {opKey:key});
+}
 /* 這一堂到底扣過沒（用於 refund_waived 的語意：「取消時選了扣課不退」）——
    問不到就當成「沒扣過」＝不標 waived，那是安全的一邊（不會讓畫面把它畫成用掉一格）。 */
 async function bkWasDeducted(b){
@@ -46873,6 +47123,58 @@ async function cancelBooking(id, refundMode, opts){
   const _silent=!!(opts&&opts.silent);
   const b=await dbGet('bookings',id);
   if(!b)return;
+  /* 2026-11-07 冪等保護（Phase1修正）：舊版備援路徑原本沒有擋「已經是cancelled」
+     就重入——RPC路徑本來就有這一句，但RPC失敗回退、或一開始就不符合RPC資格
+     （團課/無票/force/none/plain）時，完全沒有同等保護。沒有這一道，手滑連點
+     兩次、或網路延遲讓同一個取消被送出兩次，第二次會再跑一輪退款邏輯，
+     即使 refundTicket 自己有「餘額不超過總堂數」的護欄擋得住重複加堂數，
+     也會不必要地重複寫入贈點收回／補課券收回等其他副作用。 */
+  if(b.status==='cancelled'){
+    if(!_silent) showToast('這筆預約已經取消過了');
+    return;
+  }
+
+  /* ══ 櫃檯取消一律走伺服器單一交易（2026-11-18，上線阻擋 B1）══
+     原本團課、強制退／不退、無法走 RPC 的取消，是前端「先 fn_refund_ticket 退票、再 dbPut 預約為 cancelled」兩步，
+     兩步之間預約仍是 booked，別台櫃檯的加名額／扣堂會成功 → 取消後票被默默扣一堂。
+     fn_desk_cancel_booking 在同一個交易裡：鎖預約 → 逐票退款 → 寫取消狀態與 refund_waived → 寫稽核帳；任何一步失敗整個回滾。
+     取消後再來的扣堂一律被擋（BOOKING_CANCELLED）。模式沿用原政策：auto／force／plain＝有淨扣課就退，none＝人員選擇扣課不退。
+     部分退款（部分票退成功、部分退不掉）不算全部成功：outcome＝refund_partial，成功的保留、失敗的票留稽核帳、refund_waived＝true。
+     伺服器業務拒絕或連線失敗一律「不取消、請重試」——不再落回前端兩步寫入（RPC 是單一交易、已取消再呼叫冪等，重試安全）。
+     沒有雲端連線（本機 demo／測試替身）才會走下面的舊邏輯。 */
+  if(CLOUD && typeof sb!=='undefined' && sb && typeof isDeskLike==='function' && isDeskLike()){
+    const _mode=refundMode||'auto';
+    let res, _tries=0;
+    for(;_tries<2;_tries++){
+      try{ res=await sb.rpc('fn_desk_cancel_booking',{p_booking_id:id,p_mode:_mode}); }
+      catch(e){ res={error:e}; }
+      if(!(res&&res.error)) break;
+      await new Promise(r=>setTimeout(r,900));
+    }
+    dbCacheClear(['bookings','member_tickets','ticket_logs','notifications']);
+    if(res && res.error){ if(!_silent) showToast('⚠ 連線不穩，取消未執行——請再按一次'); return; }
+    const _d=res&&res.data;
+    if(!_d || _d.ok!==true){
+      const _c=(_d&&_d.error_code)||'';
+      if(!_silent) showToast(({NO_BOOKING:'找不到這筆預約',NOT_DESK:'沒有權限取消這筆預約',NOT_STAFF:'沒有權限取消這筆預約',BAD_MODE:'取消方式不正確，已停止'})[_c]||('取消未執行'+(_c?'：'+_c:'')+'——沒有任何資料被更動'));
+      return;
+    }
+    if(_d.already && _tries===0){ if(!_silent) showToast('這筆預約已經取消過了'); return; }
+    const _b2=(await dbGet('bookings',id))||b;
+    const _rv=await revokeRewardOnCancel(_b2);
+    const _mkRv=await revokeMakeupOnCancel(_b2);
+    if(_silent) return;
+    closeModal();
+    const _mkt=_mkRv?`，並收回未使用的補課券 ${_mkRv} 張`:'', _rt=rewardToastText(_rv);
+    const _o=_d.outcome;
+    if(_o==='refund_partial') showToast(`已取消預約，部分退款：已退回 ${_d.refunded} 堂，尚有 ${_d.failed} 張票的退款未成功 —— 尚有待處理，請到票券卡用「校正」補退`+_mkt+_rt, 8000);
+    else if(_o==='refund_failed') showToast('已取消預約，但退款未成功 —— 已標示「取消未退」，請到票券卡用「校正」處理'+_mkt+_rt);
+    else if(_o==='refunded') showToast(`已取消預約，退回 ${_d.refunded} 堂票券`+_mkt+_rt);
+    else if(_o==='operator_waived') showToast('已取消預約（扣課不退）'+_mkt+_rt);
+    else showToast('已取消預約'+_mkt+_rt);
+    navTo(CUR_PAGE);
+    return;
+  }
 
   // ── Sprint 3：混合取消分流 ──
   // 僅「單人課 + 有 ticket_id（新制）+ 自動政策」走 RPC；團課、legacy 無票、強制退/不退一律走下方舊邏輯。
@@ -46918,7 +47220,15 @@ async function cancelBooking(id, refundMode, opts){
     /* 2026-08-21：會員只能自行調整團課與自主訓練，其餘一律櫃檯（見 memSelfServe） */
     if(_code==='CANCEL.DESK_ONLY'){ if(!_silent) cancelDeskOnlyModal(); return; }
     if(_code==='AUTH.FORBIDDEN'){ if(!_silent) showToast('沒有權限取消這筆預約'); return; }
-    console.error('RPC 取消未成功，回退前端舊邏輯：', res && (res.error || res.data));
+    /* 2026-11-18：不再回退前端兩步（B1）。RPC 是單一交易，沒成功＝沒有任何資料被更動，請重試。 */
+    console.error('RPC 取消未成功（不回退前端舊邏輯）：', res && (res.error || res.data));
+    if(!_silent) showToast('取消未執行（'+((_code&&String(_code))||'未知原因')+'）——沒有任何資料被更動，請重試或聯絡管理員');
+    return;
+  }
+  /* 非櫃檯（教練）不能走伺服器單一交易取消的情況（團課、強制退／不退…）：櫃檯才能處理，不落回前端兩步寫入 */
+  if(CLOUD && typeof sb!=='undefined' && sb && !cancelRpcEligible && (bkIsGroup(b) || b.ticket_id)){
+    if(!_silent) cancelDeskOnlyModal();
+    return;
   }
 
   /* 備援路徑先讀後寫（2026-08-19）：會退課的單人課，先確認票券讀得到才動手取消；
@@ -46939,35 +47249,44 @@ async function cancelBooking(id, refundMode, opts){
   else if(refundMode==='none') doRefund=false;
   else doRefund = true;             // auto：目前政策一律退課（2026-07-28 使用者定案，暫停 24h 扣課）
                                     // plain（2026-09-11）：視窗說「沒扣過」的確定取消 —— 有扣過就退，永遠不標扣課不退
-  /* 只寫一次（2026-08-25 使用者回報「剛剛從我手機端取消這堂課，但為什麼顯示沒有紀錄」）——
-     原本這裡連寫兩次：先 status＋cancelled_at，再補 refund_waived。第二次送的是
-     **記憶體裡那份 b**（取消前讀的，沒有 cancelled_by），於是 DB 觸發器剛填好的
-     取消人被蓋回 null。DB 那邊已經改成「已取消且送進來是空的就沿用舊值」，
-     這裡再把兩次併成一次 —— 少一次寫入，也少一整類「用舊物件覆蓋新欄位」的坑。 */
-  b.status='cancelled';
-  b.cancelled_at=new Date().toISOString();
-  /* ⚠ 「沒扣過的課，沒有東西可以『不退』」（2026-09-01 王錫昌 9/03、吳美芳 9/03 案例）——
-     refund_waived 的語意是「取消時**選了**扣課不退」，是一個人做的決定。
-     但「這一堂帳本上查不到扣課」那條路（見 __askSeriesCancel 的 noTicket 分支）
-     只有一顆「確定取消」、從頭到尾沒問過人，卻也走到這裡把旗標蓋成 true。
-     下游把它當成「這一格用掉了」（bkEatenCancel → 金色扣課點、佔一格），
-     客人於是平白少一堂 —— 而那一堂根本沒被扣過。
-     旗標只在「真的扣過、而且這次選擇不退」時才成立。 */
-  b.refund_waived = (!doRefund) && (await bkWasDeducted(b));
-  await dbPut('bookings',b);
-
-  let refundedCount=0, refundMissed=false;
+  /* 2026-11-07 Phase1修正（根因：refund_waived 原本在退款「執行前」就依意圖
+     寫死，退款邏輯若判斷錯誤而跳過，旗標已經蓋成 false，從此跟「操作人員
+     真的選擇不退」完全分不出來——王嘉綺等4筆正式庫異常的成因）。
+     改成：先跑完整退款邏輯、得到 4 選 1 的「實際結果」分類，狀態與旗標
+     只在結果確定後一次寫入（仍沿用 2026-08-25 的「只寫一次」）：
+       refunded        — 確實退了票券
+       no_deduction    — 帳本上這一堂本來沒扣過，沒東西可退，不算「不退」
+       refund_failed   — 應該退、也確實扣過，但退款動作本身沒有成功
+       operator_waived — 操作人員在取消當下明確選擇扣課不退（且真的扣過課）
+     refund_waived 改成「operator_waived 或 refund_failed 都算 true」：
+     兩者都是「扣課沒退」的終局狀態，都要能被 bkEatenCancel／「取消未退」
+     徽章抓到、給店家一個看得到、點得到「校正」的入口——而不是讓 refund_failed
+     被系統吞掉、落回去混成一個分不出原因的「舊」殘影徽章。
+     ⚠ 殘留風險（無法在前端完全排除）：退款執行與這裡的 dbPut('bookings',b)
+     仍是兩個分開、依序的網路寫入，中間斷線會留下「票券已退、預約狀態還沒
+     標成 cancelled」的空窗——但這個空窗是自我修復的：重按一次取消，
+     bkNetDeductDB 會看到淨扣課已經是 0（已經退過），分類成 no_deduction，
+     不會重複退款，再把狀態補寫成 cancelled 即可。真正要完全消除這個空窗，
+     只有搬進伺服器端單一交易（fn_cancel_booking 的路線）才做得到，這次
+     範圍不含該 RPC，不在這裡解決。 */
+  let _cancelOutcome;   // 'refunded' | 'no_deduction' | 'refund_failed' | 'refund_partial' | 'operator_waived'
+  const _failTk=[];     // 退款失敗的票（只用來留「退票失敗」稽核標記，讓畫面分得出「系統沒退成」與「人員選擇不退」）
+  let refundedCount=0;
   if(doRefund){
     if(bkIsGroup(b)){
       const logs=(await dbGetAll('ticket_logs')).filter(l=>l.booking_id===b.id && l.action==='deduct');
       const refunded=(await dbGetAll('ticket_logs')).filter(l=>l.booking_id===b.id && l.action==='refund');
       const refundCntByTk={};
       refunded.forEach(l=>{refundCntByTk[l.ticket_id]=(refundCntByTk[l.ticket_id]||0)+1;});
+      let _anyFail=false;
       for(const log of logs){
         if((refundCntByTk[log.ticket_id]||0)>0){ refundCntByTk[log.ticket_id]--; continue; }
         // 2026-08-06：護欄擋下（餘額已滿）時不算退成功，Toast 才不會說退了幾堂其實沒退
         if(await refundTicket(log.ticket_id,b.id,SESSION.id)) refundedCount++;
+        else{ _anyFail=true; _failTk.push(log.ticket_id); }
       }
+      /* 團課多個名額：部分退成功、部分失敗＝refund_partial（不能統一算已完成；2026-11-17） */
+      _cancelOutcome = _anyFail ? (refundedCount>0 ? 'refund_partial' : 'refund_failed') : (refundedCount>0 ? 'refunded' : 'no_deduction');
     }else if(b.ticket_id){
       /* 再擋一次（2026-08-26）：畫面那一層已經不會問退不退了，但 refundMode='force'
          也可能從別的呼叫端進來。沒扣過就不退 —— 退了就是憑空多一堂。
@@ -46978,21 +47297,74 @@ async function cancelBooking(id, refundMode, opts){
         /* 問不到 ≠ 沒扣過。寧可退（refundTicket 有「不超過總堂數」的護欄擋重複退），
            也不要在查不到的時候默默吃掉客人一堂。 */
         console.warn('取消退課：查不到扣課紀錄（查詢失敗），保守起見照退',b.id,b.ticket_id);
-        refundedCount=(await refundTicket(b.ticket_id,b.id,SESSION.id))?1:0;
+        const _ok=await refundTicket(b.ticket_id,b.id,SESSION.id);
+        refundedCount=_ok?1:0;
+        _cancelOutcome=_ok?'refunded':'refund_failed'; if(!_ok) _failTk.push(b.ticket_id);
       }else if(_net>0){
-        refundedCount=(await refundTicket(b.ticket_id,b.id,SESSION.id))?1:0;
+        const _ok=await refundTicket(b.ticket_id,b.id,SESSION.id);
+        refundedCount=_ok?1:0;
+        _cancelOutcome=_ok?'refunded':'refund_failed'; if(!_ok) _failTk.push(b.ticket_id);
       }else if(refundMode==='plain'){
         refundedCount=0;   // 視窗已經講過「這一堂沒有扣過票」，不用再寫警示帳、再跳一次
+        _cancelOutcome='no_deduction';
       }else{
-        /* 「查得到、而且真的沒扣過」才走這裡。以前這裡只有 console.warn ——
-           客人少一堂，畫面上完全沒有痕跡。改成留一筆警示帳＋當面說一聲，
-           與 refundTicket 兩個失敗分支同一套做法（2026-08-19 黃柏桓案例定的）。 */
+        /* net<=0 這裡其實涵蓋兩種完全不同的情況（2026-11-07 F情境真實測試庫測試發現）：
+           ①從沒扣過——真的沒東西可退。
+           ②扣過、而且已經退完了（net=扣1-退1=0）——發生在上一次取消「退款已經寫進
+             ticket_logs/member_tickets，但booking狀態寫入那一步斷線」之後的重按：
+             這裡進來時booking.status必然還是未取消（已取消的話函式最前面的冪等保護
+             就擋掉了），所以①②無法只看_net本身分辨，要另外問一次「這個(booking,ticket)
+             組合是不是已經有一筆refund」。
+           ②絕對不能照搬①的「查不到扣課」警示字——資料其實是對的，講成「沒退到」
+           是誤導；但也不能完全當成無事發生悄悄略過——「這裡曾經半套、現在補狀態」
+           這件事本身要留痕跡，否則以後想查「這堂到底經歷過什麼」會查不到。 */
+        /* 直接問資料庫，不走整表快取的filter——與上面 bkNetDeductDB 同一個理由
+           （2026-09-07 王秋香9/12案例）：這裡要問的就是「現在、當下」是否已經有
+           一筆退款，快取慢半拍就會判斷錯誤，問資料庫才可靠。 */
+        /* 2026-11-07 ChatGPT審查發現：Supabase client查詢失敗多半不會throw，是回
+           {data:null,error:{...}}——原本只判斷data、沒看error，查詢失敗會跟「真的
+           沒退過」混成同一種結果，而且catch是空的完全沒留痕跡。查詢失敗時必須明確
+           視為「尚未確認」，不能直接推定成「沒有退款紀錄」——保守掉回下面既有、
+           已測試過的「查不到扣課」警示分支（不影響refund_waived/refundedCount，
+           不會重複退款），但這次失敗要留下可追查的非個資log。 */
+        let _alreadyRefunded=false;
+        if(CLOUD && sb){
+          try{
+            const {data,error}=await sb.from('ticket_logs').select('id').eq('booking_id',b.id).eq('ticket_id',b.ticket_id).eq('action','refund');
+            if(error) throw error;
+            _alreadyRefunded = Array.isArray(data) && data.length>0;
+          }catch(e){
+            console.error('[cancelBooking] 查詢是否已退款失敗，保守視為「尚未確認」（不等於沒有退款紀錄）',
+              {bookingId:b.id,ticketId:b.ticket_id,stage:'already_refunded_check',error:(e&&e.message)||String(e)});
+          }
+        }
         refundedCount=0;
-        console.warn('取消未退課：這一堂在該票券上沒有淨扣課紀錄',b.id,b.ticket_id,{_net});
-        try{ await logTicket(b.ticket_id,'adjust',0,b.id,SESSION.id,
-          '取消未退課：帳本上查不到這一堂的淨扣課（沒扣過就不退，退了會憑空多一堂）'); }catch(_){}
-        if(!_silent){ try{ showToast('這一堂在票券上查不到扣課紀錄，已取消但沒有退回堂數 —— 若不對請用票券卡的「校正」處理', 8000); }catch(_){} }
+        _cancelOutcome='no_deduction';
+        if(_alreadyRefunded){
+          console.warn('取消：偵測到此預約先前已完成退款但狀態未同步（可能網路中斷造成），本次僅補寫取消狀態，未重複退款',b.id,b.ticket_id);
+          try{ await logTicket(b.ticket_id,'adjust',0,b.id,SESSION.id,
+            '系統偵測：這堂課先前已完成退款但預約狀態未同步（可能是網路中斷造成），本次僅補上取消狀態，未重複退款'); }
+          catch(e){
+            console.error('[cancelBooking] 狀態補償記錄寫入失敗',{bookingId:b.id,ticketId:b.ticket_id,stage:'already_refunded_log',error:(e&&e.message)||String(e)});
+          }
+          /* 不跳「查不到扣課」那種會嚇到人的toast——這不是沒退到，是補狀態；
+             但上面的console.warn與adjust log都留著，後台查得到這段過程。 */
+        }else{
+          /* 「查得到、而且真的沒扣過」才走這裡。以前這裡只有 console.warn ——
+             客人少一堂，畫面上完全沒有痕跡。改成留一筆警示帳＋當面說一聲，
+             與 refundTicket 兩個失敗分支同一套做法（2026-08-19 黃柏桓案例定的）。 */
+          console.warn('取消未退課：這一堂在該票券上沒有淨扣課紀錄',b.id,b.ticket_id,{_net});
+          try{ await logTicket(b.ticket_id,'adjust',0,b.id,SESSION.id,
+            '取消未退課：帳本上查不到這一堂的淨扣課（沒扣過就不退，退了會憑空多一堂）'); }
+          catch(e){
+            // 2026-11-07：移除靜默吞錯——只留 booking/ticket id 與錯誤類型，不含會員姓名等個資
+            console.error('[cancelBooking] 警示帳寫入失敗',{bookingId:b.id,ticketId:b.ticket_id,stage:'no_deduction_log',error:(e&&e.message)||String(e)});
+          }
+          if(!_silent){ try{ showToast('這一堂在票券上查不到扣課紀錄，已取消但沒有退回堂數 —— 若不對請用票券卡的「校正」處理', 8000); }catch(_){} }
+        }
       }
+    }else{
+      _cancelOutcome='no_deduction';   // 沒綁票、也不是團課，無票可退
     }
     /* 「沒綁票就回頭找一張票退」的備援（refundLegacyBooking）2026-08-14 退場——
        使用者指示（陳秀蘭案例：取消 6 筆無票預約、票憑空多 6 堂）：
@@ -47003,8 +47375,36 @@ async function cancelBooking(id, refundMode, opts){
   }else if(b.ticket_id){
     /* 扣課不退要留紀錄（2026-08-13 使用者案例：吳宸維 10/23 誤按扣課，追查只能靠
        「有扣無退」反推）——寫一筆 delta 0 的紀錄標明是刻意扣課，以後一眼分得出
-       「操作選擇」與「系統漏退」。 */
-    try{ await logTicket(b.ticket_id,'adjust',0,b.id,SESSION.id,'取消・扣課不退（櫃檯選擇，票視同已使用）'); }catch(_){}
+       「操作選擇」與「系統漏退」。旗標是否算「操作人員選擇」要看真的扣過課
+       （2026-09-01 王錫昌/吳美芳案例：沒扣過的課，沒有東西可以『不退』）。 */
+    _cancelOutcome = (await bkWasDeducted(b)) ? 'operator_waived' : 'no_deduction';
+    try{ await logTicket(b.ticket_id,'adjust',0,b.id,SESSION.id,'取消・扣課不退（櫃檯選擇，票視同已使用）'); }
+    catch(e){
+      console.error('[cancelBooking] 扣課不退警示帳寫入失敗',{bookingId:b.id,ticketId:b.ticket_id,stage:'operator_waived_log',error:(e&&e.message)||String(e)});
+    }
+  }else{
+    _cancelOutcome = (await bkWasDeducted(b)) ? 'operator_waived' : 'no_deduction';
+  }
+
+  /* 只寫一次（2026-08-25 使用者回報「剛剛從我手機端取消這堂課，但為什麼顯示沒有紀錄」）——
+     原本這裡連寫兩次：先 status＋cancelled_at，再補 refund_waived。第二次送的是
+     **記憶體裡那份 b**（取消前讀的，沒有 cancelled_by），於是 DB 觸發器剛填好的
+     取消人被蓋回 null。DB 那邊已經改成「已取消且送進來是空的就沿用舊值」，
+     這裡再把兩次併成一次 —— 少一次寫入，也少一整類「用舊物件覆蓋新欄位」的坑。 */
+  b.status='cancelled';
+  b.cancelled_at=new Date().toISOString();
+  b.refund_waived = (_cancelOutcome==='operator_waived' || _cancelOutcome==='refund_failed' || _cancelOutcome==='refund_partial');
+  await dbPut('bookings',b);
+
+  let refundMissed = (_cancelOutcome==='refund_failed');
+  const refundPartial = (_cancelOutcome==='refund_partial');
+  /* 退票失敗的稽核標記（2026-11-17）：refund_waived=true 同時代表「人員選了扣課不退」與「系統沒退成」，
+     兩者後續處理與說法不同（前者是業務決定、後者要補退）。人員選擇已有一筆「取消・扣課不退（櫃檯選擇…）」帳；
+     這裡替「退票失敗」留對應的一筆（delta 0，不動堂數），畫面用 bkWaiveKind 分辨。只是標記，寫失敗不影響取消。 */
+  if(refundMissed || refundPartial){
+    for(const _tid of [...new Set(_failTk.filter(Boolean))]){
+      try{ await logTicket(_tid,'adjust',0,b.id,SESSION.id,refundPartial?BK_REFUND_PARTIAL_NOTE:BK_REFUND_FAILED_NOTE); }catch(_){}
+    }
   }
 
   // 贈點回收（2026-07-30 使用者指示）：整堂取消 → 這堂發的自主訓練點數收回，
@@ -47040,8 +47440,9 @@ async function cancelBooking(id, refundMode, opts){
   closeModal();
   const _rt=rewardToastText(_rv);
   const _mkt=_mkRv?`，並收回未使用的補課券 ${_mkRv} 張`:'';
-  if(refundedCount>0) showToast(`已取消預約，退回 ${refundedCount} 堂票券`+_mkt+_rt);
-  else if(refundMissed) showToast('已取消預約，但找不到可退的票券 —— 請到會員票券手動確認堂數'+_mkt+_rt);
+  if(refundPartial) showToast(`已取消預約，部分退款：已退回 ${refundedCount} 堂，尚有 ${new Set(_failTk.filter(Boolean)).size} 張票的退款未成功 —— 尚有待處理，請到票券卡用「校正」補退`+_mkt+_rt, 8000);
+  else if(refundedCount>0) showToast(`已取消預約，退回 ${refundedCount} 堂票券`+_mkt+_rt);
+  else if(refundMissed) showToast('已取消預約，但退款未成功 —— 已標示「取消未退」，請到票券卡用「校正」處理'+_mkt+_rt);
   else if(within24 && refundMode!=='none' && refundMode!=='force' && refundMode!=='plain') showToast('已取消預約（24 小時內，扣課不退）'+_mkt+_rt);
   else showToast('已取消預約'+_mkt+_rt);
   navTo(CUR_PAGE);
@@ -71093,7 +71494,7 @@ async function msbGrpJoinDo(bid){
   const _pick=(document.getElementById('grp-join-tk')||{}).value||window._grpJoinTk||null;
   const {data,error}=await sb.rpc('fn_member_join_group',{p_booking_id:bid,p_ticket_id:_pick});
   dbCacheClear(['bookings','member_tickets','ticket_logs']);
-  if(error){ showToast('連線失敗：'+(error.message||error)); return; }
+  if(error){ showToast(tkQuotaMsg(error)||('連線失敗：'+(error.message||error))); return; }
   if(!(data&&data.ok)){ showToast(GRP_JOIN_ERR[data&&data.error_code]||('報名失敗：'+((data&&data.error_code)||'未知錯誤'))); return; }
   closeModal(); msbExit(true);
   showToast('報名成功！');
@@ -71518,7 +71919,7 @@ async function memberSelfBookRpc(tk,date,time,venueUnit,famUser,units){
   const {data,error}=await sb.rpc('fn_member_self_book',{p_date:date,p_start_time:time,p_ticket_id:tk.id,
     p_venue_unit:venueUnit||null,p_family_user:famUser||null,p_units:Math.max(1,Number(units)||1)});
   dbCacheClear(['bookings','member_tickets','ticket_logs']);   // RPC 不經 dbPut，自行清快取（含佔用快取）
-  if(error) return {ok:false,reason:'連線失敗：'+(error.message||error)};
+  if(error) return {ok:false,reason:tkQuotaMsg(error)||('連線失敗：'+(error.message||error))};
   if(data&&data.ok) return {ok:true,booking_id:data.booking_id,units:Number(data.units)||1};
   const code=data&&data.error_code;
   return {ok:false,reason:SELF_BOOK_ERR[code]||('預約失敗：'+(code||'未知錯誤'))};
@@ -73959,7 +74360,7 @@ function ticketTokens(t,bks,typeMap,usedCount,curId,memberId,selfSet,seatN,opts)
      紅＝請假／取消未退，金＝未到課，其餘就是正常上完。 */
   const _usedCls=b=>(b&&b._leave)?' mtk-leave':((b&&b._eaten)?' mtk-eaten':((b&&b.no_show===true)?' mtk-ns':''));
   const _usedWhy=b=>(b&&b._leave)?'請假（本堂照扣，另發補課券）'
-    :((b&&b._eaten)?'取消未退（取消時選了扣課不退）'
+    :((b&&b._eaten)?bkWaiveTip(b)
     :((b&&b.no_show===true)?'未到課（人沒來，堂數照扣）':'已完成'));
   /* 到場與未到場分色（2026-08-30 使用者指示）：紅＝人有來、金＝未到場結課。
      判準與 bkCoachLeaveNoShow 寫進去的一致（completed 且沒有 checked_in_at）。 */
@@ -73974,7 +74375,7 @@ function ticketTokens(t,bks,typeMap,usedCount,curId,memberId,selfSet,seatN,opts)
   const _eatTap=!!(typeof isDeskLike==='function'&&isDeskLike()&&t&&t.id);
   const _eatDot=(b,cur,slf)=>{
     const _tp=(_eatTap&&b&&b.id)?` onclick="event.stopPropagation();mtkEatUndo('${t.id}','${b.id}')"`:'';
-    return `<span class="mtk mtk-used mtk-lv mtk-eat${_tp?' mtk-tap':''}${cur||''}${slf||''}"${_tp} style="--tk-acc:${v.accent};" title="取消未退（取消時選了扣課不退）${b&&b.date?' '+b.date:''}${b&&b._shName?'　·　'+b._shName+' 預約':''}${cur?'（本堂）':''}${_tp?'　·　選錯了？點一下改成退回堂數':''}">${_eatBody(b, b?md(b):'✓')}${cur?'<i class="mtk-comet"></i>':''}</span>`; };
+    return `<span class="mtk mtk-used mtk-lv mtk-eat${_tp?' mtk-tap':''}${cur||''}${slf||''}"${_tp} style="--tk-acc:${v.accent};" title="${bkWaiveTip(b)}${b&&b.date?' '+b.date:''}${b&&b._shName?'　·　'+b._shName+' 預約':''}${cur?'（本堂）':''}${_tp?'　·　選錯了？點一下改成退回堂數':''}">${_eatBody(b, b?md(b):'✓')}${cur?'<i class="mtk-comet"></i>':''}</span>`; };
   const _clxDot=b=>{ const ns=_clvNoShow(b);
     return `<span class="mtk mtk-used mtk-clvatt mtk-lv${ns?' mtk-lv-ns':''}" style="--tk-acc:${v.accent};" title="教練請假・${ns?'未到場結課':'會員已到場簽到'}（堂數已退回票券）${b&&b.date?' '+b.date:''}">${_lvBody(b, b?md(b):'✓')}</span>`; };
   /* ── 共享票的那幾顆：色點在上、使用人與日期各一行在下（2026-08-27 使用者回報，附截圖）──
@@ -74448,7 +74849,7 @@ function renderMemTickets(){
         myLogs.map(l=>`<div class="mck-d-log"><span class="mck-d-act">${actLabel[l.action]||l.action}</span>
           <span class="mck-d-delta" style="color:${l.delta>0?'var(--ok)':'var(--danger)'};">${l.delta>0?'+':''}${l.delta}</span>
           <span class="mck-d-time">${l.created_at?new Date(l.created_at).toLocaleDateString('zh-TW',{month:'2-digit',day:'2-digit'}):''}</span></div>`).join('')}
-      <div class="mck-d-rule">使用規則：每堂課預約即扣 1 堂，取消（開課 24 小時前）會退回；到期後未使用堂數失效。${(t.valid_days&&!t.activated_at)?`使用期限自<b>第一堂課當天</b>起算 ${t.valid_days} 天（含當天），排了第一堂才開始倒數。`:''}${lottoRuleNote(t)}</div>
+      <div class="mck-d-rule">使用規則：每堂課預約即扣 1 堂，取消（開課 24 小時前）會退回；到期後未使用堂數失效。${(t.valid_days&&!t.activated_at)?`使用期限自<b>第一次實際簽到的課程當天</b>起算 ${t.valid_days} 天（含當天）；排課或取消都不會開始倒數。`:''}${lottoRuleNote(t)}</div>
     </div>`:'';
 
     /* ══ V2 版型（2026-08-22 使用者指示，只在會員端 V2 走）══
@@ -74488,7 +74889,7 @@ function renderMemTickets(){
             <span class="mck-v2-left">${_tag}${tkExtBadge(t)}${(window._ctByTicket&&window._ctByTicket[t.id])?`<button class="btn btn-ghost btn-sm" style="font-size:11px;padding:3px 10px;" onclick="event.stopPropagation();openContractView('${window._ctByTicket[t.id]}')">合約</button>`:''}</span>
             <span class="mck-v2-dates">${_dates}</span>
           </div>
-          ${(!t.expire_date && t.valid_days && !t.activated_at)?`<div class="mck-notyet">使用期限自<b>第一堂課</b>起算 ${t.valid_days} 天（含當天）；還沒排課就不會開始倒數。</div>`:''}
+          ${(!t.expire_date && t.valid_days && !t.activated_at)?`<div class="mck-notyet">使用期限自<b>第一次實際簽到的課程</b>起算 ${t.valid_days} 天（含當天）；排課或取消都不會開始倒數。</div>`:''}
         </div>
       </div>`;
     }
@@ -74511,12 +74912,12 @@ function renderMemTickets(){
              看得到到期日，但**還沒開通的票原本會顯示「永久有效」**（expire_date 是空的，
              而空值在舊票代表永久有效）。那正是最需要說清楚的那一種：
              合約上寫不出日期，就要在票券上寫出規則。改用 fmtExpire —— 未開通時
-             顯示「未開通（首堂課後 N 天）」，並在下面補一行說明什麼時候開始算。 */''}
+             顯示「未啟用（首次簽到後 N 天）」，並在下面補一行說明什麼時候開始算（P0-E：改為首次實際簽到起算）。 */''}
         <div class="mck-figures">
           <div class="mck-num"><span class="mck-num-big">${usedCnt}</span><span class="mck-num-tot">/ ${total} 堂</span></div>
           <div class="mck-exp">${(window._ctByTicket&&window._ctByTicket[t.id])?`<button class="btn btn-ghost btn-sm" style="font-size:11px;padding:3px 10px;margin-right:8px;" onclick="openContractView('${window._ctByTicket[t.id]}')">合約</button>`:''}${t.expire_date?`${dim?'':'到期'} ${t.expire_date}`:fmtExpire(null,t)}</div>
         </div>
-        ${(!t.expire_date && t.valid_days && !t.activated_at)?`<div class="mck-notyet">使用期限自<b>第一堂課</b>起算 ${t.valid_days} 天（含當天）；還沒排課就不會開始倒數。</div>`:''}
+        ${(!t.expire_date && t.valid_days && !t.activated_at)?`<div class="mck-notyet">使用期限自<b>第一次實際簽到的課程</b>起算 ${t.valid_days} 天（含當天）；排課或取消都不會開始倒數。</div>`:''}
       </div>
     </div>`;
   };

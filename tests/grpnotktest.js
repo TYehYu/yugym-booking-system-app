@@ -15,9 +15,14 @@ console.log('名單視窗（saveGroupMembers）');
 ok('★ 票不夠一律先擋（沒有 _grpNoTkOK 放行旗標）', /if\(added\.length\)\{/.test(save) && !save.includes('_grpNoTkOK'));
 ok('★ 「仍以教練負責加入」按鈕退場', !/onclick="[^"]*grpSaveNoTk/.test(src) && !src.includes('>仍以教練負責加入<') && !src.includes('async function grpSaveNoTk'));
 ok('★ 擋下視窗只留「回名單修改」', save.includes('請先儲值（或把這幾位移出名單）再存檔'));
-ok('★ 存檔中扣不到票（競態）→ 名額不寫入', /if\(!_ded\)\{ \(_noTk\[mid\]=\(_noTk\[mid\]\|\|0\)\+1\); _failed\.add\(String\(mid\)\); continue; \}/.test(save));
+/* 2026-11-01（2d-3）：規劃階段挑不到票（還沒送進 RPC）用 !tk 判斷，
+   語意跟原本的 !_ded 一樣——「這個名額這次規劃不出一張可用的票」。 */
+ok('★ 存檔中規劃不出票 → 不送進 RPC、名額不寫入', /if\(!tk\)\{ \(_noTk\[mid\]=\(_noTk\[mid\]\|\|0\)\+1\); _failed\.add\(String\(mid\)\); continue; \}/.test(save));
 ok('　　同人前一格失敗後續格跳過（名額鍵不跳號）', /if\(_failed\.has\(String\(mid\)\)\)\{ \(_noTk\[mid\]=\(_noTk\[mid\]\|\|0\)\+1\); continue; \}/.test(save));
-ok('★ 沒扣到票的名額從 next 移除', save.includes('const j=next.map(String).lastIndexOf(String(mid)); if(j>=0) next.splice(j,1);'));
+/* 2026-11-01（2d-3）：不再靠前端的 next.splice 把失敗名額挑出去——改成 RPC 回傳
+   每個 add 項目的成敗，前端照 _plan 索引對齊回來，沒成功的併進 _noTk。 */
+ok('★ RPC 判定失敗的名額併入 _noTk（不是硬塞進名單再踢掉）',
+   save.includes("if(r && r.ok){") && save.includes('(_noTk[p.mid]=(_noTk[p.mid]||0)+1);'));
 ok('★ 事後視窗改講「沒有寫入名單」', save.includes('沒有寫入名單'));
 ok('　　連續預約只帶真的加入的名額', save.includes("Object.keys(_noTk).forEach(m=>{ _addCnt[m]=Math.max(0,(_addCnt[m]||0)-_noTk[m]);"));
 

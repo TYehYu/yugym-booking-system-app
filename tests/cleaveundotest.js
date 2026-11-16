@@ -13,14 +13,14 @@ console.log('① 復原教練請假');
   const F=grabFn('_bkCoachLeaveUndo');
   ok('★★ 只復原教練課的 coach_leave（團課是整堂取消，明講請重新建課）',
      /if\(b\.status!=='coach_leave'\)\{ showToast\('這堂不是可復原的教練請假（團課請假是整堂取消，請重新建課）'\)/.test(F));
-  ok('★★ 舊制（已退堂）從 refund 帳本回查扣回；新制（票還掛著）不動票、只回調效期',
+  ok('★★ 舊制（已退堂）從 refund 帳本回查扣回；新制（票還掛著）不動票',
      /logs\.filter\(l=>l\.action==='refund'\)/.test(F)
-     && /await logTicket\(tid,'deduct',-1,b\.id,SESSION\.id,'復原教練請假：扣回 1 堂'/.test(F)
-     && /const _keepTk=!tid && !!b\.ticket_id;/.test(F));
+     && /await logTicket\(tid,'deduct',-1,b\.id,SESSION\.id,'復原教練請假：扣回 1 堂'/.test(F));
   ok('★★ 那 1 堂已被用掉／票已作廢 → 擋下不硬扣', /退回的那 1 堂已被用掉或票已作廢，請先處理票券/.test(F));
-  ok('★★ 效期回調：只有帳本有「教練請假展延」那筆才 −7 天',
-     /l\.action==='adjust' && \/教練請假展延\/\.test\(l\.note\|\|''\)/.test(F)
-     && /d0\.setDate\(d0\.getDate\(\)-COACH_LEAVE_EXTEND_DAYS\)/.test(F));
+  ok('★★ 效期回調（2026-11 改版）：還原寫回預約之後走資料庫 RPC（同週全部有效請假撤銷才撤回 7 天）；前端不再自己改 expire_date',
+     F.indexOf("await dbPut('bookings',b)")>=0 && F.indexOf('coachLeaveComp(b')>F.indexOf("await dbPut('bookings',b)")
+     && !/expire_date\s*=/.test(F.replace(/\/\/[^\n]*/g,'').replace(/\/\*[\s\S]*?\*\//g,''))
+     && !/COACH_LEAVE_EXTEND_DAYS/.test(F));
   ok('★★ 重綁票券時清掉待簽約標記（2026-08-14 林韋綺案例：留著會紅框標待簽約）',
      /if\(tid\) b\.pending_contract=false;/.test(F));
   ok('★ 課種從 note 的「原：X」還原、狀態回 booked、重綁票券',

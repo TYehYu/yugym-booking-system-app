@@ -15,9 +15,12 @@ const eq=(n,a,e)=>ok(n,JSON.stringify(a)===JSON.stringify(e),`得到 ${JSON.stri
 const grab=n=>{let i=src.indexOf('function '+n+'(');if(i<0)throw new Error('切不到 '+n);
   let d=0;for(let k=src.indexOf('{',i);k<src.length;k++){if(src[k]==='{')d++;else if(src[k]==='}'){d--;if(!d)return src.slice(i,k+1);}}};
 
-const api=new Function('escH', grab('tkExtInfo')+'\n'+grab('tkExtTagHTML')+'\n'+grab('tkExtOrigExpire')
+/* 2026-11：展延以「週」為單位淨額（leaveExtNet／leaveWeekKey），沙箱要一起帶，並給 parseYmd／ymd 替身 */
+const _pY=ds=>{const m=/^(\d{4})-(\d{2})-(\d{2})/.exec(String(ds||''));return m?new Date(+m[1],+m[2]-1,+m[3]):null;};
+const _yM=d=>{const p=n=>String(n).padStart(2,'0');return d.getFullYear()+'-'+p(d.getMonth()+1)+'-'+p(d.getDate());};
+const api=new Function('escH','parseYmd','ymd', grab('leaveWeekKey')+'\n'+grab('leaveExtNet')+'\n'+grab('tkExtInfo')+'\n'+grab('tkExtTagHTML')+'\n'+grab('tkExtOrigExpire')
   +'\n'+grab('tkExtLineHTML')
-  +'\nreturn {tkExtInfo,tkExtTagHTML,tkExtOrigExpire,tkExtLineHTML};')(x=>String(x==null?'':x));
+  +'\nreturn {tkExtInfo,tkExtTagHTML,tkExtOrigExpire,tkExtLineHTML};')(x=>String(x==null?'':x),_pY,_yM);
 const {tkExtInfo,tkExtTagHTML,tkExtOrigExpire,tkExtLineHTML}=api;
 
 console.log('① 從帳本反推（兩種展延都只留 note，欄位靠不住）');
@@ -104,8 +107,8 @@ console.log('\n④ 接線與語彙');
      (src.match(/\$\{tkExtLineHTML\(t, logs\)\}/g)||[]).length===2
      && /格式與後台那一行完全一致：效期至（原到期）· 教練展延（展延後）。/.test(src));
   {
-    const tag=new Function('escH', grab('tkExtInfo')+'\n'+grab('tkExtTagHTML')
-      +'\nreturn tkExtTagHTML;')(x=>String(x==null?'':x));
+    const tag=new Function('escH','parseYmd','ymd', grab('leaveWeekKey')+'\n'+grab('leaveExtNet')+'\n'+grab('tkExtInfo')+'\n'+grab('tkExtTagHTML')
+      +'\nreturn tkExtTagHTML;')(x=>String(x==null?'':x),_pY,_yM);
     const both=tag({id:'T1'},[
       {ticket_id:'T1',created_at:'1',note:'2026-08-24 教練請假展延 7 天（2026/08/30 → 2026/09/06）'},
       {ticket_id:'T1',created_at:'2',note:'展延一次：2026-09-06 → 2026-11-01（56 天）'}]);

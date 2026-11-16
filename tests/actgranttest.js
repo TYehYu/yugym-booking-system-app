@@ -10,18 +10,14 @@ let pass=0,fail=0;
 const ok=(n,c,x)=>{ if(c){pass++;console.log('  ✓ '+n);} else {fail++;console.log('  ✗ '+n+(x!==undefined?'  → '+JSON.stringify(x):''));} };
 const grabFn=n=>{const i=src.indexOf('function '+n+'(');if(i<0)return'';let d=0;for(let k=src.indexOf('{',i);k<src.length;k++){if(src[k]==='{')d++;else if(src[k]==='}'){d--;if(!d)return src.slice(i,k+1);}}return'';};
 
-console.log('① RPC 路徑的首堂開通');
+console.log('① RPC 路徑的首堂開通（P0-E：已改為首次簽到才啟用，補跑整段移除）');
 {
   const f=grabFn('createBookingViaRpc');
-  ok('★ 建立成功後補跑 activateTicketIfNeeded',
-     /if\(tk && tk\.valid_days && !tk\.activated_at\)\{/.test(f)
-     && /const nd=await activateTicketIfNeeded\(fresh, data\.booking_id\);/.test(f));
-  ok('★★ 先重讀票券再開通（RPC 已改過餘額，用舊物件會把餘額寫回舊值）',
-     /const fresh=await dbGet\('member_tickets', tk\.id\);\n\s*if\(fresh && fresh\.valid_days && !fresh\.activated_at\)\{/.test(f));
-  ok('★ 開通有留帳（ticket_logs adjust）', /首堂開通（RPC 路徑補跑），效期至 \$\{nd\}/.test(f));
-  ok('　　開通失敗不擋預約（包 try）', /catch\(_\)\{\}\n\s*\}\n\s*return \{ ok:true, booking_id:data\.booking_id \};/.test(f));
-  ok('　　原本的 deductTicket 開通路徑不變（非 RPC 用）',
-     /const newExpire=await activateTicketIfNeeded\(ticket,booking_id\);/.test(src));
+  ok('★★★ 建立成功後不再補跑 activateTicketIfNeeded（預約不啟用效期）',
+     !/activateTicketIfNeeded/.test(f) && !/首堂開通（RPC 路徑補跑）/.test(f));
+  ok('★★ 仍然回傳 ok:true 與 booking_id', /return \{ ok:true, booking_id:data\.booking_id \};/.test(f));
+  ok('★★ deductTicket 也不再呼叫（newExpire 恆為 null）', /const newExpire=null;/.test(src) && !/const newExpire=await activateTicketIfNeeded/.test(src));
+  ok('　　原因記在原地（P0-E）', /P0-E：不再於預約後補跑開通/.test(f));
 }
 
 console.log('\n② 票券卡底列不再擠壓');

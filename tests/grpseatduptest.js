@@ -76,15 +76,17 @@ console.log('\n①b 帳本也算數：會員自己報名的名額不在 seat_tic
 
 console.log('\n② 重複用同一張時一定要帶 multi:true，否則名額會白站在名單上');
 {
-  ok('★★ 只有「這張已經被這堂用過」才帶 multi',
-     /const _ded = tk \? await deductTicket\(tk,b\.id,SESSION\.id,\s*\n\s*_used\.has\(String\(tk\.id\)\)\?\{multi:true\}:undefined\) : false;/.test(src));
-  ok('★★ 扣成功才記進 _used（沒扣到的不能佔住那張票）',
-     /if\(_ded\) _used\.add\(String\(tk\.id\)\);/.test(src));
-  ok('★★ 護欄本身沒被拆掉 —— 沒帶 multi 時仍會擋重複扣',
-     /const _multi=!!\(opts&&opts\.multi\);\s*\n\s*if\(!_multi && booking_id && ticket && ticket\.id\)\{/.test(src)
-     && /⚠ 已阻擋：這一堂在這張票上已經扣過 /.test(src));
-  ok('★★ 扣不到票的名額仍然不寫進名單（0820 取消教練招待那條沒被動到）',
-     /if\(!_ded\)\{ \(_noTk\[mid\]=\(_noTk\[mid\]\|\|0\)\+1\); _failed\.add\(String\(mid\)\); continue; \}/.test(src));
+  /* 2026-11-01（2d-3）：不再同步呼叫 deductTicket 決定 multi——改成規劃階段就算出
+     multi（這張是不是已經排給別人了），連同 ticket_id 一起送進 fn_group_save_members，
+     RPC 裡重現同一套「不帶 multi 時淨扣>0 就擋」的冪等判斷（照抄 fn_deduct_ticket）。 */
+  ok('★★ 只有「這張已經被這堂用過」才帶 multi（規劃階段先算出來，送進 RPC）',
+     /const multi=_used\.has\(String\(tk\.id\)\);/.test(src));
+  ok('★★ 規劃到就記進 _used（同一次呼叫裡，後續名額不會又撿到它）',
+     /const multi=_used\.has\(String\(tk\.id\)\);\s*\n\s*_used\.add\(String\(tk\.id\)\);/.test(src));
+  ok('★★ 護欄本身沒被拆掉（deductTicket／fn_deduct_ticket 的冪等判斷原文還在，RPC 裡照抄同一套）',
+     /⚠ 已阻擋：這一堂在這張票上已經扣過 /.test(src));
+  ok('★★ 規劃階段挑不到票的名額不會送進 RPC、不寫進名單（0820 取消教練招待那條沒被動到）',
+     /if\(!tk\)\{ \(_noTk\[mid\]=\(_noTk\[mid\]\|\|0\)\+1\); _failed\.add\(String\(mid\)\); continue; \}/.test(src));
 }
 
 /* ── 實跑挑票那一段：把 _used／_free 的行為驗出來 ───────────────── */

@@ -52,7 +52,12 @@ console.log('① 游晴雅的情境（grpNetDeductTicket 實跑）');
                {booking_id:'B',ticket_id:'V2',action:'deduct',delta:-1,created_at:'01'}])('B','M'), 'V2');
 
   console.log('\n② 兩條取消路都換了');
-  ok('★ 名單儲存的移除退票走淨額', /const tkid=await grpNetDeductTicket\(b\.id, mid\);\n\s*if\(tkid\) await refundTicket\(tkid,b\.id,SESSION\.id\);/.test(src));
+  /* 2026-11-01（2d-3）：名單儲存的移除退票不再是前端自己呼叫 grpNetDeductTicket+refundTicket，
+     改成把要退的 member_id 交給 fn_group_save_members，RPC 在鎖裡用同一套「淨扣>0」規則
+     即時查、即時退——比前端先查好再傳更安全（見 YUGYM_HANDOFF.md 第3.4節）。
+     這裡改成驗證：_saveGroupMembers 真的把 removed 整包送進 p_removes，不是自己退。 */
+  ok('★ 名單儲存的移除退票交給 RPC（不再自己呼叫 grpNetDeductTicket/refundTicket）',
+     /p_removes:removed/.test(src) && !/const tkid=await grpNetDeductTicket\(b\.id, mid\);/.test(src));
   ok('★ 單一名額取消也走淨額', /tkId=await grpNetDeductTicket\(bid, mid\);/.test(src));
   ok('★ 舊寫法（最近一筆扣課）已移除', !/l\.action==='deduct'&&mine\.has\(l\.ticket_id\)/.test(src));
   ok('　　案例與病根寫在程式裡', /取消兩個名額時原本都退到「最近一筆扣課」那張：\n\s*第一張多退一堂、第二張的帳懸空/.test(src));

@@ -18,7 +18,13 @@ console.log('\n② 「票券不變」那顆確定取消不再是扣課不退');
 ok('★★★ 送 plain，不送 none', /onclick="askSeriesCancel\('\$\{id\}','plain'\)">確定取消<\/button>/.test(CFM)
    && !/onclick="askSeriesCancel\('\$\{id\}','none'\)">確定取消<\/button>/.test(CFM));
 ok('★★★ plain 不進 RPC（RPC 會套 24 小時規則扣課）', /refundMode!=='force' && refundMode!=='none' && refundMode!=='plain';/.test(CB));
-ok('★★★ plain 是「有扣過就退」：doRefund 走 true，refund_waived 不會成立', /else doRefund = true;/.test(CB) && /b\.refund_waived = \(!doRefund\) && \(await bkWasDeducted\(b\)\);/.test(CB)
+/* 2026-11-07 Phase1修正：refund_waived 不再由「取消前的意圖」(!doRefund) 直接決定，
+   改成跑完退款結果分類（refunded/no_deduction/refund_failed/operator_waived）後才寫一次
+   ——plain 永遠 doRefund=true，天生就不可能落到 operator_waived，見 cancelrefundclassifytest.js */
+ok('★★★ plain 是「有扣過就退」：doRefund 走 true，refund_waived 不再由意圖決定',
+   /else doRefund = true;/.test(CB)
+   && /b\.refund_waived = \(_cancelOutcome==='operator_waived' \|\| _cancelOutcome==='refund_failed'\);/.test(CB)
+   && !/b\.refund_waived = \(!doRefund\) && \(await bkWasDeducted\(b\)\);/.test(CB)
    && !/refundMode==='plain'\) doRefund=false/.test(CB));
 ok('★★ plain 真的沒扣過：不寫警示帳、不再跳一次', /\}else if\(refundMode==='plain'\)\{\s*\n\s*refundedCount=0;/.test(CB));
 ok('★★ plain 不會跳「24 小時內，扣課不退」', /refundMode!=='force' && refundMode!=='plain'\) showToast\('已取消預約（24 小時內，扣課不退）'/.test(CB));

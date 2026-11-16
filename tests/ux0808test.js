@@ -71,19 +71,19 @@ console.log('\n③ 會員端看得到使用期限');
   const F=grabFn('fmtExpire');
   const fmt=new Function(F+'\nreturn fmtExpire;')();
   eq('★ 已開通 → 顯示到期日', fmt('2026-09-11',{valid_days:28,activated_at:'x'}), '2026-09-11');
-  eq('★★ 還沒開通 → 「未開通（首堂課後 N 天）」，不是「永久有效」',
-     fmt(null,{valid_days:28}), '未開通（首堂課後 28 天）');
+  eq('★★ 還沒啟用 → 「未啟用（首次簽到後 N 天）」，不是「永久有效」（P0-E）',
+     fmt(null,{valid_days:28}), '未啟用（首次簽到後 28 天）');
   eq('★ 真正的永久有效票（沒有 valid_days）→ 永久有效', fmt(null,{}), '永久有效');
   ok('★★ 會員票券卡改用 fmtExpire（原本 expire_date 為空就寫死「永久有效」）',
      /\$\{t\.expire_date\?`\$\{dim\?'':'到期'\} \$\{t\.expire_date\}`:fmtExpire\(null,t\)\}/.test(src));
   ok('★★ 未開通的票多一行說明「什麼時候開始算」',
-     /\$\{\(!t\.expire_date && t\.valid_days && !t\.activated_at\)\?`<div class="mck-notyet">使用期限自<b>第一堂課<\/b>起算 \$\{t\.valid_days\} 天（含當天）；還沒排課就不會開始倒數。<\/div>`:''\}/.test(src));
+     /\$\{\(!t\.expire_date && t\.valid_days && !t\.activated_at\)\?`<div class="mck-notyet">使用期限自<b>第一次實際簽到的課程<\/b>起算 \$\{t\.valid_days\} 天（含當天）；排課或取消都不會開始倒數。<\/div>`:''\}/.test(src));
   ok('★ 展開明細的「到期日」那列也一樣',
      /<div class="mck-d-row"><span class="mck-d-k">到期日<\/span><span class="mck-d-v">\$\{fmtExpire\(t\.expire_date,t\)\}<\/span><\/div>/.test(src));
   ok('★ 已開通的票多列出「開始計算」是哪一天',
      /<span class="mck-d-k">開始計算<\/span>/.test(src));
   ok('★ 使用規則那段也講一次（含當天）',
-     /使用期限自<b>第一堂課當天<\/b>起算 \$\{t\.valid_days\} 天（含當天），排了第一堂才開始倒數。/.test(src));
+     /使用期限自<b>第一次實際簽到的課程當天<\/b>起算 \$\{t\.valid_days\} 天（含當天）；排課或取消都不會開始倒數。/.test(src));
   ok('　　說明用金色（要留意但不是警告；品牌色強度 紅>金>綠）',
      /\.mck-notyet\{margin-top:6px;font-size:11px;line-height:1\.7;color:#8a5e28;background:#f7efe0;/.test(src));
   ok('　　使用者的原話寫在程式裡',

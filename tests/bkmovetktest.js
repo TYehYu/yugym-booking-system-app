@@ -78,16 +78,22 @@ const DO=(()=>{ const i=src.indexOf('async function _doBkMoveTicket(){');
   return src.slice(i, src.indexOf('\n}', i)+2); })();
 ok('★★★ 不動 sessions_remaining（票早就扣過那一次了）',
    !/sessions_remaining/.test(DO) && !/deductTicket\(/.test(DO) && !/refundTicket\(/.test(DO));
-ok('★★★ 票搬過來、這一堂不再是待簽約',
-   /to\.ticket_id=from\.ticket_id;/.test(DO) && /to\.pending_contract=false;/.test(DO) && /from\.ticket_id=null;/.test(DO));
-ok('★★★ 後面那一堂：留著＝變待簽約／取消＝status 改 cancelled（使用者要每次選）',
-   /from\.status='cancelled'; from\.cancelled_at=/.test(DO) && /from\.pending_contract=true;/.test(DO));
-ok('★★★ 送出前重驗一次（畫面可能是舊的）',
-   /if\(to\.status!=='booked'\|\|!to\.pending_contract\)/.test(DO)
-   && /if\(from\.status!=='booked'\|\|!from\.ticket_id\)/.test(DO)
-   && /if\(!tkOkForSlot\(tk,to\)\)/.test(DO));
-ok('★★ 帳本留痕（adjust 0，寫從哪一堂搬到哪一堂）',
-   /await logTicket\(tk\.id,'adjust',0,to\.id,SESSION\.id,/.test(DO) && /調課：\$\{from\.date\}/.test(DO));
+/* P0-C（2026-11）：調課改走資料庫端單一交易 fn_move_booking_ticket。以下四條取代原本「前端直寫」的斷言——
+   舊斷言守的是 to.ticket_id=…／dbPut／logTicket 那條路，那條路正是會讓扣退堂帳本對不上的舊流程，現在必須「不存在」。 */
+ok('★★★ 只呼叫 fn_move_booking_ticket（p_from_booking／p_to_booking／p_mode 三個參數），且是唯一的寫入',
+   /sb\.rpc\('fn_move_booking_ticket',\{p_from_booking:fromId, p_to_booking:toId, p_mode:mode\}\)/.test(DO)
+   && (DO.match(/sb\.rpc\(/g)||[]).length===1);
+ok('★★★ 沒有任何可繞過 RPC 的舊寫入路徑：不 dbPut、不 logTicket、不改 ticket_id／pending_contract／status、不退回直寫',
+   !/dbPut\(/.test(DO) && !/logTicket\(/.test(DO) && !/\.ticket_id\s*=[^=]/.test(DO) && !/pending_contract\s*=[^=]/.test(DO) && !/\.status\s*=[^=]/.test(DO)
+   && !/dbDel\(/.test(DO) && !/sb\.from\(/.test(DO));
+ok('★★★ hold／cancel 兩種模式照舊由使用者每次選，原樣交給 RPC',
+   /mode=\(window\._mvMode==='cancel'\)\?'cancel':'hold'/.test(DO) && /window\._mvMode=\(m==='cancel'\)\?'cancel':'hold';/.test(src));
+ok('★★★ 規則（狀態、票種、時段、帳本、影子卡、1V2）全由 RPC 驗證：前端不再重複寫一份驗證',
+   !/tkOkForSlot\(tk,to\)/.test(DO) && !/to\.status!=='booked'/.test(DO) && /moveErrMsg\(code\)/.test(DO));
+ok('★★★ 繞過 dbPut 的寫入一定要清快取（bookings、member_tickets、ticket_logs）',
+   /dbCacheClear\(\['bookings','member_tickets','ticket_logs'\]\)/.test(DO));
+ok('★★★ 傳輸層失敗不自動重試、不退回舊流程（結果不確定，請人先確認）',
+   /if\(res && res\.error\)\{[\s\S]{0,260}?return;\s*\n\s*\}/.test(DO) && !/for\(let _try/.test(DO));
 ok('★★ 防連點＋按鈕變「處理中…」',
    /async function doBkMoveTicket\(\)\{ return onceAct\('bkmove:'\+\(window\._mvBid\|\|''\), _doBkMoveTicket\); \}/.test(src)
    && /_btn\.disabled=true; _btn\.textContent='處理中…';/.test(DO));
@@ -114,9 +120,9 @@ ok('★★★ 用 try/finally 還原，不是只在 catch 還原',
    /\}finally\{\s*\n\s*if\(!_ok && _btn\)\{ _btn\.disabled=false; _btn\.textContent=_tx; \}\s*\n\s*\}/.test(src));
 ok('★★★ 成功那條不還原（視窗已關，_ok 擋著）', /let _ok=false;/.test(src) && /_ok=true;\s*\n\s*closeModal\(\);/.test(src));
 /* 連續調課時，候選清單是開視窗那一刻算的，第二次很容易挑到剛被搬走的那一堂 */
-ok('★★★ 挑到已被搬走的課 → 重算候選並重畫，不是丟一個 toast 就結束',
-   /const _re=await bkMoveCandidates\(to\);/.test(src)
-   && /window\._mvList=_re; window\._mvTo=to; window\._mvPick=_re\[0\]\.bk\.id; mvRender\(\);/.test(src));
+ok('★★★ RPC 回 MOVE.FROM_STATE（那一堂的票剛被搬走）→ 重算候選並重畫，不是丟一個 toast 就結束',
+   /if\(code==='MOVE\.FROM_STATE'\)\{/.test(DO) && /const _re=to\?await bkMoveCandidates\(to\):\[\];/.test(DO)
+   && /window\._mvList=_re; window\._mvTo=to; window\._mvPick=_re\[0\]\.bk\.id; mvRender\(\);/.test(DO));
 
 console.log(`\n${fail?'✗':'✓'} ${pass} 通過 / ${fail} 失敗`);
 process.exit(fail?1:0);
