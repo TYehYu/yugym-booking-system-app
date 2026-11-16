@@ -38,6 +38,9 @@ function grabFn(name) {
 // bkIsInstHold 直接抽真的來用（兩支修法都依賴它，必須是同一份定義）
 const SRC_bkIsInstHold = grabFn('bkIsInstHold');
 const bkIsInstHold = new Function('return ' + SRC_bkIsInstHold)();
+// 2026-11-16：轉正前會先問「這筆卡位是否已過期」（bkHoldExpired）。這支測試的主題是分期保留與退回遞補，不是到期——
+// 這裡的卡位日期都在今天以後，所以固定回 false；真正的到期判斷由 tests/renewalholdtest.js 抽真的函式測。
+const bkHoldExpired = () => false;
 
 console.log('\n═══ Fix C：_doConvertPending 整串轉正，超出範圍保留原狀 ═══');
 {
@@ -70,7 +73,7 @@ console.log('\n═══ Fix C：_doConvertPending 整串轉正，超出範圍�
     closeModal: () => {},
     navTo: () => {},
     showToast: (msg) => { env._lastToast = msg; },
-    bkIsInstHold,
+    bkIsInstHold, bkHoldExpired,
     ymd, TODAY,
     SESSION: { id: 'c-staff' },
     CUR_PAGE: 'member_detail',
@@ -235,7 +238,7 @@ function runFixB() {
       tkUsableBy: (t, mid) => t.member_id === mid,
       tkIsInstall: t => !!(t && t.installment && typeof t.installment === 'object'),
       bkTicketTypeOk: (t, typeId) => t.ticket_type_id === typeId,
-      bkIsInstHold,
+      bkIsInstHold, bkHoldExpired,
       closeModal: () => {},
       showToast: () => {},
       navTo: () => {},
@@ -377,7 +380,7 @@ async function runChainTest() {
       cxBusy: () => () => {},
       showToast: () => {},
       onceAct: (key, f) => f(),   // 防連點機制本身已有獨立測試，這裡直接放行看業務邏輯
-      bkIsInstHold, ymd, TODAY,
+      bkIsInstHold, bkHoldExpired: () => false, ymd, TODAY,   // 2026-11-16：卡位日期都在今天以後；到期判斷由 renewalholdtest 抽真的測
       SESSION: { id: 'c-staff' }, CUR_PAGE: 'member_detail',
       fmtPhone: p => p,
     };

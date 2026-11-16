@@ -24,7 +24,7 @@ ok('　　體驗／待簽約／場租仍顯示客戶姓名', /\(b\.trial_name\?b
 ok('　　原因寫在程式裡', /她根本沒上這堂/.test(src));
 
 console.log('\n待簽約紅框');
-ok('★ 待簽約的任務課卡加 tcard-pend', /const _pend = !!b\.pending_contract;/.test(src)
+ok('★ 待簽約的任務課卡加 tcard-pend', /const _pend = !!b\.pending_contract && !bkHoldExpired\(b\);/.test(src)
    && /\$\{_pend\?' tcard-pend':''\}/.test(src));
 /* 2026-08-24 使用者指示：紅框整組移除，只留暗化（理由見 cardstyletest）。 */
 ok('★★ 樣式與行事曆同一套：只暗化、沒有紅框',
