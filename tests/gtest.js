@@ -35,6 +35,8 @@ const helpers=new Function('COURSE_SHAPE','parseYmd','attObj','ymd','TODAY',[gra
   grabFn('buildWallet'),grabFn('tkNoTag')].join('\n')+
   '; return {tkVisual,ticketTokens,mids,seatKeys,seatMid,seatKeysDisplay,seatNo,tkUsableBy,allocBookingsToTickets,grpTicketAlloc,grpMergeAlloc,bkHasMember,tkClass5,buildWallet,tkNoTag};')(COURSE_SHAPE,parseYmd,attObj,ymd,TODAY);
 
+/* 2026-11-16：名單列「簽到」小按鈕改走 bkAttBtnHtml（開課前 30 分鐘才顯示，行為見 attwindowtest.js）；這支注入真的那兩支 */
+globalThis.BK_ATT_LEAD_MIN=30; new Function('return 0;'); (0,eval)(grabFn('bkAttOpenAt')+grabFn('bkAttBtnHtml')+';globalThis.bkAttOpenAt=bkAttOpenAt;globalThis.bkAttBtnHtml=bkAttBtnHtml;');   /* 抽真的那兩支；測試資料沒有 start_time → 讀不出時間 → 照常畫出按鈕 */
 async function render({ids,att={},tickets=[],bookings=[],logs=[],names={},thisDate='2026-07-27',thisId='B-NOW'}){
   const dbGetAll=async t=>t==='member_tickets'?tickets:t==='bookings'?bookings:t==='ticket_logs'?logs:t==='ticket_types'?TYPES:[];
   const typeMap=Object.fromEntries(TYPES.map(t=>[t.id,t]));

@@ -11160,6 +11160,8 @@ body.mc-mode #desk-feed-left{left:calc(232px + 20px);}
 #bk-card-pop .evo-btn.evo-gift{color:var(--gold-d);border-color:var(--gold);}
 #bk-card-pop .evo-btn.evo-gold{background:var(--gold-d,#b48a56);border-color:var(--gold-d,#b48a56);color:#fff;box-shadow:0 4px 14px rgba(140,105,60,.3);}
 #bk-card-pop .evo-btn:active{transform:scale(.93) !important;}
+/* 出席圓鈕（簽到／未到課）開課前 30 分鐘才顯示：時間未到＝隱藏（不是變淡），bkAttSchedule 到點拿掉這個 class */
+#bk-card-pop .evo-btn.evo-att-wait, .evo-att-wait{display:none !important;}
 /* 「調整課程」視窗（2026-08-20 使用者定案：標題卡點一下跳這張，卡面就不用放按鈕了）——
    一項一列，主標＋灰色副標寫清楚按下去會發生什麼；破壞性的那項走品牌紅。
    2026-08-20 二修（使用者回報「風格跟我們剛剛調整的差太多」）：對齊課卡那套語彙 ——
@@ -15634,8 +15636,8 @@ function tbl(s){return TABLE_ALIAS[s]||s;}
 let sb=null;
 // ── 版本號（日期+時間格式：年後兩碼+月+日.時分，例 26620.1058 = 26年6/20 10:58）──
 // 每次改版手動更新這一行即可，畫面與 title 會一起更新
-const APP_VERSION = '261116.2056';
-const APP_VERSION_LABEL = 'v261116.2056';
+const APP_VERSION = '261116.2123';
+const APP_VERSION_LABEL = 'v261116.2123';
 const CLOUD = !!(window.YUGYM_CONFIG && window.YUGYM_CONFIG.url && window.YUGYM_CONFIG.anonKey);
 if(CLOUD){ sb = supabase.createClient(window.YUGYM_CONFIG.url, window.YUGYM_CONFIG.anonKey); }
 
@@ -20974,6 +20976,7 @@ function navTo(key, gkey){
   /* 課表抽屜的頂列是露出來的（見 #tl-sheet 那條 top 規則），所以換頁點得到 ——
      換頁就把它收掉，否則舊的課表會浮在新頁面上。 */
   if(document.getElementById('tl-sheet')){ try{ closeTrainingLog(); }catch(_){} }
+  try{ setTimeout(bkAttSchedule,0); }catch(_){}   // 切頁：舊畫面的等待按鈕不在了就清計時器
   if(key==='more_menu'){ openMoreMenu(); return; }
   /* 教練首頁 V2 的外框樣式（2026-08-21）：頂列米色、底部導覽品牌綠、小管家收進帳號選單。
      這三樣都在頁面之外的外框上，改 CSS 會連教練本人一起改到 —— 所以掛一個 body class，
@@ -40182,8 +40185,8 @@ async function expandBkCard(el, id){
   if(!_calCtx && tlOwnsBk(b) && tlLoggable(b) && tlCanLog())
     btns += evoBtn('evo-t2','',`collapseBkCard();openTrainingLog('${id}')`,'plan','課表');
   if(!_calCtx && (staff||coachCk) && b.no_show===true) btns += evoBtn('evo-b2','evo-gold',`collapseBkCard();bkUndoNoShow('${id}')`,'noshow','取消未到課');
-  else if(!_calCtx && (staff||coachCk) && b.status==='coach_leave') btns += evoBtn('evo-b2','evo-gold',`collapseBkCard();bkCoachLeaveNoShow('${id}')`,'noshow','未到課');
-  else if(!_calCtx && (staff||coachCk) && !bkIsCoachLeave(b) && !isGroup && b.status==='booked') btns += evoBtn('evo-b2','evo-gold',`collapseBkCard();bkMarkNoShow('${id}')`,'noshow','未到課');
+  else if(!_calCtx && (staff||coachCk) && b.status==='coach_leave') btns += evoAttBtn(b,'evo-b2','evo-gold',`collapseBkCard();bkCoachLeaveNoShow('${id}')`,'noshow','未到課');
+  else if(!_calCtx && (staff||coachCk) && !bkIsCoachLeave(b) && !isGroup && b.status==='booked') btns += evoAttBtn(b,'evo-b2','evo-gold',`collapseBkCard();bkMarkNoShow('${id}')`,'noshow','未到課');
   // ④ 取消（紅；教練只能取消自己的課；2026-08-20 起管理員手機改掛在會員卡上）
   /* 非團課的取消／簽到擺回下方那一排（2026-08-21 使用者指示）——
      單人課只有一張會員卡，右邊掛兩顆圓鈕等於為了兩顆按鈕把卡撐到 100px 高；
@@ -40199,11 +40202,11 @@ async function expandBkCard(el, id){
   //    2026-08-20 起管理員手機改成每位會員卡上各自一顆，不再是整堂一顆
   if((!_ashMode || !isGroup) && !_calCtx && (staff||coachCk) && !closed){
     if(isGroup){
-      btns += evoBtn('evo-r2','evo-primary',`bkOrbitRoster('${id}')`,'check','簽到');
+      btns += evoAttBtn(b,'evo-r2','evo-primary',`bkOrbitRoster('${id}')`,'check','簽到');
     }else{
       btns += checked
         ? evoBtn('evo-r2','',`bkOrbitUndo(this,'${id}')`,'undo','取消簽到')
-        : evoBtn('evo-r2','evo-primary',`collapseBkCard();checkInBooking('${id}')`,'check','簽到');
+        : evoAttBtn(b,'evo-r2','evo-primary',`collapseBkCard();checkInBooking('${id}')`,'check','簽到');
     }
   }
   /* 2026-07-29 使用者指示：環繞式圓鈕改成「橫式小卡＋下方圓形按鈕」的彈出面板——
@@ -40470,7 +40473,9 @@ async function bkCardPop(el, b, btns, acts){
             if(_ck && _canLeave && !inHere && !A.closed)
               _leaveBtn=`<button type="button" class="ash-mlv" onclick="event.stopPropagation();ashSeatAct('${b.id}','leave','${r.sk}')">請假</button>`;
             if(A.staff && !inHere && !A.closed) _outOrbs += evoBtn('','evo-danger',`ashSeatAct('${b.id}','cancel','${r.sk}')`,'x','取消');
-            if(_ck && !A.calCtx && !A.closed) _outOrbs += evoBtn('','evo-primary',`ashSeatAct('${b.id}','attend','${r.sk}')`,'check',inHere?'取消簽到':'簽到');
+            if(_ck && !A.calCtx && !A.closed) _outOrbs += inHere
+              ? evoBtn('','evo-primary',`ashSeatAct('${b.id}','attend','${r.sk}')`,'check','取消簽到')
+              : evoAttBtn(b,'','evo-primary',`ashSeatAct('${b.id}','attend','${r.sk}')`,'check','簽到');
           }
         }else if(A.isGroup){
           /* 沒有名額鍵、但仍是團課（舊資料只有 member_id 的那種）—— 保留原本的右側圓鈕。
@@ -40479,7 +40484,7 @@ async function bkCardPop(el, b, btns, acts){
           if(A.canCancel && A.staff) _outOrbs += evoBtn('','evo-danger',`collapseBkCard();confirmCancelBooking('${b.id}')`,'x','取消');
           if(_ck && !A.calCtx && !A.closed) _outOrbs += A.checked
             ? evoBtn('','',`bkOrbitUndo(this,'${b.id}')`,'undo','取消簽到')
-            : evoBtn('','evo-primary',`collapseBkCard();checkInBooking('${b.id}')`,'check','簽到');
+            : evoAttBtn(b,'','evo-primary',`collapseBkCard();checkInBooking('${b.id}')`,'check','簽到');
         }
       }
       /* 使用人：單人課與團課名額走的是兩個不同的欄位（2026-08-21 使用者回報「團課是不是
@@ -40648,6 +40653,7 @@ async function bkCardPop(el, b, btns, acts){
       ${btns?`<div class="mtp-orbs">${btns}</div>`:''}
     </div>`;
   document.body.appendChild(host);
+  bkAttSchedule();   // 有時間未到的出席圓鈕 → 排到點自動顯示（見 evoAttBtn）
   const box=document.getElementById('bkp-box');
   /* ⚠ el 可能已經不在畫面上（2026-08-21 使用者回報「改完後簡易課卡會跑到視窗左上角」）——
      改使用人／換課程這類動作收尾會 navTo(CUR_PAGE) 重畫整頁，原本被點的那張課卡元素
@@ -40685,6 +40691,12 @@ async function bkCardPop(el, b, btns, acts){
    跟放大出來的感覺對不起來）。動畫跑不動（舊瀏覽器、prefers-reduced-motion）
    就直接移除 —— 任何一條路都要保證 DOM 收得掉。 */
 function bkCardPopClose(animate){
+  bkCardPopClose0(animate);
+  /* 關卡後重算計時器：這張卡的等待按鈕不再算（已移除或標記 closing），沒有別的等待中按鈕就清掉；
+     明細視窗還開著且有等待中的按鈕時，會照原樣重排，不會誤清。（開新卡也走這裡，不會重複註冊） */
+  try{ bkAttSchedule(); }catch(_){}
+}
+function bkCardPopClose0(animate){
   const h=document.getElementById('bk-card-pop');
   if(!h) return;
   const box=h.querySelector('.mtp');
@@ -40704,8 +40716,64 @@ function bkCardPopClose(animate){
     setTimeout(()=>{ if(document.getElementById('bk-card-pop')===h) h.remove(); },260);   // 保險
   }catch(_){ h.remove(); }
 }
-function evoBtn(pos, extra, onclick, icon, label){
-  return `<button class="evo-btn ${pos}${extra?' '+extra:''}" onclick="event.stopPropagation();${onclick}">
+/* ── 出席圓鈕時間閘（「簽到」「未到課」）：開課前 30 分鐘才顯示 ──
+   ⚠ 這是前端防誤觸，不是資料庫強制限制。
+   ⚠ 時間一律以台北時間（+08:00，台灣無日光節約）算：預約日期＋開始時間 → 絕對時刻，
+     不吃瀏覽器所在時區，跨午夜（00:10 的課在前一晚 23:40 開放）自然正確。
+   ⚠ 只管「顯示」與「點擊重驗」；角色權限、待簽約、已關閉等條件仍在各入口原本的 if 裡，
+     時間到了不代表能繞過它們。已開課／過去課程 now >= 門檻，維持原本補登行為，不另加結束時間。 */
+const BK_ATT_LEAD_MIN=30;
+function bkAttOpenAt(date,start){
+  const d=String(date||'').slice(0,10);
+  let t=String(start||'').slice(0,5);
+  if(!/^\d{4}-\d{2}-\d{2}$/.test(d)||!/^\d{1,2}:\d{2}$/.test(t)) return NaN;
+  if(t.length===4) t='0'+t;
+  return Date.parse(d+'T'+t+':00+08:00')-BK_ATT_LEAD_MIN*60000;
+}
+/* 點擊時重驗（舊畫面、延遲事件都擋得住）；日期或時間讀不出來時不擋（維持原行為，後面的處理函式各有自己的檢查） */
+function bkAttOk(date,start,msg){
+  const at=bkAttOpenAt(date,start);
+  if(!isFinite(at) || Date.now()>=at) return true;
+  try{ showToast(msg||'尚未開放（課程開始前 30 分鐘起）'); }catch(_){}
+  return false;
+}
+/* 點擊時以「最新的預約日期／時間」重驗：課卡開著期間可能被別人改期，不能拿開卡時的舊值放行。
+   從資料庫單筆讀（dbGet 全欄位）。讀取失敗或查無這筆預約 → 一律拒絕並請使用者重新開啟課卡，
+   **不退回舊值放行**（舊值可能已被別人改期）。d0/t0 只留給舊呼叫相容，不再參與判斷。 */
+async function bkAttGate(id,d0,t0){
+  let nb=null;
+  try{ nb=await dbGet('bookings',id); }catch(_){ nb=null; }
+  if(!nb){ try{ showToast('讀不到最新的預約資料，請重新開啟課卡後再試'); }catch(_){} return false; }
+  return bkAttOk(nb.date,nb.start_time);
+}
+/* 預約明細／名單列的小按鈕版本（員工出席操作）：時間未到＝不顯示（到點由 bkAttSchedule 自動補出） */
+function bkAttBtnHtml(b, cls, onclick, label, title){
+  const d=String(b&&b.date||'').slice(0,10), t=String(b&&b.start_time||'').slice(0,5);
+  const at=bkAttOpenAt(d,t);
+  const wait=isFinite(at) && Date.now()<at;
+  return `<button class="btn ${cls}${wait?' evo-att-wait':''}"${wait?` data-att-at="${at}"`:''}${title?` title="${title}"`:''} onclick="bkAttGate('${b.id}','${d}','${t}').then(ok=>{if(!ok)return;${onclick}})">${label}</button>`;
+}
+function evoAttBtn(b, pos, extra, onclick, icon, label){
+  const d=String(b&&b.date||'').slice(0,10), t=String(b&&b.start_time||'').slice(0,5);
+  const at=bkAttOpenAt(d,t);
+  const wait=isFinite(at) && Date.now()<at;
+  return evoBtn(pos, (extra?extra+' ':'')+(wait?'evo-att-wait':''),
+    `bkAttGate('${b.id}','${d}','${t}').then(ok=>{if(!ok)return;${onclick}})`, icon, label, wait?`data-att-at="${at}"`:'');
+}
+/* 課卡開著跨過門檻 → 按鈕自動出現。只留一個計時器（bkCardPopClose 會清），
+   每次只排「最近一顆」的時間，到點再重排；單次最長 1 小時以避開 setTimeout 上限。 */
+function bkAttSchedule(){
+  if(window._bkAttTimer){ clearTimeout(window._bkAttTimer); window._bkAttTimer=0; }
+  const now=Date.now(); let next=Infinity;
+  document.querySelectorAll('.evo-att-wait').forEach(el=>{
+    if(el.closest && el.closest('[data-closing="1"]')) return;   // 正在播關閉動畫的面板不算
+    const at=Number(el.getAttribute('data-att-at'));
+    if(isFinite(at) && now<at) next=Math.min(next,at); else el.classList.remove('evo-att-wait');
+  });
+  if(isFinite(next)) window._bkAttTimer=setTimeout(bkAttSchedule, Math.min(Math.max(next-now,1),3600000));
+}
+function evoBtn(pos, extra, onclick, icon, label, attrs){
+  return `<button class="evo-btn ${pos}${extra?' '+extra:''}"${attrs?' '+attrs:''} onclick="event.stopPropagation();${onclick}">
     <span class="evo-ic">${EVO_IC[icon]||''}</span><span class="evo-lb">${label}</span></button>`;
 }
 /* 扇形排列（2026-07-21 使用者指示）：按鈕統一在卡片右側、以右緣中心為圓心平均展開，
@@ -40827,16 +40895,18 @@ async function bkOrbitRoster(id){
 async function bkRosterToggle(key, baseId){
   const p = key.split('|');
   if(p[0]==='att'){
-    const b=await dbGet('bookings',p[1]); if(!b) return;
+    const b=await dbGet('bookings',p[1]); if(!b){ showToast('讀不到最新的預約資料，請重新開啟課卡後再試'); return; }
     const att=attObj(b); const mid=p[2];
+    if(att[mid]!=='checked_in' && !bkAttOk(b.date,b.start_time,'尚未開放簽到（課程開始前 30 分鐘起）')) return;
     att[mid] = (att[mid]==='checked_in') ? 'booked' : 'checked_in';
     b.attendance=att;
     const anyIn=Object.values(att).some(s=>s==='checked_in');
     if(b.status!=='completed'&&b.status!=='cancelled') b.status = anyIn?'checked_in':'booked';
     await dbPut('bookings',b);
   }else{
-    const b=await dbGet('bookings',p[1]); if(!b) return;
+    const b=await dbGet('bookings',p[1]); if(!b){ showToast('讀不到最新的預約資料，請重新開啟課卡後再試'); return; }
     if(b.status==='checked_in'||b.status==='completed'){ b.status='booked'; b.checked_in_at=null; }
+    else if(!bkAttOk(b.date,b.start_time,'尚未開放簽到（課程開始前 30 分鐘起）')) return;
     else { b.status='checked_in'; b.checked_in_at=new Date().toISOString(); }
     await dbPut('bookings',b);
   }
@@ -42872,7 +42942,10 @@ async function openBookingDetail(id){
                與「請假」（本堂照扣、另發補課券）區隔。 */
             + (inHere?'':`<button class="btn btn-ghost btn-sm" style="color:#b5372e;" onclick="groupCancelSeat('${b.id}','${sk}')">取消</button>`)
             + (inHere?'':`<button class="btn btn-ghost btn-sm" onclick="groupToggleLeave('${b.id}','${sk}')">請假</button>`)
-            + `<button class="btn btn-ghost btn-sm" onclick="toggleGroupAttend('${b.id}','${sk}')">${inHere?'取消簽到':(isPastD?'補簽':'簽到')}</button></span>`;
+            + ((inHere||isPastD)
+                ? `<button class="btn btn-ghost btn-sm" onclick="toggleGroupAttend('${b.id}','${sk}')">${inHere?'取消簽到':'補簽'}</button>`
+                : bkAttBtnHtml(b,'btn-ghost btn-sm',`toggleGroupAttend('${b.id}','${sk}')`,'簽到'))
+            + `</span>`;
       }
       /* 多名額 → 每列標「第 N 個名額」，讓櫃檯知道這列是同一個人的哪一個位子 */
       const seatTag = _seat[mid]>1 ? `<span class="tag" style="font-size:10.5px;background:#f7efe0;color:#8a5e28;">第 ${seatNo(sk)} 個名額</span>` : '';
@@ -42938,9 +43011,9 @@ async function openBookingDetail(id){
       ${b.status==='booked'&&!isGroupD&&staffCanCheckin
         ? ((function(){const nd=(parseYmd(b.date)?ymd(parseYmd(b.date)):b.date);return nd<ymd(TODAY);})()
             ? `<button class="btn btn-gold btn-sm" onclick="openMakeupModal('${b.id}')">補簽</button>`
-            : `<button class="btn btn-green btn-sm" onclick="checkInBooking('${b.id}')">簽到</button>`)
+            : bkAttBtnHtml(b,'btn-green btn-sm',`checkInBooking('${b.id}')`,'簽到'))
         : (b.status==='coach_leave'&&!isGroupD&&staffCanCheckin)
-        ? `<span style="display:flex;align-items:center;gap:8px;"><button class="btn btn-green btn-sm" title="學生有到場：退堂＋發自主訓練點數" onclick="checkInBooking('${b.id}')">簽到</button><button class="btn btn-ghost btn-sm" title="學生沒到場：結課退堂、不發點數" onclick="bkCoachLeaveNoShow('${b.id}')">未到場結課</button></span>`
+        ? `<span style="display:flex;align-items:center;gap:8px;">${bkAttBtnHtml(b,'btn-green btn-sm',`checkInBooking('${b.id}')`,'簽到','學生有到場：退堂＋發自主訓練點數')}${bkAttBtnHtml(b,'btn-ghost btn-sm',`bkCoachLeaveNoShow('${b.id}')`,'未到場結課','學生沒到場：結課退堂、不發點數')}</span>`
         : memberCkBtn ? memberCkBtn
         : (b.status==='checked_in'&&!isGroupD&&staffCanCheckin
             ? `<span style="display:flex;align-items:center;gap:8px;"><span class="tag tag-ok" style="font-size:12px;">已簽到</span><button class="btn btn-ghost btn-sm" onclick="undoCheckin('${b.id}')">取消簽到</button></span>`
@@ -43091,6 +43164,7 @@ async function openBookingDetail(id){
         ? `<button class="btn btn-green bkd-signup" onclick="openConvertPending('${b.id}')">轉正簽約</button>
            <button class="btn btn-ghost" onclick="openConvertPendingAsk('${b.id}')" title="這位會員若還有其他待簽約預約，一次處理">整串轉正</button>`:''}
     </div>`);
+  try{ bkAttSchedule(); }catch(_){}   // 明細裡的簽到／未到場結課：開課前 30 分鐘才出現，到點自動補出
   try{ bkFillHoldInfo(b); }catch(_){}   // 2026-11-16：待簽約卡位顯示「暫定使用期間／只保留到當天」（不等它，填不出來也不影響明細）
 }
 /* ── 連續取消（2026-07-29 使用者指示：連續預約也要有連續取消）─────────────
@@ -43748,12 +43822,7 @@ async function _checkInBooking(id, opts){  opts=opts||{};
     showToast('教練請假堂：到場後請洽櫃檯簽到'); return false;
   }
   // 簽到開放時間：課程開始前 30 分鐘起。太早不可簽（維持時段公平、避免提前領點數）
-  const slotDt=new Date(b.date+'T'+b.start_time+':00');
-  const openDt=new Date(slotDt.getTime()-30*60000);
-  if(new Date()<openDt){
-    showToast('尚未開放簽到（課程開始前 30 分鐘起）');
-    return false;
-  }
+  if(!bkAttOk(b.date,b.start_time,'尚未開放簽到（課程開始前 30 分鐘起）')) return false;   // 共用的台北時間判斷（2026-11-16）
   // ── Sprint 3：簽到改走 RPC（旗標開啟時；發點由後端 handle_checkin_reward 統一處理）──
   // 已通過上方「開課前 30 分鐘」時間限制。RPC 成功即 return；未成功回退舊邏輯（RPC 單一交易，回退安全）。
   if(window.FEATURE_FLAGS && FEATURE_FLAGS.checkinBookingRpc && CLOUD){
@@ -46437,8 +46506,11 @@ function attObj(b){
 async function toggleGroupAttend(bid,mid){ return onceAct('grpatt:'+bid+':'+mid, ()=>_toggleGroupAttend(bid,mid)); }
 async function _toggleGroupAttend(bid,mid){
   const b=await dbGet('bookings',bid);
+  if(!b){ showToast('讀不到最新的預約資料，請重新開啟課卡後再試'); return; }
   const att=attObj(b);
   const wasIn = att[mid]==='checked_in';
+  /* 新增簽到才受 30 分鐘限制（用剛讀到的最新日期時間，繞不過按鈕）；取消簽到與過去課程補簽不受影響 */
+  if(!wasIn && !bkAttOk(b.date,b.start_time,'尚未開放簽到（課程開始前 30 分鐘起）')) return;
   att[mid] = wasIn ? 'booked' : 'checked_in';
   b.attendance=att;
   // 整體狀態：有任一人簽到就算 checked_in，否則 booked（保留原本整體狀態邏輯供今日事項統計）
@@ -81898,7 +81970,8 @@ function showModal(html){
   }
   if(typeof mpkScan==='function') mpkScan();   // 會員選擇器：搜尋框＋下拉合併（2026-07-30）
 }
-function closeModal(){const m=document.getElementById('modal-bg');if(m)m.remove(); window._modalSideUntilClose=false; document.body.style.overflow='';
+function closeModal(){const m=document.getElementById('modal-bg');if(m)m.remove(); try{ bkAttSchedule(); }catch(_){}   /* 明細關了：沒有等待中的出席按鈕就清計時器（課卡那邊還在等的會保留） */
+  window._modalSideUntilClose=false; document.body.style.overflow='';
   /* 會員選單搬到 body 層級（2026-08-04）：彈窗關掉時把孤兒選單清掉 */
   try{ if(typeof mpkSheetClose==='function') mpkSheetClose(); }catch(_){}   // 挑選視窗跟著彈窗一起收
   // 還原捲動鎖（與 showModal 的 position:fixed 保存式鎖成對）

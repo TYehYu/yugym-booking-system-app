@@ -118,7 +118,7 @@ ok('★★ 會員端明細不給自簽鈕、改顯示「請洽櫃檯」', /教�
 ok('★★ checkInBooking 函式層也擋會員（深連結繞不過）',
    /if\(\(b\.status==='coach_leave'\|\|b\.coach_leave===true\) && SESSION && SESSION\.role==='member'\)\{/.test(src));
 ok('★★ 櫃檯明細有兩顆：簽到（發點）＋未到場結課（不發點）',
-   /onclick="bkCoachLeaveNoShow\('\$\{b\.id\}'\)">未到場結課<\/button>/.test(src)
+   /bkAttBtnHtml\(b,'btn-ghost btn-sm',`bkCoachLeaveNoShow\('\$\{b\.id\}'\)`,'未到場結課'/.test(src)   /* 2026-11-16 改走 bkAttBtnHtml（開課前 30 分鐘才顯示） */
    && /學生有到場：退堂＋發自主訓練點數/.test(src));
 ok('★★ 未到場結課＝completed＋退堂、不發點、不寫 checked_in_at',
    (()=>{ const i2=src.indexOf('async function bkCoachLeaveNoShow');
@@ -153,7 +153,7 @@ ok('★★ 圓點：只要是「請假且已結課」就畫（不再分有沒有
 
 console.log('\n課卡環繞按鈕（2026-08-14 使用者指示：加金色「未到課」、拿掉代課）');
 ok('★★ 請假堂有金色「未到課」圓鈕 → bkCoachLeaveNoShow',
-   /if\(!_calCtx && \(staff\|\|coachCk\) && b\.status==='coach_leave'\) btns \+= evoBtn\('evo-b2','evo-gold',`collapseBkCard\(\);bkCoachLeaveNoShow\('\$\{id\}'\)`,'noshow','未到課'\);/.test(src));   // 2026-08-19 行事曆情境不放
+   /if\(!_calCtx && \(staff\|\|coachCk\) && b\.status==='coach_leave'\) btns \+= evoAttBtn\(b,'evo-b2','evo-gold',`collapseBkCard\(\);bkCoachLeaveNoShow\('\$\{id\}'\)`,'noshow','未到課'\);/.test(src));   // 2026-08-19 行事曆情境不放
 ok('★★ 請假堂不顯示代課（復原入口在明細）',
    /b\.date>=ymd\(TODAY\) && !bkIsCoachLeave\(b\)\)\{/.test(src)
    && /教練請假的堂不顯示代課/.test(src));
@@ -164,7 +164,7 @@ console.log('\n未到課（2026-08-14 金色圓鈕＋課卡右下角金色「未
    0814 這一顆的條件寫著 bkIsSelf(b)，所以只有自主訓練有；教練課、友善教練課、體驗
    全都沒有。櫃檯遇到客人沒來只剩假簽到或取消（取消會把堂數退回去）。 */
 ok('★★ 所有單人課（預約中、非教練請假堂）都有金色「未到課」圓鈕 → bkMarkNoShow',
-   /else if\(!_calCtx && \(staff\|\|coachCk\) && !bkIsCoachLeave\(b\) && !isGroup && b\.status==='booked'\) btns \+= evoBtn\('evo-b2','evo-gold',`collapseBkCard\(\);bkMarkNoShow\('\$\{id\}'\)`,'noshow','未到課'\);/.test(src)
+   /else if\(!_calCtx && \(staff\|\|coachCk\) && !bkIsCoachLeave\(b\) && !isGroup && b\.status==='booked'\) btns \+= evoAttBtn\(b,'evo-b2','evo-gold',`collapseBkCard\(\);bkMarkNoShow\('\$\{id\}'\)`,'noshow','未到課'\);/.test(src)
    && !/bkIsSelf\(b\) && !bkIsCoachLeave\(b\) && !isGroup && b\.status==='booked'\) btns/.test(src));   // 2026-08-19 行事曆情境不放
 ok('★★ bkMarkNoShow＝completed＋no_show 旗標、堂數照扣不退',
    (()=>{ const i2=src.indexOf('async function bkMarkNoShow');
