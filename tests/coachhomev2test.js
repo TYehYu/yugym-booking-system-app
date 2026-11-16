@@ -347,7 +347,7 @@ ok('★★ ⚠ 場地是全店共用的 → 判斷要用當天全部未取消的
    && /判斷用\*\*當天全部\*\*未取消的預約/.test(src));
 ok('★ 快速預約只建教練課（自主訓練是會員自約、團課從後台開）',
    /window\._bkCoachCourseOnly=true;/.test(src)
-   && /if\(window\._bkCoachCourseOnly && t\.category!=='私人教練'\) return false;/.test(src));
+   && /if\(window\._bkCoachCourseOnly && t\.category!=='私人教練' && t\.category!=='體驗'\) return false;/.test(src));
 ok('　　一次性旗標：開窗過濾完就清掉，不影響下一次一般的新增預約',
    /window\._bkCoachCourseOnly=false;   \/\* 一次性旗標/.test(src));
 
