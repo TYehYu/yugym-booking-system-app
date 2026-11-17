@@ -31,7 +31,8 @@ console.log('① 補扣改吃已開通額度');
      /if\(!tk \|\| !\(tkUnlockedLeft\(tk\)>0\)\) break;/.test(src));
   ok('★★★ 未開通那一段留成分期繳費保留，不進「要不要取消」那一批',
      /const _hold=_inst \? _allUnpaid\.slice\(left, _rem\) : \[\];/.test(src)
-     && /const over=_allUnpaid\.slice\(_inst\?_rem:left\)\.filter\(b=>b && b\.pending_contract===true\);/.test(src));
+     && /const over=\[\];/.test(src)   /* 2026-11-21：待簽約卡位的超額取消改由 fn_hold_settle_new_ticket 處理，這裡不再取消 */
+     && /unpaidFutureBookings\(memberId,tk,true\)/.test(src));
   ok('★★★ 取消掉會把客人排好的時段還出去 —— 理由寫在原地',
      /\*\*絕對不能拿去問要不要取消\*\*：\s*\n\s*取消掉等於把客人已經排好的時段還出去。/.test(src));
   ok('★★ 已開通額度用完、但還有課沒扣時要出聲（不能靜靜什麼都不做）',

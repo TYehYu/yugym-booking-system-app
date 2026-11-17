@@ -15636,8 +15636,8 @@ function tbl(s){return TABLE_ALIAS[s]||s;}
 let sb=null;
 // ── 版本號（日期+時間格式：年後兩碼+月+日.時分，例 26620.1058 = 26年6/20 10:58）──
 // 每次改版手動更新這一行即可，畫面與 title 會一起更新
-const APP_VERSION = '261116.2123';
-const APP_VERSION_LABEL = 'v261116.2123';
+const APP_VERSION = '261117.1056';
+const APP_VERSION_LABEL = 'v261117.1056';
 const CLOUD = !!(window.YUGYM_CONFIG && window.YUGYM_CONFIG.url && window.YUGYM_CONFIG.anonKey);
 if(CLOUD){ sb = supabase.createClient(window.YUGYM_CONFIG.url, window.YUGYM_CONFIG.anonKey); }
 
@@ -39119,7 +39119,8 @@ function cpRenderList(){
 /* 整串批次轉正的明確入口（2026-11-03）：與一般「轉正」共用同一套邏輯，只是多帶一個
    mode='ask' —— 让 _doConvertPending 照舊彈「整串卡位要怎麼轉」，但要使用者從這顆按鈕
    主動點進來，不再是偵測到多筆待簽約就自動跳出。 */
-function openConvertPendingAsk(id){ return openConvertPending(id,'ask'); }
+/* 2026-11-21：不再有「整串」與「只轉這一堂」兩條路——轉正一律走新票轉正整理。保留函式名稱只為相容舊呼叫。 */
+function openConvertPendingAsk(id){ return openConvertPending(id); }
 /* 轉正簽約：會員有兩張以上可用票券時先問要扣哪一張（2026-07-30 使用者指示：所有預約都能選票券） */
 async function doConvertPending(memberId, tkId, mode){
   mode = mode || window._cpMode || null;   // 沿用 openConvertPending 存的模式（票券選擇視窗等中繼呼叫不用逐一多傳）
@@ -39188,134 +39189,119 @@ async function _doConvertPending(memberId, tkId, mode){
   }
   const tk=(tkId&&cand.find(t=>t.id===tkId))||cand[0];
   if(!tk){ _clr(); showToast('選的票券已不能用，請重新選一次'); return; }
-  /* 整串卡位一起轉（2026-08-04 使用者指示）：
-     「待簽約先約了 12 堂、先繳 4 堂 → 後面 8 堂直接轉分期繳費保留」
-     「只簽約 8 堂 → 直接取消後面佔位子的 4 堂」
-     同名同手機同票種的未來卡位視為同一串，照日期序處理：
-     ①放得進已開通堂數的 → 綁票扣課
-     ②分期票未開通的額度 → 轉成會員的「分期待繳費保留」（開通下一期自動補綁）
-     ③超過簽約總堂數的 → 自動取消，把時段還出來。 */
-  const _all=await dbGetAll('bookings');
-  const _k=x=>String(x.date)+String(x.start_time||'');
-  /* 同一串（2026-08-04 擴充）：除了「同名同手機」的未綁定卡位，
-     也包含「已用綁定會員掛到這位會員身上、還沒簽約」的卡位（分期保留不算——
-     那些已經屬於某張分期票，由開通下一期接手）。 */
-  let series=_all.filter(x=>x.pending_contract && !x.ticket_id && x.status==='booked'
-      && (x.ticket_type_id||null)===(b.ticket_type_id||null)
-      && x.date>=ymd(TODAY)
-      && ( ((b.trial_name||b.trial_phone) && !x.member_id
-            && String(x.trial_name||'')===String(b.trial_name||'')
-            && String(x.trial_phone||'')===String(b.trial_phone||''))
-         || (x.member_id===memberId && !bkIsInstHold(x)) ))
-    .sort((a,c)=>_k(a).localeCompare(_k(c)));
-  if(!series.some(x=>x.id===b.id)) series=[b].concat(series);
-  const otherCount=series.length-1;   // 2026-11-03：預設只轉這一堂，其他待簽約堂數算給使用者看
-  const isInst=tk.installment&&typeof tk.installment==='object';
-  let avail=Math.max(0, tkUnlockedLeft(tk));
-  let lockedLeft=isInst?Math.max(0,(Number(tk.sessions_total)||0)-(Number(tk.unlocked_sessions)||0)):0;
-  /* 2026-11-09（施佩怡Fix C三修，部署前複查動態測試才抓到）：上面 series 的蒐集
-     條件刻意排除掉「已經是分期保留」的手足（!bkIsInstHold(x)）——那些已經正確
-     標記、交給 promoteHeldBooking 處理，不該在這裡重算一次。但 lockedLeft 是從
-     票券「總堂數−已開通堂數」直接算出來的一個數字，不知道這些被排除的手足
-     已經存在——如果不處理，這裡會把同一份鎖定額度**分給** series 裡其他（通常
-     是待續約、跟這張合約無關的）卡位，等於用同一份額度動到不該動的預約。
-     ⚠ 二修版本（上一輪）是「扣掉手足數量的差額」（4−3=1），但施佩怡案例的
-       4 堂鎖定額度對不齊剛好只有 3 筆對應的手足紀錄（可能是歷史資料本來就有
-       落差），扣完還剩 1 堂差額，二修會把這 1 堂分給「12/18起那13堂」裡的
-       其中一堂——這仍然違反「不得修改既有13堂預約」「不得把13堂未來預約
-       當成可扣票券」這兩條鐵則，即使只動到1堂也不行。
-     ⚠ 三修：只要偵測到這個會員這個票種**已經有任何一筆**現成的分期保留手足
-       （不管差額是不是剛好對得齊），就代表這張票的鎖定額度已經有別的機制
-       （promoteHeldBooking）在負責，這次操作的 series 完全不應該再分到任何
-       lockedLeft——一律歸零，不猜測差額怎麼分。只有「這個會員這個票種完全沒有
-       任何現成手足」（新客戶整批第一次轉正的原始情境，2026-08-04 定的那個
-       「先約12堂先繳4堂→後面8堂轉分期保留」）才會维持原本吃滿 lockedLeft
-       的行為——兩種情境用「有沒有現成手足」完全區分開，不是用猜的。 */
-  try{
-    const _siblingHeld=_all.some(x=>x.id!==b.id && x.member_id===memberId
-      && (x.ticket_type_id||null)===(b.ticket_type_id||null)
-      && x.status==='booked' && x.date>=ymd(TODAY) && bkIsInstHold(x));
-    if(_siblingHeld) lockedLeft=0;
-  }catch(_){}
-  /* 先讓人看清楚會動到什麼（2026-08-04 使用者提問：教練們早就大量用待簽約卡位了，
-     這個功能上線後會有什麼影響？）——正式庫現有 538 筆待簽約卡位、66 個人，
-     最長一串 24 堂。整串轉正會「扣課／轉保留／取消」三種結果一次發生，
-     其中「取消」是把教練排好的時段還出去，按下去之前一定要先看到數字。
-     只有一堂的卡位不會多這一步。
-     2026-11-03 孫怡敏案例修正：這個視窗改成只在使用者主動按「整串」(mode='ask')
-     才會跳出來——一般點「轉正」不再自動偵測到多筆就彈窗，避免被誤會成卡住。 */
-  if(mode==='ask' && series.length>1){
-    _clr();                       // 要再問一次「整串怎麼轉」→ 先收掉忙碌狀態
-    /* 2026-11-09（施佩怡Fix C）：超出目前這張票券容量的卡位，改成「保留原狀」，
-       不再自動取消——合約12堂不代表會員這個時段只能排12筆未來預約，很多人會先把
-       固定時段卡住等續約。原本「超出簽約堂數→取消」會把這些還沒簽下一份合約的
-       卡位直接釋出給別人，等於幫會員把位子讓掉，而且無法復原。
-       ⚠ 這裡只改「怎麼處理」，不改「怎麼分類」——series 的蒐集範圍、avail／
-         lockedLeft 的算法完全沒動，一樣是同一張票的容量內才算扣課/保留。 */
-    let a=avail, l=lockedLeft, nB=0, nH=0, over=[];
-    series.forEach(x=>{ if(a>0){a--;nB++;} else if(l>0){l--;nH++;} else over.push(x); });
-    const m=(window._cpMembers||[]).find(x=>x.id===memberId)||{};
-    const _d=x=>String(x.date).replace(/-/g,'/')+' '+String(x.start_time).slice(0,5);
-    /* ══ 2026-09-22 收斂（使用者：「剛剛幫林義智轉正　轉正的那個視窗　訊息太多了」）══
-       林義智那串是 10 堂 → 扣課 4、取消 6，看到的是內容最多的版本：
-       三行說明段 ＋ 兩列結果 ＋ 紅框（標題＋六個日期）＋ 兩條規則 ＋ 三顆鈕。
-
-       照「確認視窗寫法」那條定版（0911）逐項對：
-       ・**不重複上方** ← 這次犯的就是這條：紅框標題「這 6 堂時段會被取消」
-         和上面那列「超出簽約堂數 → 取消 6 堂」講的是同一件事。刪掉標題，只留日期。
-       ・開頭那三行說明搬成抬頭下的**一行副標**（姓名・堂數・起始時間），
-         票券名併進「扣課」那一列 —— 它本來就是在講那一列。
-       ・第二條規則「之後還要上：改用『只轉這一堂』…」是在解釋按鈕，而按鈕就在下面。
-         縮成紅框裡的一句話。
-       ⚠ 留下來的不能再少：**被取消的日期一定要列出來**。
-         那是把教練排好的時段還出去，0804 就是為了這件事才加這一步。 */
-    const _plan=(tk.plan_name||b.category).replace(/</g,'&lt;');
-    showModal(`<div class="modal-title">整串卡位要怎麼轉？</div>
-      <div class="ash-eihead">${m.name||b.trial_name||''}　·　${series.length} 堂　·　${_d(series[0])} 起</div>
-      <div class="sc-list">
-        <div class="sc-row"><span class="sc-d">扣課（${_plan}）</span><span class="sc-x">${nB} 堂</span></div>
-        ${nH?`<div class="sc-row"><span class="sc-d">轉分期待繳費保留</span><span class="sc-x">${nH} 堂</span></div>`:''}
-        ${over.length?`<div class="sc-row"><span class="sc-d" style="color:var(--gold-d,#8a6e2f);">超出目前票券範圍 → 保留原狀</span><span class="sc-x" style="color:var(--gold-d,#8a6e2f);">${over.length} 堂</span></div>`:''}
-      </div>
-      ${over.length?`<div class="mk-key">這些時段維持原狀，不會被取消或扣課——等簽下一份合約／續約時再處理<small>${over.slice(0,6).map(_d).join('、')}${over.length>6?`…等 ${over.length} 堂`:''}</small></div>`:''}
-      <div class="modal-foot" style="flex-wrap:wrap;gap:8px;">
-        <button class="btn btn-ghost" onclick="openBookingDetail('${id}')">返回</button>
-        <button class="btn btn-ghost" onclick="doConvertPending('${memberId}','${tk.id}','one')">只轉這一堂</button>
-        <button class="btn btn-green" onclick="doConvertPending('${memberId}','${tk.id}','series')">整串轉正</button>
-      </div>`);
-    return;
-  }
-  if(mode!=='series') series=[b];   // 2026-11-03：預設與 'one'、'ask'（沒有其他待簽約時）都只處理這一堂
-  let bound=0, held=0, kept=0;
-  for(const hb of series){
-    if(avail>0){
-      hb.member_id=memberId; hb.ticket_id=tk.id; hb.ticket_type_id=tk.ticket_type_id||hb.ticket_type_id||null;
-      hb.pending_contract=false; hb.trial_name=null; hb.trial_phone=null;
-      if(await deductTicket(tk,hb.id,SESSION.id)){ await dbPut('bookings',hb); avail--; bound++; }
-      else { break; }   // 餘額護欄擋下＝沒扣到，停止轉正（2026-08-06）
-    }else if(lockedLeft>0){
-      hb.member_id=memberId; hb.ticket_type_id=tk.ticket_type_id||hb.ticket_type_id||null;
-      hb.trial_name=null; hb.trial_phone=null;
-      hb.note='分期待繳費保留（收款後自動補扣）';
-      await dbPut('bookings',hb);      // pending_contract 維持 true＝分期保留（紅框待收款）
-      lockedLeft--; held++;
-    }else{
-      /* 2026-11-09（施佩怡Fix C）：超出這張票容量的卡位改成完全不碰——不寫
-         status、不寫note、不呼叫dbPut，資料庫裡原封不動。只計數讓使用者知道
-         有幾堂落在這個範圍外，之後簽下一份合約/續約時再另外處理。 */
-      kept++;
-    }
-  }
-  dbCacheClear(['bookings','member_tickets','ticket_logs']);
-  closeModal();
-  showToast(`已轉正式預約：扣課 ${bound} 堂`
-    +(held?`、轉分期保留 ${held} 堂`:'')
-    +(kept?`、保留原狀（超出範圍）${kept} 堂`:'')
-    /* 2026-11-03 孫怡敏案例：預設只轉這一堂時，順便讓使用者知道還有幾堂待簽約沒動到，
-       不是漏掉，是本來就不自動處理——要處理再按〔整串轉正〕。 */
-    +(mode!=='series' && otherCount>0 ? `。此會員另有 ${otherCount} 堂待簽約預約，本次預設只轉正目前這 1 堂，其他預約不受影響。` : ''));
-  navTo(CUR_PAGE);
+  /* 2026-11-21 新票轉正整理（使用者定案：既有無票券卡位先不動；會員有新可用票券、處理轉正時，
+     按上課日期時間由近到遠保留，超額卡位取消釋出，**不再保留等下一次續約**）。
+     原本這裡的整串／單堂兩種模式與舊的超額處理分支整段移除：
+       ・改由資料庫 fn_hold_settle_new_ticket 單一交易處理（轉正扣堂、分期保留、取消超額），
+         前端不再逐筆 deductTicket／dbPut／取消 —— 扣堂失敗時後面的卡位不會被取消。
+       ・單堂轉正的選項不再存在：點哪一筆轉正，都是整理這位會員這張票的全部符合卡位，由近到遠。
+       ・新票發放後的補扣入口（askChargeUnpaid）走同一支函式、同一份確認畫面。 */
+  _clr();
+  await holdSettleStart(memberId, tk.id, b.id, {anchor:true});
  }catch(e){ _clr(); showToast('轉換失敗：'+(e&&e.message?e.message:e)); }
+}
+/* ══ 新票轉正整理（2026-11-21）══════════════════════════════════════════
+   「轉正」與「新票發放後補扣」共用這一組：呼叫資料庫 fn_hold_settle_new_ticket（單一交易）。
+   流程：① 預覽（p_dry=true，只算不寫）→ ② 櫃檯在確認畫面看到「轉正／分期保留／將取消」的日期時間與堂數 → ③ 按確認才執行（帶著同一份清單）。
+   伺服器重算後清單不同 → PLAN_CHANGED（不做任何事，重新確認）；重送（結果不明時再按一次）不會重扣、不會重取消。
+   ⚠ 前端不再自己扣堂或取消卡位；任何失敗＝整批沒有變動。 */
+const HS_ERR={NOT_STAFF:'請重新登入再試',NOT_DESK:'只有櫃檯或管理員可以整理卡位',NO_TICKET:'找不到這張票券',
+  TICKET_NOT_USABLE:'這張票券目前不是可用狀態，不能轉正',
+  ANCHOR_NOT_ELIGIBLE:'這筆卡位不能用這張票轉正（可能已處理、已簽到、票種或時段不符），沒有任何變動',
+  INST_AMBIGUOUS:'這張分期票已經有「分期待繳費保留」的課，系統算不準還能保留幾堂；為避免誤取消，已全部停止、沒有任何變動，請管理員確認',
+  UNVERIFIABLE_OTHER:'同票種還有另一張票（分期額度或別人共享給他的票）資料讀不懂，無法確認卡位能不能由那張票承接；為避免誤取消，已全部停止、沒有任何變動，請管理員確認',
+  BUSY:'系統正忙，請稍後再試（沒有任何變動）',EXPECT_REQUIRED:'缺少確認清單，已停止',BAD_ARGS:'參數不完整，已停止',NO_MEMBER:'這張票券沒有所屬會員'};
+function hsMsg(r){ const c=(r&&r.error_code)||''; if(c==='SETTLE.FAILED') return '整理失敗，整批已復原、沒有任何扣堂或取消：'+((r&&r.detail)||'');
+  return HS_ERR[c]||('整理失敗'+(c?'：'+c:'')); }
+function hsRefresh(){ return (async()=>{ try{ if(typeof PP!=='undefined'&&PP.id){ await ppLoadCtx(); ppRenderBody(); } else navTo(CUR_PAGE); }catch(_){ try{ navTo(CUR_PAGE); }catch(__){} } })(); }
+async function holdSettleStart(memberId, tkId, anchorId, opts){
+  opts=opts||{};
+  const done=cxBusy('整理卡位中…');
+  let res=null;
+  try{
+    const x=await sb.rpc('fn_hold_settle_new_ticket',{p_ticket_id:tkId,p_dry:true,p_anchor_booking_id:anchorId||null});
+    if(x&&x.error) throw x.error;
+    res=x&&x.data;
+  }catch(e){
+    done(); showToast('卡位整理失敗（沒有任何變動）：'+((e&&e.message)||e), 6000);
+    if(opts.after){ try{ await opts.after(); }catch(_){} }
+    return false;
+  }
+  done();
+  return holdSettleHandle(res, memberId, tkId, anchorId, opts);
+}
+async function holdSettleHandle(res, memberId, tkId, anchorId, opts){
+  opts=opts||{};
+  const after=async()=>{ if(opts.after){ try{ await opts.after(); }catch(_){} } };
+  if(!res||res.ok!==true){ showToast(hsMsg(res), 7000); await after(); return false; }
+  const rows=res.rows||[]; const plan=res.plan||{bind:[],hold:[],cancel:[]};
+  if(!rows.length){
+    if(opts.anchor) showToast('沒有可轉正的卡位（可能已被處理）');
+    await after(); return true;
+  }
+  window._hs={memberId, tkId, anchorId:anchorId||null, plan, ticketName:res.ticket_name||null, after:opts.after||null};
+  /* 只有「轉正這幾堂」、沒有分期保留也沒有要取消的，且只有一堂：不再多問一次，直接執行（行為同過去的單堂轉正） */
+  if(opts.anchor && !(plan.hold||[]).length && !(plan.cancel||[]).length && (plan.bind||[]).length<=1){
+    return holdSettleRun();
+  }
+  const m=await dbGet('members',memberId).catch(()=>null);
+  const _d=x=>String(x.date).slice(5).replace('-','/')+' '+String(x.start_time||'').slice(0,5);
+  const by=k=>rows.filter(r=>r.kind===k);
+  const B=by('bind'), H=by('hold'), C=by('cancel'), K=by('skip'), D=by('defer');
+  /* 超出「尚未啟用票券的使用期間（最早一堂起 valid_days 天）」的卡位：不轉正、也不取消（不動），只讓櫃檯知道 */
+  if(!B.length && !H.length && !C.length){ showToast(D.length?`有 ${D.length} 堂卡位可由這位會員的其他票券（含別人共享給他的票）承接（${D.map(_d).join('、')}），這張票沒有可轉正的，也沒有動它們；請改對那張票整理`:K.length?`有 ${K.length} 堂卡位超出這張票尚未啟用時的使用期間（${K.map(_d).join('、')}），沒有可轉正的，也沒有動它們`:'沒有可整理的卡位', 7000); await after(); return true; }
+  const nm=(res.ticket_name||'票券').replace(/</g,'&lt;');
+  showModal(`<div class="modal-title">卡位整理：用新票轉正</div>
+    <div class="ash-eihead">${((m&&m.name)||'').replace(/</g,'&lt;')}　·　${nm}　·　共 ${rows.length} 堂卡位</div>
+    <div class="sc-list">
+      <div class="sc-row"><span class="sc-d">轉正並扣課（由近到遠）</span><span class="sc-x">${B.length} 堂</span></div>
+      ${H.length?`<div class="sc-row"><span class="sc-d">合約內尚未繳費開通 → 分期待繳費保留</span><span class="sc-x">${H.length} 堂</span></div>`:''}
+      ${C.length?`<div class="sc-row"><span class="sc-d" style="color:var(--danger,#b5372e);">超出票券總堂數 → 取消</span><span class="sc-x" style="color:var(--danger,#b5372e);">${C.length} 堂</span></div>`:''}
+    </div>
+    ${B.length?`<div style="background:var(--card2);border-radius:9px;padding:8px 12px;font-size:13px;line-height:2;margin:8px 0;"><b>轉正：</b>${B.map(_d).join('、')}</div>`:''}
+    ${H.length?`<div style="background:var(--card2);border-radius:9px;padding:8px 12px;font-size:13px;line-height:2;margin:8px 0;"><b>分期保留（不扣、不取消）：</b>${H.map(_d).join('、')}</div>`:''}
+    ${D.length?`<div style="background:var(--card2);border-radius:9px;padding:8px 12px;font-size:12.5px;line-height:1.9;margin:8px 0;color:var(--t2);"><b>可由其他票券（含別人共享給他的票）承接，先不動（不扣、不取消）：</b>${D.map(_d).join('、')}</div>`:''}
+    ${K.length?`<div style="background:var(--card2);border-radius:9px;padding:8px 12px;font-size:12.5px;line-height:1.9;margin:8px 0;color:var(--t2);"><b>超出票券使用期間，不動（不轉正也不取消）：</b>${K.map(_d).join('、')}</div>`:''}
+    ${C.length?`<div class="mk-key">這 ${C.length} 堂會取消、時段釋出（保留取消紀錄），不再保留等下一份合約<small>${C.map(_d).join('、')}</small></div>`:''}
+    <div class="modal-foot" style="flex-wrap:wrap;gap:8px;">
+      <button class="btn btn-ghost" onclick="holdSettleSkip()">先不整理</button>
+      <button class="btn ${C.length?'btn-red':'btn-green'}" onclick="holdSettleGo()">確認整理${C.length?'（含取消 '+C.length+' 堂）':''}</button>
+    </div>`);
+  return true;
+}
+async function holdSettleSkip(){
+  const S=window._hs; window._hs=null; closeModal();
+  if(S&&S.after){ try{ await S.after(); }catch(_){} }
+}
+function holdSettleGo(){ const S=window._hs; if(!S) return; return onceAct('hsettle:'+S.tkId, ()=>holdSettleRun()); }
+async function holdSettleRun(){
+  const S=window._hs; if(!S) return;
+  const done=cxBusy('整理中…');
+  try{
+    const x=await sb.rpc('fn_hold_settle_new_ticket',{p_ticket_id:S.tkId,p_dry:false,p_anchor_booking_id:S.anchorId,p_expect:S.plan});
+    dbCacheClear(['bookings','member_tickets','ticket_logs']);   // RPC 繞過 dbPut，快取不會自己失效
+    if(x&&x.error) throw x.error;
+    const r=x&&x.data; done();
+    if(r&&r.ok===true){
+      window._hs=null; closeModal();
+      if(r.already) showToast('這批已經整理過了（沒有重複扣堂或取消）');
+      else showToast(`已整理：轉正扣課 ${(r.bound||[]).length} 堂`+((r.held||[]).length?`、分期保留 ${r.held.length} 堂`:'')+((r.cancelled||[]).length?`、取消超額卡位 ${r.cancelled.length} 堂`:''), 6000);
+      await hsRefresh();
+      if(S.after){ try{ await S.after(); }catch(_){} }
+      return true;
+    }
+    if(r&&r.error_code==='PLAN_CHANGED'){
+      showToast('清單在你確認後有變動，沒有做任何事，請重新確認', 6000);
+      return holdSettleHandle({ok:true,rows:r.rows,plan:r.plan,ticket_name:S.ticketName}, S.memberId, S.tkId, S.anchorId, {after:S.after});
+    }
+    showToast(hsMsg(r), 8000);
+    return false;
+  }catch(e){
+    done();
+    /* 結果不明（網路中斷等）：視窗保留，再按一次「確認整理」是安全的——伺服器認得同一份清單，已完成的不會重扣、不會重取消。 */
+    showToast('結果不明：請先重新整理確認，或直接再按一次「確認整理」（重送不會重複扣堂）：'+((e&&e.message)||e), 9000);
+    return false;
+  }
 }
 /* 家庭成員選擇視窗（2026-08-03 使用者指示）：櫃檯幫同帳號在同一時段約第二個
    自主訓練名額時，先選這格是哪位家人使用（寫進 trial_name，與會員端同一套規則）。 */
@@ -43161,8 +43147,7 @@ async function openBookingDetail(id){
           &&(isDeskLike()||(SESSION&&SESSION.role==='coach'&&(bkCoachId(b))===SESSION.id)))
         ? `<button class="btn btn-ghost" onclick="${bkIsOpenHold(b)?`closeModal();bkAddMemberOpen('${b.id}')`:`window._bpFrom='';openBindPending('${b.id}')`}">${bkIsOpenHold(b)?'安排會員':'綁定會員'}</button>`:''}
       ${(b.pending_contract&&!b.ticket_id&&b.status==='booked'&&(isDeskLike())&&!bkIsInstHold(b))
-        ? `<button class="btn btn-green bkd-signup" onclick="openConvertPending('${b.id}')">轉正簽約</button>
-           <button class="btn btn-ghost" onclick="openConvertPendingAsk('${b.id}')" title="這位會員若還有其他待簽約預約，一次處理">整串轉正</button>`:''}
+        ? `<button class="btn btn-green bkd-signup" onclick="openConvertPending('${b.id}')">轉正簽約</button>`:''}
     </div>`);
   try{ bkAttSchedule(); }catch(_){}   // 明細裡的簽到／未到場結課：開課前 30 分鐘才出現，到點自動補出
   try{ bkFillHoldInfo(b); }catch(_){}   // 2026-11-16：待簽約卡位顯示「暫定使用期間／只保留到當天」（不等它，填不出來也不影響明細）
@@ -56137,7 +56122,7 @@ async function compareInferOff(){
    之後會員補買了票，卻沒有人回頭把那幾堂補扣。帳上那幾堂永遠是免費的，
    票券則空著格子，票券卡靠先進先出推算把它們畫上去 —— 看起來對、帳其實不對。
    ⚠ 不自動扣：有些名額本來就是教練負責的免費名額。列出來讓櫃檯自己決定。 */
-async function unpaidFutureBookings(memberId, tk){
+async function unpaidFutureBookings(memberId, tk, skipPending){
   const [bks,logs,tks]=await Promise.all([dbGetAll('bookings'),
     dbGetAll('ticket_logs').catch(()=>[]), dbGetAll('member_tickets').catch(()=>[])]);
   const mineTk=new Set((tks||[]).filter(t=>String(t.member_id)===String(memberId)).map(t=>t.id));
@@ -56158,7 +56143,8 @@ async function unpaidFutureBookings(memberId, tk){
      ⚠ 補扣仍要櫃檯按確認（askChargeUnpaid 是問句不是自動扣），教練負責的免費名額
        照樣可以選「先不補扣」。 */
   return (bks||[]).filter(b=> b && b.status==='booked' && String(b.date||'')>=today
-      && !b.ticket_id && !bkIsInstHold(b)                // 分期待繳費保留走另一套（開通下一期時 bindHeldBookings 接手）
+      && !b.ticket_id && !bkIsInstHold(b) && !(skipPending && b.pending_contract)   // skipPending：待簽約卡位改由「新票轉正整理」處理（2026-11-21）
+      // 分期待繳費保留走另一套（開通下一期時 bindHeldBookings 接手）
       && bkHasMember(b,memberId)
       && b.category!=='體驗' && b.category!=='場租'      // 這兩種本來就不扣票
       && !b.sibling_of                                   // 跑步機第二台的影子預約不扣點（2026-08-06 黃麗琴案例）
@@ -56166,7 +56152,22 @@ async function unpaidFutureBookings(memberId, tk){
       && !((net[b.id]||0)>0))
     .sort((a,c)=>((a.date||'')+(a.start_time||'')).localeCompare((c.date||'')+(c.start_time||'')));
 }
+/* 新票發放後的入口（2026-11-21）：先做「卡位整理」（待簽約卡位由近到遠轉正、超額取消，單一交易），
+   做完／略過再接原本的補扣（只剩「非待簽約」的已排課，例如教練負責的免費名額由櫃檯自己決定）。 */
 async function askChargeUnpaid(memberId, ticketId){
+  try{
+    const x=await sb.rpc('fn_hold_settle_new_ticket',{p_ticket_id:ticketId,p_dry:true,p_anchor_booking_id:null});
+    const r=x&&x.data;
+    if(r&&r.ok===true&&(r.rows||[]).length){
+      return holdSettleHandle(r, (await dbGet('member_tickets',ticketId)||{}).member_id||memberId, ticketId, null,
+        {after:()=>askChargeUnpaidOthers(memberId,ticketId)});
+    }
+    if(x&&x.error) console.error('卡位整理預覽失敗',x.error);
+    else if(r&&r.ok===false&&r.error_code!=='NOT_DESK') showToast(hsMsg(r), 7000);
+  }catch(e){ console.error('卡位整理預覽失敗',e); }
+  return askChargeUnpaidOthers(memberId,ticketId);
+}
+async function askChargeUnpaidOthers(memberId, ticketId){
   const tk=await dbGet('member_tickets',ticketId); if(!tk) return;
   const _rem=Number(tk.sessions_remaining)||0; if(_rem<=0) return;
   /* ⚠ 分期票只能補扣「已開通」的那幾堂（2026-08-31 劉雪珠案例）——
@@ -56176,7 +56177,7 @@ async function askChargeUnpaid(memberId, ticketId){
      tkFitsBooking 與「整串卡位轉正」早就夾了這條線，補扣這一支是漏網的。 */
   const _inst=tkIsInstall(tk) && Number(tk.unlocked_sessions||0)<Number(tk.sessions_total||0);
   const left=Math.max(0, tkUnlockedLeft(tk));
-  const _allUnpaid=await unpaidFutureBookings(memberId,tk);
+  const _allUnpaid=await unpaidFutureBookings(memberId,tk,true);
   const list=_allUnpaid.slice(0,left);
   /* 未開通的那一段不是「超出堂數」，是「還沒繳到」——留成分期繳費保留
      （收款開通下一期時自動補綁），**絕對不能拿去問要不要取消**：
@@ -56200,7 +56201,7 @@ async function askChargeUnpaid(memberId, ticketId){
        收下一期款時自動補綁。這裡的 over 只有「連整張票的總堂數都超出去」的那幾堂。
      ⚠ 只挑 pending_contract 的卡位。剩下那些「沒綁票也不是待簽約」的是
        教練負責的免費名額（下面那句「先不補扣」講的就是它們），絕對不能一起刪。 */
-  const over=_allUnpaid.slice(_inst?_rem:left).filter(b=>b && b.pending_contract===true);
+  const over=[];   // 2026-11-21：待簽約卡位的超額取消已改由 fn_hold_settle_new_ticket 處理，這裡只剩非待簽約的已排課，不再取消任何東西
   const _od=b=>String(b.date).slice(5).replace('-','/')+' '+String(b.start_time||'').slice(0,5);
   window._chgUnpaid={mid:memberId, tid:ticketId, ids:list.map(b=>b.id), over:over.map(b=>b.id)};
   showModal(`<div class="modal-title">這幾堂還沒扣到票</div>
@@ -64869,6 +64870,8 @@ async function _grantReqApprove(id){
     showToast(`已發放：${r.plan_name||'票券'}　·　30 分鐘內可在首頁今日營收整筆退回`);
     /* 會員資料開著時就地重讀（2026-08-09）：票券頁的「待審核」卡要當場換成真票券 */
     if(!(await ppRefreshIfOpen(r.member_id))) navTo(CUR_PAGE);
+    /* 2026-11-21：審核發放後同樣做卡位整理（與賣票當下同一套） */
+    try{ await askChargeUnpaid(r.member_id, t.id); }catch(e2){ console.error('發放後卡位整理失敗',e2); }
   }catch(e){ done(); showToast('發放失敗：'+((e&&e.message)||e)); }
 }
 function grantReqCancel(id){

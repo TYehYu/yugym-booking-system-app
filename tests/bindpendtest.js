@@ -67,8 +67,11 @@ console.log('\n④ 入口與權限');
      /b\.pending_contract&&!b\.ticket_id&&b\.status==='booked'&&\(isDeskLike\(\)\)&&!bkIsInstHold\(b\)/.test(src));
   ok('★ 已綁定的卡位轉正 → 直接用綁好的會員，不再比對',
      /if\(b\.member_id\)\{\n\s*window\._cpMembers=await dbGetAll\('members'\); window\._cpBid=id;\n\s*doConvertPending\(b\.member_id\); return;\n\s*\}/.test(grabFn('openConvertPending')));
-  ok('★ 轉正的同一串包含已綁定的卡位（分期保留不算）',
-     /\(x\.member_id===memberId && !bkIsInstHold\(x\)\)/.test(grabFn('_doConvertPending')));
+  /* 2026-11-21：同一串改由資料庫 fn_hold_settle_new_ticket 判定（已綁定會員的待簽約算進來、分期保留不算），前端不再自己蒐集。 */
+  ok('★ 轉正的同一串由伺服器整理：已綁定會員的待簽約卡位算進來、分期保留不算',
+     /holdSettleStart\(memberId, tk\.id, b\.id/.test(grabFn('_doConvertPending'))
+     && /b\.member_id = mt\.member_id/.test(require('fs').readFileSync(process.env.HOME+'/Projects/yugym-booking-system-app/docs/migrations/20261121_hold_settle_new_ticket.sql','utf8'))
+     && /not like '%分期待繳費保留%'/.test(require('fs').readFileSync(process.env.HOME+'/Projects/yugym-booking-system-app/docs/migrations/20261121_hold_settle_new_ticket.sql','utf8')));
 }
 
 console.log('\n⑤ 顯示：純綁定不能被標成「待繳費」');

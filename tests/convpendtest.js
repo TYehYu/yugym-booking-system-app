@@ -29,32 +29,16 @@ console.log('① 分期票沒有已開通堂數時，仍要能整串轉成保留
   ok('　　票券選單標示分期未開通堂數（選之前就看得到）', /分期未開通 \$\{_lk\} 堂/.test(F));
 }
 
-console.log('\n② 整串轉正前先預覽（會取消幾堂要先看到）');
+console.log('\n② 轉正前先預覽（2026-11-21 改版：會轉正／保留／取消幾堂、哪幾天，要先看到）');
 {
-  ok('★ 兩堂以上才多這一步（單堂卡位不受影響）',
-     /if\(series\.length>1 && mode!=='one' && mode!=='series'\)\{/.test(F));
-  /* 2026-09-22 收斂（使用者：「轉正的那個視窗　訊息太多了」）——
-     「扣課」那一列改成帶票券名（原本票券名寫在上面的說明段，那段收掉了）。 */
-  ok('★ 三種結果都列出來（扣課／保留／取消）',
-     /扣課（\$\{_plan\}）/.test(F) && /轉分期待繳費保留/.test(F) && /超出簽約堂數 → 取消/.test(F));
-  ok('★★ 抬頭下只留一行副標：姓名・堂數・起始時間',
-     /<div class="ash-eihead">\$\{m\.name\|\|b\.trial_name\|\|''\}　·　\$\{series\.length\} 堂　·　\$\{_d\(series\[0\]\)\} 起<\/div>/.test(F));
-  /* 2026-11-09（施佩怡Fix C，方案A：超出範圍改成保留原狀、不再自動取消）——
-     ⚠⚠ 這一條底線沒變，只是對象從「被取消」換成「被保留原狀」：
-     整串轉正時，超出票券容量那些堂的「日期時間」還是不能被收掉只剩數字，
-     使用者要能先看到具體是哪幾堂落在範圍外，才按得下去。 */
-  ok('★★★ 保留原狀的時段要列出日期時間（不能只給數字）',
-     /<small>\$\{over\.slice\(0,6\)\.map\(_d\)\.join\('、'\)\}/.test(F));
-  ok('★★ 紅框不再重複上面那列的數字（「確認視窗寫法」：不重複上方），且不再講「釋出／別人約得走」那套舊措辭',
-     !/這 \$\{over\.length\} 堂時段會(保留原狀|被取消)/.test(F)
-     && !/時段會釋出，別人約得走/.test(F)
-     && /這些時段維持原狀，不會被取消或扣課/.test(F));
-  ok('★★ 兩條規則收成紅框裡的一句（第二條本來就是在解釋下面那顆鈕）',
-     !/<ul class="mk-pts">/.test(F));
-  ok('★ 有「只轉這一堂」的退路', /doConvertPending\('\$\{memberId\}','\$\{tk\.id\}','one'\)">只轉這一堂/.test(F)
-     && /if\(mode==='one'\) series=\[b\];/.test(F));
-  ok('　　防連點的鍵帶上模式（預覽與執行不會互相卡住）',
-     /onceAct\('convert:'\+\(window\._cpBid\|\|''\)\+':'\+\(tkId\|\|''\)\+':'\+\(mode\|\|''\)/.test(src));
+  const H=src.slice(src.indexOf('async function holdSettleHandle('), src.indexOf('async function holdSettleSkip('));
+  ok('★ 預覽由資料庫算（p_dry=true），前端只畫確認畫面', /p_dry:true/.test(src.slice(src.indexOf('async function holdSettleStart('), src.indexOf('async function holdSettleHandle('))) && /holdSettleStart\(memberId, tk\.id, b\.id/.test(F));
+  ok('★ 三種結果都列出來（轉正扣課／分期保留／取消）', /轉正並扣課/.test(H) && /分期待繳費保留/.test(H) && /超出票券總堂數 → 取消/.test(H));
+  ok('★ 抬頭下只留一行副標：姓名・票券・堂數', /class="ash-eihead">[^`]*\$\{rows\.length\} 堂卡位/.test(H));
+  ok('★★★ 轉正、分期保留、取消的時段都列出日期時間（不能只給數字）', /B\.map\(_d\)/.test(H) && /H\.map\(_d\)/.test(H) && /C\.map\(_d\)/.test(H));
+  ok('★★ 取消那段用紅框，並說明不再保留等下一份合約', /class="mk-key">這 \$\{C\.length\} 堂會取消/.test(H) && /不再保留等下一份合約/.test(H));
+  ok('★ 沒有「只轉這一堂」的退路、沒有「保留原狀」', !/只轉這一堂|保留原狀|'one'/.test(F + H));
+  ok('　　防連點（確認鈕走 onceAct）', /onceAct\('hsettle:'/.test(src));
 }
 
 console.log('\n③ 分配邏輯（實跑預覽的那段算式）');
@@ -72,40 +56,22 @@ console.log('\n③ 分配邏輯（實跑預覽的那段算式）');
 
 console.log('\n④ 既有行為沒被動到');
 {
-  ok('★ 同一串的認定條件不變（同名＋同手機＋同票種＋今天以後）',
-     /String\(x\.trial_name\|\|''\)===String\(b\.trial_name\|\|''\)/.test(F)
-     && /String\(x\.trial_phone\|\|''\)===String\(b\.trial_phone\|\|''\)/.test(F)
-     && /\(x\.ticket_type_id\|\|null\)===\(b\.ticket_type_id\|\|null\)/.test(F)
-     && /x\.date>=ymd\(TODAY\)/.test(F));
-  /* 2026-08-07 使用者回報：「綁定會員、轉正的時候沒有讀取中的動畫，看起來像當機」——
-     兩支都要逐筆讀寫整串卡位，網路一慢就是好幾秒。沿用既有的 cxBusy（取消預約那套）。 */
   ok('★ 轉正時顯示忙碌狀態（按鈕停用＋轉圈）', /let done=cxBusy\('轉正中…'\);/.test(src));
-  ok('★ 中途要再問一次（選票券／整串怎麼轉）時先收掉忙碌狀態',
+  ok('★ 中途要再問一次（選票券）與交給整理流程前，先收掉忙碌狀態',
      /_clr\(\);                       \/\/ 要再問一次「扣哪一張票」→ 先收掉忙碌狀態/.test(src)
-     && /_clr\(\);                       \/\/ 要再問一次「整串怎麼轉」→ 先收掉忙碌狀態/.test(src));
+     && /_clr\(\);\n  await holdSettleStart\(/.test(src));
   ok('★ 每一條提早結束的路徑都會收掉（不會卡在轉圈）',
      /if\(!b\|\|!b\.pending_contract\)\{ _clr\(\); showToast/.test(src)
-     && /_clr\(\); showToast\(_why\); return;/.test(src)   /* 2026-08-08：沒票券那條改帶原因 */
+     && /_clr\(\); showToast\(_why\); return;/.test(src)
      && /if\(!tk\)\{ _clr\(\); showToast/.test(src)
      && /\}catch\(e\)\{ _clr\(\); showToast\('轉換失敗：/.test(src));
   ok('★ 綁定會員也有忙碌狀態',
      /const done=cxBusy\('綁定中…'\);/.test(src)
      && /\}catch\(e\)\{ done\(\); showToast\('綁定失敗：/.test(src));
-  /* 2026-08-06：扣不到（餘額護欄）就停止轉正，不會把保留課變成沒付錢的正式預約 */
-  ok('★ 扣課仍寫 ticket_logs（deductTicket），扣不到就停',
-     /if\(await deductTicket\(tk,hb\.id,SESSION\.id\)\)\{ await dbPut\('bookings',hb\); avail--; bound\+\+; \}/.test(F));
-  ok('★ 保留課的備註不變（開通下一期會照這個備註自動補綁）',
-     /hb\.note='分期待繳費保留（收款後自動補扣）';/.test(F));
-  /* 2026-11-09（施佩怡Fix C）：這條舊斷言原本驗證「取消的那些有寫原因」——
-     現在已經不取消了，改驗證更嚴格的事：超出範圍的那些完全不寫資料庫
-     （不寫status、不呼叫dbPut），而且全檔的 _doConvertPending 裡不應該
-     再出現任何「status='cancelled'」或舊的取消原因字串，兩者都沒有才算過。 */
-  ok('　　保留原狀的那些完全不碰資料庫（不取消、不扣課、不寫status）：only kept++，且舊的取消邏輯／取消原因都已經不存在',
-     /else\{[\s\S]{0,260}?kept\+\+;[\s\S]{0,40}?\}/.test(F)
-     && !/status\s*=\s*'cancelled'/.test(F)
-     && !/簽約堂數不含此堂/.test(F));
-  ok('　　完成後清快取＋回報三個數字', /dbCacheClear\(\['bookings','member_tickets','ticket_logs'\]\)/.test(F)
-     && /已轉正式預約：扣課 \$\{bound\} 堂/.test(F));
+  const mig=fs.readFileSync(process.env.HOME+'/Projects/yugym-booking-system-app/docs/migrations/20261121_hold_settle_new_ticket.sql','utf8');
+  ok('★ 扣課仍寫 ticket_logs（deduct），扣不到（餘額不足／已扣過）整批回滾', /insert into ticket_logs[\s\S]*'deduct', -1/.test(mig) && /SETTLE\.NO_REMAINING/.test(mig) && /SETTLE\.ALREADY_DEDUCTED/.test(mig));
+  ok('★ 保留課的備註不變（開通下一期會照這個備註自動補綁）', /note = '分期待繳費保留（收款後自動補扣）'/.test(mig));
+  ok('★ 完成後清快取（RPC 繞過 dbPut）', /dbCacheClear\(\['bookings','member_tickets','ticket_logs'\]\)/.test(src.slice(src.indexOf('async function holdSettleRun('))));
 }
 
 console.log('\n'+(fail?'✗ ':'✓ ')+pass+' 通過 / '+fail+' 失敗');

@@ -129,7 +129,7 @@ const addDays = (d, n) => { const x = new Date(d); x.setDate(x.getDate() + n); r
   {
     const cp = g('async function _doConvertPending(memberId, tkId, mode){', '\n}\n');
     ok('★ 轉正：已過期卡位不能由一般流程轉正（畫面先擋，資料庫也擋）', /if\(bkHoldExpired\(b\)\)\{ _clr\(\); showToast\('這筆卡位已過期/.test(cp));
-    ok('　　轉正沿用原預約列、先扣新票成功才寫回（沒有新建預約）', /for\(const hb of series\)\{[\s\S]*await dbPut\('bookings',hb\)/.test(cp) && !/uid\('BK'\)/.test(cp) && /if\(await deductTicket\(tk,hb\.id,SESSION\.id\)\)\{ await dbPut\('bookings',hb\)/.test(cp));
+    ok('　　轉正沿用原預約列（沒有新建預約）；扣新票與綁票在資料庫同一個交易，失敗整批復原（2026-11-21 改由 fn_hold_settle_new_ticket）', /holdSettleStart\(memberId, tk\.id, b\.id/.test(cp) && !/uid\('BK'\)/.test(cp) && !/insert into bookings/i.test(require('fs').readFileSync(process.env.HOME + '/Projects/yugym-booking-system-app/docs/migrations/20261121_hold_settle_new_ticket.sql', 'utf8')));
     ok('★ 場地占用與衝堂判斷都排除到期卡位（與畫面一致）', /x\.status!=='cancelled' && !bkHoldExpired\(x\) && !skip\.has\(x\.id\)/.test(src) && /x\.status!=='cancelled' && !bkHoldExpired\(x\) && x\.date===date/.test(src));
     ok('★ 課卡：到期卡位不再畫紅框（改灰）、首頁卡不再標「尚未收款」', /_isUnpaid   = !!b\.pending_contract && !_isExpHold/.test(src) && /cal-ev-expiredhold/.test(src) && /const _pend = !!b\.pending_contract && !bkHoldExpired\(b\)/.test(src));
     const bind = g('async function bindHeldBookings(ticket_id, maxN){', '\n}\n');
