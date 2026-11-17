@@ -65,11 +65,10 @@ console.log('\n③ 訓練紀錄頁：同一堂分成兩段');
      /const _isMine=l=>\(Number\(l&&l\.slot\)===2\)===w\.meIsPartner;/.test(PAGE));
   ok('★★★ 分成 mine／other 兩組',
      /mine:_ls\.filter\(_isMine\), other:_ls\.filter\(l=>!_isMine\(l\)\)/.test(PAGE));
-  ok('★★★ 內容頁兩段各自標名字，名字查不到時寫「同行會員」',
-     /_day\.other\.length \? `<div class="mtl-who">我的訓練<\/div>` : ''/.test(PAGE)
-     && /\$\{escH\(_day\.who\.otherName\|\|'同行會員'\)\} 的訓練/.test(PAGE));
-  ok('★★★ 一般課（沒有同行）不畫分段標題 —— 畫面完全照舊',
-     /_day\.other\.length \?/.test(PAGE) && /x\.other\.length\?/.test(PAGE));
+  ok('歷史內容頁兩位學員分頁，沿用唯讀訓練卡',
+     /mtTrainingSlotsHtml\(_day\.mine,_day\.other,_day\.who,/.test(PAGE) && /tlLogCardHtml\(l,false\)/.test(PAGE));
+  ok('一般課不畫學員頁籤，並維持原本內容',
+     /if\(!who\.otherId && !other\.length\) return renderLogs\(mine\)/.test(src));
   ok('★★★ 本週統計只算自己的（一起算會讓客人以為自己練了兩倍）',
      /const _wkActs=_wkSess\.reduce\(\(a,x\)=>a\+x\.mine\.length,0\);/.test(PAGE)
      && /_wkSess\.flatMap\(x=>x\.mine\.map\(l=>l\.exercise_name\)\)/.test(PAGE));
@@ -87,9 +86,8 @@ console.log('\n④ 會員課卡：和誰一起上 ＋ 今日訓練分段');
      /\$\{_ptName\?`<div class="mtp-msub mtp-ptn">和 <b>\$\{escH\(_ptName\)\}<\/b> 一起上<\/div>`:''\}/.test(src));
   ok('★★★ 同行是誰要在「有沒有訓練紀錄」之外算 —— 教練還沒記也要寫得出來',
      /_ptName=_w\.otherName\|\|'';\s*\n\s*if\(_tl\.length\)\{/.test(T));
-  ok('★★★ 今日訓練也分兩段（不分的話像自己一堂做了十幾個動作）',
-     /\$\{_oth\.length\?'<div class="mtl-who">我的訓練<\/div>':''\}/.test(T)
-     && /\$\{escH\(_w\.otherName\|\|'同行會員'\)\} 的訓練/.test(T));
+  ok('課卡的今日訓練共用學員頁籤，而且保留唯讀摘要',
+     /mtTrainingSlotsHtml\(_mine,_oth,_w,tlLogRowsHtml\)/.test(T));
   ok('★★ 動作數只寫自己的', /今日訓練<i>\$\{_mine\.length\} 個動作<\/i>/.test(T));
   /* ⚠ 2026-09-29 使用者：「客戶那邊課表順序有更正了嗎　要跟教練紀錄相同」——
      教練 0925 起可以長按拖移調順序（寫 seq），拖完 created_at 不會變，
@@ -97,9 +95,30 @@ console.log('\n④ 會員課卡：和誰一起上 ＋ 今日訓練分段');
   ok('★★★ 順序跟教練端一致（吃 seq，不是只照 created_at）',
      /const _tlS=tlSeqSort\(_tl\);/.test(T)
      && !/_tl\.sort\(\(a,c\)=>String\(\(a&&a\.created_at\)/.test(T));
-  ok('★★ 分段標題有樣式（金色，與票券那一行分得開）',
+  ok('同行資訊與教練頁籤樣式仍在',
      /#mem-task-pop \.mtp-ptn\{color:var\(--gold-d\);\}/.test(src)
-     && /\.mtl-who\{font-size:11\.5px;font-weight:800;/.test(src));
+     && /class="tl-slots" role="group" aria-label="學員課表"/.test(src));
+}
+
+{
+  const getFn=name=>src.slice(src.indexOf('function '+name+'('),src.indexOf('\n}',src.indexOf('function '+name+'('))+2);
+  const {html,select}=new Function('SESSION','escH',getFn('mtTrainingSlotsHtml')+'\n'+getFn('mtSelectTrainingSlot')+
+    '\nreturn {html:mtTrainingSlotsHtml,select:mtSelectTrainingSlot}')({name:'甲'},String);
+  const content=html(['A'],['B'],{otherId:'B',otherName:'乙'},rows=>rows.join(''));
+  ok('預設只顯示自己，另一位有姓名且內容先隱藏',
+     content.includes('aria-pressed="true" onclick="mtSelectTrainingSlot(this,0)">甲') &&
+     content.includes('aria-pressed="false" onclick="mtSelectTrainingSlot(this,1)">乙') &&
+     content.includes('<div data-mtl-panel >A</div>') && content.includes('<div data-mtl-panel hidden>B</div>'));
+  ok('同行成員這堂沒紀錄時仍可切換，並顯示空狀態',
+     html(['A'],[],{otherId:'B',otherName:'乙'},rows=>rows.join('')).includes('這位學員還沒有這堂課的訓練紀錄'));
+  ok('沒有綁定同行的舊紀錄以會員 B 標示第二位',
+     html(['A'],['B'],{},rows=>rows.join('')).includes('>會員 B</button>'));
+  const panels=[{hidden:false},{hidden:true}];
+  const buttons=[{},{}].map(b=>Object.assign(b,{classList:{toggle:(k,on)=>{b.on=on;}},setAttribute:(k,v)=>{b[k]=v;}}));
+  const group={querySelectorAll:q=>q==='.tl-slot'?buttons:panels};
+  select({closest:()=>group},1);
+  ok('切換後只顯示對方紀錄，同步更新按鈕狀態',
+     panels[0].hidden && !panels[1].hidden && !buttons[0].on && buttons[1]['aria-pressed']==='true');
 }
 
 console.log('\n⑤ 同行的票券卡（別人的票，我只是一起上）');

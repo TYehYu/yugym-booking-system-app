@@ -155,11 +155,11 @@ console.log('⑤ 1V2 的防線沒有被改動弄丟');
 {
   /* ⚠⚠ 2026-09-26 起**不再濾掉 slot=2** —— 0923 有了同行會員（partners）之後，
      slot=2 是「誰的」查得出來了，使用者要的是「Ａ跟Ｂ都看得到對方的訓練紀錄」。
-     防線改成兩道：RLS（會員只讀得到自己的＋有同行關係的那幾堂）＋ 畫面上分段標名字。 */
-  ok('★★★ 同一堂分成「我的」與「同行那位的」，各自標名字',
+     防線改成兩道：RLS（會員只讀得到自己的＋有同行關係的那幾堂）＋ 畫面上用頁籤標名字。 */
+  ok('★★★ 同一堂分成「我的」與「同行那位的」，交給唯讀頁籤',
      /const _isMine=l=>\(Number\(l&&l\.slot\)===2\)===w\.meIsPartner;/.test(PAGE)
      && /mine:_ls\.filter\(_isMine\), other:_ls\.filter\(l=>!_isMine\(l\)\)/.test(PAGE)
-     && /的訓練<\/div>/.test(PAGE));
+     && /mtTrainingSlotsHtml\(_day\.mine,_day\.other,_day\.who,/.test(PAGE));
   ok('★★★ 本週統計只算自己的動作（一起算會讓客人以為自己練了兩倍）',
      /const _wkActs=_wkSess\.reduce\(\(a,x\)=>a\+x\.mine\.length,0\);/.test(PAGE));
 }

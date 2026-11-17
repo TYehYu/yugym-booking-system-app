@@ -4559,8 +4559,9 @@ tr.pe-row:hover td{background:var(--sage-bg,#eef4ee);}
 .mtl-sub{font-size:13px;color:var(--t2);margin-bottom:14px;}
 /* 1V2 兩個人的訓練分段標題（2026-09-26）——同一堂課裡「我的」與「同行那位的」。
    ⚠ 只有真的有同行那位時才畫，一般的課完全不變。 */
-.mtl-who{font-size:11.5px;font-weight:800;color:var(--t2);letter-spacing:.04em;margin:4px 0 8px;}
-.mtl-who-o{margin-top:18px;color:var(--gold-d);}
+.mtl-slot-group .tl-slots{margin:0 0 10px;}
+.mtl-slot-group .tl-slot{min-width:0;padding-inline:8px;overflow-wrap:anywhere;}
+.mtl-slot-empty{padding:10px 0;color:var(--t2);font-size:12.5px;}
 .tlh-hint{font-weight:400;color:var(--t3);font-size:11px;margin-left:8px;letter-spacing:0;}
 .tls-empty{text-align:center;color:var(--t3);padding:24px 0;font-size:13.5px;line-height:1.8;}
 /* 第四區：歷史課表 */
@@ -15712,8 +15713,8 @@ function tbl(s){return TABLE_ALIAS[s]||s;}
 let sb=null;
 // ── 版本號（日期+時間格式：年後兩碼+月+日.時分，例 26620.1058 = 26年6/20 10:58）──
 // 每次改版手動更新這一行即可，畫面與 title 會一起更新
-const APP_VERSION = '261117.1643';
-const APP_VERSION_LABEL = 'v261117.1643';
+const APP_VERSION = '261117.1705';
+const APP_VERSION_LABEL = 'v261117.1705';
 const CLOUD = !!(window.YUGYM_CONFIG && window.YUGYM_CONFIG.url && window.YUGYM_CONFIG.anonKey);
 if(CLOUD){ sb = supabase.createClient(window.YUGYM_CONFIG.url, window.YUGYM_CONFIG.anonKey); }
 
@@ -61477,6 +61478,28 @@ function tlSessOpen(bid){
      會員端的路由是 navTo(page)，多開一頁等於多一個要維護的入口與返回邏輯。
    ⚠ 清掉 _mtDay 的時機在 navTo 之外：離開這一頁再回來要從列表開始，
      所以每次進 PAGES.mem_training 都先看一次旗標再決定畫哪一層（見下方 _day）。 */
+/* 會員課表沿用教練的兩個學員頁籤，只切換已載入的唯讀內容。 */
+function mtTrainingSlotsHtml(mine, other, who, renderLogs){
+  if(!who.otherId && !other.length) return renderLogs(mine);
+  const tabs=[
+    {name:SESSION.name||'我的訓練',logs:mine},
+    {name:who.otherName||(who.otherId?'同行會員':'會員 B'),logs:other}
+  ];
+  return `<div class="mtl-slot-group">
+    <div class="tl-slots" role="group" aria-label="學員課表">${tabs.map((tab,i)=>
+      `<button type="button" class="tl-slot${i===0?' on':''}" aria-pressed="${i===0}" onclick="mtSelectTrainingSlot(this,${i})">${escH(tab.name)}</button>`).join('')}</div>
+    ${tabs.map((tab,i)=>`<div data-mtl-panel ${i===0?'':'hidden'}>${tab.logs.length?renderLogs(tab.logs):'<div class="mtl-slot-empty">這位學員還沒有這堂課的訓練紀錄。</div>'}</div>`).join('')}
+  </div>`;
+}
+function mtSelectTrainingSlot(button, index){
+  const group=button.closest('.mtl-slot-group');
+  if(!group) return;
+  group.querySelectorAll('.tl-slot').forEach((tab,i)=>{
+    tab.classList.toggle('on',i===index);
+    tab.setAttribute('aria-pressed',String(i===index));
+  });
+  group.querySelectorAll('[data-mtl-panel]').forEach((panel,i)=>{ panel.hidden=i!==index; });
+}
 function mtBackToList(){ window._mtDay=null; navTo('mem_training'); }
 function mtOpenDay(bid){ window._mtDay=bid; navTo('mem_training'); }
 PAGES.mem_training=async function(){
@@ -61550,12 +61573,7 @@ PAGES.mem_training=async function(){
       <div class="mtl-head">${d.replace(/-/g,'/')}${wd}</div>
       <div class="mtl-sub">${_day.mine.length} 個動作${_day.other.length
         ? `　·　同行 ${escH(_day.who.otherName||'另一位')} ${_day.other.length} 個` : ''}</div>
-      ${/* 1V2 有同行那位時分兩段，各自標名字（2026-09-26 使用者：「Ａ跟Ｂ都要能看到對方的訓練紀錄」）——
-           不分段的話兩個人的動作混在一起，看起來像自己一堂做了十幾個動作。 */''}
-      ${_day.other.length ? `<div class="mtl-who">我的訓練</div>` : ''}
-      <div class="tlh-logs">${_day.mine.map(l=>tlLogCardHtml(l,false)).join('')}</div>
-      ${_day.other.length ? `<div class="mtl-who mtl-who-o">${escH(_day.who.otherName||'同行會員')} 的訓練</div>
-        <div class="tlh-logs">${_day.other.map(l=>tlLogCardHtml(l,false)).join('')}</div>` : ''}
+      ${mtTrainingSlotsHtml(_day.mine,_day.other,_day.who,logs=>`<div class="tlh-logs">${logs.map(l=>tlLogCardHtml(l,false)).join('')}</div>`)}
     </div>`;
     try{ C.scrollTop=0; window.scrollTo(0,0); }catch(_){}
     return;
@@ -70372,7 +70390,7 @@ async function _memh2Tap(id){
     /* ⚠ 這一處**刻意整堂收、不濾 slot** —— 1V2 兩個人的動作都要看得到
          （使用者 0924：「Ａ跟Ｂ都要能看到對方的訓練紀錄」）。
        ⚠ 但要**標出是誰的**（2026-09-26）：不標的話兩個人的動作混成一串，
-         看起來像自己一堂做了十幾個動作。分段規則與訓練紀錄頁同一套（見 tlWhoOf）。
+         看起來像自己一堂做了十幾個動作。頁籤規則與訓練紀錄頁同一套（見 tlWhoOf）。
        ⚠ 安全性靠 RLS，不是靠這一行（見 20260926_1v2_partner_access.sql）。 */
     const _tl=(await dbGetAll('training_logs')).filter(l=>l&&l.booking_id===b.id);
     /* ⚠ 同行那位是誰要**在 if 外面**算：即使教練還沒記任何動作，
@@ -70391,10 +70409,7 @@ async function _memh2Tap(id){
       const _isMine=l=>(Number(l&&l.slot)===2)===_w.meIsPartner;
       const _mine=_tl.filter(_isMine), _oth=_tl.filter(l=>!_isMine(l));
       _tlBlock=`<div class="mtp-card mtp-tl"><div class="mtp-tl-h">今日訓練<i>${_mine.length} 個動作</i></div>
-        ${_oth.length?'<div class="mtl-who">我的訓練</div>':''}
-        ${tlLogRowsHtml(_mine)}
-        ${_oth.length?`<div class="mtl-who mtl-who-o">${escH(_w.otherName||'同行會員')} 的訓練</div>
-          ${tlLogRowsHtml(_oth)}`:''}</div>`;
+        ${mtTrainingSlotsHtml(_mine,_oth,_w,tlLogRowsHtml)}</div>`;
     }
   }catch(_){}
   memTaskClose();
