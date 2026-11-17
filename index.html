@@ -15713,8 +15713,8 @@ function tbl(s){return TABLE_ALIAS[s]||s;}
 let sb=null;
 // ── 版本號（日期+時間格式：年後兩碼+月+日.時分，例 26620.1058 = 26年6/20 10:58）──
 // 每次改版手動更新這一行即可，畫面與 title 會一起更新
-const APP_VERSION = '261117.1705';
-const APP_VERSION_LABEL = 'v261117.1705';
+const APP_VERSION = '261117.1729';
+const APP_VERSION_LABEL = 'v261117.1729';
 const CLOUD = !!(window.YUGYM_CONFIG && window.YUGYM_CONFIG.url && window.YUGYM_CONFIG.anonKey);
 if(CLOUD){ sb = supabase.createClient(window.YUGYM_CONFIG.url, window.YUGYM_CONFIG.anonKey); }
 
@@ -37875,10 +37875,13 @@ function recurTkHoldMode(){const s=window._rcTk;return !s.contract&&s.state==='o
 function recurTkInfoRender(){
   const el=document.getElementById('bk-tkinfo');if(!el)return;
   const s=window._rcTk;
-  el.textContent=s.state==='loading'?'確認票券中…':s.state==='err'?'無法確認可預約額度，請稍後再試':s.state!=='ok'?'':
-    s.contract?'依目前排程，最多可卡 '+s.cap+' 堂；暫定期間 '+s.contract.start+'～'+s.contract.end:
-    s.n?'有效票券 '+s.n+' 張；依所選日期與可用堂數，本次最多 '+s.cap+' 堂。確認後會扣堂。':'無有效票券或未選會員：無合約卡位從最早一堂起算，7 天內最多 2 堂；只勾一天時最多 1 堂。';
-  el.className='rc-tkinfo'+(s.state==='err'?' err':'');el.style.display=el.textContent?'':'none';
+  el.textContent=s.state==='loading'?'確認預約資格中…':s.state==='err'?'無法確認可預約額度，請稍後再試':s.state!=='ok'?'':
+    s.contract?'合約暫定期間 '+s.contract.start+'～'+s.contract.end:
+    s.n?'有效票券 '+s.n+' 張':'無有效票券';
+  el.className='rc-tkinfo'+(s.state==='err'?' err':'');
+  el.hidden=!el.textContent;
+  const rule=document.getElementById('bk-recur-hold-rule');
+  if(rule) rule.hidden=!recurTkHoldMode();
 }
 function recurTkApplyCap(){
   const s=window._rcTk,el=document.getElementById('bk-count');
@@ -37931,11 +37934,32 @@ function recurTkInfoRefresh(force){
   s.p=(async()=>{try{const result=await recurTkPlan(q);if(tok!==s.tok)return;Object.assign(s,result,{state:'ok'});}catch(e){if(tok!==s.tok)return;s.state='err';s.cap=0;s.contract=null;console.error('[連續預約]',e);}recurTkInfoRender();recurTkApplyCap();})();return s.p;
 }
 async function recurContractChoices(){
-  const q=recurTkInputs(),el=document.getElementById('bk-hold-contract');if(!el)return;el.disabled=!q.mid;if(!q.mid)return;
-  try{const rows=(await dbGetAll('ticket_grant_requests')).filter(r=>r.member_id===q.mid&&r.status==='pending'&&r.contract_id&&r.payload&&r.payload.plan&&r.payload.plan.ticket_type_id===q.type);
-    if(recurTkInputs().mid!==q.mid||recurTkInputs().type!==q.type)return;
-    const old=q.cid;el.innerHTML='<option value="">不選合約（使用有效票券；無票七天內兩堂）</option>'+rows.map(r=>'<option value="'+escH(r.contract_id)+'">未付款合約 '+escH(r.contract_id)+'</option>').join('');el.value=rows.some(r=>r.contract_id===old)?old:'';
-  }catch(_){el.innerHTML='<option value="">無法讀取未付款合約，請重開視窗</option>';}
+  const q=recurTkInputs();
+  const el=document.getElementById('bk-hold-contract');
+  if(!el) return;
+  const field=document.getElementById('bk-hold-contract-field');
+  const key=JSON.stringify([q.mid,q.type]);
+  if(el.dataset.memberCourse!==key){
+    el.dataset.memberCourse=key;
+    el.value='';
+    if(field) field.hidden=true;
+    if(q.cid) recurTkInfoRefresh(true);
+  }
+  if(!q.mid || !q.type || q.type==='__facility') return;
+  try{
+    const requests=await dbGetAll('ticket_grant_requests');
+    const current=recurTkInputs();
+    if(current.mid!==q.mid || current.type!==q.type || document.getElementById('bk-hold-contract')!==el) return;
+    const rows=requests.filter(r=>r.member_id===q.mid && r.status==='pending' && r.contract_id &&
+      r.payload?.plan?.ticket_type_id===q.type);
+    el.innerHTML='<option value="">不選合約</option>'+rows.map(r=>'<option value="'+escH(r.contract_id)+'">未付款合約 '+escH(r.contract_id)+'</option>').join('');
+    el.value=rows.some(r=>r.contract_id===current.cid)?current.cid:'';
+    el.disabled=!rows.length;
+    if(field) field.hidden=!rows.length;
+    if(el.value!==current.cid) recurTkInfoRefresh(true);
+  }catch(e){
+    console.error('[連續預約] 無法讀取未付款合約',e);
+  }
 }
 async function recurSetContract(id){_bkWizard.hold_contract_id=id||'';window._rcTk.key='';await recurTkInfoRefresh(true);return window._rcTk.contract;}
 async function recurTkInfoGate(final){
@@ -37956,9 +37980,10 @@ function recurBoxHtml(prefix, maxN, opts){
   const hasTk=Number(maxN)>0;
   /* 2026-07-30 使用者指示：一週兩天但兩天時間不同也要排得起來 ——
      每個星期各給一個時間欄，留空＝沿用步驟 1 選的時間。 */
-  return `<label class="switch-row" style="margin-bottom:6px;"><span class="switch"><input type="checkbox" id="${prefix}-recurring" onchange="toggleRecurBox('${prefix}')"><span class="switch-slider"></span></span><span class="switch-label">連續預約（每週重複）</span></label>
-    ${prefix==='bk'?'<div id="bk-tkinfo" class="rc-tkinfo" style="display:none;" aria-live="polite"></div><label>未付款合約（選填）<select id="bk-hold-contract" disabled onchange="recurSetContract(this.value)"><option value="">不選合約（使用有效票券；無票七天內兩堂）</option></select></label>':''}
+  return `${prefix==='bk'?'<div id="bk-tkinfo" class="rc-tkinfo" hidden aria-live="polite"></div><div id="bk-hold-contract-field" hidden><label>未付款合約（選填）<select id="bk-hold-contract" disabled onchange="recurSetContract(this.value)"><option value="">不選合約</option></select></label></div>':''}
+    <label class="switch-row" style="margin-bottom:6px;"><span class="switch"><input type="checkbox" id="${prefix}-recurring" onchange="toggleRecurBox('${prefix}')"><span class="switch-slider"></span></span><span class="switch-label">連續預約（每週重複）</span></label>
     <div id="${prefix}-recurring-box" style="display:none;border:1px solid var(--bd);border-radius:10px;padding:12px;margin-bottom:10px;background:var(--card2);">
+      ${prefix==='bk'?'<div id="bk-recur-hold-rule" class="rc-tkinfo" hidden>7 天內最多卡位 2 堂</div>':''}
       ${/* 2026-09-30 使用者：「這邊的文字也太多了」——
            原本開頭一句「勾選要重複的星期（以所選日期為起點）；各天可以排不同時間，
            留空＝同第一堂」整句刪掉：七顆星期膠囊擺在那裡就是要勾的，
