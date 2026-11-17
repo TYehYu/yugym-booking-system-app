@@ -30,7 +30,7 @@ const addDays = (d, n) => { const x = new Date(d); x.setDate(x.getDate() + n); r
   }
   console.log('\n每次操作七天範圍：最早一堂 D 起，D～D+6（真的跑建立引擎）');
   {
-    const code = [g('function buildRecurringSlots(', '\n}\n'), g('function buildRecurringDates(', '\n}\n'), g('function bkHoldExpired(b){', '\n}\n'), g('async function runRecurringBooking(', '\n}\n')].join('\n');
+    const code = ['const RECUR_HOLD_MAX=2;', g('function recurHoldCheck(', '\n}\n'),g('function buildRecurringSlots(', '\n}\n'), g('function buildRecurringDates(', '\n}\n'), g('function bkHoldExpired(b){', '\n}\n'), g('async function runRecurringBooking(', '\n}\n')].join('\n');
     const names = ['SESSION', 'RECUR_MAX', 'parseYmd', 'ymd', 'addDays', 'TODAY', 'uid', 'listUsableTickets', 'tkUnlockedLeft', 'dbGetAll', 'tkUsableBy', 'tkIsInstall', 'bkTicketTypeOk', 'validateBooking', 'bkIsSelf', 'bkAddTreadmillUnits', 'dbPut', 'dbDel', 'deductTicket', 'createBookingViaRpc', 'FEATURE_FLAGS', 'CLOUD', 'window', 'console'];
     const mk = () => { const puts = []; let n = 0; const env = { SESSION: { id: 'e' }, RECUR_MAX: 12, parseYmd, ymd, addDays, TODAY: parseYmd('2026-11-16'), uid: (p) => p + '-' + (++n), listUsableTickets: async () => [], tkUnlockedLeft: () => 0, dbGetAll: async () => [], tkUsableBy: () => false, tkIsInstall: () => false, bkTicketTypeOk: () => true, validateBooking: async () => null, bkIsSelf: () => false, bkAddTreadmillUnits: async () => {}, dbPut: async (s, b) => { puts.push(b); return b; }, dbDel: async () => {}, deductTicket: async () => { throw new Error('卡位不該扣堂'); }, createBookingViaRpc: async () => { throw new Error('卡位不走 RPC'); }, FEATURE_FLAGS: {}, CLOUD: true, window: { FEATURE_FLAGS: {} }, console: { error() {}, log() {} } };
       return { puts, run: new Function(...names, code + '\nreturn runRecurringBooking;')(...names.map(k => env[k])) }; };
@@ -63,7 +63,7 @@ const addDays = (d, n) => { const x = new Date(d); x.setDate(x.getDate() + n); r
     { const { r, puts } = await go({ startDate: '2027-03-03', dows: [], count: 1 });
       ok('　　單一堂（不連續預約）→ 不受影響', r.ok === 1 && puts.length === 1); }
     { const { r, puts } = await go({ member_id: null, startDate: '2027-03-03', dows: [3], count: 3 });
-      ok('　　沒有綁會員的空堂不受這條限制（維持原行為）', r.ok === 3 && puts.length === 3, { ok: r.ok }); }
+      ok('★ 匿名空堂超過上限時整批拒絕', r.ok === 0 && puts.length === 0 && r.rangeRejected && r.countRejected); }
     ok('★ 畫面有說明：卡位只保留到該堂課當天、一次最多排七天（含頭尾、可跨月跨年）、想排更久請分次', /卡位只保留到該堂課當天；一次操作最多排七天（從這次最早一堂算起到第 7 天，含頭尾，可跨月、跨年），想排更久請分次操作/.test(src));
     ok('　　程式裡不再有「週一～週日」的界線', !/bkWeekStartYmd/.test(src));
   }

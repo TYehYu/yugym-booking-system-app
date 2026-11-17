@@ -37,7 +37,7 @@ console.log('\n② 排到哪天：算得對');
 
   /* ⚠ recurWhenHint 會呼叫 recurStartOf（起算日；課卡那條要 +1 天）——
      沙箱漏餵它就會被自己的 try/catch 吞成空字串，測試看起來「沒畫」而不是「壞了」。 */
-  const F=new Function('document','RECUR_MAX','buildRecurringDates','parseYmd','ymd','addDays','_bkWizard','recurStartOf',
+  const F=new Function('document','RECUR_MAX','buildRecurringDates','parseYmd','ymd','addDays','_bkWizard','recurStartOf','recurTkHoldMode','recurHoldCheck',
     'return '+g('function recurWhenHint(prefix){','\n}'));
   const mk=(dows,cnt,max,start,on)=>{
     const doc={getElementById:id=>({
@@ -53,7 +53,7 @@ console.log('\n② 排到哪天：算得對');
       s=>{const m=/^(\d{4})-(\d{2})-(\d{2})/.exec(String(s)); return m?new Date(+m[1],+m[2]-1,+m[3]):null;},
       d=>`${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}-${String(d.getDate()).padStart(2,'0')}`,
       (d,n)=>{const x=new Date(d); x.setDate(x.getDate()+n); return x;}, {},
-      p=>String(start||''))('bk');
+      p=>String(start||''), ()=>false, ()=>({over:[],start:'',end:''}))('bk');
   };
   /* 2026/10/06 是週二：每週二排 8 堂 → 最後一堂 11/24 */
   ok('★★★ 每週二 8 堂，從 10/06 起 → 排到 11/24',

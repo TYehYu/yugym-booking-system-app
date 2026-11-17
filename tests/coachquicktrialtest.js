@@ -32,7 +32,7 @@ function make(o) {
     TODAY: new Date('2026-11-16T00:00:00'), console: { log() {}, warn() {}, error() {} },
     showToast: (m) => { log.toasts.push(String(m)); }, closeModal: () => {}, bkAfterSubmit: () => { log.after++; },
     dbGet: async () => null, coachName: async () => 'Mango', parseYmd: (s) => new Date(s + 'T00:00:00'), ymd: (d) => d.toISOString().slice(0, 10),
-    tkMoneyHtml: () => '', readRecur: () => ({ on: false }), tkFitsBooking: () => false, tkBookedCountMap: async () => ({}), tkUnlockedLeft: () => 0, bkOpenHoldCreate: async () => { log.hold = true; },
+    tkMoneyHtml: () => '', readRecur: () => ({ on: false }), recurTkInfoGate: async () => true, recurTkInfoRefresh: () => {}, recurContractChoices: () => {}, recurTkInputs: () => ({ cid: '' }), tkFitsBooking: () => false, tkBookedCountMap: async () => ({}), tkUnlockedLeft: () => 0, bkOpenHoldCreate: async () => { log.hold = true; },
     bkNeedCoach: (t) => !!t && ['體驗', '小班肌力', '私人教練'].includes(t.category), BK_COACH_REQUIRED_CATS: ['體驗', '小班肌力'],
     bizOffHoursHardBlock: () => '', bkSelfOffHoursBlock: () => '', confirmOffHours: async () => true, memNameErr: () => '', normPhone: (s) => String(s || ''),
     validateBooking: async (vbk) => { vbk.venue_unit = 'multi_1'; return null; }, bkWizVenue: () => 'multi', confirmVenueOverflow: async () => true, uid: (p) => p + '-t1',

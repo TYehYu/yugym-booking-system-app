@@ -52,8 +52,8 @@ console.log('\n④ fresh 這條路還在（有些地方真的要整表重來）�
      它不是輪詢，是「按下確認那一刻讀一次」，而且必須是新的一次查詢，不能沿用較早開始、還沒回來的查詢
      （否則剛被別人占走的場地看不到，見 tests/facilityfreshtest.js）。所以上限從 2 處改成 3 處，
      並且要求第三處就是 bkFacilityAllocate——其他地方照樣不准再多。 */
-  ok('★★ 全檔只剩三處提到 fresh（一處說明、支出編輯器一個呼叫、場租送出前檢查一個呼叫）',
-     (src.match(/\{fresh:true\}/g)||[]).length===3,
+  ok('★★ 全檔只剩四處提到 fresh（一處說明、支出編輯器一個呼叫、場租送出前檢查一個呼叫、連續預約送出閘 recurTkInfoGate 一個呼叫）',
+     (src.match(/\{fresh:true\}/g)||[]).length===4,
      (src.match(/.{0,40}\{fresh:true\}.{0,20}/g)||[]));
   const _fa=src.slice(src.indexOf('async function bkFacilityAllocate('));
   ok('★★ 第三處在 bkFacilityAllocate 裡（送出當下讀一次，不是輪詢）',

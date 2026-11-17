@@ -229,7 +229,7 @@ console.log('\n連續預約搬家之後不能無聲失效');
 ok('★ 全檔只剩一個 bk 的連續預約控制項（同 id 兩份會讀錯）',
    (src.match(/recurBoxHtml\('bk'/g)||[]).length===1);
 ok('★ 步驟 1 的設定在換頁前就收進 _bkWizard.rc',
-   /Object\.assign\(_bkWizard,\{type_id,t,coach_id,date,time,member_id:preMid,rc:readRecur\('bk'\)\}\);/.test(src));
+   /Object\.assign\(_bkWizard,\{type_id,t,coach_id,date,time,member_id:preMid,rc:readRecur\('bk'\),hold_contract_id:recurTkInputs\(\)\.cid\}\);/.test(src));
 ok('★ 送出時一律讀收起來的那份，不再直接讀已被換掉的 DOM',
    /const rc=bkReadRecurBk\(window\._bkInstMax\);/.test(src)
    && /const _rc=bkReadRecurBk\(window\._bkRecurMax\);/.test(src)

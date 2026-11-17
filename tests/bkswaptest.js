@@ -11,7 +11,7 @@ const grabFn=n=>{let i=src.indexOf('function '+n+'(');if(i<0)return '';if(src.sl
 
 console.log('① 入口：單筆票券不足才開，不搶分期保留的路');
 ok('★★ 送出參數抽成 _rrOpts（調課重送同一包）',
-   /const _rrOpts=\{\n    member_id, coach_id, substitute_coach_id:null,/.test(src)
+   /const _rrOpts=\{[\s\S]{0,260}?allowInstallHold:recurring\?false:true,\n    member_id, coach_id, substitute_coach_id:null,/.test(src)
    && /const r=await runRecurringBooking\(_rrOpts\);/.test(src));
 ok('★★ 在「結果出爐後」才判斷（分期保留 held>0 就不會進來），限教練課單筆',
    /if\(!results\[0\]\.ok && \/票券不足\/\.test\(results\[0\]\.reason\|\|''\) && t\.category==='私人教練'\)\{/.test(src)
