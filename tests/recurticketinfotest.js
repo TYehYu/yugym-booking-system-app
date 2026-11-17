@@ -15,6 +15,31 @@ function setup(){
 }
 (async()=>{
  let e=setup(),q=()=>e.ctx.recurTkInputs();
+ const balance=setup();balance.setTickets(()=>[{id:'T18',left:18}]);balance.w.rc.on=false;
+ let balancePlan=await balance.ctx.recurTkPlan(balance.ctx.recurTkInputs());
+ ok(balancePlan.available===18&&balancePlan.cap===1,'single booking keeps eighteen-ticket balance separate from one-slot cap');
+ balance.els['bk-tkinfo']={};Object.assign(balance.ctx.window._rcTk,balancePlan,{state:'ok'});balance.ctx.recurTkInfoRender();
+ ok(balance.els['bk-tkinfo'].textContent==='票券可用 18 堂','renders ticket balance rather than single-slot cap');
+ balance.w.rc.on=true;balancePlan=await balance.ctx.recurTkPlan(balance.ctx.recurTkInputs());
+ ok(balancePlan.available===18&&balancePlan.cap===18,'recurring cap follows eighteen available sessions');
+
+
+ const ui=setup(),attrs={'data-max':'18'},countEl={value:'18',getAttribute:k=>attrs[k],setAttribute:(k,v)=>attrs[k]=String(v)};
+ ui.els['bk-count']=countEl;ui.els['bk-recurring']={checked:true};
+ ui.ctx.document.querySelectorAll=sel=>sel==='.bk-dow:checked'?[{value:'5'}]:[];
+ vm.runInContext(extract('readRecur')+'\n'+extract('bkReadRecurBk')+'\n'+extract('recurClampCount')+'\n'+extract('bkRecurRecap'),ui.ctx);
+ vm.runInContext(extract('recurWhenHint'),ui.ctx);ui.ctx.recurStartOf=()=>ui.w.date;
+ ok(ui.ctx.readRecur('bk').count===18,'DOM reads eighteen without clipping');
+ const lastDate=ui.ctx.buildRecurringDates(ui.w.date,[5],18,null).at(-1);const lastParts=lastDate.split('-').map(Number);ok(ui.ctx.recurWhenHint('bk').includes('<b>'+lastParts[1]+'/'+lastParts[2]+'</b>'),'date preview reaches eighteenth lesson');
+ ok(ui.ctx.bkReadRecurBk(18).count===18,'submit reads eighteen without clipping');
+ countEl.value='19';ui.ctx.recurClampCount('bk');ok(Number(countEl.value)===18,'input clamps nineteen to eighteen');
+ ui.w.rc.count=18;ok(ui.ctx.bkRecurRecap(18).includes('18 堂'),'confirmation shows eighteen');
+ const exp=setup();exp.setTickets((mid,type,date)=>date<'2026-12-01'?[{id:'E',left:18}]:[]);
+ const ep=await exp.ctx.recurTkPlan(exp.ctx.recurTkInputs());ok(ep.available===18&&ep.cap<18&&ep.cap>0,'expiry reduces schedule cap without changing balance');
+ const dup=setup();dup.setTickets(()=>[{id:'D',left:18},{id:'D',left:18}]);const dp=await dup.ctx.recurTkPlan(dup.ctx.recurTkInputs());ok(dp.available===18&&dp.cap===18,'same ticket cannot double balance or allocation');
+ const fresh=setup();fresh.w.rc.count=18;fresh.setTickets(()=>[{id:'F',left:18}]);await fresh.ctx.recurTkInfoRefresh(true);
+ fresh.setTickets(()=>[{id:'F',left:3}]);ok(!(await fresh.ctx.recurTkInfoGate(true))&&fresh.ctx.window._rcTk.cap===3,'submit rereads balance and rejects stale eighteen after balance falls to three');
+ const multi=setup();multi.setTickets(()=>[{id:'A',left:10},{id:'B',left:8}]);const mp=await multi.ctx.recurTkPlan(multi.ctx.recurTkInputs());ok(mp.available===18&&mp.cap===18,'multiple usable tickets combine to eighteen');
  let p=await e.ctx.recurTkPlan(q());ok(p.cap===2,'Friday plus Tuesday fits seven days');
  e.w.member_id='';e.w.type_id='';e.w.rc.dows=[5];e.w.rc.count=12;
  const priorCalls=e.calls();await e.ctx.recurTkInfoRefresh(true);

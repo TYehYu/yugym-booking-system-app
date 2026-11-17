@@ -15713,8 +15713,8 @@ function tbl(s){return TABLE_ALIAS[s]||s;}
 let sb=null;
 // ── 版本號（日期+時間格式：年後兩碼+月+日.時分，例 26620.1058 = 26年6/20 10:58）──
 // 每次改版手動更新這一行即可，畫面與 title 會一起更新
-const APP_VERSION = '261117.1736';
-const APP_VERSION_LABEL = 'v261117.1736';
+const APP_VERSION = '261117.1747';
+const APP_VERSION_LABEL = 'v261117.1747';
 const CLOUD = !!(window.YUGYM_CONFIG && window.YUGYM_CONFIG.url && window.YUGYM_CONFIG.anonKey);
 if(CLOUD){ sb = supabase.createClient(window.YUGYM_CONFIG.url, window.YUGYM_CONFIG.anonKey); }
 
@@ -37877,7 +37877,7 @@ function recurTkInfoRender(){
   const s=window._rcTk;
   el.textContent=s.state==='loading'?'確認預約資格中…':s.state==='err'?'無法確認可預約額度，請稍後再試':s.state!=='ok'?'':
     s.contract?'合約暫定期間 '+s.contract.start+'～'+s.contract.end:
-    s.n?'可預約 '+s.cap+' 堂':'無有效票券';
+    s.n?'票券可用 '+s.available+' 堂':'無有效票券';
   el.className='rc-tkinfo'+(s.state==='err'?' err':'');
   el.hidden=!el.textContent;
   const rule=document.getElementById('bk-recur-hold-rule');
@@ -37894,7 +37894,9 @@ function recurUncontractedCap(slots){
   return Math.min(RECUR_HOLD_MAX,window.count-window.over.length);
 }
 async function recurTkPlan(q){
-  const slots=q.rc.on&&q.rc.dows.length?buildRecurringSlots(q.date,q.time,q.rc.dows,q.rc.times,RECUR_MAX,null):[{date:q.date,time:q.time}];
+  const firstTickets=!q.cid&&q.mid&&q.type?await listUsableTickets(q.mid,q.type,q.date,q.time):[];
+  const ticketBudget=[...new Map(firstTickets.map(t=>[t.id,t])).values()].reduce((sum,t)=>sum+Math.max(0,tkUnlockedLeft(t)),0);
+  let slots=q.rc.on&&q.rc.dows.length?buildRecurringSlots(q.date,q.time,q.rc.dows,q.rc.times,Math.max(RECUR_HOLD_MAX,ticketBudget),ymd(addDays(parseYmd(q.date),370))):[{date:q.date,time:q.time}];
   if(q.cid){
     const c=await dbGet('contracts',q.cid),requests=await dbGetAll('ticket_grant_requests');
     const r=requests.find(x=>x.contract_id===q.cid&&x.status==='pending'&&x.member_id===q.mid);
@@ -37902,15 +37904,17 @@ async function recurTkPlan(q){
     if(!c||!r||!plan||plan.ticket_type_id!==q.type||(c.member_id&&c.member_id!==q.mid))throw Error('合約不屬於這位會員或課別，或已處理');
     const days=Number(plan.valid_days);if(!Number.isInteger(days)||days<=0)throw Error('合約有效天數異常');
     const used=(await dbGetAll('bookings')).filter(x=>x.contract_id===q.cid&&x.status!=='cancelled');
-    const left=Math.max(0,Number(c.sessions)-used.length),start=used.map(x=>x.date).concat(slots.map(x=>x.date)).sort()[0];
+    const left=Math.max(0,Number(c.sessions)-used.length);
+    if(q.rc.on&&q.rc.dows.length)slots=buildRecurringSlots(q.date,q.time,q.rc.dows,q.rc.times,left,ymd(addDays(parseYmd(q.date),370)));
+    const start=used.map(x=>x.date).concat(slots.map(x=>x.date),q.date).sort()[0];
     const end=ymd(addDays(parseYmd(start),days-1));
     let cap=0;for(const x of slots){if(cap>=left||x.date>end)break;cap++;}
     return {n:0,cap,contract:{id:q.cid,start,end},slots};
   }
   if(!q.mid||!q.type) return {n:0,cap:recurUncontractedCap(slots),contract:null,slots};
-  const capacities=new Map(),ids=new Set(),windows=new Map();let cap=0,holding=null;
+  const capacities=new Map(),ids=new Set(),windows=new Map();let cap=0,holding=null,available=ticketBudget;
   for(const slot of slots){
-    const list=await listUsableTickets(q.mid,q.type,slot.date,slot.time);
+    const list=slot===slots[0]&&slot.date===q.date&&slot.time===q.time?firstTickets:await listUsableTickets(q.mid,q.type,slot.date,slot.time);
     for(const t of list){if(!capacities.has(t.id))capacities.set(t.id,Math.max(0,tkUnlockedLeft(t)));if(tkUnlockedLeft(t)>0)ids.add(t.id);}
     for(const t of list){
       if(!t.activated_at&&!t.start_date&&!t.expire_date&&Number(t.valid_days)>0&&!windows.has(t.id)){
@@ -37922,9 +37926,9 @@ async function recurTkPlan(q){
     if(!tk)break;
     capacities.set(tk.id,Math.min(capacities.get(tk.id),tkUnlockedLeft(tk))-1);if(windows.has(tk.id))windows.get(tk.id).push(slot.date);cap++;
   }
-  if(!cap&&ids.size)return {n:ids.size,cap:0,contract:null,slots};
+  if(!cap&&ids.size)return {n:ids.size,cap:0,available,contract:null,slots};
   if(!cap) return {n:0,cap:recurUncontractedCap(slots),contract:null,slots};
-  return {n:ids.size,cap,contract:null,slots};
+  return {n:ids.size,cap,available,contract:null,slots};
 }
 function recurTkInfoRefresh(force){
   const s=window._rcTk,q=recurTkInputs(),key=JSON.stringify(q);
@@ -37976,7 +37980,7 @@ async function recurTkInfoGate(final){
    第一堂已經存在，沿用「預約堂數（含第一堂）」會讓人多算一堂。其餘呼叫端不傳＝行為不變。 */
 function recurBoxHtml(prefix, maxN, opts){
   const WD=['一','二','三','四','五','六','日'];
-  const _m=Number(maxN)>0 ? Math.min(Number(maxN), RECUR_MAX) : RECUR_MAX;
+  const _m=Number(maxN)>0 ? (prefix==='bk'?Number(maxN):Math.min(Number(maxN), RECUR_MAX)) : RECUR_MAX;
   const hasTk=Number(maxN)>0;
   /* 2026-07-30 使用者指示：一週兩天但兩天時間不同也要排得起來 ——
      每個星期各給一個時間欄，留空＝沿用步驟 1 選的時間。 */
@@ -38052,7 +38056,7 @@ function recurWhenHint(prefix){
     const mx=el?(Number(el.getAttribute('data-max'))||0):0;
     let cnt=Math.max(1, Math.floor(Number(el&&el.value)||1));
     if(mx>0) cnt=Math.min(cnt,mx);
-    cnt=Math.min(cnt, RECUR_MAX);
+    if(prefix!=='bk')cnt=Math.min(cnt, RECUR_MAX);
     const start=recurStartOf(prefix);
     if(!start) return '';
     const list=buildRecurringDates(start, dows, cnt, null);
@@ -38088,7 +38092,7 @@ function recurWhenSync(prefix){
    待簽約卡位由 recurTkApplyCap 依七天範圍與實際星期交集另行限制。 */
 function recurSetMax(prefix, maxN){
   const el=document.getElementById(prefix+'-count'); if(!el) return;
-  const cap = Number(maxN)>0 ? Math.min(Number(maxN), RECUR_MAX) : RECUR_MAX;
+  const cap = Number(maxN)>0 ? (prefix==='bk'?Number(maxN):Math.min(Number(maxN), RECUR_MAX)) : RECUR_MAX;
   el.setAttribute('data-max', cap);
   el.max=cap;
   /* 使用者自己改過的數字不要覆蓋（只在超出上限時往下夾）；沒動過的就跟著新上限走 */
@@ -38132,9 +38136,9 @@ function recurClampCount(prefix){
   const mx=Number(el.getAttribute('data-max'))||0;
   let v=Math.floor(Number(el.value)||0);
   if(v<1) v=1;
-  /* 上限 12（方案最多 12 堂）；票券剩得比 12 少就以票券為準（2026-07-30） */
-  const cap = mx>0 ? Math.min(mx, RECUR_MAX) : RECUR_MAX;
-  if(v>cap){ v=cap; showToast(cap<RECUR_MAX?`最多只能排 ${cap} 堂（可約堂數上限）`:`最多只能排 ${RECUR_MAX} 堂（方案上限）`); }
+  /* 建立預約依資格計算的額度；其他入口維持原本上限。 */
+  const cap = mx>0 ? (prefix==='bk'?mx:Math.min(mx, RECUR_MAX)) : RECUR_MAX;
+  if(v>cap){ v=cap; showToast(`最多只能排 ${cap} 堂（可約堂數上限）`); }
   if(String(v)!==el.value) el.value=v;
   recurWhenSync(prefix);   /* 2026-09-30：堂數一改，「排到哪天」跟著重算 */
 }
@@ -38171,7 +38175,7 @@ function bkRecurRecap(maxN){
   const rc=(_bkWizard&&_bkWizard.rc)||{on:false};
   if(!rc.on) return '';
   const WD=['日','一','二','三','四','五','六'];
-  const m=Number(maxN)>0 ? Math.min(Number(maxN),RECUR_MAX) : RECUR_MAX;
+  const m=Number(maxN)>0 ? Number(maxN) : RECUR_MAX;
   const want=Math.max(1,Number(rc.count)||1);
   const n=Math.min(want,m);
   const dows=(rc.dows||[]).slice().sort((a,b)=>a-b).map(d=>'週'+WD[d]).join('、');
@@ -38213,7 +38217,7 @@ function bkReadRecurBk(maxN){
   const live=document.getElementById('bk-recurring');
   const rc=live ? readRecur('bk') : ((_bkWizard&&_bkWizard.rc) || {on:false});
   if(!rc.on) return rc;
-  const m=Number(maxN)>0 ? Math.min(Number(maxN), RECUR_MAX) : RECUR_MAX;
+  const m=Number(maxN)>0 ? Number(maxN) : (Number(rc.max)||Number(window._rcTk?.cap)||RECUR_MAX);
   return Object.assign({},rc,{count:Math.max(1,Math.min(Number(rc.count)||1,m)),max:m});
 }
 /* 一句話說明目前的連續預約設定（2026-08-24）——用在「已經在前一個視窗設定過、
@@ -38234,7 +38238,7 @@ function readRecur(prefix){
   const mx=el?(Number(el.getAttribute('data-max'))||0):0;
   let count=Math.max(1, Math.floor(Number(el&&el.value)||1));
   if(mx>0) count=Math.min(count,mx);
-  count=Math.min(count, RECUR_MAX);                 // 方案最多 12 堂（2026-07-30）
+  if(prefix!=='bk')count=Math.min(count, RECUR_MAX);
   /* 各天各自的時間（2026-07-30 使用者指示：一週兩天可以不同時間）；留空的不放進 map，
      buildRecurringSlots 會退回起始時間。 */
   const times={};
@@ -40077,7 +40081,7 @@ async function runRecurringBooking(opts){
   // 2) 產生「日期＋時間」清單（2026-07-30：各天可不同時間）
   let slots;
   if(o.dows && o.dows.length){
-    const reqCount=Math.min(Math.max(1, o.count||1), RECUR_MAX);   // 方案最多 12 堂
+    const reqCount=(noDeduct||canHold)?Math.min(Math.max(1,Math.floor(Number(o.count)||1)),RECUR_MAX):Math.max(1,Math.floor(Number(o.count)||1));
     /* openHold 不看票 —— 沒有票要看（remainTotal 是 0，不放行的話一堂都建不出來） */
     const cap = (noDeduct||canHold||openHold) ? reqCount : Math.min(reqCount, remainTotal||0);
     const far=o.until||ymd(addDays(parseYmd(o.startDate), o.horizonDays||370));   // 結束日期（含）優先

@@ -64,7 +64,7 @@ console.log('\n實跑 recurSetMax');
     eq('　　「排到哪天」也重算', hint.innerHTML, 'when:bk'); }
 
   { const {el,fn}=mk(); fn('bk',20);
-    eq('★ 票券剩 20 堂 → 仍以方案上限 12 為準', [el.value, el.max], [12,12]); }
+    eq('★ 票券剩 20 堂 → 上限跟隨票券', [el.value, el.max], [20,20]); }
 
   { const {el,fn}=mk(); fn('bk',0);
     eq('　　沒有票券資訊（待簽約）→ 12', [el.value, el.max], [12,12]); }
