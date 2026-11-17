@@ -87,7 +87,7 @@ ok('★ 請假／取消收名額鍵，補課券與退票仍認會員本人',
    /async function groupToggleLeave\(bid,seatKey\)\{/.test(src)
    && /const sk=String\(seatKey\), mid=seatMid\(sk\);/.test(src)
    && /async function groupCancelSeat\(bid,seatKey\)\{/.test(src)
-   && /async function doGroupCancelSeat\(bid,seatKey\)\{/.test(src));
+   && /async function doGroupCancelSeat\(bid,seatKey(?:,ctxId)?\)\{/.test(src));
 ok('　　取消前先重編剩餘名額，不留孤兒鍵',
    /const att=seatReindexAfterRemove\(b, i\);/.test(src));
 ok('　　傳純 member id 的舊呼叫仍可用（＝第 1 個名額）',

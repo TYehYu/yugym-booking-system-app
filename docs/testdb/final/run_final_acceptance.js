@@ -13,7 +13,7 @@
 const fs = require('fs'), path = require('path'), http = require('http'), crypto = require('crypto'), cp = require('child_process');
 const REF = 'kucvxpjatptfckhlxptj', BASE = 'https://' + REF + '.supabase.co';
 // 探測用參數：PostgREST 以「函式名＋參數名」比對簽章，參數對不上會回 404（看起來像沒安裝）；用真實參數名才分得出「已安裝但匿名被拒（401）」與「未安裝（404）」
-const PROBE_ARGS = { fn_desk_booking_rev: { p_booking_id: 'x' }, fn_desk_cancel_booking: { p_booking_id: 'x', p_mode: 'auto' }, fn_desk_op_begin: { p_slot: 'x', p_ticket_id: 'x', p_booking_id: 'x', p_expect_rev: '0' }, fn_desk_deduct_ticket: { p_ticket_id: 'x', p_booking_id: 'x' }, zz_cc_overlap: { p_kind: 'x', p_a: 'x', p_b: null, p_c: null, p_role: 'x' } };
+const PROBE_ARGS = { fn_desk_booking_rev: { p_booking_id: 'x' }, fn_desk_cancel_booking: { p_booking_id: 'x', p_mode: 'auto' }, fn_desk_op_begin: { p_slot: 'x', p_ticket_id: 'x', p_booking_id: 'x', p_expect_rev: '0' }, fn_desk_deduct_ticket: { p_ticket_id: 'x', p_booking_id: 'x' }, zz_cc_overlap: { p_kind: 'x', p_a: 'x', p_b: null, p_c: null, p_role: 'x' }, fn_cancel_group_seat: { p_booking_id: 'x', p_seat_key: 'x', p_expect_rev: '0', p_mode: 'auto' }, fn_group_seat_rev: { p_booking_id: 'x' }, fn_member_join_group: { p_booking_id: 'x', p_ticket_id: null } };
 // OpenAPI 根目錄對 anon 不開放、對 service_role 通常可讀；若讀不到就改用「安裝時查得的公開表清單」（只讀、逐表嚴格；表缺或讀失敗一樣丟錯）。清單來源會寫進證據。
 const FALLBACK_TABLES = { app_state: 'id', attendance: 'id', booking_op_rev: 'booking_id', bookings: 'id', category: 'id', contract_templates: 'id', contracts: 'id', course_plans: 'id', employees: 'id', exercises: 'id', leave_settlements: 'id', member_level: 'level', member_link_requests: 'id', member_tickets: 'id', members: 'id', notifications: 'id', punch_requests: 'id', purchase_applications: 'id', purchases: 'id', reward_rules: 'id', salary_templates: 'id', shifts: 'id', space_resources: 'id', spaces: 'id', ticket_deduct_ops: 'booking_id', ticket_grant_requests: 'id', ticket_logs: 'id', ticket_type_member_levels: 'ticket_type_id', ticket_types: 'id', training_logs: 'id', venues: 'id' };
 const REQUIRED_UI_FLOWS = ['new:desk-login-load', 'new:deduct', 'new:cancel', 'old:desk-login-load', 'old:deduct', 'old:cancel'];
@@ -252,17 +252,35 @@ async function askHidden(q) {
 }
 
 /* ───────── 真並行：持鎖者在 pg_stat_activity 親眼看到等候者被自己擋住，才算證明 ───────── */
+// 時間預算（不為了通過而放寬正式函式的保護）：函式內 lock_timeout＝3000ms、角色 authenticated 的 statement_timeout＝8000ms（2026-11-16 在測試庫讀出）。
+// 持鎖者的輪詢上限必須小於 lock_timeout：萬一漏看，持鎖者會在對手逾時之前就釋放，結果是「未證明」而不是對手 BUSY。
+const OVERLAP_POLL_MS = 2000, DB_LOCK_TIMEOUT_MS = 3000, DB_STMT_TIMEOUT_MS = 8000, OVERLAP_FN_HEADROOM_MS = 1500;
+function timeoutCompat(pollMs, lockMs, stmtMs, headroom) {
+  lockMs = lockMs == null ? DB_LOCK_TIMEOUT_MS : lockMs; stmtMs = stmtMs == null ? DB_STMT_TIMEOUT_MS : stmtMs; headroom = headroom == null ? OVERLAP_FN_HEADROOM_MS : headroom; const problems = [];
+  if (!(pollMs < lockMs)) problems.push('持鎖者輪詢上限 ' + pollMs + 'ms 必須小於 lock_timeout ' + lockMs + 'ms');
+  if (!(pollMs + headroom < stmtMs)) problems.push('輪詢上限 ' + pollMs + 'ms＋函式本身餘裕 ' + headroom + 'ms 必須小於 statement_timeout ' + stmtMs + 'ms');
+  return { ok: problems.length === 0, problems };
+}
+const waitsOnHolder = (b) => !!(b && (b.waits_on_my_txid === true || (Array.isArray(b.waits_on) && b.waits_on.some(x => x && (x.locktype === 'transactionid' || x.locktype === 'tuple')))));
+// 以「後端 pid＋阻擋關係」判斷，不看 query 文字（PostgREST 連線上的 query 常顯示成 COMMIT，不可靠）。
+function verifyBlocked(h, w, expectTag) {
+  const ts = (x) => x ? Date.parse(x) : NaN; const out = {};
+  out.differentPids = !!(h && w && h.pid && w.pid && h.pid !== w.pid);
+  const b = h && Array.isArray(h.blocked_waiters) ? h.blocked_waiters.find(x => x && x.pid === (w && w.pid) && x.blocked_by_me === true) : null;
+  out.lockWaitObserved = !!b;                                   // 持鎖者（pg_blocking_pids）指名這個 pid 被自己擋住
+  out.caseTagOk = !!(b && expectTag && b.application_name === expectTag);   // 被擋的就是本輪、這個案例的等候者
+  out.relationOk = waitsOnHolder(b);                            // 它在等的是持鎖者的交易（鎖持有到交易結束）
+  out.timeOverlap = ts(w && w.start) < ts(h && h.end) && ts(w && w.end) >= ts(h && h.end) - 1;   // 等候者在持鎖者結束之後才完成
+  out.verified = out.differentPids && out.lockWaitObserved && out.caseTagOk && out.relationOk && out.timeOverlap; return out;
+}
 async function overlap(api, jwt, name, holder, waiter) {
-  const call = (c, role) => api.rpcAs('zz_cc_overlap', { p_kind: c.kind, p_a: c.a, p_b: c.b || null, p_c: c.c || null, p_role: role, p_poll_ms: 5000 }, jwt);   // 小於 authenticated 的 8 秒 statement_timeout，持鎖者不會被逾時取消
+  const tc = timeoutCompat(OVERLAP_POLL_MS); if (!tc.ok) throw new Error('觀測時間預算不相容：' + tc.problems.join('；'));
+  const call = (c, role) => api.rpcAs('zz_cc_overlap', { p_kind: c.kind, p_a: c.a, p_b: c.b || null, p_c: c.c || null, p_role: role, p_poll_ms: OVERLAP_POLL_MS }, jwt);
   const hp = call(holder, 'holder'); await new Promise(r => setTimeout(r, 250));      // 只用來排定誰先拿鎖，不是證據
   const t0 = Date.now(); const [hr, wr] = await Promise.all([hp, call(waiter, 'waiter')]); const h = hr.json, w = wr.json;
   const raw = { holder: { status: hr.status, body: h && h.pid ? undefined : JSON.stringify(h).slice(0, 300) }, waiter: { status: wr.status, body: w && w.pid ? undefined : JSON.stringify(w).slice(0, 300) }, totalMs: Date.now() - t0 };
-  const ts = (s) => s ? Date.parse(s) : NaN;
-  const ev = { name, raw, holderPid: h && h.pid, waiterPid: w && w.pid, holderTxid: h && h.txid, waiterTxid: w && w.txid, holderEnd: h && h.end, waiterStart: w && w.start, waiterLockAcquiredAt: w && w.locks_acquired_at, holderObservedBlocked: h && h.blocked_waiters, holderResult: h && h.result, waiterResult: w && w.result };
-  ev.differentPids = !!(h && w && h.pid && w.pid && h.pid !== w.pid);
-  ev.timeOverlap = ts(w && w.start) < ts(h && h.end) && ts(w && w.locks_acquired_at) >= ts(h && h.end) - 1;
-  ev.lockWaitObserved = !!(h && Array.isArray(h.blocked_waiters) && h.blocked_waiters.some(b => b.pid === (w && w.pid) && b.blocked_by_me));
-  ev.verified = ev.differentPids && ev.timeOverlap && ev.lockWaitObserved; return ev;
+  const v = verifyBlocked(h, w, ('cc:' + waiter.kind + ':waiter:' + (waiter.a || '')).slice(0, 63));   // 與函式內 left(…,63) 一致
+  return Object.assign({ name, raw, holderPid: h && h.pid, waiterPid: w && w.pid, holderTxid: h && h.txid, waiterTxid: w && w.txid, holderEnd: h && h.end, waiterStart: w && w.start, waiterEnd: w && w.end, waiterLockAcquiredAt: w && w.locks_acquired_at, firstBlockedSeenAt: h && h.first_blocked_seen_at, pollIterations: h && h.poll_iterations, holderLocks: h && h.holder_locks, holderObservedBlocked: h && h.blocked_waiters, holderResult: h && h.result, waiterResult: w && w.result }, v);
 }
 
 /* ───────── 主流程 ───────── */
@@ -481,6 +499,189 @@ async function clickMain() {
   }
 }
 
+
+/* ───────── --seat-cancel：團課取消單一名額（fn_cancel_group_seat）專用驗收：HTTP／真並行／同票並行／實際點擊各一次 ─────────
+   不重跑整套；只建本案例需要的夾具。並行證明沿用：持鎖者在 pg_stat_activity 親眼看到被自己擋住的等候者。 */
+const sleep = (ms) => new Promise(r => setTimeout(r, ms));
+function validateSeatTimeline(tl, c) {   // c: {rem:{TKA,TKB}, seats:2}
+  const bad = []; const t = (tl || []).filter(x => !x.error); if (!t.length) return { ok: false, problems: ['沒有時間線'], at: {} };
+  const f = t[0]; if (f.seats !== 2 || f.remA !== c.remA || f.remB !== c.remB || f.refunds !== 0) bad.push('起點不是「2 個名額、兩張票餘額未動、無退款帳」');
+  const i = t.findIndex(x => x.seats === 1 && x.remB === c.remB + 1 && x.remA === c.remA && x.refunds === 1 && x.keys === 'M' );
+  if (i < 0) bad.push('沒有看到「只剩第 1 個名額、第 2 張票退 1 堂、第 1 張票不動、恰一筆退款帳」的狀態');
+  if (t.some(x => (x.seats === 1 && x.refunds === 0) || (x.seats === 2 && x.refunds > 0))) bad.push('出現半套狀態（名額與退款不同步）');
+  if (t.some(x => x.refunds > 1 || x.remA !== c.remA || x.remB > c.remB + 1)) bad.push('出現多退或動到別張票的狀態');
+  return { ok: !bad.length, problems: bad, at: { cancel: i >= 0 ? t[i].t : null } };
+}
+function validateSeatClickEvidence(text, tlv) {
+  const bad = []; let e = null; try { e = JSON.parse(text); } catch (_) { return { ok: false, problems: ['seat_click_done 不是有效 JSON'] }; }
+  if (e.complete !== true) bad.push('complete≠true'); if (e.logoutConfirmed !== true) bad.push('未確認清除瀏覽器登入'); if (e.consoleCallsUsed !== false) bad.push('consoleCallsUsed 必須為 false');
+  const st = Array.isArray(e.clickSteps) ? e.clickSteps : []; if (st.length < 3) bad.push('點擊步驟少於 3 步');
+  if (st.some(x => !['click', 'type', 'select'].includes(x.action) || !x.at || !x.target)) bad.push('步驟需有 action／at／target');
+  const cc = st.filter(x => x.phase === 'cancel' && x.action === 'click').map(x => x.at); if (!cc.length) bad.push('缺取消階段的實際點擊');
+  if (tlv && tlv.at && tlv.at.cancel && !cc.some(a => Date.parse(tlv.at.cancel) >= Date.parse(a) - 1000 && Date.parse(tlv.at.cancel) <= Date.parse(a) + 30000)) bad.push('資料庫看到名額被取消的時間，沒有落在任何取消點擊後 30 秒內');
+  return { ok: !bad.length, problems: bad };
+}
+async function seatMain() {
+  const CONC_ONLY = flag('--conc-only');   // 只做並行案例（C1／C2／C3）；HTTP 與點擊證據沿用已通過、功能未變的那一輪
+  fs.mkdirSync(WORK, { recursive: true });
+  const envPath = opt('--env'); if (!envPath) throw new Error('缺 --env <.env.test>');
+  const env = Object.fromEntries(fs.readFileSync(envPath, 'utf8').split('\n').filter(l => l.includes('=')).map(l => [l.slice(0, l.indexOf('=')), l.slice(l.indexOf('=') + 1)]));
+  if (env.SB_URL !== BASE) throw new Error('.env.test 的 SB_URL 不是測試庫'); const anon = env.ANON_KEY; if (!anon) throw new Error('.env.test 缺 ANON_KEY');
+  process.on('SIGINT', () => requestStop('SIGINT')); process.on('SIGTERM', () => requestStop('SIGTERM'));
+  if (loadUnfinishedManifest()) throw new Error('偵測到未完成的 manifest；請先用完整執行器（不帶 --seat-cancel）進入恢復流程');
+  log('【--seat-cancel】只碰測試庫 ' + REF + '；只測「團課取消單一名額」。接受的金鑰：舊版 JWT 形式的 service_role。');
+  const serviceKey = await askHidden('測試庫 service_role 金鑰> '); const bad0 = checkServiceKey(serviceKey); if (bad0) throw new Error(bad0);
+  const api = makeApi(serviceKey, anon), apiClean = makeApi(serviceKey, anon, { noStop: true });
+  const runId = crypto.randomBytes(3).toString('hex'); MF = newManifest(runId); saveManifest();
+  const evidence = { mode: 'seat-cancel', runId, startedAt: new Date().toISOString(), cases: {} };
+  let snapBefore = null, snapAfter = null, cleanRep = null, pwd = {}, sess = {}, jwts = {}, servers = [], tlv = { ok: false, problems: ['未取得'] }, evOk = false, adoptRep = { adopted: {}, unattributed: [] }, timeline = [], pollStop = false, concurrencyAll = true, httpAll = true;
+  const id = (x) => 'CC-' + x + '-' + runId, EMP = (r) => 'CC-EMP-' + runId + '-' + r;
+  const ids = { T: id('T'), M: id('M'), M2: id('M2'), MEM: id('MEM'), empDesk: EMP('DESK'), empCoach: EMP('COACH'), TK: {}, B: {} };
+  const read = async (t, q) => { const r = await api.rest('GET', t + '?' + q); if (!is2xx(r) || !Array.isArray(r.json)) throw new Error('讀取 ' + t + ' 失敗 HTTP ' + r.status); return r.json; };
+  const rem = async (tk) => (await read('member_tickets', 'id=eq.' + tk + '&select=sessions_remaining'))[0].sessions_remaining;
+  const bkOf = async (b) => (await read('bookings', 'id=eq.' + b + '&select=member_ids,seat_tickets,attendance,status'))[0];
+  const nlog = async (tk, b, a) => (await read('ticket_logs', 'ticket_id=eq.' + tk + '&booking_id=eq.' + b + '&action=eq.' + a + '&select=id')).length;
+  // 名單、座位票、出席、備註、餘額、帳本的完整快照（並行案例前後各取一次；帳實一致＝餘額差必須等於「新增帳本」的 delta 總和）
+  const seatSnap = async (b, tks) => { const bk = (await read('bookings', 'id=eq.' + b + '&select=member_ids,seat_tickets,attendance,seat_notes,status'))[0]; const tk = {};
+    for (const t of tks) { const lg = await read('ticket_logs', 'ticket_id=eq.' + t + '&select=id,action,delta,booking_id'); tk[t] = { rem: await rem(t), logs: lg, sumDelta: lg.reduce((x, y) => x + (Number(y.delta) || 0), 0), nRefund: lg.filter(x => x.action === 'refund').length, nDeduct: lg.filter(x => x.action === 'deduct').length }; } return { bk, tk }; };
+  const tkDiff = (s0, s1, t) => ({ remDelta: s1.tk[t].rem - s0.tk[t].rem, ledgerDelta: s1.tk[t].sumDelta - s0.tk[t].sumDelta, newRefunds: s1.tk[t].nRefund - s0.tk[t].nRefund, newDeducts: s1.tk[t].nDeduct - s0.tk[t].nDeduct, newRows: s1.tk[t].logs.length - s0.tk[t].logs.length });
+  const rpc = async (fn, body, jwt) => { const r = await api.rpcAs(fn, body, jwt); return { status: r.status, json: r.json }; };
+  try {
+    log('═══ 0. 核對專案身分與前置（06／08／新函式已安裝、匿名被拒）═══');
+    const emp = await api.rest('GET', 'employees?select=id'); if (!is2xx(emp) || !Array.isArray(emp.json) || !['e_admin', 'e_fd', 'e_coach'].every(i => emp.json.some(r => r.id === i))) throw new Error('這不像測試庫，停止，尚未建立任何東西'); ok('金鑰被測試庫接受，且測試庫特徵員工都在', true);
+    const mjg = await api.probe('fn_member_join_group', PROBE_ARGS.fn_member_join_group); if (!(mjg.status === 200 && mjg.json && mjg.json.ok === false && mjg.json.error_code === 'AUTH.FORBIDDEN')) throw new Error('fn_member_join_group（測試庫原本就有的函式）匿名呼叫的回應與預期不同（HTTP ' + mjg.status + '），停止，尚未建立任何東西'); ok('fn_member_join_group 存在，匿名呼叫只得到 AUTH.FORBIDDEN（既有行為，沒有任何寫入）', true);
+    for (const fn of ['fn_desk_booking_rev', 'fn_desk_op_begin', 'fn_desk_deduct_ticket', 'fn_desk_cancel_booking', 'fn_cancel_group_seat', 'fn_group_seat_rev', 'zz_cc_overlap']) { const r = await api.probe(fn, PROBE_ARGS[fn]); if (!(r.status === 401 || r.status === 403)) throw new Error(fn + ' 檢查不符（匿名呼叫應為 401／403；實得 HTTP ' + r.status + '）——暫時安裝不完整，停止，尚未建立任何東西'); ok(fn + ' 已安裝且匿名被拒（HTTP ' + r.status + '）', true); }
+    const hasNotes = await api.rest('GET', 'bookings?select=seat_notes&limit=1'); if (!is2xx(hasNotes)) throw new Error('測試庫 bookings 缺 seat_notes 欄（需先補上），停止');
+    guard(); snapBefore = await snapshot(api); log('  表數 ' + Object.keys(snapBefore.tables).length + '；登入帳號 ' + snapBefore.authUsers.count + ' 個；夾具 id 尾碼 ' + runId);
+    log('═══ 1. 建立 3 個專屬登入（櫃檯、教練、會員）與夾具 ═══');
+    const U = {}; for (const role of ['desk', 'coach', 'member']) { pwd[role] = crypto.randomBytes(18).toString('base64url') + 'aA1!'; U[role] = await trackedCreateUser(api, role, 'cc-' + role + '-' + runId + '@cc-test.yugym.local', pwd[role]); ok('建立 ' + role + ' 登入（已確認由本輪建立）', U[role].state === 'created'); }
+    await trackedInsert(api, 'employees', { id: ids.empDesk, auth_id: U.desk.id, name: 'CC櫃檯', role: 'front_desk', status: 'active' });
+    await trackedInsert(api, 'employees', { id: ids.empCoach, auth_id: U.coach.id, name: 'CC教練', role: 'coach', status: 'active' });
+    await trackedInsert(api, 'members', { id: ids.M, name: 'CC名額會員', status: 'active' }); await trackedInsert(api, 'members', { id: ids.M2, name: 'CC名額會員2', status: 'active' });
+    await trackedInsert(api, 'members', { id: ids.MEM, name: 'CC登入會員', status: 'active', auth_id: U.member.id });
+    await trackedInsert(api, 'ticket_types', { id: ids.T, name: 'CC團課', category: '小班肌力' });
+    await trackedInsert(api, 'venues', { id: 'group', name: '團課教室', active: true, capacity: 1, categories: ['小班肌力'], sort_order: 1 });
+    const day = (n) => new Date(Date.now() + n * 864e5).toISOString().slice(0, 10);
+    const mkTk = async (k, mem, rm) => { ids.TK[k] = id('TK' + k); await trackedInsert(api, 'member_tickets', { id: ids.TK[k], member_id: mem, ticket_type_id: ids.T, plan_name: 'CC票' + k, sessions_total: 8, sessions_remaining: rm, status: 'usable', unlocked_sessions: 8 }); };
+    const mkBk = async (k, seats, st, extra, dd) => { ids.B[k] = id('B' + k); await trackedInsert(api, 'bookings', Object.assign({ id: ids.B[k], category: '小班肌力', date: day(dd), start_time: '19:00', duration: 60, status: 'booked', member_ids: seats, attendance: {}, seat_tickets: st, max_heads: 5 }, extra || {})); };
+    const led = async (tk, b) => trackedInsert(api, 'ticket_logs', { id: 'CC-LG-' + b.slice(-12) + '-' + tk.slice(-8), ticket_id: tk, action: 'deduct', delta: -1, booking_id: b, operator: 'x', note: '夾具' });
+    for (const [k, mem] of [['1', ids.M], ['2', ids.M], ['3', ids.M], ['4', ids.M], ['5', ids.M], ['6', ids.M], ['7', ids.M], ['8', ids.M2], ['M', ids.MEM], ['A', ids.M], ['B', ids.M]]) await mkTk(k, mem, 5);
+    await mkBk('1', [ids.M, ids.M], { [ids.M]: ids.TK['1'], [ids.M + '#2']: ids.TK['2'] }, null, 2);
+    await mkBk('2', [ids.M], { [ids.M]: ids.TK['3'] }, { coach_id: ids.empCoach }, 2);
+    await mkBk('3', [ids.M], { [ids.M]: ids.TK['4'] }, null, 3);
+    await mkBk('4', [ids.M, ids.M], { [ids.M]: ids.TK['5'], [ids.M + '#2']: ids.TK['6'] }, null, 3);
+    await mkBk('5', [ids.M, ids.M2], { [ids.M]: ids.TK['7'], [ids.M2]: ids.TK['8'] }, null, 4);
+    await mkBk('6', [ids.MEM], { [ids.MEM]: ids.TK['M'] }, null, 4);
+    await mkBk('7', [], {}, null, 3);
+    await mkBk('CK', [ids.M, ids.M], { [ids.M]: ids.TK['A'], [ids.M + '#2']: ids.TK['B'] }, { coach_id: ids.empCoach }, 4);
+    for (const [tk, b] of [['1', '1'], ['2', '1'], ['3', '2'], ['4', '3'], ['5', '4'], ['6', '4'], ['7', '5'], ['8', '5'], ['M', '6'], ['A', 'CK'], ['B', 'CK']]) await led(ids.TK[tk], ids.B[b]);
+    ok('夾具建立完成（員工 2、會員 3、票種 1、票 11、團課預約 8＋空堂 1、帳本 11）', true);
+    for (const role of ['desk', 'coach', 'member']) { const r = await api.signIn(U[role].email, pwd[role]); if (!(is2xx(r) && r.json && r.json.access_token)) throw new Error(role + ' 登入失敗（HTTP ' + r.status + '）'); jwts[role] = r.json.access_token; sess[role] = r.json; ok(role + ' 登入成功', true); }
+
+    const revOf = async (b, jwt) => ((await rpc('fn_group_seat_rev', { p_booking_id: b }, jwt)).json || {}).rev;
+    if (!CONC_ONLY) {
+    log('═══ 2. 真實 HTTP（PostgREST＋JWT 角色）═══');
+    const H = (n, c, x) => { ok(n, c, x); if (!c) httpAll = false; evidence.cases[n] = { ok: !!c, detail: x }; };
+    let r = await rpc('fn_cancel_group_seat', { p_booking_id: ids.B['1'], p_seat_key: ids.M, p_expect_rev: '0', p_mode: 'auto' }, jwts.member);
+    H('H1 會員 JWT 不能取消名額（NOT_STAFF，沒有更動）', r.status === 200 && r.json && r.json.error_code === 'NOT_STAFF' && (await bkOf(ids.B['1'])).member_ids.length === 2, r);
+    r = await rpc('fn_group_seat_rev', { p_booking_id: ids.B['1'] }, jwts.member); H('H1b 會員 JWT 讀不到預約版本', r.json && r.json.ok === false, r);
+    const rv1 = await revOf(ids.B['1'], jwts.desk); const tk2a = await rem(ids.TK['2']), tk1a = await rem(ids.TK['1']);
+    r = await rpc('fn_cancel_group_seat', { p_booking_id: ids.B['1'], p_seat_key: ids.M + '#2', p_expect_rev: rv1, p_mode: 'auto' }, jwts.desk);
+    let b1 = await bkOf(ids.B['1']);
+    H('H2 櫃檯取消第 2 個名額：只退第 2 張票 1 堂、第 1 張票不動、只剩第 1 個名額', r.json && r.json.ok === true && r.json.outcome === 'refunded' && await rem(ids.TK['2']) === tk2a + 1 && await rem(ids.TK['1']) === tk1a && b1.member_ids.length === 1 && b1.seat_tickets[ids.M] === ids.TK['1'] && !(ids.M + '#2' in b1.seat_tickets) && await nlog(ids.TK['2'], ids.B['1'], 'refund') === 1 && await nlog(ids.TK['1'], ids.B['1'], 'refund') === 0, { r: r.json, b1 });
+    r = await rpc('fn_cancel_group_seat', { p_booking_id: ids.B['1'], p_seat_key: ids.M + '#2', p_expect_rev: rv1, p_mode: 'auto' }, jwts.desk);
+    H('H3 同名額重送（舊版本）：REV_MISMATCH、不再退', r.json && r.json.error_code === 'REV_MISMATCH' && await rem(ids.TK['2']) === tk2a + 1 && await nlog(ids.TK['2'], ids.B['1'], 'refund') === 1, r);
+    r = await rpc('fn_cancel_group_seat', { p_booking_id: ids.B['1'], p_seat_key: ids.M + '#2', p_expect_rev: await revOf(ids.B['1'], jwts.desk), p_mode: 'auto' }, jwts.desk);
+    H('H4 名額已不存在：NO_SEAT', r.json && r.json.error_code === 'NO_SEAT', r);
+    const rv2 = await revOf(ids.B['2'], jwts.coach); r = await rpc('fn_cancel_group_seat', { p_booking_id: ids.B['2'], p_seat_key: ids.M, p_expect_rev: rv2, p_mode: 'auto' }, jwts.coach);
+    H('H5 該堂教練可讀版本並取消自己課的名額', rv2 && r.json && r.json.ok === true && r.json.outcome === 'refunded' && (await bkOf(ids.B['2'])).member_ids.length === 0, { rv2, r: r.json });
+    r = await rpc('fn_group_seat_rev', { p_booking_id: ids.B['3'] }, jwts.coach); const r2 = await rpc('fn_cancel_group_seat', { p_booking_id: ids.B['3'], p_seat_key: ids.M, p_expect_rev: '1', p_mode: 'auto' }, jwts.coach);
+    H('H6 教練不能動別人的課（FORBIDDEN、沒有更動）', r.json && r.json.error_code === 'FORBIDDEN' && r2.json && r2.json.error_code === 'FORBIDDEN' && (await bkOf(ids.B['3'])).member_ids.length === 1, { r: r.json, r2: r2.json });
+    evidence.http = { all: httpAll };
+    }
+
+    log('═══ 3. 真並行（持鎖者在 pg_stat_activity 觀測到等候者被自己擋住才算證明）═══');
+    const rec = (ev) => { evidence.cases[ev.name] = ev; if (!ev.verified) { concurrencyAll = false; unv('真並行「' + ev.name + '」未證明鎖等待（pid 不同=' + ev.differentPids + '、時間重疊=' + ev.timeOverlap + '、觀測到被擋=' + ev.lockWaitObserved + '）'); } };
+    for (let i = 0; i < 3; i++) { guard(); await Promise.all([1, 2, 3, 4].map(() => api.rpcAs('zz_cc_overlap', { p_kind: 'seatcancel', p_a: 'CC-WARM', p_b: 'x', p_c: '0', p_role: 'waiter' }, jwts.desk))); }
+    // C1 同一個名額、同一個版本，同時送出兩次
+    const rvC1 = await revOf(ids.B['4'], jwts.desk); const sC1a = await seatSnap(ids.B['4'], [ids.TK['5'], ids.TK['6']]);
+    let ev = await overlap(api, jwts.desk, 'seat-dup-same-rev', { kind: 'seatcancel', a: ids.B['4'], b: ids.M + '#2', c: rvC1 }, { kind: 'seatcancel', a: ids.B['4'], b: ids.M + '#2', c: rvC1 }); rec(ev);
+    const res1 = [ev.holderResult, ev.waiterResult]; const sC1b = await seatSnap(ids.B['4'], [ids.TK['5'], ids.TK['6']]); const d5 = tkDiff(sC1a, sC1b, ids.TK['5']), d6 = tkDiff(sC1a, sC1b, ids.TK['6']);
+    ok('C1 同名額同時取消：鎖等待已由持鎖者以 pid／阻擋關係觀測到（不同 pid、案例識別相符、等的是持鎖者交易、等候者在持鎖者結束後才完成）', ev.verified, ev);
+    ok('C1 結果：恰一方 refunded、另一方 REV_MISMATCH（不是 BUSY／其他錯）', res1.filter(x => x && x.ok === true && x.outcome === 'refunded').length === 1 && res1.filter(x => x && x.error_code === 'REV_MISMATCH').length === 1, { res1 });
+    ok('C1 名單／座位票／出席：只移除第 2 個名額；第 1 個名額與它的票完全不動', sC1b.bk.member_ids.length === 1 && sC1b.bk.member_ids[0] === ids.M && JSON.stringify(Object.keys(sC1b.bk.seat_tickets || {})) === JSON.stringify([ids.M]) && sC1b.bk.seat_tickets[ids.M] === ids.TK['5'] && !(ids.M + '#2' in (sC1b.bk.attendance || {})) && !(ids.M + '#2' in (sC1b.bk.seat_notes || {})) && sC1b.bk.status === sC1a.bk.status, { before: sC1a.bk, after: sC1b.bk });
+    ok('C1 餘額與帳本：第 2 張票恰 +1、新增恰 1 筆退款；第 1 張票餘額與帳本都沒變；帳實一致（餘額差＝新增帳本 delta 總和）', d6.remDelta === 1 && d6.newRefunds === 1 && d6.newRows === 1 && d6.ledgerDelta === 1 && d6.remDelta === d6.ledgerDelta && d5.remDelta === 0 && d5.newRows === 0 && d5.ledgerDelta === 0, { d5, d6 });
+    // C2 同一堂兩個不同名額、同一個版本
+    const rvC2 = await revOf(ids.B['5'], jwts.desk); const t7 = await rem(ids.TK['7']), t8 = await rem(ids.TK['8']);
+    ev = await overlap(api, jwts.desk, 'seat-two-seats-same-rev', { kind: 'seatcancel', a: ids.B['5'], b: ids.M, c: rvC2 }, { kind: 'seatcancel', a: ids.B['5'], b: ids.M2, c: rvC2 }); rec(ev);
+    const res2 = [ev.holderResult, ev.waiterResult]; const bC2 = await bkOf(ids.B['5']);
+    ok('C2 同堂兩個不同名額同時取消：鎖等待已觀測', ev.verified, ev);
+    ok('C2 恰一方成功、另一方 REV_MISMATCH（版本已前進）；只移除 1 個名額、只退 1 堂（沒有退給兩張票）', res2.filter(x => x && x.ok === true).length === 1 && res2.filter(x => x && x.error_code === 'REV_MISMATCH').length === 1 && bC2.member_ids.length === 1 && ((await rem(ids.TK['7'])) - t7) + ((await rem(ids.TK['8'])) - t8) === 1, { res2, bC2 });
+    // C3 會員自助報名（真正的 fn_member_join_group，HTTP）與櫃檯取消名額，搶同一張票
+    const rvC3 = await revOf(ids.B['6'], jwts.desk); const sC3a = await seatSnap(ids.B['6'], [ids.TK['M']]);
+    const hp = api.rpcAs('zz_cc_overlap', { p_kind: 'seatcancel', p_a: ids.B['6'], p_b: ids.MEM, p_c: rvC3, p_role: 'holder', p_poll_ms: OVERLAP_POLL_MS }, jwts.desk).then(r => ({ r, at: Date.now() })); await sleep(250);
+    const wp = api.rpcAs('fn_member_join_group', { p_booking_id: ids.B['7'], p_ticket_id: ids.TK['M'] }, jwts.member).then(r => ({ r, at: Date.now() }));
+    const [hh, ww] = await Promise.all([hp, wp]); const hr = hh.r, wr = ww.r; const h = hr.json || {}; const blocked = Array.isArray(h.blocked_waiters) ? h.blocked_waiters : [];
+    const sC3p = await seatSnap(ids.B['6'], [ids.TK['M']]), sC3q = await seatSnap(ids.B['7'], [ids.TK['M']]); const dM = tkDiff(sC3a, sC3q, ids.TK['M']);
+    // 會員 RPC 不能在函式內打標記（不改既有函式）：以「持鎖者指名被自己擋住的另一個 pid」＋「它在等持鎖者的交易」＋「會員回應在持鎖者結束之後才回來」＋「會員看到的是持鎖者已提交後的餘額」關聯；不看 query 文字（會顯示成 COMMIT）
+    const others = blocked.filter(b => b && b.pid && b.pid !== h.pid && b.blocked_by_me === true); const cand = others[0] || null; const mem = wr.json || {};
+    const ev3 = { name: 'seat-cancel-vs-member-join-same-ticket', raw: { holder: { status: hr.status }, member: { status: wr.status, body: JSON.stringify(wr.json).slice(0, 200) } }, holderPid: h.pid, holderTxid: h.txid, holderEnd: h.end, holderLocks: h.holder_locks, firstBlockedSeenAt: h.first_blocked_seen_at, pollIterations: h.poll_iterations, holderResult: h.result, memberResult: wr.json, blocked, memberDoneAfterHolderDone: ww.at >= hh.at, note: '會員連線的 query 文字不作為判斷依據（PostgREST 連線常顯示 COMMIT）；測試庫 public 沒有 deferrable 約束或觸發器，所以等待不是發生在 COMMIT 階段的延遲檢查' };
+    ev3.differentPids = !!(cand && h.pid && cand.pid !== h.pid); ev3.lockWaitObserved = others.length === 1; ev3.relationOk = waitsOnHolder(cand);
+    ev3.memberSawCommittedRefund = !!(h.result && h.result.ok === true && mem.ok === true && mem.remaining_after === h.result.remaining_after - 1);   // 被擋的會員要等持鎖者提交後才扣：它看到的餘額必須是退款之後的
+    ev3.timeOverlap = ev3.memberDoneAfterHolderDone; ev3.verified = ev3.differentPids && ev3.lockWaitObserved && ev3.relationOk && ev3.timeOverlap && ev3.memberSawCommittedRefund; rec(ev3);
+    ok('C3 會員自助報名與櫃檯取消搶同一張票：持鎖者以 pid／阻擋關係指名恰一個外部連線被擋、它等持鎖者的交易、會員回應在持鎖者結束之後、且看到退款後的餘額', ev3.verified, ev3);
+    ok('C3 兩邊都成功', h.result && h.result.ok === true && wr.json && wr.json.ok === true && wr.status === 200, { h: h.result, m: wr.json });
+    ok('C3 名單／座位票：B6 名單與座位票清空、B7 只有該會員且座位票指向同一張票（沒有互相蓋掉、沒有半套）', sC3p.bk.member_ids.length === 0 && Object.keys(sC3p.bk.seat_tickets || {}).length === 0 && sC3q.bk.member_ids.length === 1 && sC3q.bk.member_ids[0] === ids.MEM && JSON.stringify(Object.keys(sC3q.bk.seat_tickets || {})) === JSON.stringify([ids.MEM]) && sC3q.bk.seat_tickets[ids.MEM] === ids.TK['M'], { b6: sC3p.bk, b7: sC3q.bk });
+    ok('C3 餘額與帳本：票餘額＝起點（退 1、扣 1）、新增恰 1 筆退款（B6）與 1 筆扣課（B7）、帳實一致（餘額差＝新增帳本 delta 總和＝0）', dM.remDelta === 0 && dM.newRefunds === 1 && dM.newDeducts === 1 && dM.newRows === 2 && dM.ledgerDelta === 0 && dM.remDelta === dM.ledgerDelta && await nlog(ids.TK['M'], ids.B['6'], 'refund') === 1 && await nlog(ids.TK['M'], ids.B['7'], 'deduct') === 1, { dM });
+    evidence.concurrencyNote = '持鎖者＝fn_cancel_group_seat 做完事後在同一交易內輪詢 pg_stat_activity，直到看到被自己擋住的等候者；C3 的等候者是真正的 fn_member_join_group（會員 JWT，經 PostgREST），以被擋 backend 的查詢文字辨識。';
+
+    if (CONC_ONLY) { tlv = { ok: true, problems: [] }; evOk = true; log('  （--conc-only：略過 HTTP 與點擊段，沿用已通過的證據）'); } else {
+    log('═══ 4. 實際點擊（新前端 127.0.0.1:8101）：畫面取消團課第 2 個名額；執行器每秒獨立觀測 ═══');
+    const siteDir = path.join(WORK, 'site', 'new'); fs.mkdirSync(siteDir, { recursive: true }); const repo = cp.execSync('git rev-parse --show-toplevel', { cwd: __dirname, encoding: 'utf8' }).trim();
+    for (const f of ['index.html', 'manifest.json', 'icon-192.png', 'icon-512.png']) { try { fs.copyFileSync(path.join(repo, f), path.join(siteDir, f)); } catch (_) {} }
+    fs.writeFileSync(path.join(siteDir, 'config.js'), "window.YUGYM_CONFIG = { url: '" + BASE + "', anonKey: '" + anon + "', lineLiffId: '', lineLoginChannelId: '' };"); fs.writeFileSync(path.join(siteDir, 'sw.js'), '');
+    const mime = { '.html': 'text/html; charset=utf-8', '.js': 'text/javascript', '.json': 'application/json', '.png': 'image/png' };
+    servers.push(await new Promise((res) => { const sv = http.createServer((q, rs) => { const u = new URL(q.url, 'http://x');
+      if (u.pathname === '/cc-login') { const se = sess[u.searchParams.get('role')]; if (!se) { rs.writeHead(404); return rs.end('no session'); } const val = JSON.stringify({ access_token: se.access_token, refresh_token: se.refresh_token, expires_at: se.expires_at, expires_in: se.expires_in, token_type: 'bearer', user: se.user }); rs.writeHead(200, { 'Content-Type': 'text/html; charset=utf-8', 'Cache-Control': 'no-store' }); return rs.end('<!doctype html><script>localStorage.setItem("sb-' + REF + '-auth-token", ' + JSON.stringify(val) + ');location.replace("/");</script>'); }
+      if (u.pathname === '/cc-logout') { rs.writeHead(200, { 'Content-Type': 'text/html; charset=utf-8', 'Cache-Control': 'no-store' }); return rs.end('<!doctype html><body>logout<script>Object.keys(localStorage).filter(function(k){return k.indexOf("sb-")===0}).forEach(function(k){localStorage.removeItem(k)});sessionStorage.clear();document.title="cleared:"+Object.keys(localStorage).filter(function(k){return k.indexOf("sb-")===0}).length;</script>'); }
+      const p2 = u.pathname === '/' ? '/index.html' : u.pathname; const fp = path.join(siteDir, path.normalize(p2).replace(/^(\.\.[/\\])+/, '')); fs.readFile(fp, (e, b) => { if (e) { rs.writeHead(404); return rs.end('404'); } rs.writeHead(200, { 'Content-Type': mime[path.extname(fp)] || 'application/octet-stream' }); rs.end(b); }); }).listen(8101, '127.0.0.1', () => res(sv)); }));
+    const c0 = { remA: await rem(ids.TK['A']), remB: await rem(ids.TK['B']) };
+    const observe = async () => { const b = (await read('bookings', 'id=eq.' + ids.B['CK'] + '&select=member_ids,seat_tickets'))[0]; const lg = await read('ticket_logs', 'booking_id=eq.' + ids.B['CK'] + '&select=ticket_id,action,delta,note,operator&order=created_at.asc');
+      const keys = (() => { const c = {}; return (b.member_ids || []).map(m => { c[m] = (c[m] || 0) + 1; return c[m] > 1 ? m + '#' + c[m] : m; }).map(k => k === ids.M ? 'M' : k.replace(ids.M, 'M')).join(','); })();
+      return { seats: (b.member_ids || []).length, keys, st: b.seat_tickets, remA: await rem(ids.TK['A']), remB: await rem(ids.TK['B']), refunds: lg.filter(x => x.action === 'refund').length, ledger: lg.map(x => ({ t: x.ticket_id.slice(-6), a: x.action, n: x.note, o: x.operator })) }; };
+    const poller = (async () => { let last = ''; while (!pollStop && !stopping) { try { const o = await observe(); const k = JSON.stringify([o.seats, o.remA, o.remB, o.refunds]); if (k !== last) { last = k; timeline.push(Object.assign({ t: new Date().toISOString() }, o)); if (o.seats === 1 && o.refunds === 1 && !fs.existsSync(path.join(WORK, 'cancel_observed.json'))) fs.writeFileSync(path.join(WORK, 'cancel_observed.json'), JSON.stringify({ observedAt: new Date().toISOString(), note: '執行器已觀測到名額移除＋恰一筆退款' })); } } catch (e) { timeline.push({ t: new Date().toISOString(), error: String(e.message || e).slice(0, 120) }); } await sleep(1000); } })();
+    fs.writeFileSync(path.join(WORK, 'seat_ready.json'), JSON.stringify({ new: 'http://127.0.0.1:8101', login: '/cc-login?role=desk', logout: '/cc-logout', fixtureIds: ids, bookingDate: day(4), note: '團課 ' + day(4) + ' 19:00 有同一位會員的 2 個名額（第 1 個＝票A、第 2 個＝票B）。只用畫面操作：開啟該課卡 → 取消「第 2 個名額」→ 確定取消・退回票券。禁止用控制台。證據：Claude 寫入 seat_click_done（complete、logoutConfirmed、consoleCallsUsed:false、clickSteps[{at,action,target,phase:cancel}]）。' }, null, 2));
+    log('  新前端 http://127.0.0.1:8101（登入 /cc-login?role=desk）。團課日期 ' + day(4) + ' 19:00。完成後由 Claude 寫入 ' + path.join(WORK, 'seat_click_done') + '。按 Enter 只會提早結束並標為「未驗證」。');
+    const doneFile = path.join(WORK, 'seat_click_done'); try { fs.unlinkSync(doneFile); } catch (_) {}
+    const how = await new Promise((res) => { const t0 = Date.now(), lim = Number(opt('--ui-timeout-min', '40')) * 60000; const onKey = () => { clearInterval(iv); res('enter'); }; process.stdin.setEncoding('utf8'); process.stdin.once('data', onKey); process.stdin.resume();
+      const iv = setInterval(() => { const fin = (w) => { process.stdin.off('data', onKey); process.stdin.pause(); clearInterval(iv); res(w); }; if (fs.existsSync(doneFile)) fin('file'); else if (stopping) fin('signal'); else if (Date.now() - t0 > lim) fin('timeout'); }, 1000); });
+    await sleep(2500); pollStop = true; await poller; timeline.push(Object.assign({ t: new Date().toISOString(), final: true }, await observe())); evidence.timeline = timeline;
+    tlv = validateSeatTimeline(timeline, c0); ok('執行器獨立觀測：起點（2 名額）→ 只剩第 1 個名額＋第 2 張票退 1 堂＋第 1 張票不動＋恰一筆退款，且從未出現半套狀態', tlv.ok, tlv.problems);
+    if (how === 'file') { const txt = fs.readFileSync(doneFile, 'utf8'); const v = validateSeatClickEvidence(txt, tlv); evidence.clickEvidence = txt.slice(0, 6000); evOk = v.ok; if (!v.ok) unv('點擊證據不完整：' + v.problems.join('；')); else ok('點擊步驟、無控制台聲明、登出確認齊全，且與資料庫轉折時間吻合', true); }
+    else unv('未取得點擊完成證據（結束方式：' + how + '）');
+    }
+    if (stopping) throw new Error('STOPPED');
+  } catch (e) { if (String(e.message) === 'STOPPED') unv('執行被中斷（SIGINT／SIGTERM）'); else { fail++; log('✗ 流程中止：' + String(e.message || e)); } evidence.abortedBy = String(e.message || e); }
+  finally {
+    pollStop = true; for (const sv of servers) { try { sv.close(); } catch (_) {} } pwd = {}; jwts = {}; sess = {};
+    log('═══ 5. 執行器收尾：納入畫面／自助報名新建資料 → 依精確 id 清除 → 測前後基準比對 ═══');
+    try { const xf = path.join(WORK, 'extra_ids.json'); if (fs.existsSync(xf)) { const xi = JSON.parse(fs.readFileSync(xf, 'utf8')); for (const [t, a] of Object.entries(xi)) if (Array.isArray(a)) MF.extra[t] = (MF.extra[t] || []).concat(a.filter(Boolean)); saveManifest(); log('  extra_ids.json：納入清除'); } } catch (e) { log('  ⚠ extra_ids.json 讀取失敗：' + String(e.message || e)); }
+    try { if (snapBefore) { const own = [ids.T, ids.M, ids.M2, ids.MEM, ids.empDesk, ids.empCoach, ...Object.values(ids.TK), ...Object.values(ids.B)]; const snapNow = await snapshot(apiClean); adoptRep = adoptUiRows(snapBefore, snapNow, own, [ids.empDesk, ids.empCoach]);
+        for (const [t, a] of Object.entries(adoptRep.adopted)) { MF.extra[t] = (MF.extra[t] || []).concat(a.filter(x => !createdIds(t).includes(x))); } saveManifest(); log('  納入清除：' + Object.values(adoptRep.adopted).reduce((s2, a) => s2 + a.length, 0) + ' 筆；無法歸屬（不刪、列出）：' + adoptRep.unattributed.length + ' 筆'); } } catch (e) { log('  ⚠ 無法計算新建資料：' + String(e.message || e)); }
+    try { cleanRep = await cleanup(apiClean); } catch (e) { cleanRep = { steps: [], failures: ['清除程序錯誤：' + String(e.message || e)], notDeleted: unresolved() }; }
+    let d = null; try { if (snapBefore) { snapAfter = await snapshot(apiClean); d = diffSnap(snapBefore, snapAfter); } } catch (e) { cleanRep.failures.push('測後快照失敗：' + String(e.message || e)); }
+    const nd = unresolved(); const cleanOk = !!(d && d.tablesChanged.length === 0 && !d.authUsersChanged && cleanRep && cleanRep.failures.length === 0 && nd.length === 0);
+    if (cleanRep.failures.length) log('  清除失敗：' + cleanRep.failures.join('；')); if (d) log('  資料表差異：' + (d.tablesChanged.length ? JSON.stringify(d.tablesChanged) : '無（與測前逐列相同）') + '；登入帳號：' + (d.authUsersChanged ? '與測前不同！' : '與測前相同'));
+    ok('執行器清除後資料與登入帳號回到測前基準', cleanOk, { failures: cleanRep.failures, diff: d && d.tablesChanged.length });
+    if (cleanOk) { MF.finished = true; MF.finishedAt = new Date().toISOString(); saveManifest(); } else { try { fs.writeFileSync(path.join(WORK, 'leftover_objects.json'), JSON.stringify({ manifest: MF, notDeleted: nd, unattributed: adoptRep.unattributed, diff: d }, null, 2), { mode: 0o600 }); } catch (_) {} log('  ⚠ 已保留 leftover_objects.json；重新執行完整執行器會先進入查證／恢復。'); }
+    const reasons = [...unverified]; if (!httpAll) reasons.push('HTTP 檢查有項目不符'); if (!concurrencyAll) reasons.push('真並行有項目未證明'); if (!tlv.ok) reasons.push('點擊時間線不符'); if (!evOk) reasons.push('點擊證據不完整'); if (!cleanOk) reasons.push('執行器清除未完全成功');
+    const overall = fail ? { status: 'FAILED', reasons } : (reasons.length ? { status: 'UNVERIFIED', reasons } : { status: CONC_ONLY ? 'CONC_COMPLETE' : 'SEAT_COMPLETE', reasons: [] });
+    const report = { mode: CONC_ONLY ? 'seat-cancel-conc-only' : 'seat-cancel', finishedAt: new Date().toISOString(), overall, pass, fail, results, unverified, cleanup: cleanRep, diff: d, adoptRep, evidence, manifest: MF, phase2: '暫時安裝（06／08／新函式／seat_notes 欄）尚未移除——需另行移除並核對基準' };
+    try { fs.writeFileSync(path.join(WORK, 'seat_report.json'), JSON.stringify(report, null, 2), { mode: 0o600 }); } catch (_) {}
+    log('\n整體判定：' + overall.status + (overall.reasons.length ? '（' + overall.reasons.join('；') + '）' : '') + '\n結果：' + pass + ' 通過／' + fail + ' 失敗／' + unverified.length + ' 項未驗證；報告：' + path.join(WORK, 'seat_report.json')); process.exitCode = (overall.status === 'SEAT_COMPLETE' || overall.status === 'CONC_COMPLETE') ? 0 : (overall.status === 'FAILED' ? 1 : 3);
+  }
+}
+
 /* ───────── selftest：不連網、不用金鑰；針對失敗路徑 ───────── */
 async function selftest() {
   const t = (n, c, x) => { if (c) { pass++; log('  ✓ ' + n); } else { fail++; log('  ✗ ' + n + (x !== undefined ? '  → ' + JSON.stringify(x).slice(0, 300) : '')); } };
@@ -584,6 +785,38 @@ async function selftest() {
   t('走查證據缺流程→不通過', !validateUiEvidence(JSON.stringify({ complete: true, logoutConfirmed: true, flows: { 'new:deduct': 'pass' } })).ok);
   t('走查證據未清除瀏覽器登入→不通過', !validateUiEvidence(JSON.stringify({ complete: true, logoutConfirmed: false, flows: Object.fromEntries(REQUIRED_UI_FLOWS.map(x => [x, 'pass'])) })).ok);
   t('ui_done 不是 JSON→不通過', !validateUiEvidence('done').ok);
+
+  log('═══ 團課取消名額：時間線與點擊證據 ═══');
+  const S0 = Date.parse('2026-11-16T10:00:00Z'), si = (ms) => new Date(S0 + ms).toISOString(), c0 = { remA: 5, remB: 5 };
+  const stl = [{ t: si(0), seats: 2, keys: 'M,M#2', remA: 5, remB: 5, refunds: 0 }, { t: si(9000), seats: 1, keys: 'M', remA: 5, remB: 6, refunds: 1 }];
+  let sv = validateSeatTimeline(stl, c0); t('名額時間線：2→1、第2張票+1、第1張不動、恰1筆退款→通過', sv.ok && sv.at.cancel === si(9000), sv);
+  t('名額時間線：名額少了但沒退款（半套）→不通過', !validateSeatTimeline([stl[0], { t: si(1), seats: 1, keys: 'M', remA: 5, remB: 5, refunds: 0 }, stl[1]], c0).ok);
+  t('名額時間線：退款了但名額還在（半套）→不通過', !validateSeatTimeline([stl[0], { t: si(1), seats: 2, keys: 'M,M#2', remA: 5, remB: 6, refunds: 1 }, stl[1]], c0).ok);
+  t('名額時間線：退到第1張票（退錯票）→不通過', !validateSeatTimeline([stl[0], { t: si(9000), seats: 1, keys: 'M', remA: 6, remB: 5, refunds: 1 }], c0).ok);
+  t('名額時間線：退了兩次→不通過', !validateSeatTimeline([stl[0], stl[1], { t: si(9500), seats: 1, keys: 'M', remA: 5, remB: 7, refunds: 2 }], c0).ok);
+  log('═══ 並行觀測判定（C1／C3 補強）：以 pid＋阻擋關係為準，不看 query 文字 ═══');
+  t('時間預算：輪詢 2000ms 與 lock_timeout 3000ms／statement_timeout 8000ms 相容', timeoutCompat(OVERLAP_POLL_MS).ok, timeoutCompat(OVERLAP_POLL_MS));
+  t('時間預算：舊的 5000ms 輪詢大於 lock_timeout→判不相容（會讓對手 BUSY 而不是等到釋放）', !timeoutCompat(5000).ok && timeoutCompat(5000).problems.length >= 1);
+  t('時間預算：statement_timeout 太短→判不相容', !timeoutCompat(2000, 3000, 3500).ok);
+  const H0 = { pid: 10, end: '2026-11-16T05:00:05.000Z', blocked_waiters: [{ pid: 20, blocked_by_me: true, application_name: 'cc:seatcancel:waiter:CC-B4-x', query: 'COMMIT', waits_on_my_txid: true, waits_on: [{ locktype: 'transactionid' }] }] };
+  const W0 = { pid: 20, start: '2026-11-16T05:00:00.400Z', end: '2026-11-16T05:00:05.050Z' };
+  t('持鎖者以 pid 指名等候者被擋（即使 query 文字是 COMMIT）→通過', verifyBlocked(H0, W0, 'cc:seatcancel:waiter:CC-B4-x').verified);
+  t('持鎖者沒看到等候者（blocked_waiters 空）→不通過（這就是 C1 舊問題的樣子）', !verifyBlocked(Object.assign({}, H0, { blocked_waiters: [] }), W0, 'cc:seatcancel:waiter:CC-B4-x').verified);
+  t('被擋的是別的 pid→不通過', !verifyBlocked(Object.assign({}, H0, { blocked_waiters: [Object.assign({}, H0.blocked_waiters[0], { pid: 99 })] }), W0, 'cc:seatcancel:waiter:CC-B4-x').verified);
+  t('案例識別（application_name）不符→不通過', !verifyBlocked(H0, W0, 'cc:seatcancel:waiter:CC-OTHER').verified);
+  t('等候者沒有在等持鎖者的交易→不通過', !verifyBlocked(Object.assign({}, H0, { blocked_waiters: [Object.assign({}, H0.blocked_waiters[0], { waits_on_my_txid: false, waits_on: [] })] }), W0, 'cc:seatcancel:waiter:CC-B4-x').verified);
+  t('等候者在持鎖者結束之前就完成→不通過（沒有真的等到交易結束）', !verifyBlocked(H0, Object.assign({}, W0, { end: '2026-11-16T05:00:03.000Z' }), 'cc:seatcancel:waiter:CC-B4-x').verified);
+  t('同一個 pid 自己擋自己→不通過', !verifyBlocked(H0, Object.assign({}, W0, { pid: 10 }), 'cc:seatcancel:waiter:CC-B4-x').verified);
+  t('等候者只有 tuple 鎖等待也算「等持鎖者的交易」', waitsOnHolder({ waits_on_my_txid: false, waits_on: [{ locktype: 'tuple' }] }) && !waitsOnHolder({ waits_on_my_txid: false, waits_on: [{ locktype: 'relation' }] }));
+  const inst = fs.readFileSync(path.join(__dirname, '..', 'grpcancel', 'phase_install_grpcancel_testdb.sql'), 'utf8'); const loopSrc = inst.slice(inst.indexOf('create or replace function public.zz_cc_overlap'), inst.indexOf('revoke all on function public.zz_cc_overlap'));
+  t('觀測函式輪詢迴圈內每圈都清快照（pg_stat_clear_snapshot）', /loop[\s\S]*pg_stat_clear_snapshot\(\)[\s\S]*pg_stat_activity[\s\S]*end loop/.test(loopSrc) && loopSrc.indexOf('pg_stat_clear_snapshot') < loopSrc.indexOf('from pg_stat_activity a'));
+  t('觀測函式在交易內標記案例識別（application_name，set_config is_local=true）', /set_config\('application_name'[^;]*true\)/.test(loopSrc));
+  t('觀測函式不放寬任何逾時（沒有 set lock_timeout／statement_timeout）', !/lock_timeout|statement_timeout/.test(loopSrc));
+  const sst = [{ at: si(1000), action: 'click', target: '課卡', phase: 'open' }, { at: si(5000), action: 'click', target: '取消（第2個名額）', phase: 'cancel' }, { at: si(8000), action: 'click', target: '確定取消・退回票券', phase: 'cancel' }];
+  const sce = (o) => JSON.stringify(Object.assign({ complete: true, logoutConfirmed: true, consoleCallsUsed: false, clickSteps: sst }, o));
+  t('名額點擊證據齊全且與時間線吻合→通過', validateSeatClickEvidence(sce({}), sv).ok, validateSeatClickEvidence(sce({}), sv));
+  t('名額點擊證據：用了控制台／未登出／缺取消點擊／時間對不上→不通過', !validateSeatClickEvidence(sce({ consoleCallsUsed: true }), sv).ok && !validateSeatClickEvidence(sce({ logoutConfirmed: false }), sv).ok && !validateSeatClickEvidence(sce({ clickSteps: sst.slice(0, 1) }), sv).ok && !validateSeatClickEvidence(sce({ clickSteps: sst.map(x => Object.assign({}, x, { at: si(-300000) })) }), sv).ok);
+
   log('═══ 其他護欄 ═══');
   let refused = false; try { const orig = process.stdin.isTTY; Object.defineProperty(process.stdin, 'isTTY', { value: false, configurable: true }); await askHidden('x'); Object.defineProperty(process.stdin, 'isTTY', { value: orig, configurable: true }); } catch (_) { refused = true; } t('非互動終端機拒絕（金鑰不能由管線或命令列帶入）', refused);
   const srcTxt = fs.readFileSync(__filename, 'utf8');
@@ -591,4 +824,4 @@ async function selftest() {
   t('所有請求都只接在固定的測試庫網址（BASE）後面，BASE 由測試庫 ref 組成', BASE === 'https://kucvxpjatptfckhlxptj.supabase.co' && /f\(BASE \+ p,/.test(srcTxt) && !/f\((?!BASE)/.test(srcTxt.slice(srcTxt.indexOf('function makeApi'), srcTxt.indexOf('const inList'))));
   log('\n結果：' + pass + ' 通過／' + fail + ' 失敗'); process.exit(fail ? 1 : 0);
 }
-(flag('--selftest') ? selftest() : flag('--click-only') ? clickMain() : main()).catch(e => { console.error('✗ ' + String(e.message || e)); process.exit(2); });
+(flag('--selftest') ? selftest() : flag('--click-only') ? clickMain() : flag('--seat-cancel') ? seatMain() : main()).catch(e => { console.error('✗ ' + String(e.message || e)); process.exit(2); });

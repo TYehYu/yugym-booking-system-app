@@ -15712,8 +15712,8 @@ function tbl(s){return TABLE_ALIAS[s]||s;}
 let sb=null;
 // ── 版本號（日期+時間格式：年後兩碼+月+日.時分，例 26620.1058 = 26年6/20 10:58）──
 // 每次改版手動更新這一行即可，畫面與 title 會一起更新
-const APP_VERSION = '261117.1526';
-const APP_VERSION_LABEL = 'v261117.1526';
+const APP_VERSION = '261117.1643';
+const APP_VERSION_LABEL = 'v261117.1643';
 const CLOUD = !!(window.YUGYM_CONFIG && window.YUGYM_CONFIG.url && window.YUGYM_CONFIG.anonKey);
 if(CLOUD){ sb = supabase.createClient(window.YUGYM_CONFIG.url, window.YUGYM_CONFIG.anonKey); }
 
@@ -24740,7 +24740,21 @@ async function _groupToggleLeave(bid,seatKey){
 /* 防連點（2026-08-01）：同一筆還在跑就跟著等同一個結果，不會扣兩次／建兩筆。 */
 async function groupCancelSeat(bid,seatKey){ return onceAct('grpcancel:'+bid+':'+seatKey, ()=>_groupCancelSeat(bid,seatKey)); }
 async function _groupCancelSeat(bid,seatKey){
-  const b=await dbGet('bookings',bid);
+  /* 2026-11-19（Codex 複審後）顯示給人看的名單、票券與要帶去伺服器的「預約版本」必須是同一份資料：
+     先讀版本、再讀預約、再讀一次版本，兩次一樣才採用（名單任何一格變動版本都會前進）。
+     順序不能反：先讀預約再讀版本，會變成「舊名單配新版本」，按下去就可能取消遞補後的另一個名額。
+     連續 3 次都對不上＝名單正在變動，不開視窗、請人稍後再按（不拿任何一份去賭）。 */
+  let b=null, rev=null;
+  if(CLOUD && sb){
+    for(let i=0;i<3 && !(b && rev);i++){
+      const r1=await sb.rpc('fn_group_seat_rev',{p_booking_id:bid}); const v1=(r1&&r1.data&&r1.data.ok)?String(r1.data.rev):null;
+      if(!v1){ showToast((GCS_MSG[r1&&r1.data&&r1.data.error_code])||'讀不到預約版本，沒有做任何更動；請重新開啟取消視窗', 5000); return; }
+      const bb=await dbGet('bookings',bid);
+      const r2=await sb.rpc('fn_group_seat_rev',{p_booking_id:bid}); const v2=(r2&&r2.data&&r2.data.ok)?String(r2.data.rev):null;
+      if(bb && v2===v1){ b=bb; rev=v1; }
+    }
+    if(!b){ showToast('名單正在變動，沒有做任何更動；請稍後再按一次「取消」', 5000); return; }
+  }else{ b=await dbGet('bookings',bid); }
   if(!b){ showToast('找不到預約'); return; }
   /* 2026-07-30：參數改收「名額鍵」（id 或 id#2）——名單改成一個名額一列後，
      要取消的是「哪一個名額」，不是「這個人」。傳純 member id 進來＝第 1 個名額。 */
@@ -24748,6 +24762,7 @@ async function _groupCancelSeat(bid,seatKey){
   const ids=(Array.isArray(b.member_ids)?b.member_ids:[]).map(String);
   const seats=ids.filter(x=>x===String(mid)).length;
   if(!seats){ showToast('此會員不在名單中'); return; }
+  if(sno>seats){ showToast('這個名額已不在名單中（可能剛剛已取消），沒有做任何更動'); return; }
   let m=null; try{ m=await dbGet('members',mid); }catch(_){}
   const hrs=hoursUntilStart(b), within24=hrs<24;
   /* 補課券的課取消「退回」（2026-08-11 使用者定案：「補課券有期限，所以補課券退課
@@ -24756,12 +24771,18 @@ async function _groupCancelSeat(bid,seatKey){
      展延的防線由「補課券的課不能再請假」那條顧（見 13051 一帶）。 */
   const _seatTk=await seatTicketOf(b, sk);
   const _isMk=tkIsMakeup(_seatTk);
+  /* 操作上下文：這一個確認視窗專屬、開窗當下的版本與名額，之後一律沿用、不刷新（見 _doGroupCancelSeatRpc）。 */
+  window._gcsCtx=window._gcsCtx||{}; window._gcsSeq=(window._gcsSeq||0)+1;
+  const _gcsCtxId='gcs'+window._gcsSeq;
+  { const ks=Object.keys(window._gcsCtx); if(ks.length>40) ks.slice(0,ks.length-40).forEach(k=>{ delete window._gcsCtx[k]; }); }
+  window._gcsCtx[_gcsCtxId]={ bid:String(bid), sk, mid:String(mid), rev:rev, ticketId:_seatTk?_seatTk.id:null, state:(CLOUD&&sb&&rev)?'ready':'norev' };
   showModal(`<div class="modal-title">取消團體課預約</div>
     <div style="font-size:13.5px;color:var(--text);padding:2px 0 10px;">
       ${m?m.name:'會員'}　·　${b.date.replace(/-/g,'/')} ${b.start_time}${seats>1?`　（共 ${seats} 個名額，本次取消<b>第 ${sno} 個</b>）`:''}</div>
     ${/* 2026-09-11 收斂（使用者：「每個視窗都清楚乾淨　不要規則一大堆」）——
          只有 24 小時內要紅字獨立一條；其餘一條一件事。「距離開課還有 N 小時」不是規則，拿掉。 */''}
     ${within24?`<div class="mk-key">距離開課不到 24 小時<small>約 ${Math.max(0,Math.floor(hrs))} 小時後開課</small></div>`:''}
+    ${_seatTk?`<div style="font-size:12px;color:var(--t2);margin:-4px 0 8px;">這個名額使用的票券：${escH(_seatTk.plan_name||'團體課票券')}</div>`:''}
     <ul class="mk-pts">
       <li>${_isMk?tkChip('back','補課券退回'):tkChip('back','1 堂團體課票券')}　名額同時釋出</li>
       ${_isMk
@@ -24769,9 +24790,12 @@ async function _groupCancelSeat(bid,seatKey){
         : `<li>想保留補課權益請改用「請假」：${tkChip('eat','本堂照扣')}＋補課券 14 天</li>`}
     </ul>
     <div class="modal-foot"><button class="btn btn-ghost" onclick="openBookingDetail('${bid}')">返回</button>
-      <button class="btn btn-green" onclick="doGroupCancelSeat('${bid}','${sk}')">確定取消・退回票券</button></div>`);
+      <button class="btn btn-green" onclick="doGroupCancelSeat('${bid}','${sk}','${_gcsCtxId}')">確定取消・退回票券</button></div>`);
 }
-async function doGroupCancelSeat(bid,seatKey){
+async function doGroupCancelSeat(bid,seatKey,ctxId){
+ /* 2026-11-19 有雲端連線一律走伺服器單一交易（fn_cancel_group_seat）：名單／座位票／出席／備註、退款、帳本在同一個交易完成，
+    前端不再有「先寫預約、再整列回寫票券、再另寫帳」的三段寫入。下面那段是沒有雲端連線（本機 demo／測試替身）才會走的舊邏輯，雲端不會落回它。 */
+ if(CLOUD && sb) return _doGroupCancelSeatRpc(bid,seatKey,ctxId);
  try{
   const b=await dbGet('bookings',bid);
   if(!b){ showToast('找不到預約'); return; }
@@ -24849,6 +24873,64 @@ async function doGroupCancelSeat(bid,seatKey){
   showToast(tkId?'已取消並退回 1 堂':'已取消（找不到可退的票券，請手動確認）');
   openBookingDetail(bid);
  }catch(e){ showToast('取消失敗：'+((e&&e.message)||e)); }
+}
+/* 團課取消單一名額（2026-11-19）：只呼叫 fn_cancel_group_seat，前端沒有任何其他寫入。
+   ⚠ 操作上下文（視窗 id＋開窗時的名額與版本）由確認視窗持有、全程不刷新；連點／重送／延遲送出都只能對「開窗時指定的那一格」生效，
+     第二次一律被擋（done／inflight／unknown）或被伺服器以 REV_MISMATCH 擋下。結果不明時只查明、不換版本重送。
+   ⚠ 不落回舊的前端三段寫入：失敗就是「什麼都沒改」（整個交易回滾），訊息要這樣講。 */
+const GCS_MSG={
+  REV_MISMATCH:'名單剛剛有變動（或這個取消已經完成），沒有做任何更動；請看更新後的名單再決定',
+  NO_SEAT:'這個名額已不在名單中（可能剛剛已取消），沒有做任何更動',
+  SEAT_CHECKED_IN:'已簽到的名額不能直接取消，請先取消簽到；沒有做任何更動',
+  SEAT_ON_LEAVE:'請假的名額不能取消（本堂照扣、已發補課券），請先取消請假；沒有做任何更動',
+  TICKET_UNKNOWN:'這個名額的票券歸屬查不清楚，系統沒有更動任何資料；請到名單／票券頁手動處理',
+  BOOKING_CANCELLED:'這堂課已經取消，沒有做任何更動',
+  NOT_GROUP:'這不是團體課，沒有做任何更動',
+  FORBIDDEN:'你沒有權限取消這個名額，沒有做任何更動', NOT_STAFF:'你沒有權限取消這個名額，沒有做任何更動',
+  BUSY:'系統忙碌，沒有做任何更動，請稍後再按一次',
+  INTERNAL_ERROR:'取消沒有完成，整筆已回滾、沒有任何資料被更動，請稍後再試或通知管理員'
+};
+async function _doGroupCancelSeatRpc(bid,seatKey,ctxId){
+  const sk=String(seatKey);
+  const ctx=(window._gcsCtx&&ctxId)?window._gcsCtx[ctxId]:null;
+  /* ① 沒有確認視窗的上下文（直接呼叫、視窗已失效）、或開窗時沒讀到版本：停止，要求重新開啟——
+        ⚠ 不在送出時自動去讀「最新版本」：名額鍵會在移除後遞補，用最新版本＋舊名額鍵＝可能取消到遞補後的另一個人。 */
+  if(!ctx || ctx.bid!==String(bid) || ctx.sk!==sk){ showToast('這個確認視窗已失效，沒有做任何更動；請重新開啟「取消」確認視窗', 5000); return; }
+  if(!ctx.rev){ showToast('開窗時沒有讀到預約版本，沒有做任何更動；請重新開啟「取消」確認視窗', 5000); return; }
+  /* ② 執行中防連點（同步檢查；第一個 await 之前就改狀態）：連點／重複觸發只算第一次，後面的完全不送出 */
+  if(ctx.state==='inflight') return;
+  if(ctx.state==='done'){ showToast('這個確認視窗已經用過了，沒有再送出；請看更新後的名單', 4000); return; }
+  if(ctx.state==='unknown'){ showToast('上一次取消的結果還不確定，沒有再送出；請先看更新後的名單與票券', 5000); return; }
+  ctx.state='inflight';
+  /* ③ 結果不明（連線失敗／例外）：保留原操作識別與原版本，只「查明」，不換新版本重送。
+        版本沒變＝伺服器沒做這件事（或還在排隊——排隊的話後到者會因版本前進而被擋），可以用同一個原版本再按一次；
+        版本變了＝可能已完成、也可能別人改了名單，一律不重送，請人看結果。 */
+  const unsure=async()=>{
+    let cur=null; try{ const rv=await sb.rpc('fn_group_seat_rev',{p_booking_id:bid}); cur=(rv&&rv.data&&rv.data.ok)?String(rv.data.rev):null; }catch(_){}
+    dbCacheClear(['bookings','member_tickets','ticket_logs']);
+    if(cur && cur===ctx.rev){ ctx.state='ready'; showToast('連線失敗：這次取消沒有送達（名單沒有變動）；可以再按一次「確定取消」', 6000); }
+    else{ ctx.state='unknown'; showToast('連線失敗：不確定這次取消有沒有完成，沒有再送出；請看更新後的名單與票券再決定（不要連按）', 7000); try{ openBookingDetail(bid); }catch(_){} }
+  };
+  try{
+    const {data,error}=await sb.rpc('fn_cancel_group_seat',{p_booking_id:bid,p_seat_key:sk,p_expect_rev:ctx.rev,p_mode:'auto'});
+    if(error){ await unsure(); return; }
+    ctx.state='done';
+    if(!data||data.ok!==true){
+      const c=data&&data.error_code;
+      showToast(GCS_MSG[c]||('取消沒有完成（'+(c||'未知')+'），沒有任何資料被更動'), 5000);
+      dbCacheClear(['bookings','member_tickets','ticket_logs']); openBookingDetail(bid); return;
+    }
+    dbCacheClear(['bookings','member_tickets','ticket_logs','notifications']);
+    closeModal();
+    const o=data.outcome;
+    showToast(o==='refunded'?'已取消並退回 1 堂'
+      :o==='no_deduction'?'已取消；這個名額在票券上沒有扣課紀錄，所以沒有退課（請確認）'
+      :o==='already_refunded'?'已取消；這一堂先前已經退過款，沒有重複退'
+      :o==='refund_failed'?'已取消，但退款沒有成功（票券沒有被更動，請到票券頁手動補退）'
+      :o==='operator_waived'?'已取消（扣課不退）'
+      :'已取消', (o==='refunded'||o==='operator_waived')?3000:6000);
+    openBookingDetail(bid);
+  }catch(e){ await unsure(); }
 }
 
 /* ════════ 營運中心（取代每日前台表，可切換日期）════════ */
