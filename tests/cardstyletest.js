@@ -91,7 +91,7 @@ console.log('\n出席章的 DOM 只放一份');
    章在時間右邊，警示離開第一列改成絕對定位的左下角。 */
 ok('★ 行事曆：姓名列只剩姓名，標籤在第一列左半、時間與章在右半',
    /<span class="evc-r2"><span class="evc-name\$\{bkNameBlankCls\(b\)\}\$\{_nmVCls\}\$\{_nmSCls\}">\$\{_stdName\}<\/span><\/span>/.test(src)
-   && /<span class="evc-r1">\$\{_friOut\}\$\{_stdTag\}\$\{_newOut\}<span class="evc-rr"><b class="evc-hm">\$\{b\.start_time\}<\/b>\$\{_wmOut\}<\/span><\/span>/.test(src));
+   && /<span class="evc-r1">\$\{_friOut\}\$\{_stdTag\}\$\{_newOut\}\$\{_blTop\}<span class="evc-rr"><b class="evc-hm">\$\{b\.start_time\}<\/b>\$\{_wmOut\}<\/span><\/span>/.test(src));
 ok('★ _stampOut 必須先於 _bodyOut 算完（否則 const TDZ 直接爆）',
    src.indexOf('const _stampOut =') < src.indexOf('const _bodyOut ='),
    {stamp:src.indexOf('const _stampOut ='), body:src.indexOf('const _bodyOut =')});
@@ -238,8 +238,8 @@ ok('★ 不再是右下角跟教練並列的膠囊',
 /* 2026-10-26：教練改成絕對定位的右下角膠囊，不再參與流排版 ——
    場地仍然是流排版的最後一列，教練在 DOM 裡排它後面（位置由 CSS 決定）。 */
 /* 2026-10-26 二修：狀態標籤搬進第一列，所以姓名列後面只剩場地與教練膠囊。 */
-ok('★ 場地是流排版的最後一列，教練膠囊與警示排在它後面（兩者都絕對定位）',
-   /<\/span>\$\{_venueSub\}\$\{_abbrOut\}\$\{_alertOut\}\$\{_moreHtml\}<\/div>/.test(src));
+ok('★ 場地（第三列）是流排版的最後一列；右下場地＋教練（_brOut）、左下分期／續約（_blOut）與警示排在它後面（都絕對定位）',
+   /<\/span>\$\{_venueSub\}\$\{_brOut\|\|_abbrOut\}\$\{_blOut\}\$\{_alertOut\}\$\{_moreHtml\}<\/div>/.test(src));
 ok('　　只有教室／跑步機會有值（多功能是預設場地、不標）',
    /selfVenueLabel 本來就只在教室／跑步機才有值/.test(src));
 

@@ -137,7 +137,7 @@ ok('★★★ 徽章排進第一列的流裡（原本 absolute right:3px，時�
    「出席章改到卡片右上角　時間的右邊　卡片左上角就只剩下標籤」
    → 左半＝標籤（友善／體驗／團課）＋NEW；右半＝時間→章；警示在左下角。 */
 ok('★★★ 第一列：標籤靠左，時間與章靠右，警示已離開這一列',
-   /<span class="evc-r1">\$\{_friOut\}\$\{_stdTag\}\$\{_newOut\}<span class="evc-rr"><b class="evc-hm">\$\{b\.start_time\}<\/b>\$\{_wmOut\}<\/span><\/span>/.test(src));
+   /<span class="evc-r1">\$\{_friOut\}\$\{_stdTag\}\$\{_newOut\}\$\{_blTop\}<span class="evc-rr"><b class="evc-hm">\$\{b\.start_time\}<\/b>\$\{_wmOut\}<\/span><\/span>/.test(src));
 ok('★★★ 姓名列只剩姓名（時間不在那裡了）',
    /<span class="evc-r2"><span class="evc-name[^>]*>\$\{_stdName\}<\/span><\/span>/.test(src));
 ok('★★★ 有出席章就不出 NEW（使用者：新跟簽不用同時出現）',
@@ -219,7 +219,7 @@ console.log('\n④ 四列的順序（DOM 由上而下：時間 → 姓名 → �
    章回到第一列，場地與教練對調 —— 教練改成絕對定位的右下角膠囊，
    所以它在 DOM 裡排最後，場地維持在流排版的最後一列。 */
 ok('★★★ _bodyOut 的順序（第一列 → 姓名列 → 場地 → 教練膠囊）',
-   /<div class="evc-flip"><div class="evc-body"><\/div><div class="evc-txt"><span class="evc-r1">.*?<\/span><span class="evc-r2">.*?<\/span>\$\{_venueSub\}\$\{_abbrOut\}/.test(src));
+   /<div class="evc-flip"><div class="evc-body"><\/div><div class="evc-txt"><span class="evc-r1">.*?<\/span><span class="evc-r2">.*?<\/span>\$\{_venueSub\}\$\{_brOut\|\|_abbrOut\}/.test(src));
 ok('★★★ 教練不再推到右下角（那是首頁課卡才留著的位置）',
    /\.cal-ev\.cal-ev-std \.evc-coach\{ margin-top:0 !important; align-self:flex-start !important; \}/.test(src)
    && /\.tcard\.tcard-std \.tcard-co\{ margin-top:auto !important; align-self:flex-end !important; \}/.test(src));
@@ -361,7 +361,7 @@ console.log('\n⑫ 場地移到最後一列（2026-09-04）');
 /* 2026-10-26：教練改成絕對定位的右下角膠囊（@container 150px 以上才顯示），
    不再參與流排版，所以它排在最後面；場地仍是流排版的最後一列。 */
 ok('★★★ DOM 順序：姓名 → 場地 → 教練膠囊 → 警示（後兩者都絕對定位）',
-   /<\/span>\$\{_venueSub\}\$\{_abbrOut\}\$\{_alertOut\}\$\{_moreHtml\}<\/div>/.test(src));
+   /<\/span>\$\{_venueSub\}\$\{_brOut\|\|_abbrOut\}\$\{_blOut\}\$\{_alertOut\}\$\{_moreHtml\}<\/div>/.test(src));
 ok('★★★ 狀態標籤不在姓名列後面了', !/<\/span>\$\{_stdTag\}\$\{_venueSub\}/.test(src));
 ok('★★ 為什麼教練排在場地前面，寫在原地',
    /場地是「這一堂在哪裡上」，屬於補充資訊；教練是「誰上的」，比場地重要/.test(src));

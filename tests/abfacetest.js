@@ -42,7 +42,7 @@ ok('★★★ 轉內容層的理由寫在原地（.cal-ev 要留著當 container
    所以順序是：友善／狀態標籤 → NEW ──（推到最右）── 時間 → 章。
    警示不在這一列了（絕對定位的左下角）。 */
 ok('★★★ 第一列：友善 → 狀態標籤 → NEW → 時間 → 章（警示已不在這一列）',
-   /<span class="evc-r1">\$\{_friOut\}\$\{_stdTag\}\$\{_newOut\}<span class="evc-rr"><b class="evc-hm">\$\{b\.start_time\}<\/b>\$\{_wmOut\}<\/span><\/span>/.test(src));
+   /<span class="evc-r1">\$\{_friOut\}\$\{_stdTag\}\$\{_newOut\}\$\{_blTop\}<span class="evc-rr"><b class="evc-hm">\$\{b\.start_time\}<\/b>\$\{_wmOut\}<\/span><\/span>/.test(src));
 ok('★★★ 警示改成絕對定位的左下角（不再參與第一列的寬度）',
    /\.cal-ev\.cal-ev-std \.ev-payalert\{top:auto;right:auto;left:5px;bottom:3px;\}/.test(css)
    && !/\.cal-ev\.cal-ev-std \.evc-r1 \.ev-payalert\{margin-left:auto;\}/.test(css));

@@ -95,8 +95,8 @@ console.log('\n團體課卡的最後一堂提醒');
   ok('　　已續約／不續約的標記優先，不會又綠勾又驚嘆號',
      /if\(window\._renewDoneBk\[bid\] \|\| window\._renewNoBk\[bid\]\) return;/.test(src));
   /* 2026-09-04：徽章搬進第一列，改由 _alertOut 這個 const 產生（見 _bodyOut）。 */
-  ok('　　驚嘆號本來就不靠票券（團課沒票券也畫得出來）',
-     /const _alertOut = bkRenewBadge\(\{done:_renewDone,no:_renewNo,renew:_renewAlert,pay:_payAlert\}\);/.test(src));
+  ok('　　分期／續約提醒本來就不靠票券（團課沒票券也畫得出來；2026-11-17 起改畫在左下角 _blOut）',
+     /const _alertOut = bkRenewBadge\(\{done:_renewDone,no:_renewNo\}\);/.test(src) && /const _blKind = hideMember \? '' : \(_renewAlert \? 'rn' : \(_payAlert \? 'in' : ''\)\);/.test(src));
 }
 
 console.log(`\n${pass} passed, ${fail} failed`);
