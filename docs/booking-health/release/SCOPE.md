@@ -1,6 +1,6 @@
 # Ticket accounting safety release · 2026-11-19
 
-Authorized priority: correct deductions/refunds. No historical balance or booking rewrite. Frontend based on origin/master563a40a; responsive-calendar CSS is excluded and preserved separately.
+Authorized priority: correct deductions/refunds. No historical balance or booking rewrite. Frontend based on origin/master563a40a; Employee and member mobile clients are included. The scoped employee mobile calendar layout fix is included; it passed320/390/430px isolated rendering and month/card interactions. No separate mobile accounting rules.
 
 Server: zero-value links do not count as charges; nonstandard/negative ledgers stop for manual review. Booking-before-ticket locks and cancellation guards; refund exactly once; expiry cancellation stops if refund fails. Member group cancellation uses atomic preview revision and explicit seat, refuses stale intent/rejoined-seat ABA; old API requires refresh. New endpoints auth-only, internal accounting helper not public.
 
@@ -8,6 +8,6 @@ Evidence: real HTTP assertions23 passed; sole original report failure is incompl
 
 Full release apply/postcondition/rollback/original-body checks rehearsed in test inside forced outer rollback. An initial rehearsal correctly stopped on test dependency ACL mismatch; bootstrap parity corrected and complete rehearsal passed. Test baseline then matches all original stable hashes.
 
-Known pre-existing limitation: full create-booking route12-versus11 RPC parameter compatibility is not certified or changed by this release. No claim that all booking creation paths are now fully tested. Mobile layout/private cancellation follow-up remains separate.
+Known pre-existing limitation: full create-booking route12-versus11 RPC parameter compatibility is not certified or changed by this release. No claim that all booking creation paths are now fully tested. Actual mobile desk private cancellation remains unverified; actual mobile member group cancellation is verified.
 
 Deploy order: server guarded transaction and verify, then frontend normal fast-forward push, then online version/hash check. Existing open member group pages must refresh; old cancellation endpoint intentionally refuses writes. Frontend rollback retains new server functions. Full database rollback requires explicit incident authorization and handling open new pages; rollback flag alone is not authorization.
