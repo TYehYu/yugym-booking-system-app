@@ -1,0 +1,48 @@
+select auth_id into u from employees where id='e_fd';
+perform set_config('request.jwt.claim.sub',u::text,true);
+perform set_config('request.jwt.claims',jsonb_build_object('sub',u,'role','authenticated')::text,true);
+insert into members(id,name,phone) values('CC-CS-M','CC create member','0999999151'),('CC-CS-O','CC other member','0999999152');
+for i in 1..4 loop
+ insert into member_tickets(id,member_id,ticket_type_id,plan_name,sessions_total,sessions_remaining,unlocked_sessions,status,activation_mode,valid_days)
+ values('CC-CS-T'||i,case when i>=3 then 'CC-CS-O' else 'CC-CS-M' end,'tt_pt','CC create',5,5,5,'usable','checkin',365);
+end loop;
+update member_tickets set shared_with='["CC-CS-M"]'::jsonb where id='CC-CS-T3';
+r:=zz_cs_call('CC-CS-K1',31,'CC-CS-T1',null,'general','coaching_session');b:=r->>'booking_id';
+if r->>'ok' is distinct from 'true' then raise exception 'SETUP_CREATE_FAILED:%',r;end if;
+out:=out||jsonb_build_array(jsonb_build_object('case','selected_ticket_deduct_exactly_one','safe',(select sessions_remaining=4 from member_tickets where id='CC-CS-T1') and (select count(*)=1 from ticket_logs where booking_id=b and delta=-1)));
+r2:=zz_cs_call('CC-CS-K1',31,'CC-CS-T1',null,'general','coaching_session');
+out:=out||jsonb_build_array(jsonb_build_object('case','same_key_same_booking_no_second_charge','safe',r2->>'already'='true' and r2->>'booking_id'=b and (select sessions_remaining=4 from member_tickets where id='CC-CS-T1') and (select count(*)=1 from ticket_logs where booking_id=b and delta=-1)));
+for i in 1..3 loop
+ r:=zz_cs_call('CC-CS-K1',31,'CC-CS-T1',case when i=1 then 'changed' else null end,case when i=2 then 'group_room' else 'general' end,case when i=3 then 'none' else 'coaching_session' end);
+ out:=out||jsonb_build_array(jsonb_build_object('case','changed_note_space_benefit_'||i,'safe',r->>'error_code'='IDEMPOTENCY.CONFLICT' and (select sessions_remaining=4 from member_tickets where id='CC-CS-T1')));
+end loop;
+select auth_id into u from employees where id='e_coach';perform set_config('request.jwt.claim.sub',u::text,true);perform set_config('request.jwt.claims',jsonb_build_object('sub',u,'role','authenticated')::text,true);
+r:=zz_cs_call('CC-CS-K1',31,'CC-CS-T1',null,'general','coaching_session');
+out:=out||jsonb_build_array(jsonb_build_object('case','other_actor_cannot_reuse_receipt','safe',r->>'error_code'='IDEMPOTENCY.CONFLICT'));
+select auth_id into u from employees where id='e_fd';perform set_config('request.jwt.claim.sub',u::text,true);perform set_config('request.jwt.claims',jsonb_build_object('sub',u,'role','authenticated')::text,true);
+r:=fn_desk_cancel_booking(b,'auto');if r->>'ok' is distinct from 'true' then raise exception 'SETUP_CANCEL_FAILED:%',r;end if;
+r:=zz_cs_call('CC-CS-K1',31,'CC-CS-T1',null,'general','coaching_session');
+out:=out||jsonb_build_array(jsonb_build_object('case','cancelled_receipt_never_recreates','safe',r->>'error_code'='IDEMPOTENCY.CANCELLED' and (select sessions_remaining=5 from member_tickets where id='CC-CS-T1') and (select count(*)=1 from bookings where idempotency_key='CC-CS-K1')));
+r:=zz_cs_call(' ',32,'CC-CS-T1',null,'general','coaching_session');
+out:=out||jsonb_build_array(jsonb_build_object('case','blank_operation_rejected','safe',r->>'error_code'='IDEMPOTENCY.BAD_KEY'));
+update member_tickets set sessions_remaining=0,status='used_up' where id='CC-CS-T2';
+r:=zz_cs_call('CC-CS-EMPTY',32,'CC-CS-T2',null,'general','coaching_session');
+out:=out||jsonb_build_array(jsonb_build_object('case','empty_ticket_rolls_back_booking_and_ledger','safe',r->>'ok'='false' and not exists(select 1 from bookings where idempotency_key='CC-CS-EMPTY') and not exists(select 1 from ticket_logs where ticket_id='CC-CS-T2')));
+r:=zz_cs_call('CC-CS-SHARED',33,'CC-CS-T3',null,'general','coaching_session');
+out:=out||jsonb_build_array(jsonb_build_object('case','shared_selected_ticket_correct','safe',r->>'ok'='true' and (select sessions_remaining=4 from member_tickets where id='CC-CS-T3') and (select sessions_remaining=5 from member_tickets where id='CC-CS-T1')));
+r:=zz_cs_call('CC-CS-OTHER',34,'CC-CS-T4',null,'general','coaching_session');
+out:=out||jsonb_build_array(jsonb_build_object('case','unshared_ticket_no_booking_or_charge','safe',r->>'error_code'='TICKET.NOT_YOURS' and not exists(select 1 from bookings where idempotency_key='CC-CS-OTHER') and (select sessions_remaining=5 from member_tickets where id='CC-CS-T4')));
+update member_tickets set sessions_remaining=5,status='usable',unlocked_sessions=0,installment='{}' where id='CC-CS-T2';
+r:=zz_cs_call('CC-CS-LOCKED',36,'CC-CS-T2',null,'general','coaching_session');
+out:=out||jsonb_build_array(jsonb_build_object('case','installment_unpaid_no_booking_or_charge','safe',r->>'error_code'='TICKET.INSTALLMENT_LOCKED' and not exists(select 1 from bookings where idempotency_key='CC-CS-LOCKED') and (select sessions_remaining=5 from member_tickets where id='CC-CS-T2')));
+update member_tickets set unlocked_sessions=5 where id='CC-CS-T2';
+r:=zz_cs_call('CC-CS-LOCKED',36,'CC-CS-T2',null,'general','coaching_session');r2:=zz_cs_call('CC-CS-LOCKED',36,'CC-CS-T2',null,'general','coaching_session');
+out:=out||jsonb_build_array(jsonb_build_object('case','failed_attempt_then_payment_retry_only_one_charge','safe',r->>'ok'='true' and r2->>'already'='true' and (select sessions_remaining=4 from member_tickets where id='CC-CS-T2') and (select count(*)=1 from bookings where idempotency_key='CC-CS-LOCKED')));
+r:=zz_cs_call('CC-CS-CONFLICT',33,'CC-CS-T1',null,'general','coaching_session');
+out:=out||jsonb_build_array(jsonb_build_object('case','time_conflict_no_booking_or_charge','safe',r->>'error_code'='BOOKING.TIME_CONFLICT' and not exists(select 1 from bookings where idempotency_key='CC-CS-CONFLICT') and (select sessions_remaining=5 from member_tickets where id='CC-CS-T1')));
+r:=zz_cs_call(repeat('x',201),37,'CC-CS-T1',null,'general','coaching_session');
+out:=out||jsonb_build_array(jsonb_build_object('case','oversized_key_rejected','safe',r->>'error_code'='IDEMPOTENCY.BAD_KEY'));
+perform set_config('request.jwt.claim.sub','00000000-0000-0000-0000-000000000000',true);perform set_config('request.jwt.claims','{"sub":"00000000-0000-0000-0000-000000000000","role":"authenticated"}',true);
+r:=zz_cs_call('CC-CS-AUTH',35,'CC-CS-T1',null,'general','coaching_session');
+out:=out||jsonb_build_array(jsonb_build_object('case','unauthorised_no_write','safe',r->>'error_code'='AUTH.FORBIDDEN' and not exists(select 1 from bookings where idempotency_key='CC-CS-AUTH')));
+raise exception 'CREATE_STABILITY_RESULT:%',out;

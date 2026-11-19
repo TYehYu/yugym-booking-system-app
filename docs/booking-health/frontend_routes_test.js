@@ -17,6 +17,6 @@ function run(name,e){const scope=new Proxy(e,{has:()=>true,get:(t,k)=>k===Symbol
 }
 const args=[];const e={window:{},benefitTypeOfTypeId:()=> 'pt_pass',spaceForBooking:()=>({space:'general',resource:'general_area'}),dbCacheClear(){},sb:{rpc:async(n,a)=>{args.push(a);return {error:{message:'PGRST202: signature mismatch'}};}}};
 const result=await run('createBookingViaRpc',e)({member_id:'M',coach_id:'C',category:'私人教練',type_id:'PT'}, {id:'T',ticket_type_id:'PT'},'2026-11-20','09:00','operation');
-check('creation sends idempotency parameter not present in current production signature',Object.keys(args[0]).length===12&&Object.hasOwn(args[0],'p_idempotency_key'));
-check('signature refusal is surfaced, no booking success claimed',result.ok===false&&result.reason.includes('PGRST202'));
+check('creation includes the stable idempotency parameter',Object.keys(args[0]).length===12&&Object.hasOwn(args[0],'p_idempotency_key'));
+check('RPC refusal is surfaced, no booking success claimed',result.ok===false&&result.reason.includes('PGRST202'));
 console.log(passed+' passed');})().catch(e=>{console.error(e);process.exitCode=1;});
