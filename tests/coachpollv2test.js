@@ -76,7 +76,7 @@ function mkEnv(opt) {
       return [];
     },
     dbBookingsRange: async (a, b) => { log.ranges.push([a, b]); return server.bookings.filter(x => x.date >= a && x.date <= b).map(x => Object.assign({}, x)); },
-    dbBookingsForCoach: async () => [], _tkRowsIn: async () => [],
+    dbBookingsForCoach: async () => [], _tkRowsIn: async () => [], dbCalendarLastBkRows: async () => server.bookings.slice(),
     computeLastBkMarks(tk, bks) { log.marks.push({ tickets: tk, bookings: bks }); win._cagAgendaGen = -1; /* 讓世代檢查直接 return，不跑畫面組字 */ },
     startCalPoll() { log.startPoll++; },
     remoteSigChanged: async () => true, dbCacheClear() {}, uiBusyReason: () => '', navTo() { log.navTo++; },

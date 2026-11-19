@@ -15713,8 +15713,8 @@ function tbl(s){return TABLE_ALIAS[s]||s;}
 let sb=null;
 // ── 版本號（日期+時間格式：年後兩碼+月+日.時分，例 26620.1058 = 26年6/20 10:58）──
 // 每次改版手動更新這一行即可，畫面與 title 會一起更新
-const APP_VERSION = '261117.1747';
-const APP_VERSION_LABEL = 'v261117.1747';
+const APP_VERSION = '261119.0911';
+const APP_VERSION_LABEL = 'v261119.0911';
 const CLOUD = !!(window.YUGYM_CONFIG && window.YUGYM_CONFIG.url && window.YUGYM_CONFIG.anonKey);
 if(CLOUD){ sb = supabase.createClient(window.YUGYM_CONFIG.url, window.YUGYM_CONFIG.anonKey); }
 
@@ -23056,6 +23056,54 @@ async function listUsableTickets(member_id,type_id,bookDate,bookTime){
 /* ══ 只抓用得到的那幾列（2026-10-28 效能）════════════════════════════════
    `.in()` 分批打，一批 150 個 id —— PostgREST 走 GET，id 全部塞進網址，
    一次塞太多會被網址長度擋掉（而且那種錯誤長得像「讀取失敗」，很難查）。 */
+/* 手機課卡的付款提醒：分頁讀齊相關票券與團課會員的後續課卡。
+   不使用整店 bookings 快取，也不以選定日 ±3 天代替完整歷史。
+   count 與回傳筆數不一致、資料中途改變或看不到畫面上的預約，一律交由畫面停用提醒。 */
+async function dbCalendarLastBkRows(tickets, visible, typeMap){
+  const active=(visible||[]).filter(b=>b&&b.status!=='cancelled');
+  const seeds=new Set(active.map(b=>b.ticket_id).filter(Boolean));
+  const groups=new Set((tickets||[]).filter(t=>seeds.has(t.id))
+    .map(t=>t.member_id+'|'+tkRenewGroup(t,typeMap)));
+  const ids=[...new Set([...seeds,...(tickets||[])
+    .filter(t=>groups.has(t.member_id+'|'+tkRenewGroup(t,typeMap))).map(t=>t.id)])];
+  const groupBk=active.filter(b=>bkIsGroup(b));
+  const mids=[...new Set(groupBk.flatMap(b=>Array.isArray(b.member_ids)?b.member_ids:(b.member_id?[b.member_id]:[])))];
+  const minDate=groupBk.map(b=>b.date).filter(Boolean).sort()[0];
+  const fields='id,ticket_id,member_id,member_ids,category,date,start_time,status,coach_leave';
+  const rows=new Map();
+  async function read(makeQuery){
+    const pageSize=500, seen=new Set(); let total=null, readCount=0;
+    for(let from=0;;from+=pageSize){
+      const {data,error,count}=await makeQuery(sb.from('bookings').select(fields,{count:'exact'}))
+        .order('id').range(from,from+pageSize-1);
+      if(error) throw dbFriendlyError(error,'bookings','讀取');
+      if(!Array.isArray(data)||!Number.isInteger(count)||count<0) throw new Error('CAL.HISTORY_INCOMPLETE');
+      if(total===null) total=count;
+      if(count!==total) throw new Error('CAL.HISTORY_CHANGED');
+      readCount+=data.length;
+      for(const b of data){
+        if(!b||!b.id||seen.has(b.id)||(rows.has(b.id)&&JSON.stringify(rows.get(b.id))!==JSON.stringify(b))) throw new Error('CAL.HISTORY_CHANGED');
+        seen.add(b.id); rows.set(b.id,b);
+      }
+      if(readCount===total) break;
+      if(data.length!==pageSize||readCount>total) throw new Error('CAL.HISTORY_INCOMPLETE');
+    }
+  }
+  // 每批限制網址長度；其他同類票也要讀，避免漏掉會員下一張票的後續課。
+  for(let i=0;i<ids.length;i+=50){
+    const batch=ids.slice(i,i+50);
+    await read(q=>q.in('ticket_id',batch));
+  }
+  // member_ids 為 jsonb；只查當前團課會員及最早可見課之後，不下載整店歷史。
+  for(let i=0;i<mids.length;i+=20){
+    const filters=mids.slice(i,i+20).map(id=>'member_ids.cs.'+JSON.stringify([id]));
+    filters.push(...mids.slice(i,i+20).map(id=>'member_id.eq.'+JSON.stringify(id)));
+    await read(q=>q.gte('date',minDate).or(filters.join(',')));
+  }
+  const required=active.filter(b=>b.ticket_id||bkIsGroup(b));
+  if(required.some(b=>!rows.has(b.id))) throw new Error('CAL.HISTORY_INCOMPLETE');
+  return [...rows.values()];
+}
 async function _tkRowsIn(table, col, vals, sel){
   const out=[], CH=150, v=[...new Set((vals||[]).map(String).filter(Boolean))];
   for(let i=0;i<v.length;i+=CH){
@@ -34768,46 +34816,27 @@ async function renderCoachAgenda(){
   try{
     const _tkPk=dbPeek('member_tickets');
     const _tkAll=_tkPk ? _tkPk.data : await dbGetAll('member_tickets');
-    /* 2026-11-06（蔡惠蓉11/6、王慧穎11/6 案例，手機版最後一堂誤標）：
-       dayRangeBk（＝這裡的 bookings）是選定日±3天的窄窗口（2026-11-03 MANGO效能修復
-       引入），但「這張票真正排到哪一天」要看完整歷史——真正最後一堂若在窗口外
-       （兩案例都排到下個月），computeLastBkMarks 只看得到窗口內這幾筆，
-       會把「窗口內剛好最後一筆」誤判成「全票最後一堂」，提醒標錯日期。
-       只對今天課卡實際用到的那幾張票，額外用_tkRowsIn（coachHomeV2._tkBkMap已經在用
-       的同一支範圍查詢）補抓這些票的全部預約（不限日期），不影響dayRangeBk本身
-       （課卡渲染／場地占用仍用窄窗口，效能不受影響——只多一支.in(ticket_id)查詢，
-       筆數等同今天看得到的客人數，不是整表）。
-       ⚠ 團課（member_ids，無ticket_id）的最後一堂判斷是另一段邏輯、直接掃
-         bookings找該會員團課，同樣有這個窗口限制，本次未修——留待後續處理。 */
-    const _dayTkIds=[...new Set(bookings.map(b=>b&&b.ticket_id).filter(Boolean))];
-    /* 2026-11-07（蔡靜雯案例：上一版修正邏輯上應涵蓋，但無法單靠程式碼閱讀確認
-       當次真的有成功補到完整歷史）——_tkRowsIn 原本用 .catch(()=>[]) 吞掉任何失敗，
-       失敗時會靜默退回窄窗口（重現同一個誤判，卻看不出是「查詢失敗」還是「邏輯本身
-       又有新漏洞」）。這裡只加可觀測性，三種結果都留痕：成功有資料／成功但空／
-       拋例外被接住。⚠ 只記數量與耗時，不印會員姓名、票券內容或任何個資。
-       ⚠ 失敗時的退回行為（_lastBkMarkSrc 退回 bookings）完全不變，只是現在看得到
-       它發生過。 */
-    let _tkFullRows=[];
-    if(_dayTkIds.length){
-      const _tkT0=performance.now();
-      try{
-        _tkFullRows=await _tkRowsIn('bookings','ticket_id',_dayTkIds,'id,ticket_id,date,start_time,status,coach_leave');
-        _calDiag(_tkFullRows.length ? 'agenda:lastbk-fullrows-ok' : 'agenda:lastbk-fullrows-empty',
-          { tkIdCount:_dayTkIds.length, rowCount:_tkFullRows.length, ms:Math.round(performance.now()-_tkT0) });
-      }catch(e){
-        _tkFullRows=[];
-        _calDiag('agenda:lastbk-fullrows-error',
-          { tkIdCount:_dayTkIds.length, msg:(e&&e.message)||String(e), ms:Math.round(performance.now()-_tkT0) });
-      }
+    // 最後一堂必須用完整票券／團課名單歷史；窄日期窗口只用來畫課卡。
+    const _tkT0=performance.now();
+    try{
+      const _lastBkMarkSrc=await dbCalendarLastBkRows(_tkAll, bookings,
+        Object.fromEntries((window._ttCache||[]).map(t=>[t.id,t])));
+      if(window._cagAgendaGen!==_myAgendaGen) return;
+      _calDiag('agenda:lastbk-fullrows-ok',
+        { rowCount:_lastBkMarkSrc.length, ms:Math.round(performance.now()-_tkT0) });
+      computeLastBkMarks(_tkAll, _lastBkMarkSrc, Object.fromEntries((window._ttCache||[]).map(t=>[t.id,t])));
+    }catch(e){
+      if(window._cagAgendaGen!==_myAgendaGen) return;
+      _calDiag('agenda:lastbk-fullrows-error',
+        { msg:(e&&e.message)||String(e), ms:Math.round(performance.now()-_tkT0) });
+      // 查詢失敗／空資料／分頁缺漏不可退回當週判斷，也不可沿用上一天的警示。
+      computeLastBkMarks([], [], {});
     }
-    const _lastBkMarkSrc=_tkFullRows.length ? (()=>{
-        const seen={}, out=[];
-        _tkFullRows.forEach(x=>{ if(x&&x.id&&!seen[x.id]){ seen[x.id]=1; out.push(x); } });
-        bookings.forEach(x=>{ if(x&&x.id&&!seen[x.id]){ seen[x.id]=1; out.push(x); } });
-        return out;
-      })() : bookings;
-    computeLastBkMarks(_tkAll, _lastBkMarkSrc, Object.fromEntries((window._ttCache||[]).map(t=>[t.id,t])));
-  }catch(_){ window._installLastBk=window._installLastBk||{}; window._renewLastBk=window._renewLastBk||{}; }
+  }catch(_){
+    if(window._cagAgendaGen!==_myAgendaGen) return;
+    window._installLastBk={}; window._renewLastBk={};
+    window._renewDoneBk={}; window._renewNoBk={}; window._bkSeq={};
+  }
   /* 這裡是最後一個await之後——世代檢查放這裡：比它早的所有await都可能被打斷執行順序，
      比它晚的全是同步組字串，JS單執行緒不會再被插隊，查一次就夠，不用每段都查。 */
   if(window._cagAgendaGen!==_myAgendaGen) return;

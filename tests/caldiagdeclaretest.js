@@ -133,7 +133,7 @@ function runWith(fnSrc, name, sb) {
       dbGetAll: async () => [],
       dbBookingsRange: async () => [{ id: 'b1', ticket_id: 't1', status: 'booked' }],
       dbBookingsForCoach: async () => [],
-      _tkRowsIn: async () => { if (!rowsOk) throw new Error('RPC 失敗'); return [{ id: 'b1', ticket_id: 't1' }]; },
+      dbCalendarLastBkRows: async () => { if (!rowsOk) throw new Error('RPC 失敗'); return [{ id: 'b1', ticket_id: 't1' }]; },
       computeLastBkMarks() { env.marksCalled = (env.marksCalled || 0) + 1; win._cagAgendaGen = -1; /* 讓後面的世代檢查直接 return，不跑畫面組字 */ },
       performance: { now: () => 1 }, Date,
     };
