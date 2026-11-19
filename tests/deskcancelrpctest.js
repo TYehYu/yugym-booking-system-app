@@ -16,6 +16,7 @@ function make(o) {
   const booking = Object.assign({ id: 'B1', member_id: 'M1', ticket_id: null, category: '小班肌力', date: '2026-12-01', start_time: '19:00', duration: 60, status: 'booked' }, o.booking || {});
   let attempt = 0;
   const env = {
+    bookingAccountErrMsg: new Function('return ('+src.slice(src.indexOf('function bookingAccountErrMsg('),src.indexOf('\n}\n',src.indexOf('function bookingAccountErrMsg('))+3)+');')(),
     window: { FEATURE_FLAGS: { cancelBookingRpc: true } }, FEATURE_FLAGS: { cancelBookingRpc: true }, CLOUD: o.cloud !== false,
     sb: { rpc: async (n, a) => { log.rpcs.push([n, a]); attempt++; return o.rpc(n, a, attempt); } },
     isDeskLike: () => o.desk !== false, SESSION: { id: 'E1', role: o.desk === false ? 'coach' : 'front_desk' }, CUR_PAGE: 'calendar',

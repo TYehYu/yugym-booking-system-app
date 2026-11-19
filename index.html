@@ -15713,8 +15713,8 @@ function tbl(s){return TABLE_ALIAS[s]||s;}
 let sb=null;
 // ── 版本號（日期+時間格式：年後兩碼+月+日.時分，例 26620.1058 = 26年6/20 10:58）──
 // 每次改版手動更新這一行即可，畫面與 title 會一起更新
-const APP_VERSION = '261119.0911';
-const APP_VERSION_LABEL = 'v261119.0911';
+const APP_VERSION = '261119.1205';
+const APP_VERSION_LABEL = 'v261119.1205';
 const CLOUD = !!(window.YUGYM_CONFIG && window.YUGYM_CONFIG.url && window.YUGYM_CONFIG.anonKey);
 if(CLOUD){ sb = supabase.createClient(window.YUGYM_CONFIG.url, window.YUGYM_CONFIG.anonKey); }
 
@@ -23460,6 +23460,19 @@ async function tkNetDeductOn(ticket_id, booking_id){
     return lg.filter(l=>l.action==='deduct').length - lg.filter(l=>l.action==='refund').length;
   }catch(_){ return 0; }
 }
+// 扣退帳無法判讀時，只提示核對，不替換票券或直接寫入餘額。
+function bookingAccountErrMsg(code){
+  const c=String(code||'');
+  if(/TICKET\.LEDGER_(AMBIGUOUS|NEGATIVE)/.test(c)) return '這堂課的扣退紀錄需要核對，沒有更動；請櫃檯查帳後再處理';
+  return ({'CLIENT.UPDATE_REQUIRED':'此頁面需要更新，沒有取消；請重新整理後再試',
+    'REV_MISMATCH':'名單已變動，沒有再次取消；請先重新整理確認',
+    'TICKET.UNKNOWN':'無法確認這個名額使用哪張票，沒有更動；請櫃檯協助',
+    'SEAT.MULTIPLE':'您在這堂課有多個名額，請櫃檯協助指定要取消的名額',
+    'SEAT_NOT_CANCELLABLE':'這個名額已簽到或請假，請櫃檯協助',
+    'REFUND.NO_DEDUCT':'這一堂沒有扣課紀錄，沒有更動；請櫃檯核對',
+    'REFUND.BALANCE_FULL':'這張票券的堂數已是滿的，沒有更動；請櫃檯核對',
+    'REFUND.BUSY':'目前有人正在操作，沒有完成；請稍後重試'})[c]||'';
+}
 async function deductTicket(ticket,booking_id,operator,opts){
   const _opKey=(opts&&opts.opKey)?String(opts.opKey):null;   // 合法多堂：每一次扣課帶一把「穩定的操作識別」（重送／重新整理／重試都沿用同一把）
   const _multi=!!(opts&&(opts.multi||opts.opKey));
@@ -23508,8 +23521,9 @@ async function deductTicket(ticket,booking_id,operator,opts){
       ticket.sessions_remaining+=1;   // 沒扣成就把記憶體裡的餘額還原，別讓畫面先減了
       const _code=(data&&data.error_code)||'';
       const _qm=tkQuotaMsg(error&&error.message);
-      const _msg=_qm||{NOT_STAFF:'沒有權限扣課', NO_BOOKING:'找不到這筆預約',
+      const _msg=bookingAccountErrMsg(error&&error.message)||_qm||{NOT_STAFF:'沒有權限扣課', NO_BOOKING:'找不到這筆預約',
         NOT_YOUR_BOOKING:'只能扣自己課堂的票（請櫃檯協助）',
+        BOOKING_CANCELLED:'這筆預約已取消，沒有再扣課', TICKET_NOT_USABLE:'這張票券已不能使用，沒有扣課',
         NO_TICKET:'找不到票券', NO_REMAINING:'票券已無剩餘堂數'}[_code]||('扣課失敗'+(_code?'：'+_code:''));
       try{ if(typeof showToast==='function') showToast('⚠ '+_msg); }catch(_){}
       return false;
@@ -23662,7 +23676,7 @@ async function refundTicket(ticket_id,booking_id,operator){
   dbCacheClear(['member_tickets','ticket_logs']);   // RPC 繞過 dbPut：票券與帳本快取要丟掉
   const d=res&&res.data;
   if(res&&res.error){ console.error('退課 RPC 錯誤',res.error); _warn('退課沒有成功（'+(res.error.message||'連線失敗')+'），請到會員票券頁確認補退'); return false; }
-  if(!d || d.ok!==true){ _warn(REFUND_MSG[(d&&d.error_code)||'']||('退課沒有成功'+((d&&d.error_code)?'：'+d.error_code:''))); return false; }
+  if(!d || d.ok!==true){ _warn(bookingAccountErrMsg(d&&d.error_code)||REFUND_MSG[(d&&d.error_code)||'']||('退課沒有成功'+((d&&d.error_code)?'：'+d.error_code:''))); return false; }
   if(d.refunded!==true) return false;                // 已完全退款：冪等，不重複退、不再提示
   /* 舊制（預約時啟用）票的「效期退回未開通」後處理（2026-07-24 使用者定案）：只處理 activation_mode 不是 checkin 的票；
      只動效期欄位的窄更新，不碰餘額。失敗不影響已完成的退款（事後校正，不是金額紅線）。 */
@@ -24966,7 +24980,7 @@ async function _doGroupCancelSeatRpc(bid,seatKey,ctxId){
     ctx.state='done';
     if(!data||data.ok!==true){
       const c=data&&data.error_code;
-      showToast(GCS_MSG[c]||('取消沒有完成（'+(c||'未知')+'），沒有任何資料被更動'), 5000);
+      showToast(bookingAccountErrMsg(c)||GCS_MSG[c]||('取消沒有完成（'+(c||'未知')+'），沒有任何資料被更動'), 5000);
       dbCacheClear(['bookings','member_tickets','ticket_logs']); openBookingDetail(bid); return;
     }
     dbCacheClear(['bookings','member_tickets','ticket_logs','notifications']);
@@ -47691,7 +47705,7 @@ async function cancelBooking(id, refundMode, opts){
     const _d=res&&res.data;
     if(!_d || _d.ok!==true){
       const _c=(_d&&_d.error_code)||'';
-      if(!_silent) showToast(({NO_BOOKING:'找不到這筆預約',NOT_DESK:'沒有權限取消這筆預約',NOT_STAFF:'沒有權限取消這筆預約',BAD_MODE:'取消方式不正確，已停止'})[_c]||('取消未執行'+(_c?'：'+_c:'')+'——沒有任何資料被更動'));
+      if(!_silent) showToast(bookingAccountErrMsg(_c)||({NO_BOOKING:'找不到這筆預約',NOT_DESK:'沒有權限取消這筆預約',NOT_STAFF:'沒有權限取消這筆預約',BAD_MODE:'取消方式不正確，已停止'})[_c]||('取消未執行'+(_c?'：'+_c:'')+'——沒有任何資料被更動'));
       return;
     }
     if(_d.already && _tries===0){ if(!_silent) showToast('這筆預約已經取消過了'); return; }
@@ -47755,6 +47769,7 @@ async function cancelBooking(id, refundMode, opts){
     /* 2026-08-21：會員只能自行調整團課與自主訓練，其餘一律櫃檯（見 memSelfServe） */
     if(_code==='CANCEL.DESK_ONLY'){ if(!_silent) cancelDeskOnlyModal(); return; }
     if(_code==='AUTH.FORBIDDEN'){ if(!_silent) showToast('沒有權限取消這筆預約'); return; }
+    if(bookingAccountErrMsg(_code)){ if(!_silent) showToast(bookingAccountErrMsg(_code),6000); return; }
     /* 2026-11-18：不再回退前端兩步（B1）。RPC 是單一交易，沒成功＝沒有任何資料被更動，請重試。 */
     console.error('RPC 取消未成功（不回退前端舊邏輯）：', res && (res.error || res.data));
     if(!_silent) showToast('取消未執行（'+((_code&&String(_code))||'未知原因')+'）——沒有任何資料被更動，請重試或聯絡管理員');
@@ -71534,7 +71549,8 @@ async function doMemCancelSelf(id){
      本人驗證與 24 小時退點界線都在 DB 端判定（台北時區）。 */
   const {data,error}=await sb.rpc('fn_cancel_booking',{p_booking_id:id,p_reason:null});
   dbCacheClear(['bookings','member_tickets','ticket_logs']);
-  if(error||!data||!data.ok){ showToast('取消失敗'+(data&&data.error_code?'：'+data.error_code:'')); return; }
+  if(error){ showToast('連線中斷，取消結果尚未確認；請重新整理課表與票券再操作',6000); return; }
+  if(!data||!data.ok){ showToast(bookingAccountErrMsg(data&&data.error_code)||('取消失敗'+(data&&data.error_code?'：'+data.error_code:''))); return; }
   closeModal();
   showToast(data.cancellation_result==='refunded'?'已取消，退回 1 點':'已取消（24 小時內，恕不退點）');
   /* 回到原本那一頁（2026-09-02）——原本一律跳去「預約紀錄」，
@@ -71760,30 +71776,53 @@ async function memCancelTap(id){
 async function memCancelBooking(id){ return cancelDeskOnlyModal(); }
 /* 取消團體課報名（2026-07-28）：只退自己的名額＋退 1 堂，整堂課不動 */
 async function memLeaveGroup(id){
-  const b=await dbGet('bookings',id);
-  if(!b||!mids(b).includes(SESSION.id)){showToast('找不到報名紀錄');return;}
-  /* 2026-08-20：改用統一的 24 小時界線（原本只擋「開課當天」，
-     會漏掉「明天早上 8 點的課、今晚 11 點退」這種只剩 9 小時的情況）。 */
-  if(hoursUntilStart(b) < 24){ cancelTooLateModal(); return; }
-  /* 2026-09-14 銀髮友善改版：與自主訓練那張同一套版面。
-     ⚠ 「這堂課照常開課」要留著 —— 長輩會擔心自己按了會把整堂課取消掉。 */
-  showModal(`<div class="mcx"></div><div class="modal-title">取消報名</div>
-    <p class="mcx-when">${memWhenText(b.date,b.start_time)}<span>團體課</span></p>
-    <div class="mk-key green">會退回 1 堂</div>
-    <ul class="mk-pts"><li>只取消您的名額，這堂課照常開課</li></ul>
-    <div class="modal-foot mcx-foot">
-      <button class="btn btn-danger" onclick="doMemLeaveGroup('${id}')">確定取消</button>
-      <button class="btn btn-ghost" onclick="closeModal()">先不要</button></div>`);
-}
-async function doMemLeaveGroup(id){
  try{
-  const {data,error}=await sb.rpc('fn_member_leave_group',{p_booking_id:id});
-  dbCacheClear(['bookings','member_tickets','ticket_logs']);
-  if(data && data.error_code==='CANCEL.TOO_LATE'){ cancelTooLateModal(); return; }
-  if(error||!(data&&data.ok)){ showToast('取消失敗'+((data&&data.error_code)?'：'+(GRP_JOIN_ERR[data.error_code]||data.error_code):'')); return; }
-  closeModal(); showToast('已取消報名，退回 1 堂');
-  navTo('mem_bookings');
- }catch(e){ showToast('取消失敗：'+(e&&e.message?e.message:e)); }
+  const {data,error}=await sb.rpc('fn_member_group_cancel_preview',{p_booking_id:id});
+  if(error||!data||data.ok!==true||!data.rev||!Array.isArray(data.seat_keys)||!data.seat_keys.length){
+    showToast(bookingAccountErrMsg(data&&data.error_code)||'讀不到最新的報名資料，沒有取消；請重新開啟再試',6000); return;
+  }
+  if(hoursUntilStart(data)<24){ cancelTooLateModal(); return; }
+  const n=(window._mlgSeq||0)+1; window._mlgSeq=n;
+  const cid='mlg'+n, ctx={bid:String(id),rev:String(data.rev),seats:data.seat_keys.slice(),state:'ready'};
+  (window._mlgCtx=window._mlgCtx||{})[cid]=ctx;
+  const choices=ctx.seats.length>1?`<label for="mlg-seat-${cid}">取消哪個名額</label><select id="mlg-seat-${cid}" class="input">${ctx.seats.map((k,i)=>`<option value="${escH(k)}">第 ${i+1} 個名額</option>`).join('')}</select>`:'';
+  showModal(`<div class="mcx"></div><div class="modal-title">取消報名</div>
+    <p class="mcx-when">${memWhenText(data.date,data.start_time)}<span>團體課</span></p>
+    ${choices}<div class="mk-key green">依實際扣堂紀錄退回</div><div id="mlg-status-${cid}" role="status" aria-live="polite" hidden style="margin-top:12px;padding:12px;background:var(--card2);border-radius:10px;line-height:1.7;"></div>
+    <ul class="mk-pts"><li>只取消選定名額，這堂課照常開課</li></ul>
+    <div class="modal-foot mcx-foot">
+      <button id="mlg-confirm-${cid}" class="btn btn-danger" onclick="doMemLeaveGroup('${id}','${cid}')">確定取消</button>
+      <button class="btn btn-ghost" onclick="closeModal()">先不要</button></div>`);
+ }catch(_){ showToast('讀不到最新的報名資料，沒有取消；請重新開啟再試',6000); }
+}
+async function doMemLeaveGroup(id,cid){
+  const ctx=window._mlgCtx&&window._mlgCtx[cid];
+  if(!ctx||ctx.bid!==String(id)||ctx.state!=='ready'){ showToast('這個確認視窗已處理或結果待確認，沒有再次送出；請先更新課表',6000); return; }
+  const el=document.getElementById('mlg-seat-'+cid);
+  const sk=el?el.value:(ctx.seats.length===1?ctx.seats[0]:null);
+  if(!sk||!ctx.seats.includes(sk)){ showToast('找不到選定的名額，沒有取消；請重新開啟',6000); return; }
+  const status=(state,message)=>{
+    ctx.state=state;const button=document.getElementById('mlg-confirm-'+cid),box=document.getElementById('mlg-status-'+cid);
+    if(button){button.disabled=true;button.textContent=state==='inflight'?'處理中…':state==='unknown'?'請先更新課表':'請重新確認';}
+    if(el) el.disabled=true;
+    if(box){box.hidden=false;box.textContent=message;}
+  };
+  status('inflight','正在核對名額與票券，請稍候…');
+  const unknown=()=>{const message='取消結果尚未確認，沒有再次送出；請先重新整理課表與票券';status('unknown',message);showToast(message,6000);};
+  try{
+    const {data,error}=await sb.rpc('fn_member_leave_group_v2',{p_booking_id:id,p_seat_key:sk,p_expect_rev:ctx.rev});
+    dbCacheClear(['bookings','member_tickets','ticket_logs']);
+    if(error||!data||typeof data.ok!=='boolean'){ unknown(); return; }
+    if(data.ok!==true){
+      const message=bookingAccountErrMsg(data.error_code)||('取消未完成：'+(GRP_JOIN_ERR[data.error_code]||data.error_code||'請重新開啟確認'));
+      status('done',message);
+      if(data.error_code==='CANCEL.TOO_LATE'){ cancelTooLateModal(); return; }
+      showToast(message,6000); return;
+    }
+    // V2 promises an explicit actual refund. Conflicting or incomplete responses cannot prove completion.
+    if(data.refunded!==1||data.outcome!=='refunded'){ unknown(); return; }
+    ctx.state='done';closeModal();showToast('已取消報名，退回 1 堂',6000);navTo('mem_bookings');
+  }catch(_){ unknown(); }
 }
 /* ════════════════════════════════════════════════════════════
    會員首頁 [+] 預約自主訓練（2026-07-22 使用者指定流程）：

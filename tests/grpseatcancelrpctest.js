@@ -52,6 +52,7 @@ function make(S, o) {
   const log = { puts: [], refunds: [], logs: [], toasts: [], opens: 0, modals: [], cleared: 0 };
   const win = {};
   const env = {
+    bookingAccountErrMsg: new Function('return ('+src.slice(src.indexOf('function bookingAccountErrMsg('),src.indexOf('\n}\n',src.indexOf('function bookingAccountErrMsg('))+3)+');')(),
     window: win, CLOUD: o.cloud !== false, sb: o.cloud === false ? null : { rpc: S.rpc },
     dbGet: async (t, id) => { if (t === 'bookings') { if (o.bumpOnRead) { S.rev++; if (o.bumpOnRead === 'once') o.bumpOnRead = false; } return S.snapshot(); } if (t === 'members') return { id, name: '王小明' }; if (t === 'member_tickets') return { id, plan_name: '票' + id }; return null; },
     dbPut: async (t, x) => { log.puts.push([t, x]); }, refundTicket: async (t, b) => { log.refunds.push([t, b]); return true; }, logTicket: async (...a) => { log.logs.push(a); },
@@ -89,7 +90,7 @@ const noFrontWrites = (m) => m.log.puts.length === 0 && m.log.refunds.length ===
   // 另一個視窗（開在第 1 個名額、同一個舊版本）也在第一筆之前開好：第一筆完成後才按
   S = server(); m = make(S); const cA = await m.openAndCtx('B1', 'M#2'), cB = await m.openAndCtx('B1', 'M');
   await m.doCancel(cA.bid, cA.sk, cA.id); const readsBefore = revReads(S).length; await m.doCancel(cB.bid, cB.sk, cB.id);
-  ok('★★★ 開在舊版本的另一個視窗（第 1 個名額）：伺服器以 REV_MISMATCH 擋下，第 1 個名額與票A 不動；送出時沒有重讀版本', JSON.stringify(S.ids) === '["M"]' && S.tk.M === 'A' && S.bal.A === 5 && cancels(S).length === 2 && cancels(S)[1][1].p_expect_rev === '1' && revReads(S).length === readsBefore && m.log.toasts.some(t => /名單剛剛有變動/.test(t)), { calls: cancels(S), ids: S.ids });
+  ok('★★★ 開在舊版本的另一個視窗（第 1 個名額）：伺服器以 REV_MISMATCH 擋下，第 1 個名額與票A 不動；送出時沒有重讀版本', JSON.stringify(S.ids) === '["M"]' && S.tk.M === 'A' && S.bal.A === 5 && cancels(S).length === 2 && cancels(S)[1][1].p_expect_rev === '1' && revReads(S).length === readsBefore && m.log.toasts.some(t => t === '名單已變動，沒有再次取消；請先重新整理確認'), { calls: cancels(S), ids: S.ids });
 
   console.log('═══ ③ 版本讀取失敗／缺少確認上下文：停止並要求重新開啟，不在送出時自動讀最新版本 ═══');
   S = server(); S.rpc0 = S.rpc; S.rpc = async (n, a) => (n === 'fn_group_seat_rev' ? { data: { ok: false, error_code: 'FORBIDDEN' }, error: null } : S.rpc0(n, a)); m = make(S);
@@ -105,7 +106,7 @@ const noFrontWrites = (m) => m.log.puts.length === 0 && m.log.refunds.length ===
   S = server(); m = make(S); c = await m.openAndCtx('B1', 'M#2');
   S.removeSeat('M', true);   // 別的操作取消了第 1 個名額 → 原本的第 2 個名額遞補成 M、票B 跟著搬、版本前進
   const revReadsBefore = revReads(S).length, balB = S.bal.B; await m.doCancel(c.bid, c.sk, c.id);
-  ok('★★★ 過期視窗按下去：伺服器 REV_MISMATCH；遞補成 M 的那個名額（原第 2 個）沒有被取消、票B 沒有被多退；送出時沒有重讀版本來「刷新」', JSON.stringify(S.ids) === '["M"]' && S.tk.M === 'B' && S.bal.B === balB && cancels(S).length === 1 && cancels(S)[0][1].p_expect_rev === '1' && revReads(S).length === revReadsBefore && m.log.toasts.some(t => /名單剛剛有變動/.test(t)), { ids: S.ids, tk: S.tk, bal: S.bal });
+  ok('★★★ 過期視窗按下去：伺服器 REV_MISMATCH；遞補成 M 的那個名額（原第 2 個）沒有被取消、票B 沒有被多退；送出時沒有重讀版本來「刷新」', JSON.stringify(S.ids) === '["M"]' && S.tk.M === 'B' && S.bal.B === balB && cancels(S).length === 1 && cancels(S)[0][1].p_expect_rev === '1' && revReads(S).length === revReadsBefore && m.log.toasts.some(t => t === '名單已變動，沒有再次取消；請先重新整理確認'), { ids: S.ids, tk: S.tk, bal: S.bal });
   S = server(); m = make(S); await m.open('B1', 'M#2'); S.removeSeat('M#2', true); const b4 = S.calls.length; const miss = await m.openAndCtx('B1', 'M#2');
   ok('名額已被取消後再開確認視窗：不開視窗、提示「名額已不在名單中」', miss === null && m.log.toasts.some(t => /已不在名單中/.test(t)), m.log.toasts);
 

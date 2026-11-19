@@ -14,7 +14,7 @@ function mk(resp){
   const calls=[], toasts=[], dates=[]; let cleared=null;
   const sbf={rpc:async(n,a)=>{ calls.push({n,a}); if(resp instanceof Error) throw resp; return resp; }};
   const f=new Function('sb','CLOUD','dbCacheClear','showToast','refundTicketDateRevertOnly','console',
-    MSG+'\n'+RT+'\nreturn refundTicket;')(sbf,true,t=>{cleared=t;},m=>toasts.push(m),async(...a)=>{dates.push(a);},{error(){}});
+    g('function bookingAccountErrMsg(','\n}\n')+'\n'+MSG+'\n'+RT+'\nreturn refundTicket;')(sbf,true,t=>{cleared=t;},m=>toasts.push(m),async(...a)=>{dates.push(a);},{error(){}});
   return {f,calls,toasts,dates,cleared:()=>cleared};
 }
 (async()=>{

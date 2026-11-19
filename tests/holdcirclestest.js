@@ -1,3 +1,5 @@
+/* 2026-11-19: only deductTicket/cancelBooking message integration pins updated.
+   Safety behavior is exercised by bookingaccountguardtest/deductrpctest/deskcancelrpctest; all other pins retained. */
 /* 待簽約／分期保留預約卡：原分期票圓形卡備援顯示（2026-11-11，溫怡婷 11/11 11:00 案例）
    ⚠ 讀的是本檔所在 repo 的 index.html（__dirname/..）。不連任何資料庫。
    行為測試把真正的 bkHoldCircleCard／bkInstCandidates 原始碼抽出來實際執行；ticketTokens／W 用可檢查的假物件
@@ -142,7 +144,7 @@ console.log('\n═══ ⑤b 分類判斷：用預約 category==="私人教練"
 console.log('\n═══ ⑥ 不該被動到的函式（以正式版 2e53f78 的雜湊釘住；deductTicket／cancelBooking 因 P0-E 刻意修改，已改釘 P0-E 版 2026-11-17，保留的保護由 deductrpctest／cancelnopromotetest 的行為測試驗證）═══');
 {
   /* 2026-11-16 expandBkCard 的雜湊刻意更新：「簽到／未到課」圓鈕改走 evoAttBtn（開課前 30 分鐘才顯示，見 attwindowtest.js），其餘邏輯未動 */
-  const pins = { findRefundTargetTicket: 'f1788b71501afa7ffb259d1cb5555ff0', bindHeldBookings: '136cc284a4ef8120aea33db3d8487d55', deductTicket: 'eeae7e48bb859f2f4e02292999594c9a', cancelBooking: '0dfa692fbdd548b964c16c4b8a9a530a', promoteHeldBooking: '828611bf1bf3122b5bfd978cc9035508', confirmInstallNext: 'd6e92517058299f95bc32e070b7977f2', _confirmInstallNext: '65770d74cf14477beb8ab182c2c73bc4', openInstallNext: 'c8c315b79b2ee277d08fab0161fac353', bkInstCandidates: '97626eb30efc9faec10845cd892feb75', bkCardPayKind: 'fa59c97db3672a082cf118cb990f9016', ticketTokens: '8ed450c8f0b8327f58f5230d6809640d', _ashInstNext: '0b354b4d1fb5e42d2804d094de209e1e', _bkInstConfirm: 'f1d6f6024cccb60faf169aeb61916a44', expandBkCard: 'bba80b3e8e49602fb0183616525a7728' };
+  const pins = { findRefundTargetTicket: 'f1788b71501afa7ffb259d1cb5555ff0', bindHeldBookings: '136cc284a4ef8120aea33db3d8487d55', deductTicket: '65ed4eb4033a079c66037ec9396c0740', cancelBooking: 'cf3a37b381f8ea7bbb271122617dd88f', promoteHeldBooking: '828611bf1bf3122b5bfd978cc9035508', confirmInstallNext: 'd6e92517058299f95bc32e070b7977f2', _confirmInstallNext: '65770d74cf14477beb8ab182c2c73bc4', openInstallNext: 'c8c315b79b2ee277d08fab0161fac353', bkInstCandidates: '97626eb30efc9faec10845cd892feb75', bkCardPayKind: 'fa59c97db3672a082cf118cb990f9016', ticketTokens: '8ed450c8f0b8327f58f5230d6809640d', _ashInstNext: '0b354b4d1fb5e42d2804d094de209e1e', _bkInstConfirm: 'f1d6f6024cccb60faf169aeb61916a44', expandBkCard: 'bba80b3e8e49602fb0183616525a7728' };
   const bad = Object.keys(pins).filter(n => md5(grabFn(n)) !== pins[n]);
   ok('★★★ 收款／轉正／扣票／綁票／取消／遞補／分期確認／findRefundTargetTicket／預約明細(expandBkCard，含 tkCircleHtml)／ticketTokens 都與正式版逐字相同', bad.length === 0, bad);
 }

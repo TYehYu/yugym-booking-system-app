@@ -32,7 +32,7 @@ ok('★ 舊的「扣課放行」設計已完全退場',
    這條 24 小時檢查在會員端已無用武之地，只剩教練端那一份。
    會員端剩下的兩條自助路徑各自有自己的 24 小時界線（團課、自主訓練）。 */
 ok('★ 會員端的團課退出仍走同一條 24 小時界線',
-   /if\(hoursUntilStart\(b\) < 24\)\{ cancelTooLateModal\(\); return; \}/.test(src));
+   /if\(hoursUntilStart\(data\)<24\)\{ cancelTooLateModal\(\); return; \}/.test(src));
 /* 2026-08-21 使用者定案推翻此條：「所以其實讓教練可以自行取消 24 小時內的課程其實比較實務」。
    理由是他自己想通的 —— 教練本來就能改時間、而且改時間不受 24 小時限制，
    「挪到 24 小時之後再取消」兩步就繞過去了，擋牆只擋得住老實人。
@@ -42,7 +42,7 @@ ok('★ 教練端的 24 小時擋牆已拿掉',
    && /教練本來就能改時間，而且改時間不受 24 小時限制/.test(src));
 ok('★ 會員端仍然擋（memCancelTap 只放行團課與自主訓練，其餘一律櫃檯）',
    /return cancelDeskOnlyModal\(\);/.test(src)
-   && /if\(hoursUntilStart\(b\) < 24\)\{ cancelTooLateModal\(\); return; \}/.test(src));
+   && /if\(hoursUntilStart\(data\)<24\)\{ cancelTooLateModal\(\); return; \}/.test(src));
 ok('★ 提示簡單清楚：一句找櫃檯＋一句不講會扣票',
    /<div class="cx-warn-t">請聯繫櫃檯<\/div>/.test(src)
    && /距離開課不到 24 小時，這堂課要由櫃檯協助取消。/.test(src)
@@ -54,13 +54,13 @@ ok('★ 兩個例外與 DB 同一組：剛約完 10 分鐘內、自主訓練',
 ok('★ DB 擋下時前端不得回退舊的直寫路徑（否則規則等於沒有）',
    /if\(_code==='CANCEL\.TOO_LATE'\)\{ if\(!_silent\) cancelTooLateModal\(\); return; \}/.test(src));
 ok('★ 團課退出也用同一條 24 小時界線（原本只擋開課當天）',
-   /if\(hoursUntilStart\(b\) < 24\)\{ cancelTooLateModal\(\); return; \}/.test(src)
+   /if\(hoursUntilStart\(data\)<24\)\{ cancelTooLateModal\(\); return; \}/.test(src)
    && !/開課當天無法自行取消報名/.test(src));
 /* 2026-09-14 銀髮友善改版：會員端兩張取消視窗改用全站統一的 .mk-key.green，
    舊的 .cx-note 語彙在這兩支退場（教練課那張早就隨流程退場）。 */
-ok('　　會退回的用綠框講結果（自主訓練 1 點／團體課 1 堂）',
+ok('　　綠框說明退款依據（自主訓練 1 點／團課依實際扣堂）',
    /<div class="mk-key green">會退回 1 點<\/div>/.test(src)
-   && /<div class="mk-key green">會退回 1 堂<\/div>/.test(src)
+   && /<div class="mk-key green">依實際扣堂紀錄退回<\/div>/.test(src)
    && !/<div class="cx-note cx-note-ok"><b>會退回 1 點<\/b>/.test(src));
 
 console.log('\n櫃檯端：兩顆按鈕分得開');

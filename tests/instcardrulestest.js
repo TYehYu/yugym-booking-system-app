@@ -1,3 +1,5 @@
+/* 2026-11-19: only deductTicket/cancelBooking message integration pins updated.
+   Safety behavior is exercised by bookingaccountguardtest/deductrpctest/deskcancelrpctest; all other pins retained. */
 /* 分期預約卡 Phase 2A（2026-11-10）：轉正 → 分期 → 儲值，與原分期票的安全判斷
 
    業務規則（負責人確認）：
@@ -377,7 +379,7 @@ const bookingOf = h => h.tables.bookings.BK1;
   console.log('\n═══ ⑩ 不該被動到的函式與入口（以 cfee1ec 的雜湊釘住）═══');
   {
     const PIN = {
-      bindHeldBookings: '136cc284a4ef8120aea33db3d8487d55', openInstallNext: 'c8c315b79b2ee277d08fab0161fac353', cancelBooking: '0dfa692fbdd548b964c16c4b8a9a530a',
+      bindHeldBookings: '136cc284a4ef8120aea33db3d8487d55', openInstallNext: 'c8c315b79b2ee277d08fab0161fac353', cancelBooking: 'cf3a37b381f8ea7bbb271122617dd88f',
       promoteHeldBooking: '828611bf1bf3122b5bfd978cc9035508', bkIsInstHold: '3cadde2f2bf02204a589182effeecfb2', ppTopUp: '7f2e88265b8b64e06220b302772ce271',
       openSalesModal: 'b6ebc7f95437bb9e27a7df1b6aae6024', confirmInstallNext: 'd6e92517058299f95bc32e070b7977f2', _confirmInstallNext: '65770d74cf14477beb8ab182c2c73bc4',
       listUsableTickets: 'a21acbcd007ba434afac1e388994944b', tkFitsBooking: 'b91a5391b91aa9d99ea6360256d359ef', tkUnlockedLeft: '5b12d837a22621e01010fb7c305f5eee',
