@@ -1,0 +1,83 @@
+'''Generate reviewable release SQL; never connects or executes SQL.'''
+from pathlib import Path
+import json,re,hashlib
+root=Path(__file__).resolve().parents[1];out=Path(__file__).resolve().parent
+pre=json.loads((root/'acceptance/production_release_preflight.json').read_text())
+pins=json.loads((root/'sql_result.json').read_text())['pins']
+new=[s for s in pins if not s.startswith('fn_member_sign_installment(')]
+modified='fn_member_sign_installment(text,integer,text)'
+legacy=next(f for f in pre['functions'] if f['signature']==modified)
+q=lambda x:"'"+x.replace("'","''")+"'"
+prod='7637215626725903220'
+cluster="do $$begin if (select system_identifier::text from pg_control_system())<>"+q(prod)+" then raise exception 'WRONG_PRODUCTION_CLUSTER';end if;end$$;\n"
+def pincheck(mapping):
+ return "do $pin$ declare x record;begin for x in select * from jsonb_each_text("+q(json.dumps(mapping))+"::jsonb) loop if (select md5(prosrc) from pg_proc where oid=to_regprocedure('public.'||x.key)) is distinct from x.value then raise exception 'FUNCTION_VERSION_MISMATCH: %',x.key;end if;end loop;end $pin$;\n"
+definitions=(root/'candidate.sql').read_text();definitions=definitions[definitions.index('create table public.installment_receipts'):]
+# Hash unrelated objects, ignoring only the exact expected additions / changed legacy RPC.
+exclude=','.join(q(s.split('(')[0]) for s in pins)
+untouched=f"""jsonb_build_object(
+ 'functions',(select md5(coalesce(jsonb_agg(jsonb_build_array(p.oid::regprocedure::text,pg_get_functiondef(p.oid),p.proacl::text,pg_get_userbyid(p.proowner)) order by p.oid::regprocedure::text)::text,'[]')) from pg_proc p where p.pronamespace='public'::regnamespace and p.prokind='f' and p.proname not in ({exclude})),
+ 'columns',(select md5(coalesce(jsonb_agg(jsonb_build_array(c.relname,a.attname,format_type(a.atttypid,a.atttypmod),a.attnotnull,pg_get_expr(d.adbin,d.adrelid),a.attidentity,a.attgenerated) order by c.relname,a.attnum)::text,'[]')) from pg_attribute a join pg_class c on c.oid=a.attrelid left join pg_attrdef d on d.adrelid=c.oid and d.adnum=a.attnum where c.relnamespace='public'::regnamespace and c.relkind in ('r','p','v','m') and c.relname<>'installment_receipts' and a.attnum>0 and not a.attisdropped),
+ 'policies',(select md5(coalesce(jsonb_agg(jsonb_build_array(schemaname,tablename,policyname,permissive,roles,cmd,qual,with_check) order by schemaname,tablename,policyname)::text,'[]')) from pg_policies where schemaname='public' and tablename<>'installment_receipts'),
+ 'grants',(select md5(coalesce(jsonb_agg(jsonb_build_array(c.relname,c.relkind,c.relrowsecurity,c.relforcerowsecurity,pg_get_userbyid(c.relowner),c.relacl::text) order by c.relname)::text,'[]')) from pg_class c where c.relnamespace='public'::regnamespace and c.relkind in ('r','p','v','m','S') and c.relname<>'installment_receipts'),
+ 'triggers',(select md5(coalesce(jsonb_agg(jsonb_build_array(c.relname,t.tgname,t.tgenabled,pg_get_triggerdef(t.oid)) order by c.relname,t.tgname)::text,'[]')) from pg_trigger t join pg_class c on c.oid=t.tgrelid where c.relnamespace='public'::regnamespace and not t.tgisinternal and t.tgname not in ('trg_installment_collection_guard','trg_installment_signature_guard')),
+ 'constraints',(select md5(coalesce(jsonb_agg(jsonb_build_array(c.relname,x.conname,pg_get_constraintdef(x.oid)) order by c.relname,x.conname)::text,'[]')) from pg_constraint x join pg_class c on c.oid=x.conrelid where c.relnamespace='public'::regnamespace and c.relname<>'installment_receipts'),
+ 'indexes',(select md5(coalesce(jsonb_agg(jsonb_build_array(tablename,indexname,indexdef) order by tablename,indexname)::text,'[]')) from pg_indexes where schemaname='public' and tablename<>'installment_receipts'),
+ 'views',(select md5(coalesce(jsonb_agg(jsonb_build_array(c.relname,c.reloptions,pg_get_viewdef(c.oid)) order by c.relname)::text,'[]')) from pg_class c where c.relnamespace='public'::regnamespace and c.relkind in ('v','m'))
+)"""
+data="jsonb_build_object("+','.join(q(t)+",(select md5(coalesce(jsonb_agg(to_jsonb(x) order by x.id)::text,'[]')) from public."+t+" x)" for t in ['contracts','member_tickets','purchases','ticket_logs','invoices'])+")"
+snapshot="create temp table ic_release_before on commit drop as select "+untouched+" catalog,"+data+" data;\n"
+unchanged="do $same$begin if (select catalog from ic_release_before) is distinct from (select "+untouched+") then raise exception 'UNRELATED_CATALOG_CHANGED';end if;if (select data from ic_release_before) is distinct from (select "+data+") then raise exception 'BUSINESS_DATA_CHANGED';end if;end $same$;\n"
+# Definitions/types actually present in production: fail closed if any expected column changed.
+colspec=[dict(table=c['table'],column=c['column'],udt=c['udt']) for c in pre['columns']]
+cols="do $col$declare x record;begin for x in select * from jsonb_to_recordset("+q(json.dumps(colspec))+"::jsonb) as x(\"table\" text,\"column\" text,udt text) loop if not exists(select 1 from information_schema.columns c where c.table_schema='public' and c.table_name=x.\"table\" and c.column_name=x.\"column\" and c.udt_name=x.udt) then raise exception 'COLUMN_MISMATCH: %.%',x.\"table\",x.\"column\";end if;end loop;end $col$;\n"
+deps={f['signature']:f['body_md5'] for f in pre['functions']}
+trigger_specs=pre['triggers']
+trigger_guard="do $trig$declare x record;begin for x in select * from jsonb_to_recordset("+q(json.dumps(trigger_specs))+"::jsonb) as x(\"table\" text,name text,enabled text,definition text) loop if not exists(select 1 from pg_trigger t join pg_class c on c.oid=t.tgrelid where c.relnamespace='public'::regnamespace and c.relname=x.\"table\" and t.tgname=x.name and t.tgenabled::text=x.enabled and pg_get_triggerdef(t.oid)=x.definition) then raise exception 'TRIGGER_DEPENDENCY_CHANGED: %.%',x.\"table\",x.name;end if;end loop;end $trig$;\n"
+dependency_specs=[]
+for f in pre['functions']:
+ acl=f.get('acl');entries={'':'X'} if acl is None else {a.split('=')[0]:a.split('=')[1].split('/')[0] for a in acl.strip('{}').split(',') if a};public_exec='X' in entries.get('','')
+ spec={'signature':f['signature'],'config':f.get('config'),'security_definer':f.get('security_definer',True),'public_execute':public_exec}
+ for role in ['anon','authenticated','service_role']:
+  spec[role+'_execute']=public_exec or 'X' in entries.get(role,'')
+  spec[role+'_delegate']='X*' in entries.get(role,'') or 'X*' in entries.get('','')
+ dependency_specs.append(spec)
+acl_columns='signature text,config jsonb,security_definer boolean,public_execute boolean,anon_execute boolean,authenticated_execute boolean,service_role_execute boolean,anon_delegate boolean,authenticated_delegate boolean,service_role_delegate boolean'
+acl_predicate="(exists(select 1 from aclexplode(coalesce(p.proacl,acldefault('f',p.proowner))) a where a.grantee=0 and a.privilege_type='EXECUTE'))=x.public_execute and "+' and '.join("has_function_privilege('"+role+"',p.oid,'execute')=x."+role+"_execute and has_function_privilege('"+role+"',p.oid,'execute with grant option')=x."+role+"_delegate" for role in ['anon','authenticated','service_role'])
+
+dependency_acl="do $depacl$declare x record;begin for x in select * from jsonb_to_recordset("+q(json.dumps(dependency_specs))+"::jsonb) as x("+acl_columns+") loop if not exists(select 1 from pg_proc p where p.oid=to_regprocedure('public.'||x.signature) and "+acl_predicate+" and to_jsonb(p.proconfig) is not distinct from x.config and p.prosecdef=x.security_definer and pg_get_userbyid(p.proowner)='postgres') then raise exception 'DEPENDENCY_ACL_CONFIG_CHANGED: %',x.signature;end if;end loop;end $depacl$;\n"
+missing="do $new$declare s text;begin if to_regclass('public.installment_receipts') is not null then raise exception 'RECEIPTS_ALREADY_INSTALLED';end if;for s in select jsonb_array_elements_text("+q(json.dumps(new))+"::jsonb) loop if to_regprocedure('public.'||s) is not null or exists(select 1 from pg_proc where pronamespace='public'::regnamespace and proname=split_part(s,'(',1)) then raise exception 'NEW_FUNCTION_NAME_OCCUPIED: %',s;end if;end loop;if exists(select 1 from pg_trigger where not tgisinternal and tgname in ('trg_installment_collection_guard','trg_installment_signature_guard')) then raise exception 'NEW_TRIGGER_NAME_OCCUPIED';end if;end $new$;\n"
+api=['fn_installment_request_v2(text,jsonb)','fn_member_sign_installment_v2(text,text,text)','fn_installment_collect_v2(text,text,jsonb,boolean,jsonb)',modified]
+internal=[s for s in pins if s not in api]
+post=pincheck(pins)+"do $acl$declare s text;begin "
+post+="for s in select jsonb_array_elements_text("+q(json.dumps(api))+"::jsonb) loop if not has_function_privilege('authenticated',s,'execute') or has_function_privilege('anon',s,'execute') then raise exception 'API_ACL_MISMATCH: %',s;end if;end loop;"
+post+="for s in select jsonb_array_elements_text("+q(json.dumps(internal))+"::jsonb) loop if has_function_privilege('authenticated',s,'execute') or has_function_privilege('anon',s,'execute') then raise exception 'INTERNAL_ACL_MISMATCH: %',s;end if;end loop;"
+post+="if not exists(select 1 from pg_class where oid='public.installment_receipts'::regclass and relrowsecurity) or exists(select 1 from pg_policies where schemaname='public' and tablename='installment_receipts') then raise exception 'PRIVATE_RECEIPTS_RLS_MISMATCH';end if;for s in select unnest(array['anon','authenticated','service_role']) loop if has_table_privilege(s,'public.installment_receipts','select,insert,update,delete,truncate,references,trigger') then raise exception 'RECEIPTS_ACL_MISMATCH: %',s;end if;end loop;"
+post+="if exists(select 1 from pg_proc where oid in ("+','.join("to_regprocedure("+q(s)+")" for s in pins)+") and (not prosecdef or not coalesce(proconfig @> array['search_path=public, pg_temp'],false))) then raise exception 'DEFINER_CONFIG_MISMATCH';end if;"
+post+="if (select count(*) from pg_trigger t join pg_class c on c.oid=t.tgrelid where c.relnamespace='public'::regnamespace and t.tgenabled='O' and ((c.relname='contracts' and t.tgname='trg_installment_signature_guard' and t.tgfoid='fn_installment_signature_guard()'::regprocedure) or (c.relname='member_tickets' and t.tgname='trg_installment_collection_guard' and t.tgfoid='fn_installment_collection_guard()'::regprocedure)))<>2 then raise exception 'GUARD_TRIGGER_MISMATCH';end if;end $acl$;\n"
+header="-- REVIEW ONLY. Production execution requires separate explicit authorization.\n-- No business-row updates/deletes; each statement runs in a single transaction.\n"
+start="begin;\nset local lock_timeout='5s';\nset local statement_timeout='60s';\n"+cluster+"lock table contracts,member_tickets,purchases,ticket_logs,invoices in share row exclusive mode;\n"
+apply=header+start+cols+pincheck(deps)+dependency_acl+trigger_guard+missing+snapshot+definitions+'\n'+post+unchanged+"notify pgrst,'reload schema';\ncommit;\n"
+(out/'apply_prod.sql').write_text(apply)
+# Full removal is allowed only before any new-format signature request or receipt exists.
+rbguard="do $unused$declare n text;begin if current_setting('app.ic_frontend_retired',true) is distinct from 'yes' or coalesce(nullif(btrim(current_setting('app.ic_removal_authorization',true)),''),'')='' then raise exception 'EXPLICIT_REMOVAL_AUTHORIZATION_REQUIRED';end if;if exists(select 1 from installment_receipts) then raise exception 'RECEIPTS_EXIST_KEEP_OBJECTS';end if;if exists(select 1 from contracts c cross join lateral jsonb_array_elements(coalesce(c.installment_signs,'[]')) a where a->>'request_id' is not null) then raise exception 'V2_SIGNATURE_EVIDENCE_EXISTS_KEEP_OBJECTS';end if;"
+rbguard+="for n in select proname from pg_proc where pronamespace='public'::regnamespace and prokind='f' and proname not in ("+exclude+") and ("+' or '.join("pg_get_functiondef(oid) ilike "+q('%'+s.split('(')[0]+'%') for s in new)+") loop raise exception 'EXTERNAL_FUNCTION_REFERENCE: %',n;end loop;end $unused$;\n"
+rb=header+start+post+rbguard+snapshot+"drop trigger trg_installment_signature_guard on contracts;\ndrop trigger trg_installment_collection_guard on member_tickets;\n"
+for s in ['fn_installment_signature_guard()','fn_installment_collection_guard()','fn_installment_collect_v2(text,text,jsonb,boolean,jsonb)','fn_member_sign_installment_v2(text,text,text)','fn_installment_request_v2(text,jsonb)','fn_installment_terms(text,integer,numeric,text,integer)']:rb+='drop function public.'+s+';\n'
+rb+="drop table public.installment_receipts;\n"+(root/'original_sign_rpc.sql').read_text()+"\nrevoke all on function "+modified+" from public,anon,authenticated,service_role;grant execute on function "+modified+" to authenticated;\n"+pincheck({modified:legacy['body_md5']})+unchanged+"notify pgrst,'reload schema';\ncommit;\n"
+(out/'rollback_unused_prod.sql').write_text(rb)
+(out/'verify_pre_readonly.sql').write_text('-- SELECT only; expected all true before apply.\nselect (select system_identifier::text from pg_control_system())='+q(prod)+' correct_cluster, to_regclass(\'public.installment_receipts\') is null new_table_absent,\n'+',\n'.join("(select md5(prosrc) from pg_proc where oid=to_regprocedure("+q(s)+"))="+q(h)+" as dependency_"+str(i) for i,(s,h) in enumerate(deps.items()))+';\n')
+(out/'verify_post_readonly.sql').write_text('-- SELECT only; function body checks plus effective client ACLs.\nselect '+',\n'.join("(select md5(prosrc) from pg_proc where oid=to_regprocedure("+q(s)+"))="+q(h)+" as body_"+str(i) for i,(s,h) in enumerate(pins.items()))+",\n"+','.join("(has_function_privilege('authenticated',"+q(s)+",'execute') and not has_function_privilege('anon',"+q(s)+",'execute')) as api_"+str(i) for i,s in enumerate(api))+";\n")
+post_verify=(out/'verify_post_readonly.sql').read_text().rstrip().removesuffix(';')
+post_verify+=",\n(select relrowsecurity from pg_class where oid=to_regclass('public.installment_receipts')) as private_receipts_rls,\nnot exists(select 1 from pg_policies where schemaname='public' and tablename='installment_receipts') as no_receipt_policies,\nnot exists(select 1 from unnest(array['anon','authenticated','service_role']) role where has_table_privilege(role,'public.installment_receipts','select,insert,update,delete,truncate,references,trigger')) as no_receipt_table_grants,\n"
+post_verify+=','.join("(not has_function_privilege('authenticated',"+q(s)+",'execute') and not has_function_privilege('anon',"+q(s)+",'execute')) as private_function_"+str(i) for i,s in enumerate(internal))
+post_verify+=",\n(select count(*)=2 from pg_trigger t join pg_class c on c.oid=t.tgrelid where c.relnamespace='public'::regnamespace and t.tgenabled='O' and ((c.relname='contracts' and t.tgname='trg_installment_signature_guard' and t.tgfoid='fn_installment_signature_guard()'::regprocedure) or (c.relname='member_tickets' and t.tgname='trg_installment_collection_guard' and t.tgfoid='fn_installment_collection_guard()'::regprocedure))) as guards_enabled;\n"
+(out/'verify_post_readonly.sql').write_text(post_verify)
+verify=(out/'verify_pre_readonly.sql').read_text().rstrip().removesuffix(';')
+verify+=",\nnot exists(select 1 from jsonb_to_recordset("+q(json.dumps(colspec))+"::jsonb) as x(\"table\" text,\"column\" text,udt text) where not exists(select 1 from information_schema.columns c where c.table_schema='public' and c.table_name=x.\"table\" and c.column_name=x.\"column\" and c.udt_name=x.udt)) as expected_columns,\n"
+verify+="not exists(select 1 from jsonb_to_recordset("+q(json.dumps(trigger_specs))+"::jsonb) as x(\"table\" text,name text,enabled text,definition text) where not exists(select 1 from pg_trigger t join pg_class c on c.oid=t.tgrelid where c.relnamespace='public'::regnamespace and c.relname=x.\"table\" and t.tgname=x.name and t.tgenabled::text=x.enabled and pg_get_triggerdef(t.oid)=x.definition)) as expected_triggers,\n"
+verify+="not exists(select 1 from jsonb_to_recordset("+q(json.dumps(dependency_specs))+"::jsonb) as x("+acl_columns+") where not exists(select 1 from pg_proc p where p.oid=to_regprocedure(x.signature) and "+acl_predicate+" and to_jsonb(p.proconfig) is not distinct from x.config and p.prosecdef=x.security_definer and pg_get_userbyid(p.proowner)='postgres')) as dependency_permissions,\n"
+verify+="not exists(select 1 from pg_proc where pronamespace='public'::regnamespace and proname in ("+','.join(q(s.split('(')[0]) for s in new)+")) as new_names_available;\n"
+(out/'verify_pre_readonly.sql').write_text(verify)
+(out/'pins.json').write_text(json.dumps({'dependency':deps,'installed':pins,'new_signatures':new},indent=2))
+print('Generated release apply / unused-only rollback / readonly verification; no execution.')

@@ -15722,8 +15722,8 @@ function tbl(s){return TABLE_ALIAS[s]||s;}
 let sb=null;
 // ── 版本號（日期+時間格式：年後兩碼+月+日.時分，例 26620.1058 = 26年6/20 10:58）──
 // 每次改版手動更新這一行即可，畫面與 title 會一起更新
-const APP_VERSION = '261119.1741';
-const APP_VERSION_LABEL = 'v261119.1741';
+const APP_VERSION = '261120.0826';
+const APP_VERSION_LABEL = 'v261120.0826';
 const CLOUD = !!(window.YUGYM_CONFIG && window.YUGYM_CONFIG.url && window.YUGYM_CONFIG.anonKey);
 if(CLOUD){ sb = supabase.createClient(window.YUGYM_CONFIG.url, window.YUGYM_CONFIG.anonKey); }
 
@@ -17236,6 +17236,9 @@ async function invIssueForPurchase(pur, mem, f, items, opt){
     love_code:d.LoveCode||null, print_flag:d.Print,   /* 欄位是 text，存綠界原值 '0'/'1'（寫 boolean 會被 PostgREST 退件） */
     amt, tax_amt:amt-Math.round(amt/1.05), total_amt:amt, items:d.Items,
     env:cfg.env||'stage', created_by:(SESSION&&SESSION.id)||null, created_at:new Date().toISOString() };
+  // 先留可追蹤的待確認紀錄；存不進去就不向外開票。
+  row.status='failed';row.raw_result={ok:false,stage:'prepared',msg:'已建立開票追蹤，結果待確認'};
+  await dbPut('invoices',row);
   const r=await invCall('issue', d);
   const rd=(r&&r.data)||{};
   row.status = r&&r.ok ? 'issued' : 'failed';
@@ -17243,7 +17246,7 @@ async function invIssueForPurchase(pur, mem, f, items, opt){
   row.random_num     = rd.RandomNumber||null;
   row.invoice_time   = rd.InvoiceDate||null;
   row.raw_result     = r||null;
-  try{ await dbPut('invoices', row); }catch(e){ console.error('invoices 寫入失敗', e); }
+  try{ await dbPut('invoices', row); }catch(e){ console.error('invoices 寫入失敗',e);throw new Error('發票結果尚未存妥，請至發票頁核對原編號，勿另開新單'); }
   if(r&&r.ok){
     try{ await dbPut('purchases', Object.assign({}, pur, {invoice_type:'ecpay', invoice_number:rd.InvoiceNo})); }catch(_){}
     /* ⚠ 2026-09-14 二修：發票偏好寫回會員的那一段**搬到收款流程**（submitGrant 內）了。
@@ -58738,10 +58741,12 @@ async function ppLoadCtx(){
         /* 收款日期（2026-10-03 使用者：「票券右下角收費資訊補個日期」）——
            分期每一期各是一次收款，日期本來就在 purchases.created_at，只是沒畫出來。
            ⚠ 分期常常隔好幾個月才收下一期，沒有日期就看不出「第 2 期是什麼時候收的」。 */
+        const _range=p.source==='installment'?/分期收款・開通 \d+ 堂（第 (\d+)–(\d+) 期）/.exec(String(p.note||'')):null;
         _invs.push({no:p.invoice_number||null, amt:Number(p.deal_amount)||0, pm:p.payment_method||'',
           at:p.created_at||'',
           vn:_vm?Number(_vm[1]):0, va:_vm?Number(String(_vm[2]).replace(/,/g,'')):0,
           cu:Number(p.credit_used)||0, lp:Number(p.list_price)||0});
+        if(_range) Object.assign(_invs[_invs.length-1],{periodFrom:Number(_range[1]),periodTo:Number(_range[2])});
         window._tkPayMap[p.ticket_id]={m:p.payment_method, sp:p.pay_split||null,   /* 拆帳帶金額（2026-08-13） */
           vn:_vm?Number(_vm[1]):0, va:_vm?Number(String(_vm[2]).replace(/,/g,'')):0,
           cu:Number(p.credit_used)||0, lp:Number(p.list_price)||0, invs:_invs};
@@ -62086,7 +62091,7 @@ async function memSignContract(id, n){
       ${/* 2026-08-08 使用者指示：購買內容用白底。原本這裡只有一行「方案・N 堂・$X」，
            分期表、每堂費用、有效期限、付款方式全看不到 —— 客人在手機上簽字時，
            看不到自己簽的標的。改用與後台檢視同一份 fill_snapshot（簽約當下就存好了）。 */''}
-      <div class="cr-body">${_n?`<div style="background:#fdf6e6;border:1px solid #e6d4a6;border-radius:10px;padding:11px 13px;font-size:13.5px;color:#7a5c14;line-height:1.8;margin-bottom:12px;white-space:normal;">這是<b>第 ${_n} 期</b>的簽名。合約內容與第一次簽的同一份，簽完櫃檯才會幫你開通後面的堂數。</div>`:''}${c.fill_snapshot
+      <div class="cr-body">${_n?`<div style="background:#fdf6e6;border:1px solid #e6d4a6;border-radius:10px;padding:11px 13px;font-size:13.5px;color:#7a5c14;line-height:1.8;margin-bottom:12px;white-space:normal;">${instSignFind(c,_n)?.terms?`<div style="font-size:20px;font-weight:800;margin-bottom:8px;">${escH(instTermsSummary(instSignFind(c,_n).terms))}</div>`:''}這是<b>第 ${_n} 期</b>的簽名。合約內容與第一次簽的同一份，簽完櫃檯才會幫你開通後面的堂數。</div>`:''}${c.fill_snapshot
         ? `<div class="ct-fill-view">${c.fill_snapshot}</div>`
         : `<div style="white-space:normal;font-size:12.5px;color:var(--t2);margin-bottom:10px;">${c.plan_name||''}　·　${c.sessions||0} 堂　·　$${(Number(c.amount)||0).toLocaleString()}</div>`
         }${ctBodyHTML(c.body_snapshot)}</div>
@@ -62102,22 +62107,20 @@ async function memSignContract(id, n){
         <div class="ct-sign-bar"><span>點簽名區可放大簽署</span><button type="button" class="ct-sign-clear" onclick="memSignClear()">清除重簽</button></div>
         <div style="display:flex;gap:10px;margin-top:10px;">
           <button class="btn btn-ghost" style="flex:1;padding:12px;" onclick="closeContractReader()">稍後再簽</button>
-          <button class="btn btn-green" style="flex:1.6;padding:12px;font-size:15px;" onclick="${_dc?`closeContractReader();showToast('這是預覽用的範例合約，真的會員按下去才會送出簽名',5000)`:`memSignContractDo('${id}'${_n?','+_n:''})`}">完成簽署</button>
+          <button class="btn btn-green" style="flex:1.6;padding:12px;font-size:15px;" onclick="${_dc?`closeContractReader();showToast('這是預覽用的範例合約，真的會員按下去才會送出簽名',5000)`:`memSignContractDo('${id}'${_n?','+_n+(instSignFind(c,_n)?.request_id?",'"+String(instSignFind(c,_n).request_id).replace(/[^a-zA-Z0-9-]/g,'')+"'":''):''})`}">完成簽署</button>
         </div>
       </div>
     </div>`;
   setTimeout(signPadInit,60);
 }
-async function memSignContractDo(id, n){
+async function memSignContractDo(id, n, requestId){
   if(!window._signInk){ showToast('請先在簽名區簽名'); return; }
   const sig=(document.getElementById('ct-sign')||{toDataURL:()=>null}).toDataURL('image/png');
   const _n=Number(n)||0;
   try{
-    /* 分期補簽走另一支 RPC（2026-09-22）：只把簽名寫進 installment_signs 的那一格，
-       ⚠ 刻意不在 SQL 裡開通堂數 —— 開通（installment.current／unlocked_sessions／
-         回補分期保留預約）整套住在前端 _confirmInstallNext，寫第二份就會分岔。 */
+    // 新確認以 requestId 綁定畫面內容；舊待簽只可簽舊紀錄，不能簽新版請求。
     const {data,error}= _n
-      ? await sb.rpc('fn_member_sign_installment',{p_contract_id:id,p_n:_n,p_signature:sig})
+      ? (requestId ? await sb.rpc('fn_member_sign_installment_v2',{p_contract_id:id,p_request_id:requestId,p_signature:sig}) : await sb.rpc('fn_member_sign_installment',{p_contract_id:id,p_n:_n,p_signature:sig}))
       : await sb.rpc('fn_member_sign_contract',{p_contract_id:id,p_signature:sig});
     if(error||!(data&&data.ok)){ showToast('簽署失敗：'+((data&&data.error_code)||error&&error.message||'請稍後再試')); return; }
     dbCacheClear(['contracts']);
@@ -63878,7 +63881,7 @@ async function submitGrant(){
      現在走到這一行代表「後台直接發放票券」，那條路本來就不簽約。 */
   window._ctBody=null; window._ctSignature=null;   // 一次性，避免下一筆沿用
   // 新朋友購買「私人教練」課程 → 自動升級為「會員」
-  closeModal();showToast('票券已發放：'+plan.name+(voucherN?`（折抵券×${voucherN}，實收 $${paidAmount.toLocaleString()}）`:''));
+  closeModal();showToast('票券已發放：'+plan.name+(voucherN?`（折抵券×${voucherN}，實收 $${paidAmount.toLocaleString()}）`:'')+(t._invoicePending?'；發票待確認，請至發票頁核對，勿另開新單':''),t._invoicePending?8000:3500);
   /* 會員明細開著時就地重畫（2026-08-03 使用者回報：「按了＋儲值加了票券，
      但視窗沒有即時更新，以為沒有儲進去」）——
      明細是蓋在頁面上的覆層，navTo 只重畫底下那頁，覆層不會動；
@@ -64022,8 +64025,8 @@ async function _grantIssue(P){
        ⚠ null 的「照常開」語意只留給退款手續費那條內部補開（invVoidForPurchase 之後），
          櫃檯流程一律要有明確的 f。 */
     if(P.inv){
-      try{ await invIssueForPurchase(_purRow, await dbGet('members',P.member_id).catch(()=>null), P.inv,
-        [{name:plan.name||'健身課程', amt:_dealRec}]); }catch(e){ console.error('invoice fail', e); }
+      try{ const _invoice=await invIssueForPurchase(_purRow, await dbGet('members',P.member_id).catch(()=>null), P.inv,
+        [{name:plan.name||'健身課程', amt:_dealRec}]);t._invoicePending=!!(_invoice&&_invoice.status!=='issued'); }catch(e){console.error('invoice fail',e);t._invoicePending=true;}
     }else{
       console.warn('發票區未顯示（P.inv 為 null），這筆不開立發票：', _purRow.id);
     }
@@ -65243,15 +65246,7 @@ async function _grantReqApprove(id){
         const _nCt=ctSnapInstall(_c.fill_snapshot);
         if(_final!==_onCt || _nNow!==_nCt){
           const _lb=n=>n>1?`分 ${n} 期`:'一次付清';
-          if(!confirm(`⚠ 這份合約會員已經簽回了，但收款內容跟合約上寫的不一樣。\n\n`
-            +`　合約上：$${_onCt.toLocaleString()}　·　${_lb(_nCt)}\n`
-            +`　現在要發：$${_final.toLocaleString()}　·　${_lb(_nNow)}`
-            +(_nNow>1?`（這次先收第 1 期 $${grDueAmount(_p).toLocaleString()}）`:'')+`\n\n`
-            +`合約內文不會跟著改 —— 那是會員簽名時看到的那一份。\n`
-            +`要照現在的金額發放嗎？（會在合約上留一筆調整紀錄）\n\n`
-            +`如果客人是改了付款方式，建議先「取消這筆發放」再重開一份新合約給他簽。`)) { done(); return; }
-          /* 櫃檯按了「確定」→ 一定要留痕。金額沒變、只有期數變的情況（合約寫分 3 期、
-             實際發一次付清）原本什麼都不會寫，日後對帳的人看不出發生過什麼。 */
+          done();showToast('收款內容與已簽合約不同，請取消這筆發放，重開正確合約並重新簽署',8000);return;
           _drift=`合約寫 $${_onCt.toLocaleString()}・${_lb(_nCt)}，實際發 $${_final.toLocaleString()}・${_lb(_nNow)}`;
         }
       }
@@ -65320,7 +65315,7 @@ async function _grantReqApprove(id){
       `您購買的「${r.plan_name||'課程'}」已完成，票券已發放，可以開始預約囉。`); }catch(_){}
     dbCacheClear(['member_tickets','ticket_logs','purchases','contracts','ticket_grant_requests','notifications']);
     closeModal();
-    showToast(`已發放：${r.plan_name||'票券'}　·　30 分鐘內可在首頁今日營收整筆退回`);
+    showToast(`已發放：${r.plan_name||'票券'}　·　${t._invoicePending?'發票待確認，請至發票頁核對，勿另開新單':'30 分鐘內可在首頁今日營收整筆退回'}`,t._invoicePending?8000:3500);
     /* 會員資料開著時就地重讀（2026-08-09）：票券頁的「待審核」卡要當場換成真票券 */
     if(!(await ppRefreshIfOpen(r.member_id))) navTo(CUR_PAGE);
     /* 2026-11-21：審核發放後同樣做卡位整理（與賣票當下同一套） */
@@ -65566,100 +65561,23 @@ async function doSaveTicketShare(){
   _tkShareBack(st.back);
  }catch(e){ console.error('共享設定失敗:',e); showToast('儲存失敗：'+(e&&e.message||e)); }
 }
-/* ══ 分期第 2 期起的簽名（2026-09-22）══════════════════════════════════════════
-   使用者：「今天黃柏瑜要收第二期　應該要讓他簽第二次」
-   定版（同日指示）：「紙本第二期還是在紙本　就不用待簽　電子要等待簽才開通」
-
-   做法（B 案，使用者選的）：不另開一份合約，在**原合約上補一格簽名欄**：
-     contracts.installment_signs = [{n, sign_type, requested_at, requested_by,
-                                     amount, signature, signed_at, by}]
-   ⚠ 簽名圖很大，那一欄放在 LEAN_DROP 裡（列表讀取不搬）。所以「有沒有人在等簽」
-     另外用輕量欄位 `contracts.pending_sign_n` 表示 —— 會員端的票券清單走 dbGetAll，
-     只有這個欄位讀得到。兩者由 fn_member_sign_installment 一起維護。
-   ⚠ 只擋 sign_type='remote'（會員自己在手機上簽的那種）。紙本與現場平板照舊放行 ——
-     那兩種櫃檯手上就有客人，沒有「等」這件事。
-   ⚠ 開通堂數／補綁分期保留課那一整套完全不動：簽名只是閘門，
-     收款與開通仍然是櫃檯按下去的同一個動作。 */
+/* 分期收費確認：原合約不重簽。每次收費綁定金額、開通堂數、付款方式、折抵券與期數。
+   已簽內容保留；改單產生新請求。會員以請求 id 簽署，收款用穩定收據 id 防重送。
+   交易內寫收據、收款紀錄、票券開通與折抵券；發票與預約補綁另行追蹤結果。 */
 function instSignsOf(c){ const a=c&&c.installment_signs; return Array.isArray(a)?a:[]; }
-function instSignFind(c,n){ return instSignsOf(c).find(x=>x&&Number(x.n)===Number(n))||null; }
+function instSignFind(c,n){ return instSignsOf(c).slice().reverse().find(x=>x&&Number(x.n)===Number(n))||null; }
 function instNeedsSign(c){ return !!(c && String(c.sign_type||'')==='remote'); }
 /* ⚠ 一定要用單筆 dbGet 補一次：installment_signs 在 LEAN_DROP 裡，dbGetAll 拿不到。 */
 async function instCtOfTicket(ticket_id){
-  try{
-    const hit=(await dbGetAll('contracts').catch(()=>[])).filter(c=>c&&c.ticket_id===ticket_id);
-    if(!hit.length) return null;
-    return await dbGet('contracts',hit[0].id).catch(()=>null);
-  }catch(_){ return null; }
+  const hit=(await dbGetAll('contracts')).filter(c=>c&&c.ticket_id===ticket_id);
+  if(hit.length!==1) throw new Error('合約資料不完整或有重複，請先確認合約，暫不收款');
+  const c=await dbGet('contracts',hit[0].id);
+  if(!c || !c.signed_at || !['remote','paper'].includes(c.sign_type))
+    throw new Error('尚未確認合約簽署方式，請先完成合約，暫不收款');
+  return c;
 }
-/* 第 N 期還沒送出待簽 → 先問要走哪一種（2026-09-22）。
-   紙本那顆是逃生門：客人本來就站在櫃檯前面，不該被自己的電子合約擋住。 */
-function openInstSignAsk(ticket_id,c,n,seg,amt,memName){
-  showModal(`<div class="modal-title">第 ${n} 期・要先請會員簽名</div>
-    <div style="background:var(--card2);border-radius:10px;padding:14px;font-size:13.5px;line-height:1.9;margin-bottom:12px;">
-      <div><span style="color:var(--t2);">會員</span>　${memName||'—'}</div>
-      <div><span style="color:var(--t2);">合約</span>　${c.plan_name||'課程合約'}　·　電子簽（會員手機）</div>
-      <div><span style="color:var(--t2);">本期</span>　${seg} 堂　·　$${(Number(amt)||0).toLocaleString()}</div>
-    </div>
-    <div style="background:#fdf6e6;border:1px solid #e6d4a6;border-radius:10px;padding:11px 13px;font-size:13px;color:#7a5c14;line-height:1.75;margin-bottom:10px;">
-      送出後會員的「我的票券」上會出現簽名欄；<b>會員簽完，你再按一次〔分期繳費〕就能收款開通</b>。
-    </div>
-    <div style="font-size:12px;color:var(--t3);line-height:1.85;margin-bottom:4px;">
-      ・第 1 期的簽名不受影響，這是另外補的一格<br>
-      ・送出不會扣款，也不會先開通堂數<br>
-      ・會員人在現場的話，請他當場拿自己的手機簽就好
-    </div>
-    <div class="modal-foot">
-      <button class="btn btn-ghost" onclick="closeModal()">取消</button>
-      <button class="btn btn-green" onclick="instSignRequest('${ticket_id}','${c.id}',${n},${Number(amt)||0})">送到會員手機</button>
-    </div>`);
-}
-/* 已送出、還沒簽回 */
-function openInstSignWait(ticket_id,c,n,s,memName){
-  const at=String(s&&s.requested_at||'').replace('T',' ').slice(5,16).replace('-','/');
-  showModal(`<div class="modal-title">等待會員簽名</div>
-    <div style="background:var(--card2);border-radius:10px;padding:14px;font-size:13.5px;line-height:1.9;margin-bottom:12px;">
-      <div><span style="color:var(--t2);">會員</span>　${memName||'—'}</div>
-      <div><span style="color:var(--t2);">進度</span>　第 ${n} 期的簽名已送出${at?`（${at}）`:''}，會員還沒簽</div>
-    </div>
-    <div style="background:#fdf6e6;border:1px solid #e6d4a6;border-radius:10px;padding:11px 13px;font-size:13px;color:#7a5c14;line-height:1.75;margin-bottom:10px;">
-      <b>會員簽完之後，回到這裡再按一次〔分期繳費〕</b>就能收款並開通堂數。
-    </div>
-    <div style="font-size:12px;color:var(--t3);line-height:1.85;margin-bottom:4px;">
-      ・會員用自己的手機開「我的票券」，這張票上就有簽名欄<br>
-      ・人在現場也一樣用他自己的手機簽<br>
-      ・堂數尚未開通，目前的可用堂數不變
-    </div>
-    <div class="modal-foot">
-      <button class="btn btn-ghost" onclick="closeModal()">關閉</button>
-    </div>`);
-}
-/* 送出待簽：只寫合約，不碰票券、不收款。 */
-async function instSignRequest(ticket_id,contract_id,n,amt){
-  if(!(isDeskLike())) return;
-  try{
-    const c=await dbGet('contracts',contract_id); if(!c) throw new Error('找不到合約');
-    const arr=instSignsOf(c).filter(x=>x&&Number(x.n)!==Number(n));
-    arr.push({n:Number(n), sign_type:'remote', requested_at:new Date().toISOString(),
-              requested_by:SESSION.name||'', amount:Number(amt)||0, signature:null, signed_at:null});
-    c.installment_signs=arr.sort((a,b)=>(a.n||0)-(b.n||0));
-    c.pending_sign_n=Number(n);
-    /* 送出時間也要用輕量欄位留一份（2026-10-03 使用者：「［分期繳費］發送後要有提示
-       訊息在票券卡上　不然都要點進去才看到是不是有發送」）——
-       requested_at 住在 installment_signs 裡，而那一欄在 LEAN_DROP，票券卡撈不到。
-       ⚠ 與 pending_sign_n 成對：簽回時由 fn_member_sign_installment 一起清掉。 */
-    c.pending_sign_at=new Date().toISOString();
-    await dbPut('contracts',c);
-    dbCacheClear(['contracts']);
-    closeModal(); showToast(`已送出第 ${n} 期簽名，會員手機上就看得到`,4000);
-  }catch(e){ showToast('送出失敗：'+((e&&e.message)||e),5000); }
-}
-/* ⚠ 這裡刻意**沒有**「現場簽」或「改用紙本」的逃生門（2026-09-22 使用者連續兩次指正）：
-   ① 「他就算在現場　也只有電子簽約　因為第一次電子簽約就已經沒有紙本了」
-      → 紙本那顆是錯的：叫人簽一張不存在的紙，系統還會記下「紙本簽署」這個謊。
-   ② 「電子簽名都是在會員手機端」
-      → 現場簽那顆也是多餘的：人在櫃檯前面，一樣是拿他自己的手機簽。
-   所以只有一條路：送到會員手機 → 他簽 → 櫃檯再按一次〔分期繳費〕。
-   要再加逃生門之前，先回頭看這兩句話。 */
+/* 先確認本次金額、堂數與涵蓋期數，再送會員手機簽名。
+   紙本需在原合約對應欄補簽；員工確認不等於系統持有紙本簽名影像。 */
 async function openInstallNext(ticket_id){
   if(!(isDeskLike())){ showToast('只有管理員或櫃台可開通分期'); return; }
   const t=await dbGet('member_tickets',ticket_id);
@@ -65676,33 +65594,26 @@ async function openInstallNext(ticket_id){
   const leftN=Math.max(0,total-unlocked);
   const restAmt=(inst.amounts||[]).slice(cur).reduce((a,x)=>a+(Number(x)||0),0);
   const m=await dbGet('members',t.member_id).catch(()=>null);
-  /* 第 2 期起的簽名閘門（2026-09-22，見上方說明）——
-     ⚠ 擋在這裡而不是在收款那一步：櫃檯還沒開始算錢就知道要先請人簽。
-     ・電子簽（remote）→ 送到會員手機，簽完才放行
-     ・紙本（paper）　 → **不擋**，只在收款畫面上多一行提醒補簽（見下方 _paper）
-     ・其餘（undecided／沒有合約）→ 照舊直接進收款畫面
-
-   ⚠ 紙本刻意不開確認視窗（2026-09-22 我提案、使用者問「會不會多此一舉」後一起收掉）：
-     這張收款畫面本身不扣錢 —— 還要填堂數、金額、付款方式，按〔確認收款並開通〕才動，
-     誤觸只是開了一張表單。而「櫃檯自己按一下表示紙本已簽」那種註記，紙在會員手上，
-     **沒有任何證明力**，只是多一次點擊與一筆假紀錄。
-     真正有用的只有「別忘了請他補簽」這個提醒，所以做成一行字就好。 */
-  const _sn=cur+1;                                   // 這次要收的是第幾期
-  const _ct=await instCtOfTicket(t.id);
-  if(instNeedsSign(_ct)){
-    const _s=instSignFind(_ct,_sn);
-    if(!_s) return openInstSignAsk(t.id,_ct,_sn,(seg||leftN),amt,(m?m.name:''));
-    if(!_s.signature && _s.sign_type!=='paper') return openInstSignWait(t.id,_ct,_sn,_s,(m?m.name:''));
-  }
-  const _sok=_ct?instSignFind(_ct,_sn):null;
-  const _paper=!!(_ct && String(_ct.sign_type||'')==='paper');
+  // 不再先簽預設數字：收款表單定案後，才送出本次確認。
+  let _ct; try{ _ct=await instCtOfTicket(t.id); }catch(e){ showToast(e.message||'讀不到最新合約，暫不收款',6000); return; }
+  const _paper=!!(_ct && _ct.sign_type==='paper');
+  let _method='cash',_draft=null;
+  const _records=Array.isArray(_ct.installment_signs)?_ct.installment_signs:[];
+  const _last=_records[_records.length-1];
+  try{
+    const q=_last&&_last.terms;
+    if(q&&instTermsKey(q)===instTermsKey(instCollectTerms(t,Number(q.sessions),Number(q.amount),q.method,Number(q.vouchers)))){
+      _draft=q;_method=q.method;
+    }
+  }catch(_){} // 舊確認不符合現在票券狀態，不沿用。
+  window._inxState={ticket:t,contract:_ct,receipt:null};
   showModal(`<div class="modal-title">分期繳費・開通堂數</div>
     <div style="background:var(--card2);border-radius:10px;padding:14px;font-size:13.5px;line-height:1.9;margin-bottom:12px;">
       <div><span style="color:var(--t2);">會員</span>　${m?m.name:'—'}</div>
       <div><span style="color:var(--t2);">方案</span>　${t.plan_name||'分期票券'}　·　已開通 ${unlocked}/${total} 堂</div>
-      <div><span style="color:var(--t2);">進度</span>　已收到第 ${cur} 期（共 ${inst.count} 期）・未開通 ${leftN} 堂</div>
-      ${_sok?`<div><span style="color:var(--t2);">簽名</span>　第 ${_sn} 期 已簽${_sok.signed_at?`（${String(_sok.signed_at).slice(5,10).replace('-','/')}）`:''}</div>`:''}
-      ${_paper?`<div style="color:var(--gold);">紙本合約・記得請會員在紙本上補簽第 ${_sn} 期</div>`:''}
+      <div id="inx-sign-status" style="font-size:18px;font-weight:800;margin-top:8px;"></div>
+      ${_paper?`<div style="margin-top:10px;padding:12px;background:#fff4d5;border-radius:10px;color:#725315;font-size:16px;font-weight:700;">請在原合約補簽本次金額、堂數與期數。</div>
+      <label style="display:flex;gap:8px;align-items:flex-start;margin-top:10px;"><input type="checkbox" id="inx-paper-ack" onchange="instCollectSync()">已確認紙本補簽（紙本另存）</label>`:''}
     </div>
     <div style="display:flex;gap:8px;margin-bottom:10px;">
       <button type="button" class="btn btn-ghost btn-sm" style="flex:1;" onclick="inxFill(${seg},${amt})">下一期（${seg} 堂・$${amt.toLocaleString()}）</button>
@@ -65718,7 +65629,7 @@ async function openInstallNext(ticket_id){
          ⚠ 會員手上沒有對應的券就整塊不畫（同銷售那條路的 refreshGrantVoucher）。 */''}
     <div id="inx-voucher-wrap" class="gt-voucher-hi" style="display:none;margin-bottom:12px;"></div>
     <div class="form-row"><label>付款方式</label>
-      <select id="inx-method"><option value="cash">現金</option><option value="transfer">匯款</option></select></div>
+      <select id="inx-method" onchange="instCollectSync()"><option value="cash"${_method==='cash'?' selected':''}>現金</option><option value="transfer"${_method==='transfer'?' selected':''}>匯款</option></select></div>
     ${/* 電子發票（2026-09-15）：分期的每一期都是一次收款，都要能開發票。 */''}
     ${invFieldsHTML()}
     <div style="font-size:11.5px;color:var(--t3);margin:4px 0 10px;">確認後立即開通填入的堂數（會員端同步解鎖）、記入本期營收；分期保留的課由早到晚自動補綁扣課。</div>
@@ -65728,11 +65639,19 @@ async function openInstallNext(ticket_id){
     </div>`);
   /* 分期的每一期都是一次收款；會員固定，直接把人帶進去預填。
      ⚠ 存進 window 是為了讓 inxInvSync（金額改動時）也拿得到同一個人。 */
+  if(_draft){document.getElementById('inx-n').value=_draft.sessions;document.getElementById('inx-amt').value=_draft.amount;}
   window._inxMemberId=t.member_id||'';
   window._inxMembers=(m?[m]:[]);
   window._invGateBtn='inx-go';
-  inxInvSync();
-  try{ await inxVoucherInit(t); }catch(e){ console.error('分期折抵券載入失敗',e); }
+  inxInvSync(); instCollectSync();
+  try{
+    await inxVoucherInit(t);
+    if(_draft&&_draft.vouchers){
+      const v=document.getElementById('inx-voucher'),a=document.getElementById('inx-amt');
+      if(v&&a){v.value=String(_draft.vouchers);a.dataset.vch=String(_draft.vouchers);inxVoucherSync(true);}
+    }
+    instCollectSync();
+  }catch(e){ console.error('分期折抵券載入失敗',e); }
 }
 /* 這一期可以用的折抵券（2026-10-12）——
    判準與銷售那條路同一支：看票種的**類別**（VOUCHER_TT），不是方案名稱。
@@ -65806,9 +65725,10 @@ function inxVoucherSync(init){
     lim.textContent=cap>0?`最多 ${cap} 張`:'這一期不能折抵';
     lim.title=`這一期開通 ${_n} 堂・每 ${VOUCHER_SESSIONS_PER} 堂可折抵 1 張`;
   }
-  inxVoucherCalc(); inxInvSync();
+  inxVoucherCalc(); inxInvSync(); instCollectSync();
 }
 function inxVoucherCalc(){
+  instCollectSync();
   const box=document.getElementById('inx-voucher-calc'); if(!box) return;
   const n=Math.max(0, Math.floor(Number((document.getElementById('inx-voucher')||{}).value)||0));
   const amt=Math.round(Number((document.getElementById('inx-amt')||{}).value)||0);
@@ -65822,7 +65742,7 @@ function inxFill(n,amt){ const a=document.getElementById('inx-n'), b=document.ge
      不然會變成「勾著券、金額卻是沒折的」，送出時又扣一次 $300。 */
   if(b){ b.value=amt; b.dataset.vch='0'; }
   const v=document.getElementById('inx-voucher'); if(v) v.value=0;
-  inxInvSync(); if(typeof inxVoucherSync==='function') inxVoucherSync(true); }
+  inxInvSync(); if(typeof inxVoucherSync==='function') inxVoucherSync(true); instCollectSync(); }
 /* 分期的發票區同步（2026-09-15）——
    ⚠ 實收金額 0 就收起來：invIssueForPurchase 有 `amt<=0 return null`，
      留在畫面上等於讓櫃檯白問一次載具／信箱（同商品與場租那個坑）。
@@ -65831,119 +65751,119 @@ function inxInvSync(){
   const amt=Math.round(Number((document.getElementById('inx-amt')||{}).value)||0);
   /* 分期收的是教練課方案的後續期數 → 預設開立。
      ⚠ 明講不靠 _grantPlanCache：那是上一個發放視窗留下的，可能是別張票的方案。 */
-  try{ invSync({paid:amt>0, memberId:window._inxMemberId||'', members:(window._inxMembers||[]), defaultOn:true}); }catch(_){}
+  try{ Promise.resolve(invSync({paid:amt>0, memberId:window._inxMemberId||'', members:(window._inxMembers||[]), defaultOn:true})).then(instCollectSync,instCollectSync); }catch(_){instCollectSync();}
 }
 /* 防連點（2026-08-01）：同一筆還在跑就跟著等同一個結果，不會扣兩次／建兩筆。 */
 async function confirmInstallNext(ticket_id){ return onceAct('instnext:'+ticket_id, ()=>_confirmInstallNext(ticket_id)); }
-async function _confirmInstallNext(ticket_id){
-  const t=await dbGet('member_tickets',ticket_id);
-  if(!t||!t.installment){ showToast('票券資料異常'); return; }
-  const inst=t.installment;
-  const total=Number(t.sessions_total)||0;
-  const unlocked0=Number(t.unlocked_sessions)||0;
-  const leftN=Math.max(0,total-unlocked0);
-  if(leftN<=0){ showToast('已全部開通'); closeModal(); return; }
-  /* 彈性收法（2026-08-14）：堂數與金額吃畫面輸入——一次全繳、只繳兩堂都行 */
-  const n=Math.floor(Number((document.getElementById('inx-n')||{}).value));
-  const amt=Math.round(Number((document.getElementById('inx-amt')||{}).value));
-  if(!Number.isFinite(n)||n<1||n>leftN){ showToast(`開通堂數要在 1–${leftN} 之間`); return; }
-  if(!Number.isFinite(amt)||amt<0){ showToast('請輸入實收金額'); return; }
-  const method=(document.getElementById('inx-method')||{}).value||'cash';
-  /* 折抵券（2026-10-12）：在改動資料之前先讀，closeModal 之後表單就沒了。
-     ⚠ 券要重讀一次再扣：開窗到按下確認之間，可能已經被別筆用掉（同銷售那條路 0808 的教訓）。 */
-  const _vWant=Math.max(0, Math.floor(Number((document.getElementById('inx-voucher')||{}).value)||0));
-  /* 電子發票（2026-09-15）：在改動資料之前先把表單讀起來，後面 closeModal 就沒了。 */
-  const _inv=invReadFields();
-  { const _e=invCheckFields(_inv); if(_e){ showToast('發票欄位：'+_e); return; } }
-  t.unlocked_sessions=unlocked0+n;
-  /* 期數進度依「累計開通堂數」重算：蓋滿哪一段就算收到哪一期；全開通＝最後一期。
-     自訂堂數跨段一半時，那一段的 paid 先不標——帳以購買紀錄的實收為準。 */
-  let cum=0, curNew=0;
-  (inst.segments||[]).forEach((sg,i)=>{ cum+=(Number(sg)||0);
-    if(t.unlocked_sessions>=cum){ curNew=i+1; if(Array.isArray(inst.paid)) inst.paid[i]=true; } });
-  inst.current=Math.max(inst.current||1, curNew);
-  if(t.unlocked_sessions>=total){ t.unlocked_sessions=total; inst.current=inst.count; }
-  t.installment=inst;
-  t.amount_paid=(t.amount_paid||0)+amt;              // 累計實收
-  await dbPut('member_tickets',t);
-  /* 扣折抵券（2026-10-12）——與銷售那條路同一套寫法：餘額扣 1、歸零就 used_up，
-     帳本逐張記 deduct（那筆 note 就是票券卡上「折抵使用日」的來源）。
-     ⚠ 擺在票券更新之後、購買紀錄之前：扣券失敗要講清楚，不能靜靜吞掉。 */
-  /* 逐張扣（最快到期優先，與銷售那條路同一套）——
-     ⚠ 每一張都重讀：開窗到按下確認之間可能已經被別筆用掉（0808 的教訓）。
-     ⚠ 扣失敗不吞掉：票已經開通了，少扣幾張一定要講出來。 */
-  let _vUsed=0;
-  if(_vWant>0){
-    try{
-      let left=_vWant;
-      for(const v0 of (window._inxVoucherTks||[])){
-        if(left<=0) break;
-        const fresh=await dbGet('member_tickets',v0.id); if(!fresh) continue;
-        const take=Math.min(left, Number(fresh.sessions_remaining)||0);
-        if(take<=0) continue;
-        fresh.sessions_remaining=(Number(fresh.sessions_remaining)||0)-take;
-        if(fresh.sessions_remaining<=0) fresh.status='used_up';
-        await dbPut('member_tickets',fresh);
-        for(let k=0;k<take;k++) await logTicket(fresh.id,'deduct',1,null,SESSION.id,
-          `折抵 $300（分期第 ${inst.current} 期・${t.plan_name||'票券'}）`);
-        _vUsed+=take; left-=take;
-      }
-      if(left>0) showToast(`折抵券只扣到 ${_vUsed}/${_vWant} 張（餘額不足），請至會員票券確認`, 7000);
-    }catch(e){ console.error('分期折抵券扣點失敗',e);
-      showToast('折抵券扣點失敗，請至會員票券確認：'+((e&&e.message)||e), 7000); }
-  }
-  const _full=t.unlocked_sessions>=total;
-  // 記營收（購買紀錄新增一筆本期收款）
-  try{
-    /* ⚠ 2026-09-15：接成變數，下面開發票要拿它當載體（merchant_order_no 取自 id）。 */
-    const _pRow={id:uid('PUR'),member_id:t.member_id,plan_id:t.source_plan_id||null,ticket_id:t.id,
-      plan_name:t.plan_name,
-      /* 折抵的張數與金額寫進 note（票券卡右下角的「折抵券」標籤就是從這裡解析出來的，
-         格式要與銷售那條路一字不差，見 _tkPayMap 的 /折抵券×(\d+)\s*−\$([\d,]+)/）。
-         list_price 帶原價，卡片的提示才寫得出「原價多少」。 */
-      list_price:_vUsed?(amt+300*_vUsed):null,deal_amount:amt,payment_method:method,
-      coach_id:t.sold_by||null,   /* 業績歸屬跟著票券（2026-08-15 蔡宜芬案例） */
-      installment_count:inst.count,
-      note:`分期收款・開通 ${n} 堂${_full?'（已全數開通）':`（累計 ${t.unlocked_sessions}/${total}）`}`
-        +(_vUsed?`（折抵券×${_vUsed} −$${(300*_vUsed).toLocaleString()}）`:''),operator:SESSION.id,source:'installment',
-      created_at:new Date().toISOString()};
-    await dbPut('purchases',_pRow);
-    /* 電子發票（2026-09-15 使用者：「只要有收款都要出現」）——
-       分期的每一期都是一次真實收款，各開各的發票。 */
-    if(amt>0){
-      const _pm=await dbGet('members',t.member_id).catch(()=>null);
-      if(_pm && _inv){   /* 當場問到的載具／信箱順手寫回會員（只補空值） */
-        const _u={};
-        if(_inv.email      && !((_pm.email||'').trim()))           _u.email          =_inv.email;
-        if(_inv.carrierNum && !((_pm.invoice_carrier||'').trim())) _u.invoice_carrier=_inv.carrierNum;
-        /* ⚠ 2026-09-15：統編／抬頭不寫回會員（使用者：「每次手動輸入」）。 */
-        if(Object.keys(_u).length){
-          try{ await dbPut('members', Object.assign({}, _pm, _u)); dbCacheClear(['members']); }catch(_){}
-        }
-      }
-      /* ⚠ 2026-09-15：_inv 為 null＝櫃檯沒看到發票區，一律不開（見場租那段的說明）。 */
-      if(_inv){
-        try{ await invIssueForPurchase(_pRow, _pm, _inv,
-               [{name:`${t.plan_name||'分期票券'}・開通 ${n} 堂`, amt}], {category:'installment'}); }
-        catch(e){ console.error('install invoice fail', e); }
-      }else console.warn('發票區未顯示，分期這筆不開立發票：', _pRow.id);
-    }
-  }catch(e){ console.error('install purchase log fail',e); showToast('付款紀錄寫入失敗：'+(e.message||e)); }
-  /* ⚠ 2026-09-04 修：原本寫的 action 是 'installment_unlock'，但 ticket_logs.action 的
-     列舉只有 grant/deduct/refund/adjust/expire —— 資料庫一律退件，而這一行包在
-     catch(_){} 裡，於是**每一次開通下一期的帳本紀錄都靜靜地沒寫進去**（全庫 0 筆）。
-     改用 adjust＋delta 0：開通不改變餘額（sessions_remaining 沒動），只是把鎖打開，
-     所以 delta 就是 0；_tkNetUsed 對 adjust 算 -delta＝0，不會擾動對帳。
-     ⚠ 要新增動作類型就得改資料庫的 enum，不能只在前端寫一個新字串。 */
-  try{ await logTicket(t.id,'adjust',0,null,SESSION.id,`分期收款開通 ${n} 堂（累計 ${t.unlocked_sessions}/${total}），實收 $${amt.toLocaleString()}`+(_vUsed?`（折抵券×${_vUsed}）`:'')); }
-  catch(e){ console.error('分期開通帳本寫入失敗',e); showToast('開通已完成，但帳本紀錄沒寫進去：'+dbFriendlyError(e), 8000); }
-  // 把先前以「待繳費」保留的課補綁票券並扣課（由早到晚，最多本次開通的堂數）
-  let bound=0;
-  try{ bound=await bindHeldBookings(t.id, n); }catch(e){ console.error('補綁待繳費預約失敗',e); }
-  closeModal();
-  showToast(`已收款並開通 ${n} 堂${_full?'（分期已全數開通）':''}`+(_vUsed?`，折抵券用掉 ${_vUsed} 張`:'')+(bound?`，並補扣 ${bound} 筆待繳費預約`:''));
-  openMemberDetail(t.member_id);
+function instCollectError(e){
+  const code=String(e?.message||e||'');
+  const map={'INSTALLMENT.PLAN_CHANGED':'資料已變更，請重新開啟收款畫面並確認簽名',
+    'INSTALLMENT.REFRESH_REQUIRED':'請重新整理頁面後，確認最新收費內容再簽名',
+    'INSTALLMENT.INVALID':'分期資料不完整，請先請櫃檯核對，暫不收款',
+    'INSTALLMENT.SIGNATURE_REQUIRED':'本次內容尚未完成電子簽名，請先送會員手機補簽',
+    'INSTALLMENT.PAPER_REQUIRED':'請先確認會員已在紙本補簽本次收費',
+    'INSTALLMENT.COLLECTION_REQUIRED':'請更新系統後重新開啟分期繳費',
+    'INSTALLMENT.RECEIPT_CONFLICT':'本次收款內容已變更，請先核對原收款紀錄',
+    'CONTRACT.NOT_UNIQUE':'找不到唯一合約，請先確認合約資料，暫不收款',
+    'CONTRACT.NOT_SIGNED':'合約尚未完成簽署，暫不收款',
+    'VOUCHER.BALANCE_CHANGED':'折抵券餘額已變更，本次未收款，請重新確認',
+    'VOUCHER.LIMIT':'折抵券張數超過本次上限，本次未收款',
+    'INVOICE.CHOICE_REQUIRED':'請確認本次發票選項',
+    'INVOICE.DELIVERY_REQUIRED':'請填妥本次發票的信箱或載具'};
+  return map[code]||code||'收款未完成，請重新確認';
 }
+function instHistoryHTML(c){
+  const all=instSignsOf(c),last=all[all.length-1];
+  return all.length?`<section style="margin-top:16px;white-space:normal;"><h3>分期收費確認紀錄</h3>${all.map(s=>{
+    const label=s.sign_type==='paper'?'紙本補簽・員工已確認（簽名留在紙本）':s.signature?'會員電子已簽':s===last?'等待會員簽名':'已改單，未簽署';
+    return `<div style="border:1px solid var(--line,#ddd);border-radius:8px;padding:12px;margin-bottom:8px;break-inside:avoid;"><b>${escH(s.terms?instTermsSummary(s.terms):`第 ${s.n} 期・$${Number(s.amount||0).toLocaleString()}`)}</b><div>${escH(label)}</div>${s.signature?`<img class="ct-sig-img" alt="會員分期簽名" src="${escH(s.signature)}">`:''}</div>`;
+  }).join('')}</section>`:'';
+}
+function instTermsKey(x){ return JSON.stringify(Object.keys(x||{}).sort().map(k=>[k,x[k]])); }
+function instCollectTerms(t,n,amount,method,vouchers){
+  const u=Number(t.unlocked_sessions)||0; let cum=0,from=null,to=null;
+  const seg=(t.installment||{}).segments||[];
+  seg.forEach((v,i)=>{cum+=Number(v);if(from===null&&cum>u)from=i+1;if(to===null&&cum>=u+n)to=i+1;});
+  if(!Number.isInteger(n)||n<1||n>Number(t.sessions_total)-u||!Number.isInteger(amount)||amount<0||!['cash','transfer'].includes(method)||!Number.isInteger(vouchers)||vouchers<0||cum!==Number(t.sessions_total)||from===null||to===null)
+    throw new Error('請確認本次金額、堂數與分期資料');
+  return {ticket_id:t.id,member_id:t.member_id,total:Number(t.sessions_total),unlocked_before:u,
+    amount_paid_before:Number(t.amount_paid)||0,sessions:n,amount,method,vouchers,period_from:from,period_to:to,
+    segments:seg,amounts:t.installment.amounts,install_count:t.installment.count};
+}
+function instReadTerms(t){
+  const v=id=>(document.getElementById(id)||{}).value;
+  if(v('inx-n')===''||v('inx-amt')==='')throw new Error('請填入本次堂數與實收金額');
+  return instCollectTerms(t,Number(v('inx-n')),Number(v('inx-amt')),v('inx-method')||'cash',Number(v('inx-voucher')||0));
+}
+function instTermsSummary(x){
+  const period=x.period_from===x.period_to?`第 ${x.period_from} 期`:`第 ${x.period_from}～${x.period_to} 期`;
+  return `${period} · 收款 $${Number(x.amount).toLocaleString()} · 開通 ${x.sessions} 堂`;
+}
+function instCollectSync(){
+  const st=window._inxState,box=document.getElementById('inx-sign-status'),btn=document.getElementById('inx-go'); if(!st||!box)return;
+  try{
+    const term=instReadTerms(st.ticket),sign=instSignFind(st.contract,term.period_from);
+    const signed=!!(sign&&sign.signature&&sign.signed_at&&instTermsKey(sign.terms)===instTermsKey(term));
+    box.textContent=instTermsSummary(term)+'｜'+(st.contract.sign_type==='paper'?'需紙本補簽':signed?'電子已簽本次內容':'需會員手機簽名');
+    box.style.color=signed?'var(--green)':'#725315';
+    if(btn)btn.disabled=!!invCheckFields(invReadFields())||(st.contract.sign_type==='paper'&&!document.getElementById('inx-paper-ack')?.checked);
+    if(btn)btn.textContent=st.contract.sign_type==='paper'?'確認紙本補簽・收款開通':signed?'確認收款並開通':'送到會員手機簽名';
+  }catch(e){box.textContent=e.message;if(btn){btn.textContent='請確認收款內容';btn.disabled=true;}}
+}
+async function _confirmInstallNext(ticket_id){
+  if(!isDeskLike()){showToast('只有管理員或櫃台可收款開通');return;}
+  const st=window._inxState;if(!st||st.ticket.id!==ticket_id){showToast('請重新開啟分期繳費');return;}
+  let sent=false,committed=false;
+  try{
+    const t=await dbGet('member_tickets',ticket_id);if(!t)throw new Error('讀不到最新票券，暫不收款');
+    const term=st.receipt?st.receipt.terms:instReadTerms(t);
+    if(!st.receipt&&instTermsKey(instReadTerms(st.ticket))!==instTermsKey(term))throw new Error('票券資料已變更，請重新開啟收款畫面');
+    const c=await instCtOfTicket(ticket_id);
+    if(c.id!==st.contract.id||c.member_id!==t.member_id)throw new Error('合約已變更，請重新確認');
+    const invoice=invReadFields()||(term.amount===0?{mode:'none'}:null);
+    const invError=invCheckFields(invoice);if(invError)throw new Error('發票欄位：'+invError);
+    if(!invoice)throw new Error('讀不到發票選項，請重新開啟收款畫面');
+    if(st.receipt && (instTermsKey(st.receipt.terms)!==instTermsKey(instReadTerms(st.ticket))||JSON.stringify(st.receipt.invoice)!==JSON.stringify(invoice)))
+      throw new Error('上次收款結果待確認，請勿更改內容重送；請先核對收款紀錄');
+    const sign=instSignFind(c,term.period_from);
+    const signed=!!(sign&&sign.signature&&sign.signed_at&&instTermsKey(sign.terms)===instTermsKey(term));
+    if(c.sign_type==='remote'&&!signed&&!st.receipt){
+      const {data,error}=await sb.rpc('fn_installment_request_v2',{p_ticket_id:ticket_id,p_terms:term});
+      if(error||!data?.ok)throw new Error(data?.error_code||error?.message||'送簽失敗');
+      dbCacheClear(['contracts']);closeModal();showToast(data.signed?'本次內容已簽，請重新開啟收款確認':'已送到會員手機簽名；尚未收款或開通',6000);return;
+    }
+    const paperAck=!!document.getElementById('inx-paper-ack')?.checked;
+    if(c.sign_type==='paper'&&!paperAck)throw new Error('請先確認會員已在紙本補簽本次收費');
+    if(!st.receipt)st.receipt={id:uid('IC'),terms:term,invoice};
+    sent=true;
+    const {data,error}=await sb.rpc('fn_installment_collect_v2',{p_ticket_id:ticket_id,p_receipt_id:st.receipt.id,p_terms:term,p_paper_ack:paperAck,p_invoice:invoice});
+    if(error)throw new Error('收款結果不明，請勿另收一次；可用相同內容重試確認');
+    if(!data?.ok){sent=false;st.receipt=null;throw new Error(data?.error_code||'本次收款未完成');}
+    committed=true;
+    dbCacheClear(['member_tickets','contracts','purchases','ticket_logs']);
+    if(data.already){closeModal();showToast('這筆收款已完成，不會再次收款或開通；請核對發票與預約補綁狀態',8000);openMemberDetail(t.member_id);return;}
+    let invoiceNote=invoice.mode==='none'?'未開發票':'';
+    let mem=null;
+    if(term.amount>0){
+      try{
+        mem=await dbGet('members',t.member_id);
+        const patch={};
+        if(mem&&invoice.email&&!String(mem.email||'').trim())patch.email=invoice.email;
+        if(mem&&invoice.carrierNum&&!String(mem.invoice_carrier||'').trim())patch.invoice_carrier=invoice.carrierNum;
+        if(Object.keys(patch).length){await dbPut('members',Object.assign({},mem,patch));dbCacheClear(['members']);}
+      }catch(e){console.error('會員發票偏好未儲存（收款已完成）',e);}
+    }
+    if(term.amount>0&&invoice.mode!=='none'){
+      try{
+        const r=await invIssueForPurchase(data.purchase,mem,invoice,[{name:`${t.plan_name||'分期票券'}・開通 ${term.sessions} 堂`,amt:term.amount}],{category:'installment'});
+        invoiceNote=r?.invoice_number?'發票已開立':'發票待確認，請至發票頁檢查';
+      }catch(e){console.error('分期發票待處理',e);invoiceNote='發票待處理，請至發票頁確認';}
+    }
+    let bound=0,bindNote='';try{bound=await bindHeldBookings(ticket_id,term.sessions);}catch(e){console.error(e);bindNote='；保留課補綁待確認';}
+    closeModal();showToast(`已收款 $${term.amount.toLocaleString()}、開通 ${term.sessions} 堂${bound?`，補綁 ${bound} 堂`:''}；${invoiceNote}${bindNote}`,8000);openMemberDetail(t.member_id);
+  }catch(e){console.error('分期收款',e);showToast(committed?'收款已完成，畫面更新失敗；請重新整理核對發票及預約補綁':sent?'收款結果不明，請勿另收一次；以相同內容重試或先查收款紀錄':instCollectError(e),8000);}
+}
+
 /* 待繳費保留 → 正式預約（2026-07-29）：分期收到下一期時呼叫。
    由早到晚綁，綁到已開通堂數用完為止；每筆都重讀票券，避免連續扣課時用到過期的餘額。 */
 async function bindHeldBookings(ticket_id, maxN){
@@ -74786,12 +74706,15 @@ function tkMoneyHtml(t){
     const _instN=Math.max(0, Number(_inst&&_inst.count)||0);
     const _amts=Array.isArray(_inst&&_inst.amounts)?_inst.amounts:[];
     const _list=_pe.invs.slice();
-    for(let k=_list.length;k<_instN;k++) _list.push({due:true, amt:Number(_amts[k])||0});
+    // 原子收款可一次涵蓋多期；按已確認範圍補未繳列，不能把收款筆數當期數。
+    const _covered=Math.max(_list.length,..._list.map(v=>Number(v.periodTo)<=Number(_inst&&_inst.current)?Number(v.periodTo)||0:0));
+    for(let k=_covered;k<_instN;k++) _list.push({due:true,periodFrom:k+1,periodTo:k+1,amt:Number(_amts[k])||0});
     const _multi=_list.length>1;
     const _rows=_list.map((v,i)=>{
+      const _period=(v&&v.periodFrom)?(v.periodFrom===v.periodTo?String(v.periodFrom):v.periodFrom+'～'+v.periodTo):String(i+1);
       /* 未收的那一期：日期與付款方式還不知道，格子要留（多期是 grid，少一格整列會位移） */
       if(v && v.due){
-        return `<span class="tk-payrow tk-payrow-due" title="第 ${i+1} 期尚未收款">`
+        return `<span class="tk-payrow tk-payrow-due" title="第 ${_period} 期尚未收款">`
           +`<span class="tk-when-na"></span><span class="tk-pay-na"></span>`
           +`<span class="tk-amtcell"><b class="tk-amt">${v.amt?'$'+v.amt.toLocaleString():'—'}</b></span>`
           +`<span class="tk-due">未繳</span></span>`;
@@ -74802,8 +74725,8 @@ function tkMoneyHtml(t){
          本來就由上往下就是第 1、2、3 期，多一欄反而把整組推寬。
          期數沒有消失：每一列的發票／沒開發票 title 仍寫著「第 N 期」。 */
       const _iv= v && v.no
-        ? `<span class="rev-invno" title="${_multi?`第 ${i+1} 期發票`:'發票號碼'}">${v.no}</span>`
-        : `<span class="rev-noinv" title="${_multi?`第 ${i+1} 期`:'這一筆'}沒有開立電子發票">沒開發票</span>`;
+        ? `<span class="rev-invno" title="${_multi?`第 ${_period} 期發票`:'發票號碼'}">${v.no}</span>`
+        : `<span class="rev-noinv" title="${_multi?`第 ${_period} 期`:'這一筆'}沒有開立電子發票">沒開發票</span>`;
       /* ⚠ 沒有付款方式時也要輸出一個空格子：多期時整組是三欄 grid，
          少一格會讓後面的欄位整列往左位移（第三期的金額會跑到付款方式那一欄）。 */
       const _pt=_pv?`<span class="tk-pay${_pv==='匯款'?' tk-pay-tr':''}">${_pv}</span>`
@@ -74837,7 +74760,7 @@ function tkMoneyHtml(t){
            跨年的那幾張看得出月份倒退回去，要查完整時間在〔交易〕分頁。 */
       const _wd=String(v&&v.at||'').slice(0,10);
       const _when=_wd
-        ? `<span class="tk-when" title="第 ${i+1} 期收款日　${_wd.replace(/-/g,'/')}">${_wd.slice(5).replace('-','/')}</span>`
+        ? `<span class="tk-when" title="第 ${_period} 期收款日　${_wd.replace(/-/g,'/')}">${_wd.slice(5).replace('-','/')}</span>`
         : (_multi?'<span class="tk-when-na"></span>':'');
       return `<span class="tk-payrow">${_when}${_pt}<span class="tk-amtcell">${_amt}</span>${_iv}${_dcThis}</span>`;
     }).join('');
@@ -78759,6 +78682,15 @@ async function _doInvWordsSync(){
     const b2=document.getElementById('invws-go'); if(b2){ b2.disabled=false; b2.textContent='確認建立'; }
   }
 }
+// 綠界 GetIssue 使用 IIS_* 欄位；核對同單、同額且仍有效才可承接號碼。
+function invRecoveredIssue(q,inv){
+  const d=q&&q.ok&&q.data;
+  if(!d||String(d.IIS_Relate_Number)!==String(inv.merchant_order_no)
+    ||Number(d.IIS_Sales_Amount)!==Number(inv.total_amt)
+    ||String(d.IIS_Issue_Status)!=='1'||String(d.IIS_Invalid_Status)!=='0'
+    ||!(/^[A-Z]{2}\d{8}$/).test(String(d.IIS_Number||'')))return null;
+  return {ok:true,reconciled:true,data:{InvoiceNo:d.IIS_Number,InvoiceDate:String(d.IIS_Create_Date||'').slice(0,10),RandomNumber:d.IIS_Random_Number||null},query:q};
+}
 async function invRetry(id){ return onceAct('invretry:'+id, ()=>_invRetry(id)); }
 async function _invRetry(id){
   const rows=(await dbGetAll('invoices').catch(()=>[]))||[];
@@ -78766,8 +78698,17 @@ async function _invRetry(id){
   if(!inv || inv.status!=='failed'){ showToast('這筆不需要重開'); return; }
   const pur=inv.purchase_id ? await dbGet('purchases', inv.purchase_id).catch(()=>null) : null;
   if(!pur){ showToast('找不到對應的收款紀錄，無法重開'); return; }
+  // 回應遺失不等於沒開票：先查同一個自訂編號，只有確定查無才重送。
+  let q;try{q=await invCall('query',{RelateNumber:inv.merchant_order_no});}catch(_){q=null;}
+  let recovered=null;
+  if(q&&q.ok){
+    recovered=invRecoveredIssue(q,inv);
+    if(!recovered){showToast('發票查詢內容或狀態不符，已停止，請人工核對原編號',6000);return;}
+  }else if(!(q&&q.stage==='invoice'&&Number(q.code)===2)){
+    showToast('無法確認原發票狀態，暫不重送，請稍後再查',6000);return;
+  }
   /* 用當初存下來的那組條件重組（載具／統編／捐贈／紙本），不是重新問櫃檯 */
-  const r=await invCall('issue',
+  let r=recovered||await invCall('issue',
     invPayload(Object.assign({}, pur, {id:inv.merchant_order_no, deal_amount:inv.total_amt}),
       await dbGet('members', inv.member_id).catch(()=>null),
       /* 2026-09-14：email 也要帶回去 —— 重開走的是「當初存下來的那組條件」，
@@ -78779,13 +78720,16 @@ async function _invRetry(id){
         : {mode:'carrier', carrierNum:(inv.carrier_type==='3'?inv.carrier_num:'')},
         {email:inv.buyer_email||''}),
       inv.items));
+  if(!r?.ok&&(!r?.stage||r.stage==='transport'||Number(r.code)===5070357)){
+    try{const latest=await invCall('query',{RelateNumber:inv.merchant_order_no});r=invRecoveredIssue(latest,inv)||r;}catch(_){}
+  }
   const rd=(r&&r.data)||{};
-  await dbPut('invoices', Object.assign({}, inv, {
+  try{await dbPut('invoices', Object.assign({}, inv, {
     status: r&&r.ok?'issued':'failed',
     invoice_number: rd.InvoiceNo||inv.invoice_number||null,
     random_num: rd.RandomNumber||inv.random_num||null,
     invoice_time: rd.InvoiceDate||inv.invoice_time||null,
-    raw_result: r||inv.raw_result }));
+    raw_result: r||inv.raw_result }));}catch(e){console.error('發票重試結果儲存失敗',e);showToast('發票結果未存妥，請保留原編號稍後再查，勿另開新單',6000);return;}
   if(r&&r.ok){
     try{ await dbPut('purchases', Object.assign({}, pur, {invoice_type:'ecpay', invoice_number:rd.InvoiceNo})); }catch(_){}
     showToast('發票已開立 '+rd.InvoiceNo);
@@ -79746,6 +79690,10 @@ function viewContract(id){const a=window._appCache[id];
 async function _issueTicketsFromApp(a, invoiceStatus, invoiceNumber){
   const plan=await dbGet('course_plans',a.plan_id);
   if(!plan) throw new Error('找不到對應方案，無法發放');
+  const appType=await dbGet('ticket_types',plan.ticket_type_id);
+  if(!appType)throw new Error('讀不到方案票種，暫不發券，請重新讀取');
+  if((appType?.category==='私人教練'&&Number(plan.sessions_base)+Number(plan.sessions_bonus)>1)||Number(a.installment_count)>1)
+    throw new Error('此方案需完成合約與分期核對，請由標準銷售／收款審核流程辦理；本申請未發券');
   const total=plan.sessions_base+plan.sessions_bonus;
   const unitPrice=plan.unit_price||0;
   const dealAmount=a.list_price||(unitPrice*plan.sessions_base);
@@ -80242,13 +80190,7 @@ async function openContractView(id){
       <img class="ct-sig-img" src="${c.signature}" alt="簽名"></div>`:'';
   /* 分期第 2 期起的簽名（2026-09-22）：一期一格，走紙本的那幾期也列出來
      （只記事實、沒有圖 —— 紙本的簽名在紙上，系統不假裝有）。 */
-  const _is=instSignsOf(c).slice().sort((a,b)=>(Number(a.n)||0)-(Number(b.n)||0));
-  const insig=_is.length?`<div style="margin-top:14px;white-space:normal;">
-      <div style="font-size:11.5px;color:var(--t3);margin-bottom:6px;">分期各期簽名</div>
-      ${_is.map(s=>`<div style="border:1px solid var(--line);border-radius:8px;padding:9px 11px;margin-bottom:6px;">
-        <div style="font-size:12.5px;color:var(--t2);">第 ${s.n} 期　·　${s.signature?'電子簽（會員手機）':'等待會員簽名'}${s.signed_at?`　·　${String(s.signed_at).slice(0,10)}`:''}</div>
-        ${s.signature?`<img class="ct-sig-img" src="${s.signature}" alt="第 ${s.n} 期簽名">`:''}
-      </div>`).join('')}</div>`:'';
+  const insig=instHistoryHTML(c);
   /* 手機端直接滿版閱讀（2026-08-03 使用者：「會員手機端的合約，因為頁面的關係
      沒辦法一次閱讀」）—— 原本是彈窗裡一個 32vh 的小框自己捲，手機上等於在
      兩層捲軸裡讀合約。滿版閱讀器一路捲到底。桌機維持彈窗，另給「放大閱讀」。 */
@@ -80309,7 +80251,7 @@ async function ctViewPrint(id){
      <div class="ct-text">${ctBodyHTML(c.body_snapshot)}</div>
      ${c.signature
        ? ctSignBlock({sigImg:c.signature, dateText:(c.signed_at||'').slice(0,10).replace(/-/g,' / ')})
-       : ctSignBlock({paperNote:true})}`);
+       : ctSignBlock({paperNote:true})}${instHistoryHTML(c)}`);
 }
 function openShiftQuickEdit(){
   window._sqDraft=SHIFT_QUICK.map(([code,start,end])=>({code,start,end}));

@@ -64,9 +64,11 @@ ok('★★ 用淡化＋灰籤，不用紅色（紅>金>綠；分期還沒到期�
    && !/\.tk-due\{[^}]*danger/.test(src));
 
 console.log('\n⑤ 判斷依據');
-ok('★★★ 用收款筆數補到 count，不是看 installment.paid 那組旗標',
-   /for\(let k=_list\.length;k<_instN;k\+\+\) _list\.push\(\{due:true, amt:Number\(_amts\[k\]\)\|\|0\}\);/.test(src)
-   && /不要用 installment\.paid 判斷/.test(src));
+ok('★★★ 舊收款仍補未繳列，不使用舊 paid 旗標',
+   /Math\.max\(_list\.length,/.test(src) && /不要用 installment\.paid 判斷/.test(src));
+const paidAll=mk([{amt:4000,pm:'cash'},{amt:8000,pm:'cash',periodFrom:2,periodTo:3}],{count:3,current:3,amounts:[4000,4000,4000]});
+ok('★★★ 一次繳清兩期不能誤標第三期未繳',!paidAll.includes('未繳')&&paidAll.includes('第 2～3 期'));
+
 
 console.log(`\n${pass} 通過 / ${fail} 失敗`);
 process.exit(fail?1:0);

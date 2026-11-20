@@ -1,0 +1,86 @@
+[
+  {
+    "acl": "{=X/postgres,postgres=X/postgres,anon=X/postgres,authenticated=X/postgres,service_role=X/postgres}",
+    "md5": "28c487679391b2ef4094c9e5ab014e81",
+    "name": "current_employee_id",
+    "signature": "current_employee_id()",
+    "definition": "CREATE OR REPLACE FUNCTION public.current_employee_id()\n RETURNS text\n LANGUAGE sql\n STABLE SECURITY DEFINER\n SET search_path TO 'public', 'pg_temp'\nAS $function$\n  select id from employees where auth_id = auth.uid() limit 1;\n$function$\n"
+  },
+  {
+    "acl": "{=X/postgres,postgres=X/postgres,anon=X/postgres,authenticated=X/postgres,service_role=X/postgres}",
+    "md5": "d9f058d8bc108fbb4d93d3d924322033",
+    "name": "current_member_id",
+    "signature": "current_member_id()",
+    "definition": "CREATE OR REPLACE FUNCTION public.current_member_id()\n RETURNS text\n LANGUAGE sql\n STABLE SECURITY DEFINER\n SET search_path TO 'public', 'pg_temp'\nAS $function$\n  select id from members where auth_id = auth.uid() limit 1;\n$function$\n"
+  },
+  {
+    "acl": "{=X/postgres,postgres=X/postgres,anon=X/postgres,authenticated=X/postgres,service_role=X/postgres}",
+    "md5": "a68e61e1739e0fb15658f32dd70a2c0f",
+    "name": "current_staff_role",
+    "signature": "current_staff_role()",
+    "definition": "CREATE OR REPLACE FUNCTION public.current_staff_role()\n RETURNS text\n LANGUAGE sql\n STABLE SECURITY DEFINER\n SET search_path TO 'public', 'pg_temp'\nAS $function$\n  select role::text from employees where auth_id = auth.uid() limit 1;\n$function$\n"
+  },
+  {
+    "acl": "{postgres=X/postgres,service_role=X/postgres}",
+    "md5": "a5c70a4c01905b743fb3199174b70d41",
+    "name": "fn_contract_cancel_holds",
+    "signature": "fn_contract_cancel_holds(text,text,text)",
+    "definition": "CREATE OR REPLACE FUNCTION public.fn_contract_cancel_holds(p_contract_id text, p_member_id text, p_why text)\n RETURNS integer\n LANGUAGE plpgsql\n SECURITY DEFINER\n SET search_path TO 'public', 'pg_temp'\nAS $function$\ndeclare\n  v_n  int;\n  v_op text := coalesce(current_employee_id(), '系統／直連');\nbegin\n  if p_contract_id is null then return 0; end if;\n  update bookings\n     set status = 'cancelled',\n         cancelled_at = now(),\n         cancelled_by = case when current_employee_id() is not null then current_employee_id() else cancelled_by end,\n         cancel_reason = p_why || '｜操作者 ' || v_op\n   where contract_id = p_contract_id\n     and pending_contract is true and ticket_id is null\n     and status::text <> 'cancelled'\n     and member_id is not distinct from p_member_id;\n  get diagnostics v_n = row_count;\n  return v_n;\nend\n$function$\n"
+  },
+  {
+    "acl": "{postgres=X/postgres,service_role=X/postgres}",
+    "md5": "97b46407ca5d4e481c50b86b38f5df38",
+    "name": "fn_contracts_delete_cascade",
+    "signature": "fn_contracts_delete_cascade()",
+    "definition": "CREATE OR REPLACE FUNCTION public.fn_contracts_delete_cascade()\n RETURNS trigger\n LANGUAGE plpgsql\n SECURITY DEFINER\n SET search_path TO 'public', 'pg_temp'\nAS $function$\ndeclare\n  v_n int;\nbegin\n  perform 1 from ticket_grant_requests r where r.contract_id = old.id for update;\n  v_n := public.fn_contract_cancel_holds(old.id, old.member_id,\n           '合約刪除連動（合約 ' || old.id || '）自動取消未轉正卡位');\n  update ticket_grant_requests\n     set status = 'cancelled',\n         cancel_reason = coalesce(nullif(cancel_reason, ''), '合約被刪除'),\n         reviewed_at = coalesce(reviewed_at, now())\n   where contract_id = old.id and status = 'pending';\n  return old;\nend\n$function$\n"
+  },
+  {
+    "acl": "{=X/postgres,postgres=X/postgres,anon=X/postgres,authenticated=X/postgres,service_role=X/postgres}",
+    "md5": "6e6435f3307a0683e33497f4d771afe6",
+    "name": "fn_log_change",
+    "signature": "fn_log_change()",
+    "definition": "CREATE OR REPLACE FUNCTION public.fn_log_change()\n RETURNS trigger\n LANGUAGE plpgsql\n SECURITY DEFINER\n SET search_path TO 'public', 'pg_temp'\nAS $function$\nbegin\n  insert into public.change_log(tbl,row_id,op)\n  values (tg_table_name,\n          coalesce((case when tg_op='DELETE' then old.id else new.id end), '')::text,\n          left(tg_op,1));\n  return null;\nend $function$\n"
+  },
+  {
+    "acl": "{postgres=X/postgres}",
+    "md5": "9b7f69b681bab1c00970b75603f3e172",
+    "name": "fn_tk_holding",
+    "signature": "fn_tk_holding(text,text)",
+    "definition": "CREATE OR REPLACE FUNCTION public.fn_tk_holding(p_ticket text, p_exclude text DEFAULT NULL::text)\n RETURNS TABLE(booking_id text, bdate date, bstatus text)\n LANGUAGE sql\n STABLE SECURITY DEFINER\n SET search_path TO 'public', 'pg_temp'\nAS $function$\n  select b.id, b.date, b.status::text\n    from bookings b\n   where b.status::text is distinct from 'cancelled'\n     and b.id is distinct from p_exclude\n     and ( b.ticket_id = p_ticket\n           or b.id in ( select l.booking_id from ticket_logs l\n                         where l.ticket_id = p_ticket and l.booking_id is not null\n                         group by l.booking_id\n                        having coalesce(sum(case when l.action::text = 'deduct' then 1\n                                                 when l.action::text = 'refund' then -1 else 0 end), 0) > 0 ) )\n$function$\n"
+  },
+  {
+    "acl": "{postgres=X/postgres}",
+    "md5": "29e5d64eb14b383ce183ecf493334608",
+    "name": "fn_tk_is_unopened",
+    "signature": "fn_tk_is_unopened(member_tickets)",
+    "definition": "CREATE OR REPLACE FUNCTION public.fn_tk_is_unopened(t member_tickets)\n RETURNS boolean\n LANGUAGE sql\n IMMUTABLE\n SET search_path TO 'public', 'pg_temp'\nAS $function$ select coalesce(t.valid_days, 0) > 0 and t.activated_at is null and t.start_date is null and t.expire_date is null $function$\n"
+  },
+  {
+    "acl": "{postgres=X/postgres}",
+    "md5": "40c8662d82e8223f8442b69e29a92e86",
+    "name": "fn_tk_today",
+    "signature": "fn_tk_today()",
+    "definition": "CREATE OR REPLACE FUNCTION public.fn_tk_today()\n RETURNS date\n LANGUAGE sql\n STABLE\n SET search_path TO 'public', 'pg_temp'\nAS $function$ select (now() at time zone 'Asia/Taipei')::date $function$\n"
+  },
+  {
+    "acl": "{postgres=X/postgres}",
+    "md5": "7be7c526a1e1908471ef255f128851f1",
+    "name": "fn_tk_window_check",
+    "signature": "fn_tk_window_check(text)",
+    "definition": "CREATE OR REPLACE FUNCTION public.fn_tk_window_check(p_ticket text)\n RETURNS void\n LANGUAGE plpgsql\n SECURITY DEFINER\n SET search_path TO 'public', 'pg_temp'\nAS $function$\ndeclare t member_tickets%rowtype; v_min date; v_max date;\nbegin\n  if p_ticket is null then return; end if;\n  select * into t from member_tickets where id = p_ticket;\n  if not found or not public.fn_tk_is_unopened(t) then return; end if;\n  select * into t from member_tickets where id = p_ticket for update;      -- 之後的查詢是新快照，看得到對方已提交的預約\n  if not found or not public.fn_tk_is_unopened(t) then return; end if;\n  select min(h.bdate), max(h.bdate) into v_min, v_max from public.fn_tk_holding(p_ticket, null) h;\n  if v_min is null then return; end if;\n  if (v_max - v_min) > (t.valid_days - 1) then\n    raise exception 'TKWIN.OUT_OF_WINDOW:%:%', to_char(v_min, 'YYYY-MM-DD'), to_char(v_min + (t.valid_days - 1), 'YYYY-MM-DD')\n      using errcode = 'P0001',\n            hint = '尚未啟用的票券，預約日期需落在最早一堂起 ' || t.valid_days || ' 天內（至 ' || to_char(v_min + (t.valid_days - 1), 'YYYY/MM/DD') || '）；首次簽到後才正式起算效期';\n  end if;\nend\n$function$\n"
+  },
+  {
+    "acl": "{=X/postgres,postgres=X/postgres,anon=X/postgres,authenticated=X/postgres,service_role=X/postgres}",
+    "md5": "4843a4de4f5b8e68d141c48215596234",
+    "name": "is_staff_desk",
+    "signature": "is_staff_desk()",
+    "definition": "CREATE OR REPLACE FUNCTION public.is_staff_desk()\n RETURNS boolean\n LANGUAGE sql\n STABLE SECURITY DEFINER\n SET search_path TO 'public', 'pg_temp'\nAS $function$ select current_staff_role() in ('admin','front_desk')\n   or exists(select 1 from employees e where e.auth_id=auth.uid()\n       and e.role='coach' and coalesce(e.is_manager,false) and e.status is distinct from 'inactive'); $function$\n"
+  },
+  {
+    "signature": "is_any_staff()",
+    "name": "is_any_staff",
+    "md5": "f2bf84a74a15a0ee806eca816891aa16",
+    "definition": "CREATE OR REPLACE FUNCTION public.is_any_staff()\n RETURNS boolean\n LANGUAGE sql\n STABLE SECURITY DEFINER\n SET search_path TO 'public', 'pg_temp'\nAS $function$ select current_staff_role() is not null; $function$\n",
+    "acl": "{=X/postgres,postgres=X/postgres,anon=X/postgres,authenticated=X/postgres,service_role=X/postgres}"
+  }
+]

@@ -181,9 +181,9 @@ console.log('\n④ 開不成不能擋住銷售（票券已經發出去了）');
   ok('★★ print_flag 存綠界原值 \'0\'/\'1\'（欄位是 text，不是 boolean）',
      /print_flag:d\.Print,/.test(G) && !/print_flag:d\.Print==='1'/.test(G));
   ok('★★ 成功才把發票號碼寫回 purchases', /invoice_type:'ecpay', invoice_number:rd\.InvoiceNo/.test(G));
-  ok('★ 失敗只用 toast 告知，不 throw', /showToast\('⚠ 發票開立失敗：'/.test(G) && !/throw /.test(G));
+  ok('★ 供應商拒絕告知失敗；追蹤儲存失敗必須阻擋', /showToast\('⚠ 發票開立失敗：'/.test(G) && /await dbPut\('invoices',row\)/.test(G) && /throw new Error\('發票結果尚未存妥/.test(G));
   ok('★★ 呼叫端也包 try（發票爆掉不能讓票券發放整條中斷）',
-     /try\{ await invIssueForPurchase\(_purRow, await dbGet\('members',P\.member_id\)\.catch\(\(\)=>null\), P\.inv,[\s\S]{0,120}?\}catch\(e\)\{ console\.error\('invoice fail', e\); \}/.test(src));
+     /const _invoice=await invIssueForPurchase\(_purRow/.test(src)&&/t\._invoicePending=true/.test(src)&&/發票待確認，請至發票頁核對，勿另開新單/.test(src));
   /* 2026-09-14 使用者定案：「櫃檯收款的時候要有開發票或不開發票的選項」。
      ⚠⚠ 表示「不開」一定要用 {mode:'none'}，**不能用 f==null** ——
        null 的既有語意是「走預設載具照常開」，退款手續費那條路（39399）就是傳 null。
@@ -285,13 +285,13 @@ console.log('\n④-2 每一個收款入口都要能開發票（2026-09-15）');
      /try\{ invSync\(\{paid:!window\._frHold && fee>0, defaultOn:false\}\); \}catch\(_\)\{\}/.test(src)
      && !/invSync\(\{paid:[^}]*memberId[^}]*\}\);[\s\S]{0,40}場租/.test(src)
      && /await invIssueForPurchase\(_fRow, null, _inv,/.test(src));
-  ok('★★ 分期：每一期各開各的', /await invIssueForPurchase\(_pRow, _pm, _inv,/.test(src)
+  ok('★★ 分期：每一期各開各的', /await invIssueForPurchase\(data\.purchase,mem,invoice,/.test(src)
      && /function inxInvSync\(\)\{/.test(src));
   /* ⚠ 表單一定要在 closeModal 之前讀完 —— 關掉之後 DOM 就沒了，
      0915 四個入口都踩同一條規則，所以各自在動資料前先 invReadFields()。 */
   ok('★★★ 四個入口都在動資料前先讀表單並驗證',
-     cnt(/const _inv=invReadFields\(\);/g)>=4
-     && cnt(/const _e=invCheckFields\(_inv\); if\(_e\)\{ showToast\('發票欄位：'\+_e\); return; \}/g)>=4);
+     cnt(/const _inv=invReadFields\(\);/g)>=3 && src.includes('const invoice=invReadFields()')
+     && cnt(/const _e=invCheckFields\(_inv\); if\(_e\)\{ showToast\('發票欄位：'\+_e\); return; \}/g)>=3 && src.includes('const invError=invCheckFields(invoice)'));
   ok('★★ 散客沒有會員資料可帶 → 不預填，不是錯誤',
      /散客（memberId 空或找不到人）→ 四個值都是空字串 → 不預填，櫃檯手動輸入。/.test(src));
 }
@@ -340,11 +340,11 @@ console.log('\n④-3 流程自我檢查抓到的三個洞（2026-09-15）');
      && /else if\(fee\)\{ fee\.value=200; \}\s*\n\s*frSyncMode\(\);/.test(src));
   ok('★★★ 金額 0 就把發票區收起來 —— 分期（含「下一期／剩餘全繳」快捷）',
      /function inxInvSync\(\)\{/.test(src)
-     && /try\{ invSync\(\{paid:amt>0, memberId:window\._inxMemberId\|\|''/.test(src)
+     && /Promise\.resolve\(invSync\(\{paid:amt>0, memberId:window\._inxMemberId\|\|''/.test(src)
      /* 2026-10-12：分期視窗多了折抵券，金額改動與快捷鍵要一併重算折抵說明
         （見 instvouchtest）。這一條守的仍是「金額 0 → 發票區收起來」。 */
      && /id="inx-amt" min="0" value="\$\{amt\}" oninput="inxInvSync\(\);inxVoucherCalc\(\)" data-vch="0"/.test(src)
-     && /inxInvSync\(\); if\(typeof inxVoucherSync==='function'\) inxVoucherSync\(true\); \}/.test(src));
+     && /inxInvSync\(\); if\(typeof inxVoucherSync==='function'\) inxVoucherSync\(true\); instCollectSync\(\); \}/.test(src));
   ok('★★ 未付款發放不會誤開（_dealRec 為 0 → invIssueForPurchase 的 amt<=0 擋掉）',
      /const _dealRec=\(P\.payment_status==='unpaid'\) \? 0/.test(src)
      && /if\(amt<=0\) return null;/.test(src));
@@ -377,7 +377,7 @@ console.log('\n④-4 ⚠ 事故：系統自己開了一張沒人選過的發票�
   ok('★★★ 五個入口都擋掉「_inv 為 null 就開立」',
      /if\(P\.inv\)\{/.test(src)          /* 發放票券 */
      && /if\(_fOk && _inv\)\{/.test(src) /* 場租 */
-     && cnt(/⚠ 2026-09-15：_inv 為 null＝櫃檯沒看到發票區，一律不開（見場租那段的說明）。/g)===3);
+     && cnt(/⚠ 2026-09-15：_inv 為 null＝櫃檯沒看到發票區，一律不開（見場租那段的說明）。/g)===2 && src.includes("if(!invoice)throw new Error('讀不到發票選項"));
   ok('★★ 擋下來時要留痕跡（不是靜靜跳過，否則沒人知道那筆為何沒發票）',
      cnt(/console\.warn\('發票區未顯示/g)>=4);
   /* 2026-09-15：退款改開折讓後，「手續費另開一張」那條內部補開整個拆掉了 ——

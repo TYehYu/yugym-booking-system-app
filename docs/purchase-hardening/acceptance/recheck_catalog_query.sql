@@ -1,0 +1,13 @@
+select jsonb_build_object(
+'functions',(select md5(string_agg(pg_get_functiondef(oid)||coalesce(proacl::text,''),'|' order by oid::regprocedure::text)) from pg_proc where pronamespace='public'::regnamespace and prokind='f'),
+'function_count',(select count(*) from pg_proc where pronamespace='public'::regnamespace and prokind='f'),
+'columns',(select md5(coalesce(jsonb_agg(jsonb_build_array(c.relname,a.attname,format_type(a.atttypid,a.atttypmod),a.attnotnull,pg_get_expr(d.adbin,d.adrelid),a.attidentity,a.attgenerated) order by c.relname,a.attnum)::text,'[]')) from pg_attribute a join pg_class c on c.oid=a.attrelid left join pg_attrdef d on d.adrelid=c.oid and d.adnum=a.attnum where c.relnamespace='public'::regnamespace and c.relkind in ('r','p','v','m') and a.attnum>0 and not a.attisdropped),
+'policies',(select md5(coalesce(jsonb_agg(jsonb_build_array(schemaname,tablename,policyname,permissive,roles,cmd,qual,with_check) order by schemaname,tablename,policyname)::text,'[]')) from pg_policies where schemaname='public'),
+'grants',(select md5(coalesce(jsonb_agg(jsonb_build_array(c.relname,c.relkind,c.relrowsecurity,c.relforcerowsecurity,pg_get_userbyid(c.relowner),c.relacl::text) order by c.relname)::text,'[]')) from pg_class c where c.relnamespace='public'::regnamespace and c.relkind in ('r','p','v','m','S')),
+'constraints',(select md5(coalesce(jsonb_agg(jsonb_build_array(c.relname,x.conname,pg_get_constraintdef(x.oid)) order by c.relname,x.conname)::text,'[]')) from pg_constraint x join pg_class c on c.oid=x.conrelid where c.relnamespace='public'::regnamespace),
+'indexes',(select md5(coalesce(jsonb_agg(jsonb_build_array(tablename,indexname,indexdef) order by tablename,indexname)::text,'[]')) from pg_indexes where schemaname='public'),
+'views',(select md5(coalesce(jsonb_agg(jsonb_build_array(c.relname,c.reloptions,pg_get_viewdef(c.oid)) order by c.relname)::text,'[]')) from pg_class c where c.relnamespace='public'::regnamespace and c.relkind in ('v','m')),
+'Triggers',(select md5(string_agg(pg_get_triggerdef(t.oid),'|' order by c.relname,t.tgname)) from pg_trigger t join pg_class c on c.oid=t.tgrelid where c.relnamespace='public'::regnamespace and not t.tgisinternal),
+'counts',jsonb_build_object('bookings',(select count(*) from bookings),'tickets',(select count(*) from member_tickets),'logs',(select count(*) from ticket_logs),'members',(select count(*) from members),'auth',(select count(*) from auth.users)),
+'candidate_objects',(select count(*) from pg_proc where pronamespace='public'::regnamespace and (proname like 'fn_installment_%' or proname='fn_member_sign_installment_v2' or proname like 'zz_ica_%')),
+'receipts_absent',to_regclass('public.installment_receipts') is null) catalog;

@@ -376,17 +376,17 @@ const bookingOf = h => h.tables.bookings.BK1;
     ok('　　先綁最早日期的保留課（既有行為，未改）：目標卡可能不是第一張被綁的', n4 === 1 && h4.tables.bookings['BK-EARLY'].ticket_id === 'TK-1' && h4.tables.bookings.BK1.ticket_id === null, [n4]);
   }
 
-  console.log('\n═══ ⑩ 不該被動到的函式與入口（以 cfee1ec 的雜湊釘住）═══');
+  console.log('\n═══ ⑩ 不該被動到的函式與入口（既有安全函式保留原雜湊；僅分期收款兩支改釘本輪版本）═══');
   {
     const PIN = {
-      bindHeldBookings: '136cc284a4ef8120aea33db3d8487d55', openInstallNext: 'c8c315b79b2ee277d08fab0161fac353', cancelBooking: 'cf3a37b381f8ea7bbb271122617dd88f',
+      bindHeldBookings: '136cc284a4ef8120aea33db3d8487d55', openInstallNext: 'e38c3c5df66dfbe90e1c01de80961f47', cancelBooking: 'cf3a37b381f8ea7bbb271122617dd88f',
       promoteHeldBooking: '828611bf1bf3122b5bfd978cc9035508', bkIsInstHold: '3cadde2f2bf02204a589182effeecfb2', ppTopUp: '7f2e88265b8b64e06220b302772ce271',
-      openSalesModal: 'b6ebc7f95437bb9e27a7df1b6aae6024', confirmInstallNext: 'd6e92517058299f95bc32e070b7977f2', _confirmInstallNext: '65770d74cf14477beb8ab182c2c73bc4',
+      openSalesModal: 'b6ebc7f95437bb9e27a7df1b6aae6024', confirmInstallNext: 'd6e92517058299f95bc32e070b7977f2', _confirmInstallNext: '11d3b6fe2bd8d5b17c9f6e203465df11',
       listUsableTickets: 'a21acbcd007ba434afac1e388994944b', tkFitsBooking: 'b91a5391b91aa9d99ea6360256d359ef', tkUnlockedLeft: '5b12d837a22621e01010fb7c305f5eee',
       bkTicketTypeOk: '75a7e48d18102ab23f57d684320267de', bkTypeIdOf: 'e4ac63231970bb28856de15b7942b716', tkUsableBy: '9c13668958d941f589f385ba16777061',
     };
     const bad = Object.keys(PIN).filter(n => crypto.createHash('md5').update(grabFn(n)).digest('hex') !== PIN[n]);
-    ok('★★★ bindHeldBookings／openInstallNext／cancelBooking／promoteHeldBooking／ppTopUp／openSalesModal／收款開通／票券判斷函式都與已上線版本（cfee1ec）逐字相同', bad.length === 0, bad);
+    ok('★★★ bindHeldBookings／openInstallNext／cancelBooking／promoteHeldBooking／ppTopUp／openSalesModal／收款開通／票券判斷函式維持固定指紋（僅分期收款兩支經本輪行為驗證後更新）', bad.length === 0, bad);
     ok('★★ 已上線的取消 hotfix 沒被動到：全檔沒有 promoteHeldBooking 呼叫，cancelPromoteHeld 旗標不存在', !/await promoteHeldBooking\(/.test(src) && !/cancelPromoteHeld/.test(src));
     ok('★ 會員檔案的「＋儲值」鈕維持原樣（直接 ppTopUp，不經過分期檢查）', /onclick="ppTopUp\('\$\{PP\.id\}'\)">＋ 儲/.test(src));
     const chain = src.slice(src.indexOf('async function _ashInstNext'), src.indexOf('async function _bkInstConfirm'));

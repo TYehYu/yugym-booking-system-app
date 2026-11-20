@@ -408,9 +408,9 @@ console.log('\n③c 簽回之後才改數字 → 發放前問一次');
   const F=grabFn('_grantReqApprove');
   /* 2026-09-04：合約金額改成記**總價**之後，一次付清改成分期時總價根本沒變 ——
      只比金額這道防線會整個失效，所以連期數一起比。 */
-  ok('★★★ 總價或期數其中一個不一樣就跳確認',
+  ok('★★★ 總價或期數不同就停止，要求重新簽署',
      /if\(_final!==_onCt \|\| _nNow!==_nCt\)\{/.test(F)
-     && /會員已經簽回了，但收款內容跟合約上寫的不一樣/.test(F));
+     && /重開正確合約並重新簽署/.test(F));
   ok('★★★ 期數從購買內容表判讀（contracts 沒有這一欄，舊資料也認得）',
      /const _nCt=ctSnapInstall\(_c\.fill_snapshot\);/.test(F)
      && /function ctSnapInstall\(html\)\{/.test(src)
@@ -423,9 +423,9 @@ console.log('\n③c 簽回之後才改數字 → 發放前問一次');
      && /const _ctAmt=paidAmount;/.test(src)
      && /amount:_amt, payload:P, contract_id:_ctId,/.test(src));
   ok('★★★ 講清楚內文不會跟著改（那是會員簽名時看到的那一份）',
-     /合約內文不會跟著改 —— 那是會員簽名時看到的那一份。/.test(F));
+     /重開正確合約並重新簽署/.test(F));
   ok('★★★ 給得出下一步（不是只丟一個警告）',
-     /建議先「取消這筆發放」再重開一份新合約給他簽/.test(F));
+     /請取消這筆發放，重開正確合約並重新簽署/.test(F));
   ok('★★ 按取消就真的不發（要收掉忙碌遮罩）', /\{ done\(\); return; \}/.test(F));
   /* 金額沒變、只有期數變（合約寫分 3 期、實際發一次付清）原本什麼都不會寫。 */
   ok('★★★ 按了確定一定留痕，連「只有期數變」也寫',
@@ -786,8 +786,16 @@ console.log('\n預覽會員視角：待簽名票券的範例卡');
      /function memCtDemoObj\(\)\{/.test(src)
      && /body_snapshot:\(typeof CONTRACT_TEXT!=='undefined'\)\?CONTRACT_TEXT:''/.test(src)
      && /fill=contractFillBlockHTML\(\{name:'（範例）王小明'/.test(src));
-  ok('★★ 「完成簽署」不打 fn_member_sign_contract（那個 id 不存在，打了只會拿到錯誤）',
-     /\$\{_dc\?`closeContractReader\(\);showToast\('這是預覽用的範例合約，真的會員按下去才會送出簽名',5000\)`:`memSignContractDo\('\$\{id\}'\$\{_n\?','\+_n:''\}\)`\}/.test(src));
+  // 執行真正的按鈕表達式，分別驗證範例與帶requestId的正式分期路徑。
+  const actionExpr=src.match(/onclick="\$\{(_dc\?[\s\S]*?)\}">完成簽署<\/button>/);
+  let demoClose=0,demoToast=0,demoSubmit=0,realArgs=null;
+  if(actionExpr){
+    const action=new Function('_dc','id','_n','instSignFind','c','return ('+actionExpr[1]+');');
+    new Function('closeContractReader','showToast','memSignContractDo',action(true,'DEMO-CT',0,()=>null,{}))(()=>demoClose++,()=>demoToast++,()=>demoSubmit++);
+    new Function('memSignContractDo',action(false,'REAL-CT',2,()=>({request_id:'request-123'}),{}))((...args)=>realArgs=args);
+  }
+  ok('★★ 範例完成簽署只關閉並提示，不提交任何簽名',demoClose===1&&demoToast===1&&demoSubmit===0);
+  ok('★★ 真分期完成簽署保留畫面所見requestId',JSON.stringify(realArgs)===JSON.stringify(['REAL-CT',2,'request-123']));
   ok('★ 有範例卡時不要同時出現「目前沒有票券」空狀態',
      /usable\.length===0&&inactive\.length===0&&pendCt\.length===0&&!_ctDemo/.test(R));
   ok('　　範例卡接在真卡後面（真的有就先看真的）', /pendCards\+demoCard\+/.test(R));

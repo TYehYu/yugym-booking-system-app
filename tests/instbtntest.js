@@ -2,6 +2,9 @@
    —— 分期票券卡（會員資料票券分頁）直接放「繳第 N 期・$金額」鈕，點開既有的 openInstallNext。 */
 const fs=require('fs');
 const src=fs.readFileSync(process.env.HOME+'/Projects/yugym-booking-system-app/index.html','utf8');
+
+// 收款、開通與折抵券已移至同一個資料庫交易；42 項 SQL 行為案例另驗。
+const collectSql=fs.readFileSync(require('path').join(__dirname,'../docs/purchase-hardening/candidate.sql'),'utf8');
 let pass=0,fail=0;
 const ok=(n,c)=>{ if(c){pass++;console.log('  ✓ '+n);} else {fail++;console.log('  ✗ '+n);} };
 /* 2026-08-14 二修（使用者指示：「不要預設期數——一次全繳或只繳兩堂都有」）：
@@ -14,9 +17,7 @@ ok('★★ 視窗有「下一期」「剩餘全繳」快速鍵＋自訂堂數/�
    && /onclick="inxFill\(\$\{leftN\},\$\{restAmt\}\)">剩餘全繳/.test(src)
    && /id="inx-n" min="1" max="\$\{leftN\}"/.test(src) && /id="inx-amt"/.test(src));
 ok('★★ 確認吃輸入值：堂數夾 1–剩餘、金額必填；期數進度依累計堂數重算、全開通＝最後一期',
-   /if\(!Number\.isFinite\(n\)\|\|n<1\|\|n>leftN\)/.test(src)
-   && /\(inst\.segments\|\|\[\]\)\.forEach\(\(sg,i\)=>\{ cum\+=\(Number\(sg\)\|\|0\);/.test(src)
-   && /if\(t\.unlocked_sessions>=total\)\{ t\.unlocked_sessions=total; inst\.current=inst\.count; \}/.test(src));
+   src.includes('n>Number(t.sessions_total)-u') && collectSql.includes("paid:=paid||jsonb_build_array(cum<=t.unlocked_sessions+n)") && collectSql.includes("'current',cur"));
 ok('★ 走既有的 openInstallNext（收款→解鎖→保留課自動補綁，不另做一套）',
    /async function openInstallNext\(ticket_id\)\{/.test(src));
 console.log((fail?'✗ ':'✓ ')+pass+' 通過 / '+fail+' 失敗');

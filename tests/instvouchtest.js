@@ -9,6 +9,9 @@
 const fs=require('fs');
 const src=fs.readFileSync(process.env.HOME+'/Projects/yugym-booking-system-app/index.html','utf8');
 
+
+// 收款、開通與折抵券已移至同一個資料庫交易；42 項 SQL 行為案例另驗。
+const collectSql=fs.readFileSync(require('path').join(__dirname,'../docs/purchase-hardening/candidate.sql'),'utf8');
 let pass=0,fail=0;
 const ok=(n,c,x)=>{ if(c){pass++;console.log('  ✓ '+n);} else {fail++;console.log('  ✗ '+n+(x!==undefined?'  → '+JSON.stringify(x):''));} };
 const eq=(n,a,e)=>ok(n,JSON.stringify(a)===JSON.stringify(e),`得到 ${JSON.stringify(a)}，預期 ${JSON.stringify(e)}`);
@@ -37,21 +40,15 @@ ok('★★★ 快速鍵（下一期／剩餘全繳）填原價時要把張數與
 
 console.log('\n③ 真的扣下去，而且留得下痕跡');
 ok('★★★ 逐張重讀再扣（開窗到確認之間可能被別筆用掉）',
-   /const fresh=await dbGet\('member_tickets',v0\.id\); if\(!fresh\) continue;/.test(src)
-   && /if\(left>0\) showToast\(`折抵券只扣到 \$\{_vUsed\}\/\$\{_vWant\} 張/.test(src));
+   collectSql.includes('order by id for update') && collectSql.includes("VOUCHER.BALANCE_CHANGED"));
 ok('★★★ 扣餘額、歸零轉 used_up、帳本逐張記 deduct',
-   /fresh\.sessions_remaining=\(Number\(fresh\.sessions_remaining\)\|\|0\)-take;/.test(src)
-   && /if\(fresh\.sessions_remaining<=0\) fresh\.status='used_up';/.test(src)
-   && /logTicket\(fresh\.id,'deduct',1,null,SESSION\.id,\s*\n?\s*`折抵 \$300（分期第 \$\{inst\.current\} 期/.test(src));
+   collectSql.includes('sessions_remaining=sessions_remaining-take') && collectSql.includes("then 'used_up'") && collectSql.includes("v.id,'deduct',1"));
 ok('★★★ 購買紀錄的 note 格式要與銷售那條路一字不差（票券卡靠它解析折抵券標籤）',
-   /（折抵券×\$\{_vUsed\} −\$\$\{\(300\*_vUsed\)\.toLocaleString\(\)\}）/.test(src)
-   /* 解析端的正則是 /折抵券×(\d+)\s*−\$([\d,]+)/（見 _tkPayMap），實際輸出是「折抵券×1 −$300」 */
-   && /折抵券×\(\\d\+\)\\s\*−\\\$\(\[\\d,\]\+\)/.test(src));
+   collectSql.includes("'（折抵券×'||vouchers||' −$'") && src.includes('折抵券×(\\d+)\\s*−\\$([\\d,]+)'));
 ok('★★ list_price 帶原價，卡片才寫得出「原價多少」',
-   /list_price:_vUsed\?\(amt\+300\*_vUsed\):null,/.test(src));
+   collectSql.includes('amount+vouchers*300,amount'));
 ok('★★ 扣券失敗不吞掉（票已經開通了，要講清楚）',
-   /折抵券扣點失敗，請至會員票券確認/.test(src));
-
+   collectSql.includes("raise exception 'VOUCHER.BALANCE_CHANGED'") && src.includes("'VOUCHER.BALANCE_CHANGED':'折抵券餘額已變更，本次未收款"));
 console.log('\n④ 不能折過頭（使用者問的那件事）');
 ok('★★★ 銷售那條路夾「這一筆吸收得了幾張」',
    /const _vByAmt = Math\.max\(0, Math\.floor\(_vBase\/300\)\);/.test(src)

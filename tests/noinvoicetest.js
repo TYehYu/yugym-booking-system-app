@@ -31,7 +31,7 @@ ok('　　自主訓練票券', /function fvInvSync\(\)\{/.test(src));
 ok('　　場地租借（散客，不傳 memberId；先卡位時也不開；預設不開發票）', /function frInvSync\(\)\{/.test(src)
    && /try\{ invSync\(\{paid:!window\._frHold && fee>0, defaultOn:false\}\); \}catch\(_\)\{\}/.test(src));
 ok('　　分期的每一期', /function inxInvSync\(\)\{/.test(src)
-   && /try\{ invSync\(\{paid:amt>0, memberId:window\._inxMemberId/.test(src));
+   && /Promise\.resolve\(invSync\(\{paid:amt>0, memberId:window\._inxMemberId/.test(src));
 
 console.log('\n② 開了就真的開，沒開才記 none');
 ok('★★★ 場租／自主訓練票券的 invoice_type 依實際選擇決定，不再寫死 none',
@@ -41,7 +41,7 @@ ok('★★ 商品那筆仍預設 none —— 真的開成功時由 invIssueForPu
    /invoice_type:'none',installment_count:1,note,operator/.test(src)
    && /invoice_type:'ecpay', invoice_number:rd\.InvoiceNo/.test(src));
 ok('★★★ 四個入口都在 closeModal 之前讀表單（關掉之後 DOM 就沒了）',
-   (src.match(/const _inv=invReadFields\(\);/g)||[]).length>=4);
+   (src.match(/const _inv=invReadFields\(\);/g)||[]).length>=3 && src.includes('const invoice=invReadFields()'));
 ok('　　0802 那段「還沒串聯」的說明已經拿掉（理由消失了）',
    !/發票系統還沒接，欄位留著只是讓櫃檯每次多選一次、而且選了也沒有下文。/.test(src));
 

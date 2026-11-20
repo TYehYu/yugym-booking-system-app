@@ -6,6 +6,9 @@ const src=fs.readFileSync(process.env.HOME+'/Projects/yugym-booking-system-app/i
 const grabFn=n=>{const i=src.indexOf('function '+n+'(');let d=0;
   for(let k=src.indexOf('{',i);k<src.length;k++){if(src[k]==='{')d++;else if(src[k]==='}'){d--;if(!d)return src.slice(i,k+1);}}};
 
+
+// 收款、開通與折抵券已移至同一個資料庫交易；42 項 SQL 行為案例另驗。
+const collectSql=fs.readFileSync(require('path').join(__dirname,'../docs/purchase-hardening/candidate.sql'),'utf8');
 let pass=0,fail=0;
 const ok=(n,c,x)=>{ if(c){pass++;console.log('  ✓ '+n);} else {fail++;console.log('  ✗ '+n+(x!==undefined?'  → '+JSON.stringify(x):''));} };
 const eq=(n,a,e)=>ok(n,a===e,`得到 ${a}，預期 ${e}`);
@@ -58,7 +61,7 @@ ok('　　保留課不扣票（pending_contract、無 ticket_id）',
    /pending_contract:openHold\|\|holdOnly\|\|false,/.test(src));
 ok('　　保留課不可走會扣票的 RPC', /&&tk&&!holdOnly&&!o\.venue_pref&&!bkIsSelf\(bk\)\)/.test(src));   // 2026-08-04 自主訓練也排除
 ok('★ 收款開通時自動補綁並扣課（2026-08-14 起堂數改吃畫面輸入 n）', /function bindHeldBookings\(/.test(src)
-   && /bound=await bindHeldBookings\(t\.id, n\)/.test(src));
+   && /bound=await bindHeldBookings\(ticket_id,term\.sessions\)/.test(src));
 ok('　　補綁時每筆重讀票券，開通堂數用完就停',
    /const tk=await dbGet\('member_tickets',ticket_id\);[\s\S]{0,120}tkUnlockedLeft\(tk\)<=0\) break;/.test(src));
 ok('　　卡片與明細看得出是待繳費', /（待繳費）/.test(src) && /分期待繳費保留/.test(src));
@@ -177,14 +180,11 @@ console.log('\n⑨ 分期防呆與帳本（2026-09-04 施佩怡案例）');
   /* ticket_logs.action 的列舉只有 grant/deduct/refund/adjust/expire，
      'installment_unlock' 一律被資料庫退件，而那一行包在 catch(_){} 裡 → 全庫 0 筆。 */
   ok('★★★ 開通下一期的帳本改用合法的 action（原本一直寫不進去）',
-     /await logTicket\(t\.id,'adjust',0,null,SESSION\.id,`分期收款開通/.test(C)
-     /* ⚠ 不能整份 src 找字串：上面那段解釋 bug 的註解自己就寫著 installment_unlock */
-     && !/logTicket\([^)]*'installment_unlock'/.test(src));
+   collectSql.includes("t.id,'adjust',0,current_employee_id()") && !/logTicket\([^)]*'installment_unlock'/.test(src));
   ok('★★★ 寫不進去要出聲，不能再吞掉',
-     /catch\(e\)\{ console\.error\('分期開通帳本寫入失敗',e\); showToast\('開通已完成，但帳本紀錄沒寫進去：'/.test(C));
+   collectSql.includes("exception when others then return jsonb_build_object('ok',false,'error_code',sqlerrm)") && C.includes('if(!data?.ok)'));
   ok('★★ 為什麼是 delta 0（開通不改餘額，只是把鎖打開）',
-     /開通不改變餘額（sessions_remaining 沒動），只是把鎖打開，/.test(src)
-     && /要新增動作類型就得改資料庫的 enum，不能只在前端寫一個新字串/.test(src));
+   collectSql.includes("t.id,'adjust',0,") && !collectSql.includes('set sessions_remaining=t.sessions_remaining'));
 }
 
 console.log(`\n${pass} passed, ${fail} failed`);
