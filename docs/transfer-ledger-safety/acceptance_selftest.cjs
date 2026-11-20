@@ -1,0 +1,37 @@
+'use strict';
+const assert=require('assert'),fs=require('fs'),path=require('path');
+const {REF,BASE,readEnv,atomic,fingerprintErrors,invariant}=require('./acceptance_common.cjs');
+const {spec}=require('./run_acceptance.cjs');const {verifyBlockedBy}=require('../testdb/renewal/harness.js');
+let pass=0;function check(n,f){f();pass++;}
+function ioFor(fail){let fd=0;const fds=new Map(),files=new Map([['/work/state.json',Buffer.from('OLD')]]);return {files,mkdirSync(){},openSync(p){files.set(p,Buffer.alloc(0));fds.set(++fd,p);return fd;},writeSync(n,b,o,l){if(fail==='zero')return 0;if(fail==='write')throw Error('disk');const k=Math.min(l,2),p=fds.get(n);files.set(p,Buffer.concat([files.get(p),b.subarray(o,o+k)]));return k;},fsyncSync(){if(fail==='sync')throw Error('sync');},closeSync(n){fds.delete(n);},renameSync(a,b){if(fail==='rename')throw Error('rename');files.set(b,files.get(a));files.delete(a);},unlinkSync(p){files.delete(p);}};}
+check('partial writes finish all UTF8 bytes',()=>{const io=ioFor();atomic('/work/state.json','測試abcdef',io);assert.equal(io.files.get('/work/state.json').toString(),'測試abcdef');assert.equal(io.files.size,1);});
+for(const kind of ['zero','write','sync','rename'])check(kind+' fails without corrupting prior file',()=>{const io=ioFor(kind);assert.throws(()=>atomic('/work/state.json','NEW',io));assert.equal(io.files.get('/work/state.json').toString(),'OLD');assert.equal(io.files.size,1);});
+check('missing env stops',()=>assert.throws(()=>readEnv()));
+const tmp='/private/tmp/yugym-tls-selftest-'+process.pid+'.env';
+for(const [name,txt] of [['production','SB_URL=https://rlpiomzplckzqnqrvrwc.supabase.co\nANON_KEY=fake'],['missing key','SB_URL='+BASE]])check(name+' rejected',()=>{fs.writeFileSync(tmp,txt);assert.throws(()=>readEnv(tmp));});
+check('test env accepted',()=>{fs.writeFileSync(tmp,'SB_URL='+BASE+'\nANON_KEY=fake');assert.equal(readEnv(tmp).SB_URL,BASE);});fs.unlinkSync(tmp);
+const pins={a:'1'},fp={cluster:'7662742571317219726',functions:pins,deferred_guard:true,internal_acl:true};
+check('correct fingerprint accepted',()=>assert.deepEqual(fingerprintErrors(fp,pins),[]));
+for(const field of ['cluster','deferred_guard','internal_acl'])check('fingerprint '+field+' rejected',()=>assert(fingerprintErrors({...fp,[field]:null},pins).length));
+check('different body rejected',()=>assert(fingerprintErrors({...fp,functions:{a:'2'}},pins).includes('a')));
+const t={id:'T',sessions_total:4,sessions_remaining:3},bs=[{id:'FROM',ticket_id:null,status:'booked'},{id:'TO',ticket_id:'T',status:'booked'}],ls=[{booking_id:'FROM',action:'deduct',delta:-1},{booking_id:'FROM',action:'refund',delta:1},{booking_id:'TO',action:'deduct',delta:-1}];
+check('valid transfer invariant passes',()=>assert.deepEqual(invariant(bs,ls,t),[]));
+check('unbound debit fails',()=>assert(invariant(bs,ls.slice(0,1),t).length));
+check('double debit fails',()=>assert(invariant(bs,[...ls,ls[2]],t).length));
+check('bad balance fails',()=>assert(invariant(bs,ls,{...t,sessions_remaining:4}).length));
+check('cancellation with debit fails',()=>assert(invariant([{...bs[1],status:'cancelled'}],ls,t).length));
+check('cleanup removes revisions after bookings',()=>{const a=spec({createdIds:()=>[]});assert(a.findIndex(x=>x.table==='booking_op_rev')>a.findIndex(x=>x.table==='bookings'));});
+const src=fs.readFileSync(path.join(__dirname,'run_acceptance.cjs'),'utf8'),obs=fs.readFileSync(path.join(__dirname,'observer.sql'),'utf8');
+check('preflight before any remote create',()=>assert(src.indexOf('fingerprintErrors(fp.json')<src.indexOf('H.trackedCreateUser')));
+check('wrapper restricts all object args',()=>{for(const p of ['p_from','p_to','p_ticket'])assert(obs.includes(p+" not like 'CC-TLS-%'"));});
+check('wrapper restricts employee identity',()=>assert(obs.includes("not like 'CC-EMP-TLS-%'")));
+check('wrapper restricted to test environment',()=>assert(obs.includes('7662742571317219726')));
+check('raw HTTP proof preserved',()=>assert(src.includes('holder:rawHttp(h),waiter:rawHttp(w)')));
+check('never sets HOME',()=>assert(!src.includes('process.env.HOME=')));
+check('secret key never serialized',()=>assert(!/JSON\.stringify\([^)]*(?:serviceKey|\bkey\b)/.test(src)));
+const h={pid:1,txid:'99',end:'2026-01-01T01:00:00Z',blocked_waiters:[{pid:2,application_name:'CASE',waits_on_my_txid:true,waits_on:[{locktype:'transactionid',transactionid:'99'}]}]},w={pid:2,end:'2026-01-01T01:00:01Z'};
+check('strict overlap proof accepted',()=>assert(verifyBlockedBy(h,w,'CASE').verified));
+check('wrong txid fails proof',()=>assert(!verifyBlockedBy({...h,txid:'100'},w,'CASE').verified));
+check('same pid fails proof',()=>assert(!verifyBlockedBy(h,{...w,pid:1},'CASE').verified));
+check('missing evidence fails proof',()=>assert(!verifyBlockedBy({},w,'CASE').verified));
+console.log(pass+' passed / 0 failed');

@@ -15722,8 +15722,8 @@ function tbl(s){return TABLE_ALIAS[s]||s;}
 let sb=null;
 // ── 版本號（日期+時間格式：年後兩碼+月+日.時分，例 26620.1058 = 26年6/20 10:58）──
 // 每次改版手動更新這一行即可，畫面與 title 會一起更新
-const APP_VERSION = '261120.1626';
-const APP_VERSION_LABEL = 'v261120.1626';
+const APP_VERSION = '261120.2347';
+const APP_VERSION_LABEL = 'v261120.2347';
 const CLOUD = !!(window.YUGYM_CONFIG && window.YUGYM_CONFIG.url && window.YUGYM_CONFIG.anonKey);
 if(CLOUD){ sb = supabase.createClient(window.YUGYM_CONFIG.url, window.YUGYM_CONFIG.anonKey); }
 
@@ -16599,6 +16599,9 @@ function dbFriendlyError(e, store, op){
     msg = '超出合約的暫定使用期間'+(_w?('（'+_w[1].replace(/-/g,'/')+' 起到 '+_w[2].replace(/-/g,'/')+'）'):'')
         +'；首次實際簽到後才正式起算效期。請改選期間內的日期';
     _hmCode='CONTRACT.OUT_OF_WINDOW';
+  }else if(/TICKET\.(LEDGER_OWNERSHIP|TRANSFER_LEDGER_MISMATCH)/.test(raw)){
+    msg = bookingAccountErrMsg(raw);
+    _hmCode = /TICKET\.LEDGER_OWNERSHIP/.test(raw)?'TICKET.LEDGER_OWNERSHIP':'TICKET.TRANSFER_LEDGER_MISMATCH';
   }else if(/TICKET\.(INSTALLMENT_LOCKED|QUOTA_EXCEEDED)/.test(raw+' '+String((e&&e.details)||''))){
     msg = tkQuotaMsg((e&&typeof e==='object')?e:raw) || '這張分期票的已開通堂數已用滿，無法再扣課';
     _hmCode='TICKET.INSTALLMENT_LOCKED';
@@ -23479,6 +23482,7 @@ async function tkNetDeductOn(ticket_id, booking_id){
 // 扣退帳無法判讀時，只提示核對，不替換票券或直接寫入餘額。
 function bookingAccountErrMsg(code){
   const c=String(code||'');
+  if(/TICKET\.(LEDGER_OWNERSHIP|TRANSFER_LEDGER_MISMATCH)/.test(c)) return '這堂課與扣課紀錄不一致，已停止；請櫃檯核對調課紀錄，不要刪除重約';
   if(/TICKET\.LEDGER_(AMBIGUOUS|NEGATIVE)/.test(c)) return '這堂課的扣退紀錄需要核對，沒有更動；請櫃檯查帳後再處理';
   return ({'CLIENT.UPDATE_REQUIRED':'此頁面需要更新，沒有取消；請重新整理後再試',
     'REV_MISMATCH':'名單已變動，沒有再次取消；請先重新整理確認',
@@ -23495,6 +23499,14 @@ async function deductTicket(ticket,booking_id,operator,opts){
   if(!_multi && booking_id && ticket && ticket.id){
     const _net=await tkNetDeductOn(ticket.id, booking_id);
     if(_net>0){
+      // 舊調課可能只搬綁票、沒有搬帳；不能把原卡位的舊扣堂當成轉正成功。
+      let _chargedBooking;
+      try{ _chargedBooking=await dbGet('bookings',booking_id); }
+      catch(_){ showToast('讀不到最新預約，已停止；請重新開啟後再試'); return false; }
+      if(!_chargedBooking || _chargedBooking.status==='cancelled'
+         || (['私人教練','運動按摩'].includes(_chargedBooking.category) && _chargedBooking.ticket_id!==ticket.id)){
+        showToast(bookingAccountErrMsg('TICKET.LEDGER_OWNERSHIP')); return false;
+      }
       /* 已經扣過了 —— 回 true（這一堂確實掛在這張票上），但不再扣第二次。
          留一筆 adjust／delta 0 當痕跡，之後查得到「這裡擋下過一次重複」。 */
       try{ await logTicket(ticket.id,'adjust',0,booking_id,operator||'system',
@@ -39318,8 +39330,8 @@ async function _bpGo(memberId){
      要嘛取消（每次問，使用者指定「每次讓我選」）。
    ⚠ 候選一定要拿**這一堂的日期時間**去驗票，不是看票還剩幾堂：
      友善票限平日 18:00 前，蕭育筑週六那一串根本用不了友善票（tkOkForSlot）。
-   ⚠ 不走扣課／退課：票早就扣過那一次了，這裡只是把同一次扣課掛到別堂課上，
-     所以只搬 ticket_id，不動 sessions_remaining。帳本寫一筆 adjust 留痕。 */
+   ⚠ 由 RPC 同交易搬綁票與成對扣退帳，餘額不變；不能只搬 ticket_id，
+     否則原卡位之後取消時會退到已移走的堂數。 */
 function tkOkForSlot(t, b){
   if(!t || !b) return false;
   if(t.status!=='usable') return false;
@@ -39387,6 +39399,7 @@ async function doBkMoveTicket(){ return onceAct('bkmove:'+(window._mvBid||''), _
    ⚠ 這裡只負責「說清楚」，不改變任何結果：錯誤一律停止調課、不退回舊的寫入流程、不自動換成「取消那一堂」。 */
 function moveErrMsg(code){
   const c=String(code||'');
+  if(/TICKET\.(LEDGER_OWNERSHIP|TRANSFER_LEDGER_MISMATCH)/.test(c)) return '這堂課與扣課紀錄不一致，已停止；請櫃檯核對調課紀錄，不要刪除重約';
   if(c.indexOf('HOLD.MONTH_LIMIT')===0){
     const d=c.split(':')[1]||'';
     return '沒有符合資格票券的卡位只能預約到'+(d?(' '+d.replace(/-/g,'/')):'當月')+'；這一堂超出可保留的日期，可改選「取消那一堂」（原課取消、票移過來）';
@@ -39421,6 +39434,7 @@ function moveErrMsg(code){
     'MOVE.LEDGER_MISSING':'那一堂沒有扣課紀錄，無法自動調課，請洽管理員（請勿重試）',
     'MOVE.LEDGER_UNSUPPORTED':'那一堂的扣課帳本不符合調課條件，請洽管理員（請勿重試）',
     'MOVE.TO_LEDGER_DIRTY':'這一堂的帳本有殘留紀錄，無法自動調課，請洽管理員（請勿重試）',
+    'MOVE.LEDGER_MISMATCH':'調課帳務核對未通過，整批已回復；請櫃檯核對，不要刪除重約',
     'MOVE.WRITE_CONFLICT':'資料剛被別人修改，請重新整理後再試',
     'MOVE.BUSY':'系統忙碌中，請稍後再按一次',
     'MOVE.INTERNAL_ERROR':'調課失敗，資料沒有被更動；請稍後再試，持續發生請洽管理員'
@@ -39447,6 +39461,8 @@ async function _doBkMoveTicket(){
     catch(e){ res={error:e}; }
     dbCacheClear(['bookings','member_tickets','ticket_logs']);   // RPC 動到的表（繞過 dbPut 的寫入必須清快取）
     if(res && res.error){
+      const _accountError=bookingAccountErrMsg(res.error.message);
+      if(_accountError){ showToast(_accountError); return; }
       /* 傳輸層失敗：不自動重試（重送若上一次其實已成功，會回 FROM_STATE／TO_STATE，不會重複搬帳，但仍讓人先確認）。 */
       showToast('⚠ 連線不穩，調課結果不確定——請先重新整理確認這兩堂課，再決定是否重做');
       return;

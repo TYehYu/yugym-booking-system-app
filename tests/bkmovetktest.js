@@ -93,7 +93,7 @@ ok('★★★ 規則（狀態、票種、時段、帳本、影子卡、1V2）全
 ok('★★★ 繞過 dbPut 的寫入一定要清快取（bookings、member_tickets、ticket_logs）',
    /dbCacheClear\(\['bookings','member_tickets','ticket_logs'\]\)/.test(DO));
 ok('★★★ 傳輸層失敗不自動重試、不退回舊流程（結果不確定，請人先確認）',
-   /if\(res && res\.error\)\{[\s\S]{0,260}?return;\s*\n\s*\}/.test(DO) && !/for\(let _try/.test(DO));
+   /if\(res && res\.error\)\{[\s\S]{0,600}?return;\s*\n\s*\}/.test(DO) && !/for\(let _try/.test(DO));
 ok('★★ 防連點＋按鈕變「處理中…」',
    /async function doBkMoveTicket\(\)\{ return onceAct\('bkmove:'\+\(window\._mvBid\|\|''\), _doBkMoveTicket\); \}/.test(src)
    && /_btn\.disabled=true; _btn\.textContent='處理中…';/.test(DO));
