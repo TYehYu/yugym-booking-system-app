@@ -1,0 +1,43 @@
+create function pg_temp.ch_fail() returns trigger language plpgsql as $$begin if new.id='CC-CH-T' and current_setting('app.ch_fail',true)='yes' then raise exception 'CH_SIMULATED_DEDUCT_FAILURE';end if;return new;end$$;
+create trigger zz_ch_fail before update on member_tickets for each row execute function pg_temp.ch_fail();
+do $test$
+declare r jsonb; r2 jsonb; p jsonb; i int; h text; h2 text; m text; tt text; adm record;
+begin
+ select member_id,ticket_type_id into m,tt from member_tickets where id='CC-CH-T';
+ r:=fn_hold_settle_new_ticket('CC-CH-T',true,'CC-CH-B01');p:=r->'plan';
+ insert into ch_results values('same_contract_6_bind_6_hold_2_cancel',(r->>'ok')::boolean and jsonb_array_length(p->'bind')=6 and jsonb_array_length(p->'hold')=6 and jsonb_array_length(p->'cancel')=2,r);
+ insert into ch_results values('preview_does_not_deduct',(select sessions_remaining=12 from member_tickets where id='CC-CH-T') and not exists(select 1 from ticket_logs where ticket_id='CC-CH-T'),null);
+ insert into ch_results values('nearest_first',p->'bind'='["CC-CH-B01","CC-CH-B02","CC-CH-B03","CC-CH-B04","CC-CH-B05","CC-CH-B06"]'::jsonb,null);
+ r2:=fn_hold_settle_new_ticket('CC-CH-T',true,'CC-CH-OTHER-B');
+ insert into ch_results values('other_contract_anchor_rejected',r2->>'error_code'='ANCHOR_NOT_ELIGIBLE',r2);
+ update contracts set note='confirm changed' where id='CC-CH-C';
+ r2:=fn_hold_settle_new_ticket('CC-CH-T',false,'CC-CH-B01',p);
+ insert into ch_results values('contract_changed_stops_whole_plan',r2->>'error_code'='PLAN_CHANGED' and (select sessions_remaining=12 from member_tickets where id='CC-CH-T'),r2);
+ r:=fn_hold_settle_new_ticket('CC-CH-T',true,'CC-CH-B01');p:=r->'plan';
+ select md5(string_agg(to_jsonb(b)::text,'|' order by id)) into h from bookings b where id like 'CC-CH-%';
+ perform set_config('app.ch_fail','yes',true);r2:=fn_hold_settle_new_ticket('CC-CH-T',false,'CC-CH-B01',p);perform set_config('app.ch_fail','no',true);
+ select md5(string_agg(to_jsonb(b)::text,'|' order by id)) into h2 from bookings b where id like 'CC-CH-%';
+ insert into ch_results values('deduct_failure_no_cancel_or_binding',r2->>'error_code'='SETTLE.FAILED' and h=h2 and (select sessions_remaining=12 from member_tickets where id='CC-CH-T'),r2);
+ r2:=fn_hold_settle_new_ticket('CC-CH-T',false,'CC-CH-B01',p);
+ insert into ch_results values('execution_success',(r2->>'ok')::boolean,r2);
+ insert into ch_results values('original_ids_times_retained',(select count(*)=14 and bool_and(date=fn_tk_today()+right(id,2)::int and start_time='13:00') from bookings where id ~ '^CC-CH-B[0-9]+$'),null);
+ insert into ch_results values('six_net_deductions_only',(select count(*)=6 and sum(delta)=-6 from ticket_logs where ticket_id='CC-CH-T' and action::text='deduct') and (select sessions_remaining=6 from member_tickets where id='CC-CH-T'),null);
+ insert into ch_results values('six_locked_holds_retained',(select count(*)=6 from bookings where id ~ '^CC-CH-B[0-9]+$' and status::text='booked' and ticket_id is null and pending_contract and note like '分期待繳費保留%' and contract_id='CC-CH-C'),null);
+ insert into ch_results values('excess_cancelled_without_deduction',(select count(*)=2 from bookings where id in ('CC-CH-B13','CC-CH-B14') and status::text='cancelled') and not exists(select 1 from ticket_logs where booking_id in ('CC-CH-B13','CC-CH-B14') and action::text='deduct'),null);
+ insert into ch_results values('other_contract_unchanged',(select status::text='booked' and ticket_id is null and pending_contract from bookings where id='CC-CH-OTHER-B'),null);
+ r2:=fn_hold_settle_new_ticket('CC-CH-T',false,'CC-CH-B01',p);
+ insert into ch_results values('replay_does_not_deduct_twice',r2->>'already'='true' and (select count(*)=6 from ticket_logs where ticket_id='CC-CH-T' and action::text='deduct'),r2);
+ -- 已有六堂轉正＋六堂保留，再多一堂；即使有其他票，也不能延續本合約的超額卡位。
+ perform set_config('request.jwt.claim.role','',true);perform set_config('request.jwt.claims','{}',true);
+ select ticket_type_id into tt from member_tickets where id='CC-CH-T';
+ perform pg_temp.mktk('CC-CH-EXTRA-T',m,tt,10,10,null,null);
+ perform pg_temp.mkbk('CC-CH-B15',m,tt,'私人教練',fn_tk_today()+15,'13:00',jsonb_build_object('contract_id','CC-CH-C'));
+ select id,auth_id into adm from employees where role::text='admin' and auth_id is not null limit 1;
+ perform set_config('request.jwt.claims',json_build_object('sub',adm.auth_id,'role','authenticated')::text,true);perform set_config('request.jwt.claim.role','authenticated',true);
+ r:=fn_hold_settle_new_ticket('CC-CH-T',true,'CC-CH-B15');
+ insert into ch_results values('existing_locked_holds_not_counted_twice',jsonb_array_length(r->'plan'->'hold')=0 and r->'plan'->'cancel'='["CC-CH-B15"]'::jsonb,r);
+ insert into ch_results values('excess_contract_hold_not_deferred_to_other_ticket',jsonb_array_length(r->'plan'->'defer')=0,r);
+ r2:=fn_hold_settle_new_ticket('CC-CH-T',false,'CC-CH-B15',r->'plan');
+ insert into ch_results values('only_extra_cancelled_other_ticket_untouched',(r2->>'ok')::boolean and (select status::text='cancelled' from bookings where id='CC-CH-B15') and (select sessions_remaining=10 from member_tickets where id='CC-CH-EXTRA-T'),r2);
+end $test$;
+do $finish$ declare r jsonb;begin select jsonb_build_object('passed',count(*) filter(where pass),'failed',count(*) filter(where pass is not true),'results',jsonb_agg(to_jsonb(ch_results))) into r from ch_results;raise exception 'CH_TEST_ROLLBACK:%',r;end $finish$;
