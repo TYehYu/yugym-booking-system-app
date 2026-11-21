@@ -1,0 +1,37 @@
+[
+  {
+    "proname": "benefit_refund",
+    "def": "CREATE OR REPLACE FUNCTION public.benefit_refund(p_benefit_ref text, p_qty integer, p_booking_id text)\n RETURNS jsonb\n LANGUAGE plpgsql\n SECURITY DEFINER\n SET search_path TO 'public', 'pg_temp'\nAS $function$\ndeclare n int; did_refund boolean;\nbegin\n if p_benefit_ref is null then return jsonb_build_object('ok',true,'refunded',false,'skipped','no_ticket'); end if;\n -- Existing caller fn_cancel_booking refunds one unit. Never trust an arbitrary amount.\n if p_qty is distinct from 1 or p_booking_id is null then raise exception 'REFUND.BAD_ARGS'; end if;\n perform 1 from bookings where id=p_booking_id for update;\n if not found then raise exception 'REFUND.NO_BOOKING'; end if;\n perform 1 from member_tickets where id=p_benefit_ref for update;\n if not found then raise exception 'REFUND.NO_TICKET'; end if;\n n:=public.fn_ticket_net_checked(p_benefit_ref,p_booking_id);\n if n=0 then return jsonb_build_object('ok',true,'refunded',false,'skipped','no_deduct'); end if;\n did_refund:=public.fn_tk_refund_once(p_benefit_ref,p_booking_id,'取消返還原票');\n if not did_refund then raise exception 'REFUND.BALANCE_FULL'; end if;\n return jsonb_build_object('ok',true,'refunded',true);\nend $function$\n",
+    "md5": "5844c849b2d3ad56b5c0027236c0a3a9"
+  },
+  {
+    "proname": "current_employee_id",
+    "def": "CREATE OR REPLACE FUNCTION public.current_employee_id()\n RETURNS text\n LANGUAGE sql\n STABLE SECURITY DEFINER\n SET search_path TO 'public', 'pg_temp'\nAS $function$\r\n  select id from employees where auth_id = auth.uid() limit 1;\r\n$function$\n",
+    "md5": "2fc6c9794046276e34edfd838a878d6f"
+  },
+  {
+    "proname": "current_member_id",
+    "def": "CREATE OR REPLACE FUNCTION public.current_member_id()\n RETURNS text\n LANGUAGE sql\n STABLE SECURITY DEFINER\n SET search_path TO 'public', 'pg_temp'\nAS $function$\r\n  select id from members where auth_id = auth.uid() limit 1;\r\n$function$\n",
+    "md5": "64b4cc94a492bd9ada5fa038eb29c227"
+  },
+  {
+    "proname": "current_staff_role",
+    "def": "CREATE OR REPLACE FUNCTION public.current_staff_role()\n RETURNS text\n LANGUAGE sql\n STABLE SECURITY DEFINER\n SET search_path TO 'public', 'pg_temp'\nAS $function$\r\n  select role::text from employees where auth_id = auth.uid() limit 1;\r\n$function$\n",
+    "md5": "b415c8b9ce2b59478b12b96e22a09eef"
+  },
+  {
+    "proname": "fn_ticket_net_checked",
+    "def": "CREATE OR REPLACE FUNCTION public.fn_ticket_net_checked(p_ticket text, p_booking text)\n RETURNS integer\n LANGUAGE plpgsql\n SECURITY DEFINER\n SET search_path TO 'public', 'pg_temp'\nAS $function$\ndeclare d int; r int; bad int; b public.bookings%rowtype;\nbegin\n select count(*) filter(where action::text='deduct' and delta=-1),\n        count(*) filter(where action::text='refund' and delta=1),\n        count(*) filter(where (action::text='deduct' and (delta is null or delta not in (-1,0)))\n                          or (action::text='refund' and (delta is null or delta<>1)))\n into d,r,bad from public.ticket_logs where ticket_id=p_ticket and booking_id=p_booking;\n if bad>0 then raise exception 'TICKET.LEDGER_AMBIGUOUS'; end if;\n if r>d then raise exception 'TICKET.LEDGER_NEGATIVE'; end if;\n -- An existing debit is not proof that this reservation still owns it.\n -- Older clients moved only ticket_id. Never refund or reuse that orphan debit.\n -- Group seats and self-training multi-point accounting retain their existing rules.\n if d>r then\n  select * into b from public.bookings where id=p_booking;\n  if found and b.category::text in ('私人教練','運動按摩')\n     and b.ticket_id is distinct from p_ticket then\n   raise exception 'TICKET.LEDGER_OWNERSHIP';\n  end if;\n end if;\n return d-r;\nend $function$\n",
+    "md5": "912f22ccf357435d30ffe4f9bf399ffa"
+  },
+  {
+    "proname": "fn_tk_refund_once",
+    "def": "CREATE OR REPLACE FUNCTION public.fn_tk_refund_once(p_ticket text, p_booking text, p_note text)\n RETURNS boolean\n LANGUAGE plpgsql\n SECURITY DEFINER\n SET search_path TO 'public', 'pg_temp'\nAS $function$\ndeclare t member_tickets%rowtype; v_net integer; v_op text := coalesce(nullif(current_setting('app.tk_operator', true), ''), 'system');\nbegin\n  select * into t from member_tickets where id = p_ticket for update;\n  if not found then return false; end if;\n  v_net := public.fn_ticket_net_checked(p_ticket,p_booking);\n  if v_net <= 0 then return false; end if;\n  if coalesce(t.sessions_total, 0) > 0 and coalesce(t.sessions_remaining, 0) >= t.sessions_total then\n    insert into ticket_logs(id, ticket_id, action, delta, booking_id, operator, note)\n    values (public.gen_short_id('LG-'), p_ticket, 'adjust', 0, p_booking, v_op, '⚠ 已阻擋：餘額已滿，未再退課（效期屆滿自動取消）');\n    return false;\n  end if;\n  update member_tickets\n     set sessions_remaining = coalesce(sessions_remaining, 0) + 1,\n         status = case when status::text = 'used_up' then 'usable' else status end\n   where id = p_ticket;\n  insert into ticket_logs(id, ticket_id, action, delta, booking_id, operator, note)\n  values (public.gen_short_id('LG-'), p_ticket, 'refund', 1, p_booking, v_op, coalesce(p_note, '取消返還原票'));\n  return true;\nend\n$function$\n",
+    "md5": "adc6582b60d36117ca2e57bbcc2e0953"
+  },
+  {
+    "proname": "is_staff_desk",
+    "def": "CREATE OR REPLACE FUNCTION public.is_staff_desk()\n RETURNS boolean\n LANGUAGE sql\n STABLE SECURITY DEFINER\n SET search_path TO 'public', 'pg_temp'\nAS $function$ select current_staff_role() in ('admin','front_desk')\n   or exists(select 1 from employees e where e.auth_id=auth.uid()\n       and e.role='coach' and coalesce(e.is_manager,false) and e.status is distinct from 'inactive'); $function$\n",
+    "md5": "4843a4de4f5b8e68d141c48215596234"
+  }
+]

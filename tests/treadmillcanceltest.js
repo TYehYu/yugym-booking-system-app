@@ -1,0 +1,11 @@
+const fs=require('fs'),path=require('path'),vm=require('vm'),assert=require('assert');
+const s=fs.readFileSync(path.join(__dirname,'../index.html'),'utf8');
+const fn=s.slice(s.indexOf('function bookingAccountErrMsg('),s.indexOf('async function deductTicket('));
+const c={};vm.createContext(c);vm.runInContext(fn,c);
+assert.match(c.bookingAccountErrMsg('BOOKING.SIBLING_MISMATCH'),/沒有取消或退點/);
+assert.match(c.bookingAccountErrMsg('BOOKING.MAIN_CANCELLED'),/沒有新增同行/);
+assert.match(c.bookingAccountErrMsg('BOOKING.IS_SIBLING'),/主預約取消/);
+assert.match(c.bookingAccountErrMsg('REFUND.NO_DEDUCT'),/沒有更動/);
+assert.match(c.bookingAccountErrMsg('TICKET.LEDGER_OWNERSHIP'),/不一致/);
+assert.equal(c.bookingAccountErrMsg('unrecognized'),'');
+console.log('6 passed, 0 failed');
