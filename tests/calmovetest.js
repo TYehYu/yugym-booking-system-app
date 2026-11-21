@@ -52,23 +52,31 @@ console.log('\n② 這是誰的哪一堂課');
      /const _mem=\(dbPeek\('members'\)\|\|\{\}\)\.data\|\|\[\];/.test(src));
 }
 
-console.log('\n③ 前後用顏色標明（紅 > 金 > 綠）');
-{
-  const box=grabFn('confirmCalMove');
-  ok('★ 原時間＝紅（這個時段要空出來）',
-     /原時間（將空出）/.test(box) && /color:var\(--danger,#b5372e\);font-size:11px;font-weight:700/.test(box));
-  ok('★ 原時間加刪除線（一眼看出是舊的）', /text-decoration:line-through/.test(box));
-  ok('★ 新時間＝綠（改成的正式時間）、字放大加粗',
-     /新時間（改成這個）/.test(box) && /border:1\.5px solid var\(--green\)/.test(box)
-     && /font-size:15px;font-weight:800/.test(box));
-  ok('★ 中間的差異說明＝金（次要提示）', /color:var\(--gold-d\);font-size:12px;font-weight:700/.test(box)
-     && /calMoveDiff\(od,ot,nd,nt\)/.test(box));
-  ok('★ 標題下一行寫清楚是誰的課', /\$\{who\?`<div style="font-size:12\.5px;color:var\(--t2\)/.test(box));
-  ok('　　日期時間用等寬數字（兩行對得齊）', (box.match(/font-family:var\(--num\)/g)||[]).length>=2);
-  ok('　　場地被擠到次選的提示仍在（原本就有）', /\$\{venueMoveNote\(b\)\}/.test(box));
-  ok('　　按鈕講清楚在確認什麼', /確認修改<\/button>/.test(box));
-  ok('　　品牌色強度的理由寫在程式裡', /品牌色強度 紅>金>綠/.test(src));
-}
-
-console.log('\n'+(fail?'✗ ':'✓ ')+pass+' 通過 / '+fail+' 失敗');
-process.exit(fail?1:0);
+console.log('\n③ 改期確認：實際產生畫面與確認行為');
+(async()=>{
+  let html='',writes=0,series=0,back=0;
+  const win={};
+  const env={window:win,showModal:h=>{html=h;},calMoveWho:()=>'<示範會員> · 教練',
+    escH:x=>String(x).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;'),
+    fmtRange:new Function('parseYmd','timeToMin','minToTime','WD',grabFn('fmtRange')+'\nreturn fmtRange;')(parseYmd,timeToMin,n=>String(Math.floor(n/60)).padStart(2,'0')+':'+String(n%60).padStart(2,'0'),['日','一','二','三','四','五','六']),
+    calMoveDiff:()=> '往後 1 天、延後 1 小時',venueMoveNote:()=>'<aside>場地變更：教室</aside>',
+    bizOffHoursNote:()=>'',bkOffHoursAsk:()=>'',bkOfferSeriesMove:async()=>{series++;},navTo:()=>{back++;},CUR_PAGE:'calendar'};
+  const render=new Function(...Object.keys(env),grabFn('calMoveRangeHtml')+'\n'+grabFn('confirmCalMove')+'\nreturn confirmCalMove;')(...Object.values(env));
+  render({id:'B'},'2026-11-24','19:00',60,'2026-11-25','20:00',90,async()=>{writes++;});
+  ok('會員姓名保留且安全顯示',html.includes('&lt;示範會員&gt; · 教練'));
+  ok('原日期與完整時段仍在',html.includes('2026-11-24（二）')&&html.includes('19:00–20:00'));
+  ok('新日期與九十分鐘結束時間正確',html.includes('2026-11-25（三）')&&html.includes('20:00–21:30'));
+  ok('原時段、新時段有明確文字，不只靠顏色',html.includes('原時間（將空出）')&&html.includes('新時間（改成這個）'));
+  ok('原時段紅色與刪除線',src.includes('.cm-old .cm-label{color:var(--danger')&&src.includes('.cm-old .cm-time{text-decoration:line-through'));
+  ok('新時段綠色、時間放大',src.includes('.cm-new .cm-label,.cm-new .cm-time{color:var(--green);}')&&src.includes('font-size:29px;font-weight:800'));
+  ok('保留移動差異與場地變更提醒',html.includes('往後 1 天、延後 1 小時')&&html.includes('場地變更：教室'));
+  ok('操作按鈕明確',html.includes('>返回</button>')&&html.includes('>確認改期</button>'));
+  ok('開窗尚未寫入或處理整串',writes===0&&series===0);
+  win._calNo();ok('返回不寫入',back===1&&writes===0&&series===0);
+  await win._calYes();ok('確認先套用這堂再詢問後續',writes===1&&series===1);
+  env.bizOffHoursNote=()=> '超出營業時間';env.bkOffHoursAsk=()=> '請填寫原因';
+  const warned=new Function(...Object.keys(env),grabFn('calMoveRangeHtml')+'\n'+grabFn('confirmCalMove')+'\nreturn confirmCalMove;')(...Object.values(env));
+  warned({},'2026-11-24','19:00',60,'2026-11-25','23:00',60,()=>{});
+  ok('營業時間外提醒與原因要求仍在',html.includes('超出營業時間')&&html.includes('請填寫原因'));
+  console.log('\n'+(fail?'✗ ':'✓ ')+pass+' 通過 / '+fail+' 失敗');process.exit(fail?1:0);
+})().catch(e=>{console.error(e);process.exit(1);});
