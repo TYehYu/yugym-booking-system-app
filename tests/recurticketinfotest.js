@@ -59,7 +59,7 @@ function setup(){
  e.els['bk-hold-contract']={value:'C',dataset:{memberCourse:JSON.stringify(['M','PT'])}};
  e.els['bk-hold-contract-field']={hidden:true};
  await e.ctx.recurContractChoices();
- ok(e.els['bk-hold-contract'].innerHTML.includes('<option value="C">未付款合約 C</option>'),'loads eligible contract without an esc global');
+ ok(e.els['bk-hold-contract'].innerHTML.includes('<option value="C">未付款方案 · 10 天</option>'),'loads eligible contract without an esc global or displaying its internal id');
  ok(e.els['bk-hold-contract'].value==='C'&&!e.els['bk-hold-contract-field'].hidden,'keeps the selected contract');
  e.els['bk-hold-contract'].value='';
  e.setData([],[]);
