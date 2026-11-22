@@ -1,0 +1,1 @@
+select md5(prosrc)='ddc9aeb7399d65055d6ee27ae8317e79' as body_matches,proacl::text='{postgres=X/postgres,authenticated=X/postgres}' as acl_preserved,prosecdef and proconfig=array['search_path=public, pg_temp'] as security_preserved from pg_proc where oid='public.fn_hold_settle_new_ticket(text,boolean,text,jsonb)'::regprocedure;
