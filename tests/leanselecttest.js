@@ -82,7 +82,7 @@ console.log('\n② 欄位清單是「學」來的，不是寫死的');
 console.log('\n③ 單筆讀取維持全欄位（編輯流程的來源）');
 {
   const f=grabFn('dbGet');
-  ok('★ dbGet 仍是 select(\'*\')', /sb\.from\(tbl\(store\)\)\.select\('\*'\)\.eq\('id',id\)/.test(f));
+  ok('★ dbGet 仍是 select(\'*\')', /\.select\('\*'\)\.eq\('id',id\)/.test(f));
   ok('　　順便當學習來源', /if\(data\) leanLearn\(store, data\);/.test(f));
 }
 
@@ -133,7 +133,7 @@ console.log('\n⑥ 實跑資料層（假 sb）：學欄位 → 精簡讀 → 回
     upsert(obj){ lastUpsert=obj; DB[obj.id]=Object.assign({},DB[obj.id],obj);
       return { select:()=>({ maybeSingle:()=>Promise.resolve({data:lastUpsert,error:null}) }) }; }
   })};
-  const env={sb, tbl:s=>s, dbFriendlyError:e=>new Error(String(e)), dbCacheClear:()=>{}, dbCacheApply:()=>{}, mchgNotify:null,
+  const env={sb, tbl:s=>s, dbSrc:s=>s, empPublicMode:()=>false, dbFriendlyError:e=>new Error(String(e)), dbCacheClear:()=>{}, dbCacheApply:()=>{}, mchgNotify:null,
     LEAN_DROP:{bookings:DROP}, _leanSel:new Map()};
   const code=['leanLearn','_dbGetAllFresh','dbGet','dbPut'].map(n=>{
     const s=grabFn(n); return /^\s*$/.test(s)?'':(src.indexOf('async function '+n+'(')>=0?'async ':'')+s;

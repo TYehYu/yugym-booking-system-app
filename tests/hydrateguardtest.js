@@ -41,7 +41,7 @@ ok('★★  旗子用 localStorage，不是記憶體變數（分頁被砍時記�
    /const BOOT_FLAG='yugym_boot_hydrating';/.test(src)
    && /localStorage\.setItem\(BOOT_FLAG,'1'\); _flagged=true;/.test(src));
 ok('★★  還原規則改了 → CACHE_EPOCH 跳號（CLAUDE.md 的規矩）',
-   /const CACHE_EPOCH='2026-10-30\.hydrate';/.test(src));
+   /const CACHE_EPOCH='2026-11-18\.hrperm';/.test(src));
 
 console.log('\n② 四條 return 都要把旗拔乾淨（實跑）');
 {
@@ -65,7 +65,7 @@ console.log('\n② 四條 return 都要把旗拔乾淨（實跑）');
       idbTx:async()=> o.noStore ? null : store,
       cacheWipe:async()=>{ wiped=true; },
       dbWhy:()=>{},
-      CACHE_EPOCH:'2026-10-30.hydrate',
+      CACHE_EPOCH:'2026-11-18.hrperm',
       IDB_MAX_AGE:86400000,
       _dbCache:new Map(),
       window:{},
@@ -86,7 +86,7 @@ console.log('\n② 四條 return 都要把旗拔乾淨（實跑）');
   };
 
   const NOW=Date.now();
-  const okRows=[{uid:'U1',table:'__ver',ver:'2026-10-30.hydrate'},
+  const okRows=[{uid:'U1',table:'__ver',ver:'2026-11-18.hrperm'},
                 {uid:'U1',table:'bookings',data:[1,2,3],sig:'s',savedAt:NOW}];
   const okKeys=['U1|__ver','U1|bookings'];
 

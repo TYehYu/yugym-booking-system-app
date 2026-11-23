@@ -39,7 +39,7 @@ function makeDB(){
 function makeEnv(db,o){
   o=o||{};
   const env={
-    tbl:s=>s, _dbCache:new Map(), _dbInflight:new Map(), _leanSel:new Map(),
+    tbl:s=>s, dbSrc:s=>s, empSelf:async(st,r)=>r, _dbCache:new Map(), _dbInflight:new Map(), _leanSel:new Map(),
     DB_CACHE_TTL:20000, DB_CACHE_TTL_BY:{}, DB_SWR_MAX:600000, DELTA_MAX:o.deltaMax||400,
     occCacheClear:()=>{},
     sb:{

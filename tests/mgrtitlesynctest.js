@@ -24,14 +24,14 @@ ok('★★★ **不做**反向（改職稱就給權限）—— is_manager 給�
    /\*\*只單向\*\*：開關 → 職稱。反過來（改職稱就給權限）不做/.test(src)
    && !/job_title==='主管'[\s\S]{0,80}is_manager\s*=\s*true/.test(src));
 ok('★★★ 兩個入口都接上（列表的開關、薪資規則的勾）',
-   /else if\(key==='manager'\)\{ c\.is_manager = on; stSyncMgrTitle\(c, on\); \}/.test(src)
+   /else if\(key==='manager'\)\s+payRulesApplyNow\(c, x=>\{ x\.is_manager = on; stSyncMgrTitle\(x, on\); \}\);/.test(src)
    && /c\.is_manager=ck\('hr-ismgr'\);\s*\n\s*stSyncMgrTitle\(c, c\.is_manager\);/.test(src));
 /* 2026-10-28：員工列表的權限改成三選一的選單（管理員／主管／無），
    所以多了第三處寫 is_manager —— 它同樣接著 stSyncMgrTitle，沒有漏。 */
 ok('★★ 每一處寫 is_manager 的地方都接著同步職稱（沒有漏網的）', (()=>{
-  const at=[...src.matchAll(/c\.is_manager\s*=\s*/g)].map(m=>m.index);
-  return at.length===3 && at.every(i=>/stSyncMgrTitle/.test(src.slice(i,i+260)));
-})(), (src.match(/c\.is_manager\s*=\s*/g)||[]).length);
+  const at=[...src.matchAll(/\b[cx]\.is_manager\s*=\s*(?!=)/g)].map(m=>m.index);
+  return at.length>=3 && at.every(i=>/stSyncMgrTitle/.test(src.slice(i,i+260)));
+})(), (src.match(/\b[cx]\.is_manager\s*=\s*(?!=)/g)||[]).length);
 ok('★★ 職稱下拉仍留著「店長（舊稱）」，舊資料看得到',
    /\['店長','店長（舊稱）'\]/.test(src));
 

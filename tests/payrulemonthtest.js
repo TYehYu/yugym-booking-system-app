@@ -102,14 +102,12 @@ ok('★★★ 用一枚章講清楚現在看的是自己的版本、沿用來的
    /const _own=!!\(_hit && _hit\.ym===window\._hrSalYm\);/.test(src)
    && /const _past=String\(window\._hrSalYm\) < ymd\(TODAY\)\.slice\(0,7\);/.test(src)
    && /hr-vtag-inherit">\$\{_hit\?`沿用 \$\{String\(Number\(_hit\.ym\.slice\(5,7\)\)\)\} 月`:'尚未設定'\}/.test(src)
-   && /這是<b>歷史月份<\/b>，改了不影響現在的設定/.test(src));
+   && /歷史月份<b>僅供查閱<\/b>，更正需先核對原始紀錄/.test(src));
 ok('★ 儲存寫成那個月的快照', /_map\[_ym\]=payRuleSnapshot\(c\);/.test(src) && /c\.pay_rules=_map;/.test(src));
-ok('★ 第一次建版本時，把編輯前的樣子凍結到前一個月',
-   /if\(!Object\.keys\(_map\)\.some\(k=>k<_ym\)\) _map\[prevYm\(_ym\)\]=payRuleSnapshot\(window\._hrSalRaw\|\|\{\}\);/.test(src));
+ok('★ 儲存前先使用共用保護保留所有歷史月份', /const _historyRules=payRulesPreserveHistory\(c,_saveYm\);/.test(src) && /const _map=_historyRules;/.test(src));
 ok('　　為什麼要凍結，寫在程式裡',
    /否則改了八月，沒有版本的七月會跟著讀到新條件，回頭看七月的薪資單就對不上當時發的錢。/.test(src));
-ok('★ 回頭改過去的月份，不會動到員工資料上的現值',
-   /if\(_ym < ymd\(TODAY\)\.slice\(0,7\)\)\{\n\s*const _now=window\._hrSalRaw\|\|\{\};\n\s*PAY_RULE_KEYS\.forEach\(k=>\{ c\[k\]=_now\[k\]; \}\);/.test(src));
+ok('★ 歷史月份拒絕直接編輯，未來薪資不提前改本月', /if\(effectiveYm<current\)throw new Error/.test(src) && /if\(_ym > ymd\(TODAY\)\.slice\(0,7\)\)/.test(src) && /c\[k\]=_saveBefore\[k\]/.test(src));
 ok('　　吐司說出存的是哪個月', /showToast\(`\$\{_ym\.replace\('-','\/'\)\} 的薪資規則已儲存`\)/.test(src));
 
 console.log('\n⑥ 兩個門檻的欄位與全域預設');

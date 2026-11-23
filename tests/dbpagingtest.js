@@ -31,7 +31,7 @@ ok('★★★ 抽得到分頁那一段（抽不到就是有人改了結構，下
 const SLICE=src.slice(A, B)+'  _statPush(out.length, out[0]);\n  return out;';
 /* 這一段還含著「精簡欄位」那幾行（tbl／LEAN_DROP／_leanSel），
    一起餵假的進去就好 —— 不要為了測試去動正式碼的結構。 */
-const mkPager=()=>new Function('sb','store','leanLearn','dbFriendlyError','_statPush','tbl','LEAN_DROP','_leanSel',
+const mkPager=()=>new Function('sb','store','leanLearn','dbFriendlyError','_statPush','tbl','LEAN_DROP','_leanSel','dbSrc',
   'return (async()=>{'+SLICE+'})();');
 
 /* 假的 PostgREST：
@@ -59,7 +59,7 @@ function server(rows, cap){
 const mkRows=n=>Array.from({length:n},(_,i)=>({id:'BK-'+String(i).padStart(6,'0')}));
 async function run(n, cap){
   const {sb,log}=server(mkRows(n), cap);
-  const out=await mkPager()(sb,'bookings',()=>{},e=>e,()=>{},t=>t,{},new Map());
+  const out=await mkPager()(sb,'bookings',()=>{},e=>e,()=>{},t=>t,{},new Map(),t=>t);
   return {out, log};
 }
 

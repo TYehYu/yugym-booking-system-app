@@ -54,10 +54,10 @@ ok('★★★ 顯示取聯集：其中一個是 true 就算要值班',
 ok('　　為什麼取聯集（否則會出現「畫面寫不需打卡、系統照樣要他排班」）',
    /畫面寫不需打卡、系統照樣要他排班/.test(src));
 ok('★★★ 寫入兩個欄位一起寫',
-   /c\.need_punch=on; c\.need_duty=on;/.test(src));
+   /payRulesApplyNow\(c, x=>\{ x\.need_punch=on; x\.need_duty=on; \}\);/.test(src));
 ok('★★★ 排程中的未來月份快照也要跟著改（不然月初會搬回舊值）',
-   /if\(\/\^\\d\{4\}-\\d\{2\}\$\/\.test\(k\) && k>_cur/.test(src)
-   && /_r\[k\]\.need_duty=on;/.test(src));
+   /k>ym && rules\[k\] && typeof rules\[k\]==='object'/.test(src)
+   && /changed\.forEach\(f=>\{ if\(rules\[k\]\[f\]!==undefined\) rules\[k\]\[f\]=after\[f\]; \}\)/.test(src));
 const dutyOn=new Function(grab('stDutyOn')+';return stDutyOn;')();
 ok('★★ 兩個都 false → 不需值班', dutyOn({need_punch:false,need_duty:false})===false);
 ok('★★ 只有 need_duty 是 true（黃沛瀞那種舊資料）→ 仍然算要值班',
@@ -117,22 +117,24 @@ const empRuleAt=F('empRuleAt',{payRulesMap});
 const empAtMonth=F('empAtMonth',{empRuleAt, PAY_RULE_KEYS:env.PAY_RULE_KEYS});
 const payRuleSnapshot=F('payRuleSnapshot',{PAY_RULE_KEYS:env.PAY_RULE_KEYS});
 const prevYm=F('prevYm');
+const payRulesPreserveHistory=F('payRulesPreserveHistory',{payRulesMap,empRuleAt,empAtMonth,payRuleSnapshot,TODAY:'2026-10-20',ymd:x=>x});
 
 /* 黃美蓉的實際形狀：正職、10 月底排程 11/1 轉合作教練 */
 const MANGO={id:'E1',name:'黃美蓉',employment_type:'full_time',need_duty:true,
   base_salary:29500,duty_hourly:0,pt_mode:'tier',pt_rate:0,pt_tiers:[1,2,3,4],
   group_rate:200,pt_bonus_enabled:true,pt_bonus:[1],custom_salary:true,is_manager:false};
+MANGO.pay_rules={'2026-07':payRuleSnapshot(MANGO)};
 const TPL={contractor:{base_salary:0,duty_hourly:200,pt_mode:'flat',pt_rate:600,
   group_per_head:200,pt_tiers:[],pt_bonus:[]}};
 
 /* stApplyEmpType 會 await dbPut，所以把 dbPut 換成「把結果留下來」 */
 let SAVED=null;
 const apply=new Function('stCurYm','stNextYm','stEtNow','stEtPending','payRulesMap',
-  'payRuleSnapshot','prevYm','PAY_RULE_KEYS','dbPut','showToast','PAY_LABEL','window',
+  'payRuleSnapshot','prevYm','payRulesPreserveHistory','PAY_RULE_KEYS','dbPut','showToast','PAY_LABEL','window',
   grab('stApplyEmpType')+';return stApplyEmpType;')(
   ()=>'2026-10', ()=>'2026-11',
   c=>env.normEmp((empAtMonth(c,'2026-10')||c).employment_type),
-  ()=>null, payRulesMap, payRuleSnapshot, prevYm, env.PAY_RULE_KEYS,
+  ()=>null, payRulesMap, payRuleSnapshot, prevYm, payRulesPreserveHistory, env.PAY_RULE_KEYS,
   /* ⚠ dbPut 是 (表名, 物件) 兩個參數 —— 只收一個的話接到的是字串 'coaches'。 */
   async (_t,c)=>{ SAVED=JSON.parse(JSON.stringify(c)); }, ()=>{},
   {full_time:'正職',contractor:'合作'}, {SALARY_TPL:TPL});

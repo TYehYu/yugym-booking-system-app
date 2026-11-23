@@ -82,7 +82,7 @@ ok('　　沒有動到別處在用的 gt-card2（票券發放still用它）', /<
 /* ── ③ 未打卡併進今日值班 ─────────────────────────── */
 console.log('\n今日未打卡併進今日值班');
 ok('★ 今日值班改列完整名單：有打卡的 ＋ 今天有排班但還沒打卡的',
-   /\.filter\(x=>\(x\.att&&x\.att\.clock_in\) \|\| x\.sh\)/.test(src)
+   /\.filter\(x=>\(x\.att&&\(x\.att\.clock_in\|\|\(x\.att\._presence&&x\.att\.has_in\)\)\) \|\| x\.sh\)/.test(src)
    && /顯示完整名單 —— 有打卡的 ＋ 今天有排班但還沒打卡的（空心圈）/.test(src));
 ok('★ 未打卡畫成空心未注水的圈', /if\(!att \|\| !att\.clock_in\)\{/.test(src)
    && /class="duty-ring dr-cup dr-empty/.test(src)
@@ -93,7 +93,7 @@ ok('★ 已過上班時間仍未打卡 → 紅色虛線圈＋驚嘆號',
 /* 2026-10-25：全館停課那天沒打卡不是漏打卡（使用者：「這邊值班也沒有標示」），
    所以 late 前面多夾一個 !_cw。紅圈本身沒動。詳見 tests/cdayshifttest.js。 */
 ok('　　排序：已打卡的照上班時間，未打卡的排後面照班表',
-   /const pa=\(a\.att&&a\.att\.clock_in\)\?0:1, pb=\(b\.att&&b\.att\.clock_in\)\?0:1;/.test(src));
+   /const pa=\(a\.att&&\(a\.att\.clock_in\|\|\(a\.att\._presence&&a\.att\.has_in\)\)\)\?0:1, pb=\(b\.att&&\(b\.att\.clock_in\|\|\(b\.att\._presence&&b\.att\.has_in\)\)\)\?0:1;/.test(src));
 ok('　　離職／停用的員工不列', /\.filter\(c=>c\.status!=='inactive'&&c\.status!=='resigned'\)\s*\n\s*\.map\(c=>\(\{c, att:attMap/.test(src));
 ok('　　請假的班不算（沿用 leave_type 過濾）',
    /dayShifts\.find\(s=>s\.emp_id===id&&s\.start_time&&s\.end_time&&!s\.leave_type\)/.test(src));

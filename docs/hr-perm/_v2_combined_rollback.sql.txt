@@ -1,0 +1,45 @@
+-- 還原 20261119_hr_perm_gaps.sql（v2）。測試庫實跑驗證過；正式庫同理，另需使用者授權。
+-- 先還原政策與觸發器，再刪新物件。新表資料（hr_grants、manager_scope、hr_settings）會一併消失，回復前先匯出。
+-- 補打卡新增的 requested_by／reviewed_by 兩欄保留不刪（有資料時避免遺失）。
+drop policy if exists sh_read_hr on public.salary_history;
+drop policy if exists sh_write_ins on public.salary_history;
+drop policy if exists sh_write_upd on public.salary_history;
+drop policy if exists sh_write_del on public.salary_history;
+create policy sh_write on public.salary_history for all using ((select is_admin()));
+create policy sh_read on public.salary_history for select using (((select is_staff_desk()) or (select is_admin())));
+
+drop function if exists public.fn_employee_update_general(text, jsonb);
+drop policy if exists employees_select_v2 on public.employees;
+drop policy if exists employees_update_v2 on public.employees;
+create policy employees_select on public.employees for select using (((select is_staff_desk()) or (auth_id = (select auth.uid()))));
+create policy employees_select_all_coach on public.employees for select using ((select is_coach()));
+create policy employees_update on public.employees for update
+  using      ((((select is_staff_desk()) or (auth_id = (select auth.uid()))) and (invite_status is distinct from 'pending')))
+  with check ((((select is_staff_desk()) or (auth_id = (select auth.uid()))) and (invite_status is distinct from 'pending')));
+drop view if exists public.employees_employment;
+drop view if exists public.employees_insure;
+drop view if exists public.employees_pay;
+drop view if exists public.employees_manager_scope;
+drop view if exists public.employees_public;
+
+drop trigger if exists trg_attendance_self_guard on public.attendance;
+drop function if exists public.fn_attendance_self_guard();
+
+drop policy if exists pr_read_admin on public.punch_requests;
+drop policy if exists pr_read_self on public.punch_requests;
+drop policy if exists pr_read_desk on public.punch_requests;
+drop policy if exists pr_read_scope on public.punch_requests;
+drop policy if exists pr_ins_self on public.punch_requests;
+drop policy if exists pr_ins_desk on public.punch_requests;
+drop policy if exists pr_ins_admin on public.punch_requests;
+drop policy if exists pr_del_admin on public.punch_requests;
+create policy pr_self  on public.punch_requests for all using (emp_id = (select current_employee_id())) with check (emp_id = (select current_employee_id()));
+create policy pr_staff on public.punch_requests for all using ((select is_staff_desk())) with check ((select is_staff_desk()));
+drop function if exists public.fn_punch_decide(text, boolean);
+
+drop function if exists public.is_my_report(text);
+drop function if exists public.has_hr_duty(text);
+drop table if exists public.hr_settings;
+drop table if exists public.manager_scope;
+drop table if exists public.hr_grants;
+notify pgrst, 'reload schema';

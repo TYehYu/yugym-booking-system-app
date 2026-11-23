@@ -29,7 +29,7 @@ console.log('① 每一個 .range() 分頁都帶排序');
      數字從1變3不是退化——三個地方「各自」都有正確帶.order('id')，逐一驗證，不是只信任筆數。 */
   eq('★★★ range 分頁一共3個地方（資料層dbGetAll + 教練行事曆新增的2支範圍查詢）', lines.length, 3);
   ok('★★★ dbGetAll 分頁查詢有 .order(\'id\')',
-     /let s=sb\.from\(_tk\)\.select\(_sel\)\.order\('id',\{ascending:true\}\);/.test(src)
+     /let s=sb\.from\(dbSrc\(_tk\)\)\.select\(_sel\)\.order\('id',\{ascending:true\}\);/.test(src)
      && lines.some(l=>/\.range\(f, f\+\(n\|\|PAGE\)-1\)/.test(l)));
   ok('★★★ dbBookingsRange 也帶 .order(\'id\')，同一欄位分頁',
      /async function dbBookingsRange[\s\S]*?\.order\('id',\{ascending:true\}\)\s*\n\s*\.range\(from,from\+page-1\)[\s\S]*?^}/m.test(src));

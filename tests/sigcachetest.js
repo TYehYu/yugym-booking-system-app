@@ -23,7 +23,7 @@ function makeEnv(o){
   const log=[];
   const state={rows:[{id:'BK-1'}], sig:'1:111', rpcFail:!!o.rpcFail};
   const env={
-    tbl:s=>s,
+    tbl:s=>s, dbSrc:s=>s, empSelf:async(st,r)=>r,
     _dbCache:new Map(), _dbInflight:new Map(),
     DB_CACHE_TTL:20000, DB_CACHE_TTL_BY:{}, DB_SWR_MAX:600000, DB_FULL_MAX:21600000,
     occCacheClear:()=>{},

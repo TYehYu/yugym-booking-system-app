@@ -87,8 +87,7 @@ console.log('\n⑤ 舊月份完全沒有任何快照時：沿用員工現值（�
 }
 
 console.log('\n⑥ saveInsurance() 已改成跟 stApplyEmpType() 同一套「先凍結、再寫當月」規矩');
-ok('★ saveInsurance 內有凍結更早月份的邏輯（跟 stApplyEmpType 用同一個條件寫法）',
-   /async function saveInsurance\(id\)\{[\s\S]*?if\(!Object\.keys\(rules\)\.some\(k=>k<ym\)\)\{\s*\n\s*rules\[prevYm\(ym\)\]=payRuleSnapshot\(c\);/.test(src));
+ok('★ saveInsurance 使用共用歷史保護', /async function saveInsurance\(id\)\{[\s\S]*?const rules=payRulesPreserveHistory\(c,ym\);/.test(src));
 ok('★ saveInsurance 會寫入當月快照並存回 c.pay_rules', /rules\[ym\]=payRuleSnapshot\(c\);\s*\n\s*c\.pay_rules=rules;\s*\n\s*await dbPut\('coaches',c\); closeModal\(\); showToast\('勞健保資料已儲存'\)/.test(src));
 ok('★ 凍結判斷用 ym=stCurYm()（跟其他存檔路徑一致，不是另外發明新規則）',
    /async function saveInsurance\(id\)\{[\s\S]*?const ym=stCurYm\(\);/.test(src));

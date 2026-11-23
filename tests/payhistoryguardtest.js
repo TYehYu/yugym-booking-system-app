@@ -1,0 +1,31 @@
+'use strict';
+const fs=require('fs'),vm=require('vm'),assert=require('assert/strict'),path=require('path');const src=fs.readFileSync(process.env.INDEX_PATH||path.join(__dirname,'../index.html'),'utf8');
+function grab(name){const rx=new RegExp('(?:async )?function '+name+'\\('),m=rx.exec(src);if(!m)throw Error(name);let a=m.index,d=0;for(let i=src.indexOf('{',a);i<src.length;i++){if(src[i]==='{')d++;else if(src[i]==='}'&&!--d)return src.slice(a,i+1);}throw Error(name);}
+const a=src.indexOf('const PAY_RULE_KEYS='),constant=src.slice(a,src.indexOf('];',a)+2);let saved=[],messages=[],current;
+const rootRule={employment_type:'full_time',base_salary:29500,pt_mode:'tier',pt_rate:0,pt_tiers:[{min:0,rate:600}],group_rate:200,duty_hourly:0,is_manager:false,insured_grade:29500,labor_insurance_status:'enrolled',health_insurance_status:'enrolled'};
+const make=(over={})=>({id:'E',name:'假教練',employment_type:'full_time',base_salary:29500,hire_date:'2026-07-01',is_manager:false,pay_rules:{'2026-07':structuredClone(rootRule)},...over});
+let inputs={};const c={TODAY:'2026-11-18',ymd:x=>x,window:{SALARY_TPL:{contractor:{base_salary:0,pt_rate:600,group_per_head:200,duty_hourly:200}}},document:{getElementById:id=>inputs[id]||null},stCurYm:()=> '2026-11',stNextYm:()=> '2026-12',stEtNow:e=>e.employment_type,stEtPending:()=>null,PAY_LABEL:{contractor:'合作'},showToast:s=>messages.push(s),dbGet:async()=>structuredClone(current),dbPut:async(t,e)=>saved.push({table:t,row:structuredClone(e)}),closeModal:()=>{},navTo:()=>{},stSyncMgrTitle:()=>{},hrReadTeamMembers:()=>undefined,hrReadLeaderMembers:()=>[],hrReadTiers:()=>[],hrReadBonus:()=>[],HR_SAL_ET:'contractor',PP:{id:null},CUR_PAGE:'staff',console:{error:()=>{}}};
+vm.createContext(c);vm.runInContext(constant+'\n'+['payRulesMap','empRuleAt','empAtMonth','payRuleSnapshot','payRulesPreserveHistory','stApplyEmpType','saveInsurance','saveHrSalary','dbFriendlyError'].map(grab).join('\n'),c);let n=0;const same=(a,b)=>assert.equal(JSON.stringify(a),JSON.stringify(b));const test=(l,f)=>{f();n++;console.log('✓ '+l);};
+(async()=>{
+ const e=make(),before=JSON.stringify(e),rules=c.payRulesPreserveHistory(e,'2026-11');
+ test('凍結七月至十月，最早月份也保留',()=>{for(const m of ['07','08','09','10'])assert.equal(rules['2026-'+m].base_salary,29500);});
+ test('不修改原物件',()=>assert.equal(JSON.stringify(e),before));
+ rules['2026-07'].pt_tiers[0].rate=1;test('深層級距也不共用參照',()=>assert.equal(e.pay_rules['2026-07'].pt_tiers[0].rate,600));
+ test('部分歷史快照不猜測',()=>assert.throws(()=>c.payRulesPreserveHistory(make({pay_rules:{'2026-07':{insured_grade:29500}}}),'2026-11'),/條件待補/));
+ test('完全缺歷史不猜測',()=>assert.throws(()=>c.payRulesPreserveHistory(make({pay_rules:{}}),'2026-11'),/條件待補/));
+ test('薪資歷史陣列拒絕',()=>assert.throws(()=>c.payRulesPreserveHistory(make({pay_rules:[]}),'2026-11'),/無法判讀/));
+ test('歷史月份編輯先擋住',()=>assert.throws(()=>c.payRulesPreserveHistory(e,'2026-09'),/已鎖定/));
+ test('月份十三拒絕',()=>assert.throws(()=>c.payRulesPreserveHistory(e,'2026-13'),/無效/));
+ test('未來生效保留本月',()=>assert.equal(c.payRulesPreserveHistory(e,'2026-12')['2026-11'].employment_type,'full_time'));
+ test('本月新到職者不虛構舊月份',()=>same(c.payRulesPreserveHistory(make({hire_date:'2026-11-01',pay_rules:{}}),'2026-11'),{}));
+ current=make();saved=[];await c.stApplyEmpType(current,'contractor','now');test('實跑職務異動入口：七月至十月仍正職、本月合作',()=>{assert.equal(saved.length,1);const x=saved[0].row;assert.equal(x.pay_rules['2026-07'].base_salary,29500);assert.equal(x.pay_rules['2026-11'].employment_type,'contractor');});
+ current=make({pay_rules:{'2026-07':{insured_grade:29500}}});saved=[];await assert.rejects(()=>c.stApplyEmpType(current,'contractor','now'));test('職務入口不完整時零寫入',()=>assert.equal(saved.length,0));
+ current=make();saved=[];await c.stApplyEmpType(current,'contractor','next');test('實跑下月職務異動不提前改現值',()=>{assert.equal(saved[0].row.employment_type,'full_time');assert.equal(saved[0].row.pay_rules['2026-12'].employment_type,'contractor');});
+ current=make();saved=[];inputs={'ins-identity':{value:'employee'},'ins-labor':{value:'withdrawn'},'ins-health':{value:'withdrawn'},'ins-pension':{value:''},'ins-grade':{value:''},'ins-unit':{value:''},'ins-enroll':{value:''},'ins-withdraw':{value:'2026-11-01'}};await c.saveInsurance('E');test('實跑勞健保入口：退保不改七月加保',()=>{assert.equal(saved.length,1);assert.equal(saved[0].row.pay_rules['2026-07'].labor_insurance_status,'enrolled');assert.equal(saved[0].row.pay_rules['2026-11'].labor_insurance_status,'withdrawn');});
+ current=make({pay_rules:{}});saved=[];await c.saveInsurance('E');test('勞健保入口不完整時零寫入',()=>assert.equal(saved.length,0));
+ current=make();saved=[];inputs={'hr-ettype':{value:'contractor'},'hr-ptrate':{value:'600'},'hr-grouprate':{value:'200'},'hr-dutyrate2':{value:'200'}};c.window._hrSalYm='2026-12';await c.saveHrSalary('E');test('實跑薪資編輯：預排下月不改本月現值',()=>{assert.equal(saved.length,1);assert.equal(saved[0].row.base_salary,29500);assert.equal(saved[0].row.employment_type,'full_time');assert.equal(saved[0].row.pay_rules['2026-12'].base_salary,0);});
+ current=make();saved=[];c.window._hrSalYm='2026-10';await c.saveHrSalary('E');test('歷史薪資編輯在任何全域或員工寫入前擋下',()=>assert.equal(saved.length,0));
+ current=make({pay_rules:{'2026-07':{insured_grade:29500}}});saved=[];c.window._hrSalYm='2026-11';await c.saveHrSalary('E');test('薪資入口缺歷史零寫入',()=>assert.equal(saved.length,0));
+ test('資料庫拒絕會轉成人話且仍是 Error',()=>{const e=c.dbFriendlyError({message:'PRH.HISTORY_INCOMPLETE:2026-07'},'coaches','儲存');assert.equal(typeof e.message,'string');assert(e.message.includes('已停止儲存'));assert.equal(e.code,'PRH.HISTORY_PROTECTED');});
+ console.log(n+' passed, 0 failed');
+})().catch(e=>{console.error(e);process.exitCode=1;});

@@ -1,0 +1,35 @@
+'use strict';
+const fs=require('fs'),vm=require('vm'),assert=require('assert/strict');
+const src=fs.readFileSync(process.env.INDEX_PATH||require('path').join(__dirname,'../index.html'),'utf8');
+const a=src.indexOf('const STAFF_HUB='),b=src.indexOf('async function renderStaffList(){',a);assert(a>0&&b>a);
+const nodes={'staff-body':{innerHTML:''},'staff-hub-rows':{innerHTML:''}};
+const fixtures=[{id:'E1',name:'測試主管',name_en:'MANGO',role:'coach',job_title:'主管',is_manager:true,status:'active',employment_type:'full_time',hire_date:'2024-07-01',pay_rules:{'2026-10':{employment_type:'full_time',base_salary:29500,pt_mode:'tier',pt_rate:0,group_rate:200,duty_hourly:0}}},{id:'E2',name:'<img src=x onerror=bad()>',role:'coach',status:'active',employment_type:'contractor',pay_rules:{'2026-10':{insured_grade:29500}}},{id:'E3',name:'櫃檯員工',role:'front_desk',status:'active',employment_type:'part_time'},{id:'DEVICE',name:'設備',is_device:true,role:'front_desk'}];
+let calls=[],failRead=false,toasts=[];
+const esc=s=>String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;').replace(/'/g,'&#39;');
+const c={SESSION:{role:'admin'},TODAY:'2026-11-18',PAY_LABEL:{full_time:'正職',contractor:'合作',part_time:'兼職'},document:{getElementById:id=>nodes[id]},console:{error:()=>{}},ymd:x=>x,stMonthCur:()=> '2026-11',stEtNow:e=>e.employment_type,jobTitleTx:x=>x||'',isLegacyPayMonth:m=>m<'2026-07',empRuleAt:(e,m)=>{const k=Object.keys(e.pay_rules||{}).filter(k=>k<=m).sort().pop();return k?{ym:k,rule:e.pay_rules[k]}:null;},escH:esc,stMonthBar:()=>'<span>2026-11</span>',dbGetAll:async name=>{calls.push(name);if(failRead)throw Error('offline');return name==='coaches'?fixtures:name==='punch_requests'?[{emp_id:'E1',status:'pending',date:'2026-11-12'}]:[];},showModal:html=>{c.modal=html;},closeModal:()=>{},showToast:msg=>toasts.push(msg),openSalarySheet:async(id,m)=>{c.salary=[id,m];}};
+vm.createContext(c);vm.runInContext(src.slice(a,b)+'\nthis.H=STAFF_HUB;',c);
+let n=0;function test(label,fn){fn();n++;console.log('✓ '+label);}
+(async()=>{
+ test('年資滿年',()=>assert.equal(c.staffHubTenure('2024-11-18','2026-11-18'),'2 年'));
+ test('未到本月到職日不多算一個月',()=>assert.equal(c.staffHubTenure('2024-11-19','2026-11-18'),'1 年 11 個月'));
+ test('未到職不顯示負年資',()=>assert.equal(c.staffHubTenure('2026-12-01','2026-11-18'),'—'));
+ test('缺到職日明示未知',()=>assert.equal(c.staffHubTenure(null,'2026-11-18'),'—'));
+ test('部分歷史快照擋試算',()=>assert.equal(c.staffHubRuleProblem(fixtures[1],'2026-11'),'歷史薪資設定待補'));
+ test('完整快照可核對',()=>assert.equal(c.staffHubRuleProblem(fixtures[0],'2026-11'),''));
+ test('舊匯入月份保持原流程',()=>assert.equal(c.staffHubRuleProblem(fixtures[1],'2026-06'),''));
+ await c.renderStaffHub();
+ test('櫃檯員工保留、只排除明確設備',()=>{assert(c.H.rows.some(e=>e.id==='E3'));assert(!c.H.rows.some(e=>e.id==='DEVICE'));});
+ test('姓名跳脫 HTML',()=>{assert(nodes['staff-hub-rows'].innerHTML.includes('&lt;img'));assert(!nodes['staff-hub-rows'].innerHTML.includes('<img src=x'));});
+ test('名單不出現薪資金額',()=>assert(!nodes['staff-hub-rows'].innerHTML.includes('29500')));
+ c.staffHubFilter('query','mango');test('英文名搜尋',()=>{assert(nodes['staff-hub-rows'].innerHTML.includes('測試主管'));assert(!nodes['staff-hub-rows'].innerHTML.includes('櫃檯員工'));});
+ c.staffHubFilter('query','查無');test('無結果明確提示',()=>assert(nodes['staff-hub-rows'].innerHTML.includes('找不到符合條件')));
+ c.staffHubFilter('query','');c.staffHubFilter('type','part_time');test('任用類型篩選',()=>{assert(nodes['staff-hub-rows'].innerHTML.includes('櫃檯員工'));assert(!nodes['staff-hub-rows'].innerHTML.includes('測試主管'));});c.staffHubFilter('type','');
+ await c.staffHubOpenSalary('E2');test('歷史設定缺漏不呼叫薪資視窗',()=>{assert.equal(c.salary,undefined);assert(toasts.length>0);});
+ await c.staffHubOpenSalary('E1');test('薪資核對帶正確員工與月份',()=>assert.equal(JSON.stringify(c.salary),'["E1","2026-11"]'));
+ await c.staffHubProfile('E1','employment');test('任用與年資分清系統角色',()=>{assert(c.modal.includes('任用類型'));assert(c.modal.includes('系統權限'));assert(c.modal.includes('2 年 4 個月'));});
+ await c.staffHubProfile('E1','attendance');test('未實作休假流程不假裝可核准',()=>assert(c.modal.includes('休假申請與核准流程尚未開放')));
+ await c.staffHubProfile('E1','salary');test('薪資試算清楚標示尚未月結',()=>assert(c.modal.includes('尚未月結或發布')));
+ c.SESSION={role:'coach'};calls=[];await c.renderStaffHub();test('非管理員不讀取員工管理資料',()=>{assert.equal(calls.length,0);assert(nodes['staff-body'].innerHTML.includes('沒有員工管理權限'));});
+ c.SESSION={role:'admin'};failRead=true;await c.renderStaffHub();test('讀取失敗明確報錯而非當成零人',()=>assert(nodes['staff-body'].innerHTML.includes('無法讀取')));
+ console.log(n+' passed, 0 failed');
+})().catch(e=>{console.error(e);process.exitCode=1;});
