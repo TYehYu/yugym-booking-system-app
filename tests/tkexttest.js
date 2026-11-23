@@ -192,7 +192,7 @@ ok('　　狀態（已完成／已過期／已退費）標在進度旁（2026-08
 /* 2026-09-15 使用者：「歷史紀錄右上角的已完成改到 n/n 的左邊　讓右上角保持 n/n」——
    狀態章長度不一（已完成／已過期／已退費），擺最右邊會把 n/n 推得忽左忽右，
    整欄堂數對不齊。章移到左邊，右上角固定收在 n/n。 */
-   /<span class="bkd-tkcard-prog">\$\{st\}　<b class="num">\$\{used\}<\/b> \/ \$\{total\}<\/span>/.test(src)
+   /<span class="bkd-tkcard-prog">\$\{tkIsRevoked\(t\)\?[^\n]*:st\}　<b class="num">\$\{used\}<\/b> \/ \$\{total\}<\/span>/.test(src)   /* 2026-11-23：已回收的贈點券標「已回收」，其餘維持 ${st} */
    && /function tkStBadge\(status\)/.test(src));
 // 2026-07-30：購買日改用共用的 tkBuyDateHtml（沒有購買日的退回起始日並標示）
 ok('　　購買日與效期都保留，共享標籤照舊', /\$\{tkBuyDateHtml\(t\)\}　·　效期至/.test(src)

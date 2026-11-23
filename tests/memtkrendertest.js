@@ -46,7 +46,7 @@ function run(opts){
     _mcOpen:{},
     /* 這一頁用到的外部小工具都給替身；它們各自有自己的測試守著 */
     tkUnlimited:()=>false, tkNoTag:()=>'', fmtExpire:(d)=>String(d||'—'),
-    srcLabel:()=>'銷售', lottoRuleNote:()=>'', tkExtLineHTML:()=>'', tkExtBadge:()=>'',
+    srcLabel:()=>'銷售', lottoRuleNote:()=>'', tkExtLineHTML:()=>'', tkExtBadge:()=>'', tkIsRevoked:t=>String((t&&t.source_type)||'')==='checkin_revoked', tkRevokedNoteHtml:()=>'',
     ticketTokens:()=>'<span class="mtk"></span>', tkVisual:()=>({accent:'#000'}),
     isSelfPtTicket:()=>false, mtkKindOf:()=>'pt', memh2On:()=>opts.v2!==false,
     memTierBlock:()=>'<div class="tier"></div>', memTierBlockV2:()=>'<div class="tier2"></div>',

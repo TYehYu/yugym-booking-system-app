@@ -6694,6 +6694,9 @@ body.wp-dragging-on .wp-item{cursor:grabbing;}
 .tk-stb-refund{background:#f3ded9;color:#8a2e26;}
 .tk-stb-done{background:#e2eee5;color:#1f6f54;}
 .tk-stb-exp{background:#f7efe0;color:#8a5e28;}
+.tk-stb-rev{background:#e9e6e1;color:#5f564b;}
+.tk-revnote{font-size:11.5px;color:#6b6258;background:#f3f1ed;border-radius:6px;padding:4px 9px;margin:6px 0 2px;line-height:1.6;}
+.tk-revtag{display:inline-block;font-size:10.5px;color:#6b6258;background:#f3f1ed;border-radius:999px;padding:1px 8px;margin-left:6px;vertical-align:1px;white-space:nowrap;}
 .pp-hist-sum{font-size:11px;font-weight:700;color:var(--gold-d,#b48a56);background:#f7efe0;
   border-radius:999px;padding:2px 9px;margin-left:8px;}
 /* 會員列表迷你圓形卡（2026-07-28 二修）：只放點點、不放名稱——課種由顏色表示，點點放大 */
@@ -15840,8 +15843,8 @@ async function empMergeSelf(rows){
 let sb=null;
 // ── 版本號（日期+時間格式：年後兩碼+月+日.時分，例 26620.1058 = 26年6/20 10:58）──
 // 每次改版手動更新這一行即可，畫面與 title 會一起更新
-const APP_VERSION = '261123.1713';
-const APP_VERSION_LABEL = 'v261123.1713';
+const APP_VERSION = '261123.1740';
+const APP_VERSION_LABEL = 'v261123.1740';
 const CLOUD = !!(window.YUGYM_CONFIG && window.YUGYM_CONFIG.url && window.YUGYM_CONFIG.anonKey);
 if(CLOUD){ sb = supabase.createClient(window.YUGYM_CONFIG.url, window.YUGYM_CONFIG.anonKey); }
 
@@ -17865,6 +17868,7 @@ function tkExtBadge(t, cls){
 async function openTicketExtend(id){
   const t=await dbGet('member_tickets',id);
   if(!t){ showToast('找不到票券'); return; }
+  if(tkIsRevoked(t)){ showToast('這張贈點券已回收（取消簽到），不提供展延'); return; }
   if(tkIsExtended(t)){ showToast('這張票券已經展延過了（一次為限）'); return; }
   /* 能不能展延要知道「已上幾堂」（2026-09-11 二改），跟票券卡同一個來源；說不行就講為什麼 */
   const _why=tkExtWhyNot(t, null, await tkExtUsedOf(t));
@@ -17947,6 +17951,7 @@ async function openTicketExtendMgr(id){
   if(!isManagerUp()){ showToast('自訂天數的展延只有管理員或主管可以操作'); return; }
   const t=await dbGet('member_tickets',id);
   if(!t){ showToast('找不到票券'); return; }
+  if(tkIsRevoked(t)){ showToast('這張贈點券已回收（取消簽到），不提供展延'); return; }
   if(['refunded','void','cancelled'].includes(t.status)){ showToast('已作廢／已退費的票不能展延'); return; }
   window._tkMgrExt={id, days:30,
     name:(t.plan_name||'票券')+(t.format?' · '+String(t.format).toUpperCase():''),
@@ -18240,6 +18245,7 @@ async function mtkOverAsk(tkId, bkId){
      確認頁會把受影響的票列出來，要調就各自再開一次（多半是舊匯入票，本來就對不上）。 */
 async function tkTidyOpen(tkId){
   if(!(SESSION&&SESSION.role==='admin')){ showToast('只有管理員可以校正票券'); return; }
+  try{ const _t0=await dbGet('member_tickets',tkId); if(tkIsRevoked(_t0)){ showToast('這張贈點券已回收（取消簽到），不提供校正'); return; } }catch(_){}
   const _busy=uiBusy('讀取票券與課卡…');
   let t=null,bks=[],tks=[],emps=[],logs=[];
   try{
@@ -18725,6 +18731,7 @@ function tkExtOpensOn(t, usedN){
 }
 function tkExtWhyNot(t, today, usedN){
   if(!t) return '找不到票券';
+  if(String(t.source_type||'')==='checkin_revoked') return '取消簽到，贈點已回收，不提供展延';   /* 同 tkIsRevoked（內嵌，見 buildWallet 的說明） */
   /* 按不到要說得出是哪一種票（2026-07-31：不是只說「不符合條件」）；拿不到名稱才退回「這種票券」 */
   if(!tkPocketNow(t).canExtend) return `${tkPocketNow(t).label||'這種票券'}不提供展延`;
   const td=today||ymd(TODAY);
@@ -24524,7 +24531,8 @@ function buildWallet(memberId, ctx){
        ・沒用完而到期 → 已過期方案（可展延／重新啟用的就是這一區）
        ・還沒上完 → 持有中（只預約還沒簽到不算用掉，2026-07-29）。 */
     let state;
-    if(t.status==='refunded') state='history';
+    if(String(t.source_type||'')==='checkin_revoked') state='revoked';   /* 取消簽到回收的贈點券（同 tkIsRevoked，內嵌是為了讓只抽出票券夾的測試沙箱也能跑）：不是 active／expired；歸歷史查詢（見 history()） */
+    else if(t.status==='refunded') state='history';
     /* 今天（或未來）才用完的先留「持有中」，明天再進歷史（0805 潘詩榆、0806 李曉娟規則不變） */
     else if(total>0 && used>=total && bks.some(b=>isAtt(b)&&String(b.date||'').slice(0,10)>=today)) state='active';
     else if(total>0 && used>=total) state='history';
@@ -24553,7 +24561,7 @@ function buildWallet(memberId, ctx){
     inClass:k=>slots.filter(s=>s.cls===k),
     active:k=>slots.filter(s=>s.state==='active'&&(!k||s.cls===k)).sort(byBuy),
     expired:k=>slots.filter(s=>s.state==='expired'&&(!k||s.cls===k)).sort(byBuy),
-    history:k=>slots.filter(s=>s.state==='history'&&(!k||s.cls===k)).sort(byBuy),
+    history:k=>slots.filter(s=>(s.state==='history'||s.state==='revoked')&&(!k||s.cls===k)).sort(byBuy),
     leftoverIn:k=>leftover.filter(b=>tkClass5({ticket_type_id:b.ticket_type_id,plan_name:b.category},typeMap)===k),
     sessionsLeft:k=>slots.filter(s=>s.state==='active'&&(!k||s.cls===k)).reduce((n,s)=>n+s.left,0)
   };
@@ -49144,7 +49152,7 @@ async function openMemberDetail(member_id){
       ? `<span class="tag" style="background:#eaf3ef;color:#2f6b4f;font-size:10px;margin-left:6px;" title="共用同一個堂數池，任一人上課都從這張票扣">共享・${_others.map(x=>(peerName[x]||'—')+(!_isOwner&&String(x)===String(t.member_id)?'（持有人）':'')).join('、')}</span>`
       : '';
     // 自主訓練點數與折抵券不提供共享
-    const canShare=(isDeskLike())&&tkCategoryOf(t)==='course';
+    const canShare=(isDeskLike())&&tkCategoryOf(t)==='course'&&!tkIsRevoked(t);
     /* 1V2 同行會員（2026-09-23）：只有 1V2 的教練課票才有第二位。
        ⚠ 與共享是兩件事，兩顆按鈕並排時字要分得開（「同行會員」vs「共享設定」）。 */
     /* ⚠ 2026-09-26：format 空白也放行（原本只認明確的 1V2）——
@@ -49155,7 +49163,7 @@ async function openMemberDetail(member_id){
     const _isV2=(_fmtU2==='1V2'||_fmtU2==='');
     /* ⚠ 同行不跟著 canShare（那一支綁 isDeskLike）—— 2026-09-26 起教練也能設同行，
          但**共享仍然只有櫃檯以上**（共享會動到堂數池，那是錢的事）。 */
-    const canPartner=canSetPartner() && tkCategoryOf(t)==='course' && _isV2;
+    const canPartner=canSetPartner() && tkCategoryOf(t)==='course' && _isV2 && !tkIsRevoked(t);
     const _ptIdM=(typeof tkPartnerOf==='function')?tkPartnerOf(t,member_id):'';
     const _ptName=_ptIdM ? (peerName[_ptIdM]||'') : '';
     /* 設了同行會員就標在票名旁（2026-09-23）——櫃檯掃一眼就知道這張票是誰跟誰。
@@ -49179,8 +49187,9 @@ async function openMemberDetail(member_id){
       </div>
       <div class="mck-dots2" style="margin:10px 0 12px;">${circles}</div>
       ${tkVoucherRuleHtml(t)}
+      ${tkRevokedNoteHtml(t)}
       <div class="md-tk-foot">
-        <span class="md-tk-meta">${tkBuyDateHtml(t)}　·　${tkExpireSeg(t,tkLogs,'到期')}　·　<span class="tag ${stTag[t.status]}" style="font-size:10.5px;">${stLabel[t.status]}</span>${tkMoneyHtml(t)}</span>
+        <span class="md-tk-meta">${tkBuyDateHtml(t)}　·　${tkExpireSeg(t,tkLogs,'到期')}　·　${tkIsRevoked(t)?'<span class="tag tag-warn" style="font-size:10.5px;">已回收</span>':`<span class="tag ${stTag[t.status]}" style="font-size:10.5px;">${stLabel[t.status]}</span>`}${tkMoneyHtml(t)}</span>
         ${(inst && (t.unlocked_sessions||0)<total && (isDeskLike()))?`<button class="btn btn-gold btn-sm" onclick="openInstallNext('${t.id}')">開通下一期</button>`:''}
         ${canShare?`<button class="btn btn-ghost btn-sm" onclick="openTicketShare('${t.id}','${member_id}')">${_others.length?'共享設定':'設為共享'}</button>`:''}
         ${canPartner?`<button class="btn btn-ghost btn-sm" onclick="openTicketPartner('${t.id}','${member_id}')">${_ptIdM?'同行會員':'設定同行'}</button>`:''}
@@ -49204,6 +49213,7 @@ async function openMemberDetail(member_id){
   const _isExpiredTk=t=>((WAL.of(t.id)||{}).state)==='expired';
   const _canReactTk=t=>_isExpiredTk(t)&&(Number(t.sessions_remaining)||0)>0;
   const _isHistoryTk=t=>{
+    if(((WAL.of(t.id)||{}).state)==='revoked') return true;   /* 已回收的贈點券留在歷史，不列入一般清單與可用張數 */
     return ((WAL.of(t.id)||{}).state)==='history';
   };
   const _canReact=(isDeskLike());
@@ -57706,18 +57716,18 @@ function ppRecordHtml(){
                 ${(c.ctByTicket&&c.ctByTicket[t.id])?`<button class="btn btn-ghost btn-sm" style="padding:2px 10px;font-size:11px;" onclick="openContractView('${c.ctByTicket[t.id]}')">合約</button>`:''}
                 ${/* 用完／過期的票也要能校正（2026-08-25）——黃喬莉那三張 1V2 全在這一區，
                      入口只做在「持有中」的話，最需要更正的舊票反而點不到。 */''}
-                ${(SESSION&&SESSION.role==='admin')?`<button class="btn btn-ghost btn-sm pp-hist-btn" onclick="event.stopPropagation();tkTidyOpen('${t.id}')" title="這張票蓋了哪幾堂（含已上過的）；改完票面餘額自動重算">校正</button>`:''}
+                ${(SESSION&&SESSION.role==='admin'&&!tkIsRevoked(t))?`<button class="btn btn-ghost btn-sm pp-hist-btn" onclick="event.stopPropagation();tkTidyOpen('${t.id}')" title="這張票蓋了哪幾堂（含已上過的）；改完票面餘額自動重算">校正</button>`:''}
                 ${canExtBtn?`<button class="btn btn-ghost btn-sm pp-hist-btn" onclick="event.stopPropagation();openTicketExtend('${t.id}')" title="剩 ${Number(t.sessions_remaining)||0} 堂沒用完，可展延 ${tkPlanDays(t)} 天至 ${String(tkExtendTo(t)).replace(/-/g,'/')}">展延</button>`
                   :(canExt?`<span class="pp-hist-tag" title="剩 ${Number(t.sessions_remaining)||0} 堂沒用完，可請櫃檯展延">可展延</span>`:'')}
                 ${/* 過期票最常需要自訂天數的展延（客人出國回來才發現過期）—— 主管以上限定 */''}
-                ${(isManagerUp()&&(Number(t.sessions_remaining)||0)>0&&t.status!=='refunded'&&t.status!=='void'&&t.status!=='cancelled')?`<button class="btn btn-ghost btn-sm pp-hist-btn" onclick="event.stopPropagation();openTicketExtendMgr('${t.id}')" title="自己填天數（例如出國、受傷）；不限次數，不影響退費。主管以上才看得到">主管展延</button>`:''}
+                ${(isManagerUp()&&!tkIsRevoked(t)&&(Number(t.sessions_remaining)||0)>0&&t.status!=='refunded'&&t.status!=='void'&&t.status!=='cancelled')?`<button class="btn btn-ghost btn-sm pp-hist-btn" onclick="event.stopPropagation();openTicketExtendMgr('${t.id}')" title="自己填天數（例如出國、受傷）；不限次數，不影響退費。主管以上才看得到">主管展延</button>`:''}
 `;
           return `<div class="bkd-tkcard bkd-tkcard-hist${canExt?' bkd-tkcard-ext':''}">
             <div class="bkd-tkcard-head"><span class="bkd-tkcard-name">${tkNoTag(WAL.noOf(t.id))}${t.plan_name||'票券'}${shrTag}${tkExtBadge(t)}</span>
               ${/* 2026-09-15 使用者：「歷史紀錄右上角的已完成改到 n/n 的左邊　讓右上角保持 n/n」——
                    狀態章長度不一（已完成／已過期／已退費），擺在最右邊會把 n/n 推得忽左忽右，
                    一整列看下去堂數對不齊。章移到左邊，右上角固定是 n/n。 */''}
-              <span class="bkd-tkcard-prog">${st}　<b class="num">${used}</b> / ${total}</span></div>
+              <span class="bkd-tkcard-prog">${tkIsRevoked(t)?`<span class="tk-revtag" style="margin:0 6px 0 0;">${TK_REVOKED_NOTE}</span>${tkStBadge('revoked')}`:st}　<b class="num">${used}</b> / ${total}</span></div>
             ${/* 2026-09-15 使用者：「有效票券的格局跟歷史紀錄票券的格局分佈不同嗎　有辦法整理一致嗎」——
                  附截圖：持有中那張是「購買・效期 → 圓圈 → 按鈕｜金額」，
                  這一張卻是「圓圈 → 購買・效期＋金額 → 按鈕」，三處都對不上。
@@ -61461,6 +61471,7 @@ PAGES.m_tickets=async function(){
      的狀態，它用的是「真的上過幾堂」，兩邊因此對不起來。
      改成同一個來源：有票券夾就吃它的 state，沒有才退回舊判斷。 */
   const rankOf=t=>{
+    if(tkIsRevoked(t)) return 4;   /* 取消簽到回收的贈點券：排最後、標「已回收」，不算過期 */
     if(isRefunded(t)) return 3;
     const _s=(typeof WAL!=='undefined' && WAL && typeof WAL.of==='function') ? WAL.of(t.id) : null;
     if(_s && _s.state) return _s.state==='active' ? 0 : (_s.state==='expired' ? 2 : 1);
@@ -61485,7 +61496,8 @@ PAGES.m_tickets=async function(){
         const total=Number(t.sessions_total)||0;
         const rem=Number(t.sessions_remaining)||0;
         const used=_sl.used;                           // 已使用堂數（實心格數，與圓點同源）
-        const stateBadge = rk===3 ? '<span class="mck-badge">已退款</span>'
+        const stateBadge = rk===4 ? '<span class="mck-badge">已回收</span>'
+                          : rk===3 ? '<span class="mck-badge">已退款</span>'
                           : rk===2 ? '<span class="mck-badge">已到期</span>'
                           : rk===1 ? '<span class="mck-badge">已使用完</span>'
                           : `<span class="tag ${stTag[t.status]||'tag-ok'}">${stLabel[t.status]||'可用'}</span>`;
@@ -61514,6 +61526,7 @@ PAGES.m_tickets=async function(){
               <div class="mwtk-name">${tkNoTag(WAL.noOf(t.id))}${t.plan_name||(ty?ty.name:'票券')}${t.format?' · '+String(t.format).toUpperCase():''}
                 <span class="tag tag-${ty?ty.color:'pt'}" style="margin-left:6px;font-size:10.5px;vertical-align:1px;">${ty?ty.name:'—'}</span></div>
               <div class="mwtk-sub">${tkBuyDateHtml(t)}　·　來源 ${srcLabel(t.source)}　·　到期 ${t.expire_date||'—'}</div>
+              ${tkRevokedNoteHtml(t)}
             </div>
             ${stateBadge}
           </div>
@@ -62229,7 +62242,8 @@ PAGES.tickets=async function(){
   const q=_tkQuery.trim();
   const qPhone=normPhone(q);
   let list=tickets.filter(t=>{
-    if(_tkStatus!=='all' && t.status!==_tkStatus) return false;
+    /* 已回收的贈點券不屬於「過期」：只在「已回收」與「全部狀態」查得到 */
+    if(_tkStatus!=='all' && (tkIsRevoked(t)?'revoked':t.status)!==_tkStatus) return false;
     if(!q) return true;
     const nm=memMap[t.member_id]||'';
     const ph=memPhone[t.member_id]||'';
@@ -62246,7 +62260,7 @@ PAGES.tickets=async function(){
       <input id="tk-q" class="tk-search" placeholder="搜尋會員姓名 / 手機 / 方案名稱" value="${_tkQuery.replace(/"/g,'&quot;')}"
              oninput="clearTimeout(window._tkT);window._tkT=setTimeout(()=>tkSearch(this.value),250)">
       <select class="tk-st" onchange="tkStatusFilter(this.value)">
-        ${stOpt('usable','可用')}${stOpt('used_up','用畢')}${stOpt('expired','過期')}${stOpt('refunded','已退')}${stOpt('all','全部狀態')}
+        ${stOpt('usable','可用')}${stOpt('used_up','用畢')}${stOpt('expired','過期')}${stOpt('refunded','已退')}${stOpt('revoked','已回收')}${stOpt('all','全部狀態')}
       </select>
       <span class="tk-count">${total} 筆${total>shown.length?`（顯示前 ${shown.length}）`:''}</span>
     </div>
@@ -62261,7 +62275,7 @@ PAGES.tickets=async function(){
            否則 ＝ 永久有效（舊方案的賣法）。 -->
       <td data-label="到期日">${fmtExpire(t.expire_date,t)}</td>
       <td data-label="來源" style="font-size:11px;color:var(--t2);">${srcLabel(t.source)}</td>
-      <td data-label="狀態"><span class="tag ${stTag[t.status]}">${stLabel[t.status]}</span></td>
+      <td data-label="狀態">${tkIsRevoked(t)?`<span class="tag tag-warn" title="${TK_REVOKED_NOTE}">已回收</span><div style="font-size:10.5px;color:var(--t3);margin-top:2px;">${TK_REVOKED_NOTE}</div>`:`<span class="tag ${stTag[t.status]}">${stLabel[t.status]}</span>`}</td>
       <td class="rwd-actions" data-label=""><button class="btn btn-ghost btn-sm" onclick="viewLogs('${t.id}')">詳細</button></td>
     </tr>`;}).join('')}
     </tbody></table>
@@ -66282,6 +66296,7 @@ async function bindHeldBookings(ticket_id, maxN){
 async function openReactivateTicket(tid){
   if(!(isDeskLike())){ showToast('只有管理員或櫃台可重新啟用'); return; }
   const t=await dbGet('member_tickets',tid); if(!t){ showToast('找不到票券'); return; }
+  if(tkIsRevoked(t)){ showToast('這張贈點券已回收（取消簽到），不能重新啟用'); return; }
   /* 自主訓練點數（含友善自主）過期即作廢，不提供重新啟用（2026-07-26 使用者定案）。
      入口已在會員票券區隱藏，這裡再擋一次避免舊連結／誤呼叫。 */
   const _ttAll=await dbGetAll('ticket_types'); const _tmR={}; (_ttAll||[]).forEach(x=>{_tmR[x.id]=x;});
@@ -66346,7 +66361,7 @@ async function viewLogs(ticket_id){
     tokens=`<div class="mck-dots2" style="margin:2px 0 12px;">${ticketTokens(t,bks,typeMap,doneN,null,t.member_id,_selfLg)}</div>`;
   }catch(_){}
   showModal(`<div class="modal-title">${t.plan_name||(ty?ty.name:'票券')}</div>
-    <div style="font-size:13px;color:var(--t2);margin-bottom:6px;">剩餘 ${t.sessions_remaining} / ${t.sessions_total} 堂　·　到期 ${fmtExpire(t.expire_date,t)}${lottoRuleNote(t)}</div>
+    <div style="font-size:13px;color:var(--t2);margin-bottom:6px;">剩餘 ${t.sessions_remaining} / ${t.sessions_total} 堂　·　到期 ${fmtExpire(t.expire_date,t)}${lottoRuleNote(t)}</div>${tkRevokedNoteHtml(t)}
     ${tokens}
     <div style="font-size:10.5px;color:var(--t3);margin-bottom:14px;">系統 ID：${ticket_id}</div>
     <div style="font-size:12px;font-weight:500;margin-bottom:8px;">使用紀錄</div>
@@ -75046,6 +75061,7 @@ async function _tlPlanApply(pid,useLast){
 function ticketCopy(t){
   const total=t.sessions_total||0, remain=t.sessions_remaining||0;
   // 失效
+  if(tkIsRevoked(t)) return { tone:'soft', line1:'這張贈點已回收。', line2:'取消簽到，贈點已回收。' };
   if(t.status==='expired') return { tone:'soft', line1:'這張票券已完成它的旅程。', line2:'期待再次陪伴你。' };
   if(t.status==='used_up'||remain<=0) return { tone:'done', line1:'恭喜完成這一張票券。', line2:'謝謝你陪自己走到這裡，期待下一段旅程。' };
   // 剛購買：尚未使用任何一堂（remain===total）
@@ -75076,8 +75092,15 @@ function ticketCopy(t){
 /* 票券金額與備註（2026-07-30 使用者指示：每張票旁邊顯示金額；0 元且能辨認就標原因）。
    金額只給櫃檯／管理員看，會員端與教練端不顯示。 */
 /* 票券狀態膠囊（2026-08-13 使用者指示）：已退費＝紅底、已完成（原「已用畢」）＝綠底、已過期＝金底 */
+/* ══ 取消簽到回收的贈點券（2026-11-23）══
+   fn_undo_checkin 把「這堂簽到發的贈點券」作廢時：status='expired'、source_type='checkin_revoked'，帳本整份保留。
+   那不是「期限到了」——顯示一律叫「已回收」，不可寫「已過期」，也不提供校正／展延／重新啟用；
+   不列入一般（可用）票券清單與可用張數，只留在歷史／全部狀態查詢，並註明原因。只改顯示，不動資料。 */
+function tkIsRevoked(t){ return !!t && String(t.source_type||'')==='checkin_revoked'; }
+var TK_REVOKED_NOTE='取消簽到，贈點已回收';
+function tkRevokedNoteHtml(t){ return tkIsRevoked(t)?`<div class="tk-revnote">${TK_REVOKED_NOTE}</div>`:''; }
 function tkStBadge(status){
-  const e={used_up:['已完成','tk-stb-done'],expired:['已過期','tk-stb-exp'],refunded:['已退費','tk-stb-refund']}[status];
+  const e={used_up:['已完成','tk-stb-done'],expired:['已過期','tk-stb-exp'],refunded:['已退費','tk-stb-refund'],revoked:['已回收','tk-stb-rev']}[status];
   return e?`<span class="tk-stb ${e[1]}">${e[0]}</span>`:'';
 }
 /* 「已完成」＝課真的銷完，不是「排完」（2026-08-20 使用者定案）——
@@ -75088,6 +75111,7 @@ function tkStBadge(status){
    ⚠ 只擋「已完成」——已過期／已退費與銷課數無關，照舊顯示。 */
 function tkStBadgeUsed(t, used, total){
   if(!t) return '';
+  if(tkIsRevoked(t)) return tkStBadge('revoked');
   if(t.status==='used_up' && Number(total)>0 && Number(used)<Number(total)) return '';
   return tkStBadge(t.status);
 }
@@ -75863,6 +75887,7 @@ function renderMemTickets(){
     .sort((a,b)=>{
       // 已使用完(0) → 已過期(1) → 已退款/作廢(2)
       const rk=t=>{
+        if(tkIsRevoked(t)) return 3;
         if(t.status==='refunded'||t.status==='void'||t.status==='cancelled') return 2;
         if(t.status==='expired'||(t.expire_date&&String(t.expire_date).slice(0,10)<today)) return 1;
         return 0;
@@ -75926,7 +75951,7 @@ function renderMemTickets(){
       const _st=String(t.start_date||t.purchase_date||'').slice(0,10);
       const _ex=t.expire_date?String(t.expire_date).slice(0,10):'';
       const _dates=_ex ? `${_st?_st.replace(/-/g,'/'):'—'} ～ ${_ex.replace(/-/g,'/')}` : fmtExpire(null,t);
-      const _tag=dim?`<span class="mck-badge">${(t.status==='expired'||(t.expire_date&&t.expire_date<today))?'已到期':'已使用完'}</span>`
+      const _tag=dim?`<span class="mck-badge">${tkIsRevoked(t)?'已回收':((t.status==='expired'||(t.expire_date&&t.expire_date<today))?'已到期':'已使用完')}</span>`
                    :(soon?`<span class="mck-badge mck-badge-warn">${days} 天後到期</span>`:'');
       return `<div class="mck-card mck-v2 mck-${color}${dim?' mck-dim':''}${pt?' mck-ptk':''}">
         ${pt?`<span class="tkwm" title="${escH(pt.who?pt.who+' 的票券':'同行')}：一起上課，不扣你的堂數">同行</span>`:''}
@@ -75951,7 +75976,7 @@ function renderMemTickets(){
           ${/* 展延時間軸也給會員看（2026-08-30 使用者指示：「這種方案期限的內容
                會員那邊也要能看到」）—— 效期被改過是會員最該知道的事，
                而且教練請假那種是店家補償，講出來才看得到誠意。 */''}
-          ${tkExtLineHTML(t, logs)}
+          ${tkExtLineHTML(t, logs)}${tkRevokedNoteHtml(t)}
           <div class="mck-v2-foot">
             <span class="mck-v2-left">${_tag}${tkExtBadge(t)}${(window._ctByTicket&&window._ctByTicket[t.id])?`<button class="btn btn-ghost btn-sm" style="font-size:11px;padding:3px 10px;" onclick="event.stopPropagation();openContractView('${window._ctByTicket[t.id]}')">合約</button>`:''}</span>
             <span class="mck-v2-dates">${_dates}</span>
@@ -75967,11 +75992,11 @@ function renderMemTickets(){
           ${/* 共享來的票標「享」（2026-08-04 使用者指示：「在本人帳號顯示另一個人的票券上標個享」）——
                持有人掛在對方名下、共用同一個堂數池；會員端讀不到對方姓名（RLS），只標章。 */''}
           <div class="mck-name">${tkNoTag(_sl.no)}${name}${fmt}${(!pt&&t.member_id!==SESSION.id)?`<span class="mck-badge" style="background:#f5ede0;color:#8a5e28;margin-left:6px;" title="共享票券：這張票掛在對方名下，你們共用同一個堂數池">享</span>`:''}${pt?`<span class="mck-badge mck-badge-pt" title="同行會員：一起上課，不扣你的堂數">同行</span>`:''}</div>
-          ${dim?`<span class="mck-badge">${(t.status==='expired'||(t.expire_date&&t.expire_date<today))?'已到期':'已使用完'}</span>`
+          ${dim?`<span class="mck-badge">${tkIsRevoked(t)?'已回收':((t.status==='expired'||(t.expire_date&&t.expire_date<today))?'已到期':'已使用完')}</span>`
                 :(soon?`<span class="mck-badge mck-badge-warn">${days} 天後到期</span>`:'')}${tkExtBadge(t)}
         </div>
         ${/* 小管家文案列已移除（2026-07-26 使用者指示） */''}
-        ${tkExtLineHTML(t, logs)}
+        ${tkExtLineHTML(t, logs)}${tkRevokedNoteHtml(t)}
         <div class="mck-dots2">${ticketTokens(t,_bksC,typeMap,usedCnt,null,SESSION.id,_sl.selfBk)}</div>
         ${(t.installment && t.unlocked_sessions!=null && t.unlocked_sessions<total)?`<div class="mck-install">分期方案・目前開通 <b>${t.unlocked_sessions}</b> / ${total} 堂　·　部分堂數需繳下一期後開通</div>`:''}
         ${/* 2026-08-08 使用者提問：「使用期限是從啟用日開始計算，所以很難在一開始就寫在
