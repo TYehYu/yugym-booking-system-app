@@ -297,7 +297,7 @@ ok('★ 單人課給「教練＋自己的課」，團課整堂取消只給櫃檯
 /* 2026-08-21 三修（使用者：「還是統一改成刪除課卡 比較直覺」） */
 /* 2026-09-08：團課改走 grpDelAsk（先問後面要不要一起刪），單人課維持原本那條 */
 ok('★ 統一叫「刪除預約」（使用者正式定名），範圍寫在副標',
-   /rows\+=row\(A\.isGroup\?`collapseBkCard\(\);grpDelAsk\('\$\{b\.id\}'\)`:`collapseBkCard\(\);confirmCancelBooking\('\$\{b\.id\}'\)`,'刪除預約',/.test(src)
+   /rows\+=row\(A\.isGroup\?`collapseBkCard\(\);grpDelAsk\('\$\{b\.id\}'\)`:`collapseBkCard\(\);confirmCancelBooking\('\$\{b\.id\}'\)`,\(A\.isGroup\?'取消整堂團課':'刪除預約'\),/.test(src)
    && !/A\.isGroup\?'取消整堂課程':'取消預約',/.test(src));
 ok('　　會員卡上那顆圓鈕仍叫「取消」（範圍是這個人／這個名額，不是整張卡）',
    /跟整張課卡不是同一件事，同名反而會讓人以為按哪個都一樣/.test(src));

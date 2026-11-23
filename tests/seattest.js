@@ -116,7 +116,7 @@ ok('★ 存名單時的孤兒出席鍵清理交給 fn_group_save_members RPC（�
    (()=>{ const i=src.indexOf("async function _saveGroupMembers(id){");
      const j=src.indexOf("\n/* 警告視窗按「知道了」",i);
      const body=src.slice(i,j);
-     return /sb\.rpc\('fn_group_save_members'/.test(body) && !/_live=new Set\(seatKeys\(b\)\)/.test(body); })());
+     return /sb\.rpc\('fn_group_save_members(_v2)?'/.test(body) && !/_live=new Set\(seatKeys\(b\)\)/.test(body); })());
 ok('　　孤兒鍵的危害寫在程式裡（會讓「整堂有沒有人簽到」失準）',
    /孤兒鍵會讓判斷失準/.test(src));
 ok('　　原因寫在程式裡', /兩個名額不能分開處理/.test(src));

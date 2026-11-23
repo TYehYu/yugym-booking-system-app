@@ -65,15 +65,15 @@ ok('　　綠框說明退款依據（自主訓練 1 點／團課依實際扣堂�
 
 console.log('\n櫃檯端：兩顆按鈕分得開');
 ok('★ 「扣掉這一堂」是紅底實心並加底線（2026-08-06 三修：btn-danger 淡粉底 → btn-red 實心紅）',
-   /<button class="btn btn-red cx-btn-eat" onclick="askSeriesCancel\('\$\{id\}','none'\)">取消・<b>扣掉這一堂<\/b><\/button>/.test(src)
+   /<button class="btn btn-red cx-btn-eat" onclick="askSeriesCancel\('\$\{id\}','none'\)">\$\{_gInfo1\?'取消整堂團課・':'取消・'\}<b>扣掉這一堂<\/b><\/button>/.test(src)
    && /\.cx-btn-eat b\{text-decoration:underline;text-underline-offset:2px;text-decoration-thickness:2px;\}/.test(src));
 /* 2026-08-06 二修（使用者：「確認是否扣票的地方要用顏色標示，綠色票券返回、紅色票券扣除」）
    —— 退回那顆改綠底，與色標同一個語彙；扣課那顆維持紅底實心。 */
 /* 2026-08-06 三修（使用者指示：「會扣票券的這個改成紅底按鈕」）——
    退回是實心綠、扣除卻只有淡粉底＋紅字，最該停下來看的那顆反而輕。 */
 ok('★ 「退回票券」＝實心綠、「扣掉這一堂」＝實心紅（份量對等）',
-   /<button class="btn btn-green" onclick="askSeriesCancel\('\$\{id\}','force'\)">取消・退回票券<\/button>/.test(src)
-   && /<button class="btn btn-red cx-btn-eat" onclick="askSeriesCancel\('\$\{id\}','none'\)">取消・<b>扣掉這一堂<\/b><\/button>/.test(src)
+   /<button class="btn btn-green" onclick="askSeriesCancel\('\$\{id\}','force'\)">\$\{_gInfo1\?'取消整堂團課・退回票券':'取消・退回票券'\}<\/button>/.test(src)
+   && /<button class="btn btn-red cx-btn-eat" onclick="askSeriesCancel\('\$\{id\}','none'\)">\$\{_gInfo1\?'取消整堂團課・':'取消・'\}<b>扣掉這一堂<\/b><\/button>/.test(src)
    && /\.btn-red\{background:var\(--danger,#b5372e\);color:#fff;box-shadow:var\(--shadow-xs\);\}/.test(src));
 /* 2026-08-21：會員端教練課的取消流程整段退場（只能團課與自主訓練），
    所以「會員端的確定取消按鈕」這條斷言連同 doMemCancelBooking 一起收掉，

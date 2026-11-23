@@ -73,7 +73,7 @@ console.log('\n③ 接線');
    才記 _addFam／_addTk（給連續預約沿用同一位使用人/同一張票），邏輯沒變，
    只是從「_ded 成立就記」換成「RPC 回傳這筆 ok 就記」。 */
 ok('★ 加名單扣課成功才記歸屬（seat_tickets 交給 RPC，_addFam/_addTk 看 RPC 回傳）',
-   /sb\.rpc\('fn_group_save_members'/.test(src)
+   /sb\.rpc\('fn_group_save_members(_v2)?'/.test(src)
    && /if\(r && r\.ok\)\{\s*\n\s*const _f=String\(p\.tk\.family_user\|\|''\);\s*\n\s*if\(_addFam\[p\.mid\]===undefined\) _addFam\[p\.mid\]=_f; else if\(_addFam\[p\.mid\]!==_f\) _addFam\[p\.mid\]=null;/.test(src)
    && /if\(_addTk\[p\.mid\]===undefined\) _addTk\[p\.mid\]=String\(p\.tk\.id\); else if\(_addTk\[p\.mid\]!==String\(p\.tk\.id\)\) _addTk\[p\.mid\]=null;/.test(src));
 /* 2026-11-01：「管理名單」那條路的 seat_tickets 移除重編搬進 RPC（同名額鍵規則），

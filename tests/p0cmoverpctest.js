@@ -47,7 +47,9 @@ ok('★★ 建立預約的 RPC 路徑也認得 TKWIN', /TKWIN\.OUT_OF_WINDOW'\)=
 
 console.log('\n③ 簽到／撤銷／補簽後清票券快取（效期由資料庫觸發器啟用或重算）');
 const CLR="dbCacheClear(['member_tickets','ticket_logs']);";
-ok('★★★ 撤銷簽到（兩個入口）', (grabFn('_undoCheckin').includes(CLR)) && grabFn('undoCheckinDirect').includes(CLR));
+/* 2026-11-23：兩個入口都改走 undoCheckinRpc（fn_undo_checkin），快取在那一支統一清，清單是原本的超集（含 member_tickets／ticket_logs） */
+ok('★★★ 撤銷簽到（兩個入口）', /undoCheckinRpc\(/.test(grabFn('_undoCheckin')) && /undoCheckinRpc\(/.test(grabFn('undoCheckinDirect'))
+   && /dbCacheClear\(\['bookings','member_tickets','ticket_logs','notifications'\]\)/.test(grabFn('undoCheckinRpc')));
 ok('★★★ 備援直寫簽到', /await dbPut\('bookings',b\);\s*\n\s*dbCacheClear\(\['member_tickets','ticket_logs'\]\);[^\n]*\n\s*if\(_clvTk\)/.test(src));
 ok('★★ 補簽', grabFn('submitMakeup').includes(CLR));
 ok('★★ 名冊逐人切換', grabFn('bkRosterToggle').includes(CLR));

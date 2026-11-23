@@ -15840,8 +15840,8 @@ async function empMergeSelf(rows){
 let sb=null;
 // ── 版本號（日期+時間格式：年後兩碼+月+日.時分，例 26620.1058 = 26年6/20 10:58）──
 // 每次改版手動更新這一行即可，畫面與 title 會一起更新
-const APP_VERSION = '261123.0931';
-const APP_VERSION_LABEL = 'v261123.0931';
+const APP_VERSION = '261123.1713';
+const APP_VERSION_LABEL = 'v261123.1713';
 const CLOUD = !!(window.YUGYM_CONFIG && window.YUGYM_CONFIG.url && window.YUGYM_CONFIG.anonKey);
 if(CLOUD){ sb = supabase.createClient(window.YUGYM_CONFIG.url, window.YUGYM_CONFIG.anonKey); }
 
@@ -25005,9 +25005,10 @@ async function _groupCancelSeat(bid,seatKey){
   const _gcsCtxId='gcs'+window._gcsSeq;
   { const ks=Object.keys(window._gcsCtx); if(ks.length>40) ks.slice(0,ks.length-40).forEach(k=>{ delete window._gcsCtx[k]; }); }
   window._gcsCtx[_gcsCtxId]={ bid:String(bid), sk, mid:String(mid), rev:rev, ticketId:_seatTk?_seatTk.id:null, state:(CLOUD&&sb&&rev)?'ready':'norev' };
-  showModal(`<div class="modal-title">取消團體課預約</div>
-    <div style="font-size:13.5px;color:var(--text);padding:2px 0 10px;">
-      ${m?m.name:'會員'}　·　${b.date.replace(/-/g,'/')} ${b.start_time}${seats>1?`　（共 ${seats} 個名額，本次取消<b>第 ${sno} 個</b>）`:''}</div>
+  showModal(`<div class="modal-title">取消此名額</div>
+    <div style="font-size:13.5px;color:var(--text);padding:2px 0 6px;">
+      <b>${m?escH(m.name):'會員'}</b>　·　${b.date.replace(/-/g,'/')} ${b.start_time}${seats>1?`　（共 ${seats} 個名額，本次取消<b>第 ${sno} 個</b>）`:''}</div>
+    <div style="font-size:12px;color:var(--t2);margin:0 0 10px;line-height:1.7;">只取消這一位在這一堂的名額；同堂其他學員、其他週次都不受影響。</div>
     ${/* 2026-09-11 收斂（使用者：「每個視窗都清楚乾淨　不要規則一大堆」）——
          只有 24 小時內要紅字獨立一條；其餘一條一件事。「距離開課還有 N 小時」不是規則，拿掉。 */''}
     ${within24?`<div class="mk-key">距離開課不到 24 小時<small>約 ${Math.max(0,Math.floor(hrs))} 小時後開課</small></div>`:''}
@@ -25019,7 +25020,8 @@ async function _groupCancelSeat(bid,seatKey){
         : `<li>想保留補課權益請改用「請假」：${tkChip('eat','本堂照扣')}＋補課券 14 天</li>`}
     </ul>
     <div class="modal-foot"><button class="btn btn-ghost" onclick="openBookingDetail('${bid}')">返回</button>
-      <button class="btn btn-green" onclick="doGroupCancelSeat('${bid}','${sk}','${_gcsCtxId}')">確定取消・退回票券</button></div>`);
+      <button class="btn btn-green" onclick="doGroupCancelSeat('${bid}','${sk}','${_gcsCtxId}')">確定取消此名額・退回票券</button></div>`);
+  try{ cxSafeFocus(); }catch(_){}
 }
 async function doGroupCancelSeat(bid,seatKey,ctxId){
  /* 2026-11-19 有雲端連線一律走伺服器單一交易（fn_cancel_group_seat）：名單／座位票／出席／備註、退款、帳本在同一個交易完成，
@@ -33790,7 +33792,7 @@ async function ashEditAsk(id){
   if(_canDelBk)
     /* 團課改走 grpDelAsk（2026-09-08）：後面還有同系列就先問「只刪這一堂／連同後面 N 堂」。
        單人課維持原本那條路 —— 它已經有 askSeriesCancel 在問連續預約了。 */
-    rows+=row(A.isGroup?`collapseBkCard();grpDelAsk('${b.id}')`:`collapseBkCard();confirmCancelBooking('${b.id}')`,'刪除預約',
+    rows+=row(A.isGroup?`collapseBkCard();grpDelAsk('${b.id}')`:`collapseBkCard();confirmCancelBooking('${b.id}')`,(A.isGroup?'取消整堂團課':'刪除預約'),
       A.isGroup?`整堂取消、名單上的 ${mids(b).length} 個名額一起退`
                :'下一步可以選擇退回票券或扣課不退','ash-ei-danger');
   /* 教練看自己的團課時，把「為什麼沒有刪除」與「該用什麼」講清楚 —— 找不到按鈕又沒有
@@ -40806,7 +40808,8 @@ async function expandBkCard(el, id){
   if((!_ashMode || !isGroup) && canCancel && (isGroup ? staff : own)){
     /* 2026-07-29：直接開「取消預約」視窗——那裡才有 24 小時警示與「退回票券／扣課不退」
        的明確選擇（使用者定案的取消政策）。 */
-    btns += evoBtn('evo-r1','evo-danger',`collapseBkCard();confirmCancelBooking('${id}')`,'x','取消');
+    /* 2026-11-23 取消用語分層：團課這顆是「整堂」，不能只寫「取消」（會與逐名額的取消混淆） */
+    btns += evoBtn('evo-r1','evo-danger',`collapseBkCard();confirmCancelBooking('${id}')`,'x',isGroup?'取消整堂團課':'取消');
   }
   // ⑤ 簽到（綠；團課 → 開名單逐人簽；單人已簽 → 兩段式取消簽到，不用原生 confirm）
   //    2026-08-20 起管理員手機改成每位會員卡上各自一顆，不再是整堂一顆
@@ -41082,7 +41085,7 @@ async function bkCardPop(el, b, btns, acts){
           }else{
             if(_ck && _canLeave && !inHere && !A.closed)
               _leaveBtn=`<button type="button" class="ash-mlv" onclick="event.stopPropagation();ashSeatAct('${b.id}','leave','${r.sk}')">請假</button>`;
-            if(A.staff && !inHere && !A.closed) _outOrbs += evoBtn('','evo-danger',`ashSeatAct('${b.id}','cancel','${r.sk}')`,'x','取消');
+            if(A.staff && !inHere && !A.closed) _outOrbs += evoBtn('','evo-danger',`ashSeatAct('${b.id}','cancel','${r.sk}')`,'x','取消此名額');
             if(_ck && !A.calCtx && !A.closed) _outOrbs += inHere
               ? evoBtn('','evo-primary',`ashSeatAct('${b.id}','attend','${r.sk}')`,'check','取消簽到')
               : evoAttBtn(b,'','evo-primary',`ashSeatAct('${b.id}','attend','${r.sk}')`,'check','簽到');
@@ -41091,7 +41094,7 @@ async function bkCardPop(el, b, btns, acts){
           /* 沒有名額鍵、但仍是團課（舊資料只有 member_id 的那種）—— 保留原本的右側圓鈕。
              一般單人課走下方那一排（2026-08-21），這裡不再重複畫。 */
           /* 同上：團課整堂取消只給櫃檯以上（2026-08-22） */
-          if(A.canCancel && A.staff) _outOrbs += evoBtn('','evo-danger',`collapseBkCard();confirmCancelBooking('${b.id}')`,'x','取消');
+          if(A.canCancel && A.staff) _outOrbs += evoBtn('','evo-danger',`collapseBkCard();confirmCancelBooking('${b.id}')`,'x','取消整堂團課');
           if(_ck && !A.calCtx && !A.closed) _outOrbs += A.checked
             ? evoBtn('','',`bkOrbitUndo(this,'${b.id}')`,'undo','取消簽到')
             : evoAttBtn(b,'','evo-primary',`collapseBkCard();checkInBooking('${b.id}')`,'check','簽到');
@@ -41449,13 +41452,42 @@ async function undoCheckinDirect(id){
   const b=await dbGet('bookings',id);
   if(!b){ showToast('找不到預約'); return; }
   if(b.status!=='checked_in'){ showToast('此預約非已簽到狀態'); return; }
-  b.status='booked';
-  b.checked_in_at=null;
-  await dbPut('bookings',b);
-  dbCacheClear(['member_tickets','ticket_logs']);   // P0-E：簽到／撤銷由資料庫觸發器啟用或重算票券效期、並寫痕跡帳——前端票券快取要丟掉才看得到
-  await revokeCheckinReward(b);   // 收回券（內含沒用刪除/用過保留提示，並清 reward_issued）
+  if(!(await undoCheckinRpc(id))) return;
   closeModal();
   navTo(CUR_PAGE);
+}
+/* 2026-11-23 取消簽到＋精確回收贈點改走伺服器單一交易（fn_undo_checkin，蘭燕案例）：
+   ① 只收「這一堂」發的贈點（source_booking_id 精確對應）；② 已排但還沒到課的連帶自主訓練會取消並退點；
+   ③ 只要有任何一筆已實際到課（含混合狀態）就整個停止，連取消簽到都不做，並列出是哪幾筆；
+   ④ 重送安全（已經不是已簽到＝什麼都不做）；⑤ 失敗整筆回滾。舊的 revokeCheckinReward（前端多段寫入）不再用在這兩條取消簽到路徑。
+   回傳 true＝已取消簽到（或本來就不是已簽到）；false＝沒有取消。 */
+async function undoCheckinRpc(id){
+  let res=null, err=null;
+  try{ const r=await sb.rpc('fn_undo_checkin',{p_booking_id:id}); res=r&&r.data; err=r&&r.error; }catch(e){ err=e; }
+  dbCacheClear(['bookings','member_tickets','ticket_logs','notifications']);
+  if(err || !res){
+    showToast('⚠ 取消簽到失敗：連線不穩，不確定有沒有完成；請先看課卡狀態，再決定要不要重按（重按不會重複收回贈點）', 8000);
+    return false;
+  }
+  if(res.ok!==true){
+    if(res.error_code==='REWARD_ATTENDED' && Array.isArray(res.attended)){
+      const WD=['日','一','二','三','四','五','六'];
+      const rows=res.attended.map(a=>{ const d=parseYmd(a.date); return '<li>'+String(a.date||'').replace(/-/g,'/')+(d?'（'+WD[d.getDay()]+'）':'')+' '+String(a.time||'').slice(0,5)+'　'+(({checked_in:'已簽到',completed:'已完成',no_show:'未到課',coach_leave:'教練請假'})[a.status]||a.status)+'</li>'; }).join('');
+      showModal('<div class="modal-title" style="color:var(--danger,#b5372e);">沒有取消簽到</div>'
+        +'<div style="font-size:13px;color:var(--text);line-height:1.9;">這堂簽到發放的自主訓練點數，<b>已經有實際到課（或已結案）的預約</b>，不能自動收回：</div>'
+        +'<ul style="margin:8px 0 8px 18px;padding:0;font-size:13px;line-height:1.9;">'+rows+'</ul>'
+        +'<div style="font-size:12px;color:var(--t2);line-height:1.8;background:var(--card2);border-radius:9px;padding:10px 12px;">這次<b>沒有更動任何資料</b>（簽到、贈點、自主訓練預約都維持原樣）。請先手動處理上面那幾筆，再回來取消簽到。</div>'
+        +'<div class="modal-foot"><button class="btn btn-green" onclick="closeModal()">知道了</button></div>');
+    }else{
+      showToast('⚠ '+(res.message||'取消簽到沒有完成，沒有任何資料被更動'), 7000);
+    }
+    return false;
+  }
+  if(res.already){ showToast('這筆預約已經不是「已簽到」狀態'); return true; }
+  showToast('已取消簽到'+(res.revoked_tickets
+    ? '，並收回本堂贈點'+(res.cancelled_bookings?`、取消 ${res.cancelled_bookings} 堂未到課的自主訓練（退回 ${res.refunded_points} 點）`:'')
+    : ''), 5000);
+  return true;
 }
 // ── 團課簽到名單：卡片下方吊出白色小卡，逐人點選簽到/取消簽到 ──
 // 新結構（單筆多人 member_ids + attendance）與舊結構（同時段多筆單人合併卡）都支援。
@@ -43550,7 +43582,7 @@ async function openBookingDetail(id){
           : `<span style="margin-left:auto;display:flex;gap:6px;">`
             /* 2026-07-29 使用者指示：團體課補上「取消」——退出名單並退回票券，
                與「請假」（本堂照扣、另發補課券）區隔。 */
-            + (inHere?'':`<button class="btn btn-ghost btn-sm" style="color:#b5372e;" onclick="groupCancelSeat('${b.id}','${sk}')">取消</button>`)
+            + (inHere?'':`<button class="btn btn-ghost btn-sm" style="color:#b5372e;" onclick="groupCancelSeat('${b.id}','${sk}')">取消此名額</button>`)
             + (inHere?'':`<button class="btn btn-ghost btn-sm" onclick="groupToggleLeave('${b.id}','${sk}')">請假</button>`)
             + ((inHere||isPastD)
                 ? `<button class="btn btn-ghost btn-sm" onclick="toggleGroupAttend('${b.id}','${sk}')">${inHere?'取消簽到':'補簽'}</button>`
@@ -43762,7 +43794,7 @@ async function openBookingDetail(id){
             : (bkIsSelf(b)&&b.member_id===SESSION.id
                 ? `<button class="btn btn-danger" onclick="memCancelSelf('${b.id}')">取消預約</button>`
                 : ''))   /* 會員視角：教練課取消請洽櫃檯；原本誤走櫃檯流程（無寫入權）點了沒反應（2026-07-28） */
-        : `<button class="btn btn-danger" onclick="confirmCancelBooking('${b.id}')">取消預約</button>`):''}
+        : `<button class="btn btn-danger" onclick="confirmCancelBooking('${b.id}')">${isGroupD?'取消整堂團課':'取消預約'}</button>`):''}
       ${/* 待簽約卡位（2026-07-29 使用者指示）：主要動作放最下方、獨佔一列，
            收完錢就按這顆轉成正式預約（綁會員＋扣票）。 */''}
       ${/* 綁定會員（2026-08-04 使用者指示：「綁定由櫃檯跟教練手動確認，只是要有這一條路徑」）——
@@ -44406,13 +44438,9 @@ async function _undoCheckin(id){
   const b=await dbGet('bookings',id);
   if(!b){ showToast('找不到預約'); return; }
   if(b.status!=='checked_in'){ showToast('此預約非已簽到狀態'); return; }
-  const ok=confirm('確定要取消這筆簽到嗎？\n\n將改回「未簽到」，並收回這堂發放的自主訓練券（若券已使用則保留）。');
+  const ok=confirm('確定要取消這筆簽到嗎？\n\n將改回「未簽到」，並收回這堂發放的贈點；已排但還沒到課的自主訓練會一併取消並退點。若其中有已實際到課的，會停止、什麼都不改。');
   if(!ok) return;
-  b.status='booked';
-  b.checked_in_at=null;
-  await dbPut('bookings',b);
-  dbCacheClear(['member_tickets','ticket_logs']);   // P0-E：簽到／撤銷由資料庫觸發器啟用或重算票券效期、並寫痕跡帳——前端票券快取要丟掉才看得到
-  await revokeCheckinReward(b);   // 收回券（內含沒用刪除/用過保留提示，並清 reward_issued）
+  if(!(await undoCheckinRpc(id))) return;
   closeModal();
   navTo(CUR_PAGE);
 }
@@ -44976,6 +45004,28 @@ function cancelIsExempt(b){
   if(b.benefit_type==='training_pass' || bkIsSelf(b)) return true;
   return !!(b.created_at && (Date.now()-new Date(b.created_at).getTime()) <= 10*60*1000);
 }
+/* ── 團課取消確認窗的共用零件（2026-11-23 取消介面分層）──
+   名單來自 member_ids（逐名額；同一人多個名額會重複出現），受影響名額數＝名單長度。
+   ⚠ 只改說明文字與按鈕用語，不碰退課規則（退不退、扣不扣一律沿用原本的判斷）。 */
+function cxSafeFocus(){
+  /* 危險鈕不當預設：確認窗一開就把焦點放在「返回」，按 Enter／空白鍵＝返回，不是送出 */
+  setTimeout(()=>{ const b=document.querySelector('#modal-bg .modal-foot .btn-ghost'); if(b) b.focus(); },0);
+}
+async function grpRosterInfoHtml(b){
+  const ids=mids(b).map(String);
+  let nm={}; try{ (await dbGetAll('members')).forEach(m=>{ if(m) nm[String(m.id)]=m.name; }); }catch(_){}
+  const uniq=[...new Set(ids)];
+  const att=(b.attendance&&typeof b.attendance==='object')?b.attendance:{};
+  const seen={};
+  const rows=ids.map(id=>{
+    seen[id]=(seen[id]||0)+1; const key=seen[id]>1?id+'#'+seen[id]:id;
+    const tag=att[key]==='leave'?'（請假）':att[key]==='checked_in'?'（已簽到）':'';
+    return '<li>'+escH(nm[id]||'會員')+(seen[id]>1?' 第 '+seen[id]+' 個名額':'')+tag+'</li>';
+  }).join('');
+  return `<div style="font-size:13px;color:var(--text);padding:4px 0;"><b>${String(b.date).replace(/-/g,'/')} ${String(b.start_time||'').slice(0,5)}</b>　團體課</div>
+    <div style="font-size:12.5px;color:var(--danger,#b5372e);margin:4px 0 6px;line-height:1.8;">⚠ 這是<b>整堂</b>取消：名單上 <b>${ids.length}</b> 個名額（學員 ${uniq.length} 位）全部取消。只要取消其中一位，請返回後用該學員旁的「取消此名額」。</div>
+    ${ids.length?`<details style="margin:0 0 6px;"><summary style="font-size:12px;color:var(--t2);cursor:pointer;">查看名單（${ids.length} 個名額）</summary><ul style="margin:6px 0 0 18px;padding:0;font-size:12.5px;line-height:1.8;">${rows}</ul></details>`:'<div style="font-size:12px;color:var(--t2);">名單目前是空的。</div>'}`;
+}
 async function confirmCancelBooking(id){
   const b=await dbGet('bookings',id);
   if(!b){showToast('找不到預約');return;}
@@ -45048,8 +45098,9 @@ async function confirmCancelBooking(id){
       : (b.pending_contract ? '<b>待簽約卡位</b>，還沒收款也沒有票券'
       : (b.category==='場租' ? '場地租借不涉及票券'
       : '沒有綁票券（舊系統匯入的課多半如此）'));
-    showModal(`<div class="modal-title">取消預約</div>
-      <div style="font-size:13.5px;color:var(--text);padding:6px 0 4px;">確定要取消 ${b.date} ${String(b.start_time).slice(0,5)} 的${b.category}嗎？${b.trial_name?`<br><span style="color:var(--t2);font-size:12.5px;">客戶：${b.trial_name}</span>`:''}</div>
+    const _gInfo0=bkIsGroup(b)?await grpRosterInfoHtml(b):'';
+    showModal(`<div class="modal-title">${_gInfo0?'取消整堂團課':'取消預約'}</div>
+      ${_gInfo0||`<div style="font-size:13.5px;color:var(--text);padding:6px 0 4px;">確定要取消 ${b.date} ${String(b.start_time).slice(0,5)} 的${b.category}嗎？${b.trial_name?`<br><span style="color:var(--t2);font-size:12.5px;">客戶：${b.trial_name}</span>`:''}</div>`}
       ${/* 2026-09-11 收斂成條列（使用者：「每個視窗都清楚乾淨　不要規則一大堆」）——
            「取消只會釋出時段與場地」原本五種原因各寫一次，抽成共用的一條 */''}
       <ul class="mk-pts">
@@ -45061,7 +45112,8 @@ async function confirmCancelBooking(id){
         ${/* 'plain'（2026-09-11）：原本送 'none'＝扣課不退 —— 畫面說「票券不變」，程式卻是「不退」，
              萬一執行時資料庫查到其實有扣，就把客人一堂吃掉、還記成「櫃檯選擇」（江旻季 9/10）。
              'plain' 在 cancelBooking 裡：有扣過就退、沒扣過就只取消，永遠不標扣課不退。 */''}
-        <button class="btn btn-dark" onclick="askSeriesCancel('${id}','plain')">確定取消</button></div>`);
+        <button class="btn btn-dark" onclick="askSeriesCancel('${id}','plain')">${_gInfo0?'確定取消整堂團課':'確定取消'}</button></div>`);
+    if(_gInfo0) cxSafeFocus();
     return;
   }
 
@@ -45074,8 +45126,9 @@ async function confirmCancelBooking(id){
     const _w24 = within24
       ? `<div class="mk-key">距離開課不到 24 小時<small>約 ${Math.max(0,Math.floor(hrs))} 小時・臨時取消，可選擇扣課</small></div>`
       : '';
-    showModal(`<div class="modal-title">取消預約</div>
-      <div style="font-size:13px;color:var(--text);padding:4px 0;">${b.date} ${b.start_time}　${b.category}</div>
+    const _gInfo1=bkIsGroup(b)?await grpRosterInfoHtml(b):'';
+    showModal(`<div class="modal-title">${_gInfo1?'取消整堂團課':'取消預約'}</div>
+      ${_gInfo1||`<div style="font-size:13px;color:var(--text);padding:4px 0;">${b.date} ${b.start_time}　${b.category}</div>`}
       ${_w24}
       ${/* 團課一堂可能扣好幾堂（同一人佔多個名額、或多位會員各扣一堂）→ 講實際筆數，
            不要一律寫「1 堂」（2026-08-01）。 */''}
@@ -45090,11 +45143,12 @@ async function confirmCancelBooking(id){
         ${/* 2026-08-01 使用者指示：會扣課的那顆要一眼看得出來 —— 原本兩顆長得幾乎一樣，
              按錯就是直接吃掉客人的堂數。扣課那顆改成紅底實心，退課那顆維持一般樣式。 */''}
         ${/* 2026-08-06：退回那顆改綠底，與色標同一個語彙（綠＝退回、紅＝扣除） */''}
-        <button class="btn btn-green" onclick="askSeriesCancel('${id}','force')">取消・退回票券</button>
+        <button class="btn btn-green" onclick="askSeriesCancel('${id}','force')">${_gInfo1?'取消整堂團課・退回票券':'取消・退回票券'}</button>
         ${/* 防線（2026-08-13 使用者指示：吳宸維 10/23 誤按扣課案例）——
              扣課鈕只在開課前 24 小時內出現，提前取消沒有「會吃掉堂數」的選項可按錯。 */''}
-        ${within24?`<button class="btn btn-red cx-btn-eat" onclick="askSeriesCancel('${id}','none')">取消・<b>扣掉這一堂</b></button>`:''}
+        ${within24?`<button class="btn btn-red cx-btn-eat" onclick="askSeriesCancel('${id}','none')">${_gInfo1?'取消整堂團課・':'取消・'}<b>扣掉這一堂</b></button>`:''}
       </div>`);
+    if(_gInfo1) cxSafeFocus();
     return;
   }
   /* 教練端（2026-07-30 使用者回報「教練端取消課程，如果在 24 小時內取消，沒有會取消票券的提示」）
@@ -45272,7 +45326,14 @@ async function _saveGrpMax(id){
    ⚠ 資料與存檔完全共用（_grpSel／_saveGroupMembers）——
      兩套流程各寫一份正是這個檔案吃過最多虧的地方。 */
 async function openGroupMembers(id, keepSel, addMode){
+  /* 2026-11-23 名單儲存的「開窗版本」：先讀版本、再讀預約、再讀一次版本，兩次一樣才採用（同 _groupCancelSeat 的做法）。
+     存檔時把它帶給伺服器：開窗之後名單被別人（或自己上一次）改過，伺服器就拒絕、不覆蓋。讀不到版本或兩次不同＝這次不允許儲存，必須重開名單。 */
+  let _gmV1=null, _gmV2=null;
+  try{ if(typeof CLOUD!=='undefined' && CLOUD && sb){ const r1=await sb.rpc('fn_group_seat_rev',{p_booking_id:id}); _gmV1=(r1&&r1.data&&r1.data.ok)?String(r1.data.rev):null; } }catch(_){}
   const b=await dbGet('bookings',id);
+  try{ if(_gmV1){ const r2=await sb.rpc('fn_group_seat_rev',{p_booking_id:id}); _gmV2=(r2&&r2.data&&r2.data.ok)?String(r2.data.rev):null; } }catch(_){}
+  window._gmRev=window._gmRev||{}; window._gmRev[id]=(_gmV1&&_gmV1===_gmV2)?_gmV1:null;
+  if(!window._gmRev[id]) showToast('⚠ 讀不到名單版本（或讀取時名單剛好被改動），為避免蓋掉別人的修改，這份名單不能儲存；請關閉後重新開啟名單', 8000);
   const members=(await dbGetAll('members')).filter(m=>m.status==='active');
   const allTk=await dbGetAll('member_tickets');
   if(!window._ttCache){ try{ window._ttCache=await dbGetAll('ticket_types'); }catch(_){ window._ttCache=[]; } }
@@ -45576,15 +45637,36 @@ async function _saveGroupMembers(id){
      attendance 孤兒鍵清理（2026-07-30 發現：移出名單的人狀態留在 attendance 會變成
      孤兒鍵，「整堂有沒有人簽到」是看 Object.values(attendance)，孤兒鍵會讓判斷失準）
      也一併交給 RPC 用同一套 seatKeys() 名額鍵規則清——理由沒變，只是搬了地方。 */
-  const {data:_rpcRes, error:_rpcErr} = await sb.rpc('fn_group_save_members', {
-    p_booking_id:b.id, p_max_heads:gmax, p_ticket_type_fix:b.ticket_type_id||null,
+  /* 2026-11-23 改走 fn_group_save_members_v2：每一次「儲存」有一個操作識別（同一份內容重按＝同一個識別）。
+     ① 同一個識別伺服器只做一次，重送／回應遺失後重試只會拿到第一次的結果（replayed），不會再移除下一個名額、再退一堂。
+     ② 帶開窗時的版本（p_expect_rev）：名單在這之間被改過就拒絕。
+     ③ 失敗＝整筆回滾，訊息用伺服器回的中文 message。 */
+  const _gmRevArg=(window._gmRev&&window._gmRev[b.id])||null;
+  if(!_gmRevArg){ showToast('⚠ 這份名單沒有取得開窗版本，為避免蓋掉別人的修改，沒有儲存；請關閉後重新開啟名單再操作', 8000); return; }
+  const _gmKey=JSON.stringify([b.id,_gmRevArg,gmax,b.ticket_type_id||null,p_adds,removed]);
+  window._gmOp=window._gmOp||{};
+  if(!window._gmOp[b.id]||window._gmOp[b.id].key!==_gmKey) window._gmOp[b.id]={key:_gmKey,id:uid('GM')};
+  const {data:_rpcRes, error:_rpcErr} = await sb.rpc('fn_group_save_members_v2', {
+    p_booking_id:b.id, p_op_id:window._gmOp[b.id].id, p_expect_rev:_gmRevArg,
+    p_max_heads:gmax, p_ticket_type_fix:b.ticket_type_id||null,
     p_adds, p_removes:removed
   });
   dbCacheClear(['bookings','member_tickets','ticket_logs']);
   if(_rpcErr || !_rpcRes || _rpcRes.ok!==true){
-    showToast('⚠ 名單儲存失敗：'+(tkQuotaMsg(_rpcErr&&_rpcErr.message)||(_rpcRes&&_rpcRes.error_code)||(_rpcErr&&_rpcErr.message)||'未知錯誤'));
+    /* 結果不明（連線層失敗、沒有任何回應）：保留同一個操作識別，再按一次「儲存」會用同一個識別——
+       伺服器已經做過就回放第一次的結果，沒做過才做。確定失敗（伺服器有回應且整筆回滾）就換新識別。 */
+    const _unsure=!!_rpcErr && !_rpcErr.code && !_rpcRes;
+    if(!_unsure && !(_rpcRes && _rpcRes.error_code==='BUSY')) delete window._gmOp[b.id];
+    const _noFn=!!_rpcErr && (_rpcErr.code==='PGRST202' || /fn_group_save_members_v2/.test(String(_rpcErr.message||'')));
+    showToast('⚠ 名單儲存失敗：'+(tkQuotaMsg(_rpcErr&&_rpcErr.message)
+      ||(_rpcRes&&_rpcRes.message)
+      ||(_noFn?'資料庫還沒有更新到新版名單儲存，整筆沒有儲存；請通知管理員':'')
+      ||(_unsure?'連線不穩，不確定有沒有儲存成功；請先看名單，再按一次「儲存」（同一個操作不會重複執行）':'')
+      ||(_rpcErr&&_rpcErr.message)||'未知錯誤'), 8000);
     return;
   }
+  delete window._gmOp[b.id];
+  if(window._gmRev) window._gmRev[b.id]=_rpcRes.rev?String(_rpcRes.rev):null;
   const _addFam={}, _addTk={};   // 會員 → 這次加的名額扣到哪位使用人／哪一張票（null＝混用，不限定）
   const _results=_rpcRes.results||[];
   const _addResults=_results.filter(r=>r.op==='add');
@@ -45772,31 +45854,37 @@ async function grpDelAsk(id){
   const b=await dbGet('bookings',id); if(!b){ showToast('找不到預約'); return; }
   const sp=await grpSeriesLater(b);
   if(!sp.series.length){
-    if(sp.solo.length) showToast('後面 '+sp.solo.length+' 堂是單獨建立的課，不在連續系列裡，要刪請各自處理', 6000);
+    if(sp.solo.length) showToast('後面 '+sp.solo.length+' 堂是單獨建立的課，不在連續系列裡，要取消請各自處理', 6000);
     return confirmCancelBooking(id);
   }
-  const _heads=sp.series.reduce(function(n,x){ return n+((typeof mids==='function')?mids(x).length:0); },0);
+  /* 2026-11-23 取消介面分層：整串取消要把「這一堂＋後續」的堂數、名額數、不重複學員數都寫出來，
+     按鈕上的數字就是按下去實際會動的範圍（含本堂）。危險鈕不是預設（焦點在「返回」）。 */
+  const all=[b].concat(sp.series);
+  const _seatN=all.reduce(function(n,x){ return n+((typeof mids==='function')?mids(x).length:0); },0);
+  const _uniq=new Set(); all.forEach(function(x){ ((typeof mids==='function')?mids(x):[]).forEach(function(m){ _uniq.add(String(m)); }); });
   window._grpDelPend={id:id, ids:sp.series.map(function(x){return x.id;})};
-  showModal('<div class="ash-sheetmk"></div><div class="modal-title">後面的課要一起刪嗎？</div>'
-    +'<div style="font-size:12.5px;color:var(--t2);line-height:1.8;margin-bottom:10px;">'
-    +'這堂是<b>連續建立</b>的其中一堂，後面還有 <b>'+sp.series.length+'</b> 堂：</div>'
+  const _btn='取消本堂及後續，共 '+all.length+' 堂、'+_seatN+' 個名額';
+  showModal('<div class="ash-sheetmk"></div><div class="modal-title">取消本堂及後續？</div>'
+    +'<div style="font-size:12.5px;color:var(--t2);line-height:1.8;margin-bottom:8px;">'
+    +'這堂是<b>連續建立</b>的其中一堂（'+String(b.date).replace(/-/g,'/')+' '+String(b.start_time||'').slice(0,5)+'），後面還有 <b>'+sp.series.length+'</b> 堂：</div>'
     +scSeriesList(sp.series, scGrpKind)
-    +'<div style="font-size:12px;color:'+(_heads?'var(--danger)':'var(--t2)')+';margin:12px 0 4px;line-height:1.8;">'
-    +(_heads?('⚠ 後面這 '+sp.series.length+' 堂總共有 <b>'+_heads+'</b> 個名額，刪掉會逐一退回票券。')
-            :'後面這幾堂都還沒有人報名。')
-    +(sp.solo.length?('<br>另有 '+sp.solo.length+' 堂是單獨建立的，不在這次範圍內。'):'')+'</div>'
+    +'<div style="font-size:12.5px;color:var(--danger,#b5372e);margin:12px 0 4px;line-height:1.8;">⚠ 按下紅色鈕會取消<b>本堂加後續共 '+all.length+' 堂</b>，'
+    +'名單上總共 <b>'+_seatN+'</b> 個名額（不重複學員 <b>'+_uniq.size+'</b> 位）一起退票。</div>'
+    +'<div style="font-size:12px;color:var(--t2);margin:0 0 4px;line-height:1.8;">只要取消其中一位學員，請按「返回」，改用該學員旁的「取消此名額」。</div>'
+    +(sp.solo.length?('<div style="font-size:12px;color:var(--t2);">另有 '+sp.solo.length+' 堂是單獨建立的，不在這次範圍內。</div>'):'')
     +'<div class="modal-foot">'
     +'<button class="btn btn-ghost" onclick="closeModal()">返回</button>'
-    +'<button class="btn btn-ghost" onclick="closeModal();confirmCancelBooking(\'' + id + '\')">只刪這一堂</button>'
-    +'<button class="btn btn-danger" onclick="grpDelRun()">'+scAllBtn('刪除', sp.series.length)+'</button>'
+    +'<button class="btn btn-ghost" onclick="closeModal();confirmCancelBooking(\'' + id + '\')">只取消這一堂</button>'
+    +'<button class="btn btn-danger" onclick="grpDelRun()">'+_btn+'</button>'
     +'</div>');
+  try{ cxSafeFocus(); }catch(_){}
 }
 async function grpDelRun(){ return onceAct('grpdel', _grpDelRun); }
 async function _grpDelRun(){
   const p=window._grpDelPend; if(!p) return;
   const ids=[p.id].concat(p.ids);
   const foot=document.querySelector('.modal-foot');
-  const paint=function(n){ if(foot) foot.innerHTML='<div style="flex:1;text-align:center;color:var(--t2);font-size:13px;padding:8px;">刪除中…（'+n+'/'+ids.length+'）</div>'; };
+  const paint=function(n){ if(foot) foot.innerHTML='<div style="flex:1;text-align:center;color:var(--t2);font-size:13px;padding:8px;">取消中…（'+n+'/'+ids.length+'）</div>'; };
   paint(0);
   let done=0, fail=0;
   for(const bid of ids){
@@ -45807,7 +45895,7 @@ async function _grpDelRun(){
   window._grpDelPend=null;
   dbCacheClear(['bookings','member_tickets','ticket_logs','notifications']);
   closeModal();
-  showToast('已刪除 '+done+' 堂'+(fail?('，'+fail+' 堂失敗（請重試）'):'')+'　·　名額票券已退回', fail?8000:5000);
+  showToast('已取消 '+done+' 堂'+(fail?('，'+fail+' 堂失敗（請重試）'):'')+'　·　名額票券已退回', fail?8000:5000);
   navTo(CUR_PAGE);
 }
 /* 換授課教練：改的是主責 coach_id（不是代課）——「這個班從此由誰帶」 */

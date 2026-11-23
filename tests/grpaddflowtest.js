@@ -50,7 +50,8 @@ function mkWorld(){
   const tkOf=id=>W.TK.find(t=>t.id===id);
   const env={
     SESSION:{id:'desk',role:'front_desk',name:'櫃檯'},
-    window:{},
+    window:{ _gmRev:new Proxy({}, {get:()=>'1'}) },   /* 2026-11-23：存名單必須帶開窗版本，沙箱一律給版本 '1' */
+    uid:p=>p+'-'+Math.random().toString(36).slice(2),
     dbGet:async(t,id)=> t==='bookings' ? (W.BK[id]?JSON.parse(JSON.stringify(W.BK[id])):null)
                        : t==='member_tickets' ? (tkOf(id)||null) : {id,name:'許佳慈'},
     dbGetAll:async(t)=> t==='member_tickets'?W.TK.slice()

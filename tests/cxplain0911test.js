@@ -15,7 +15,7 @@ ok('★★★ 單堂、團課都走 bkNetDeductDB，不再 filter 整表快取�
 ok('★★★ 問不到（null）不准判成「沒扣過」', /const noTicket = \(\([^\n]*\) && !_netUnknown;/.test(CFM) && /&& !_netUnknown && _selfNetDeduct<=0/.test(CFM));
 
 console.log('\n② 「票券不變」那顆確定取消不再是扣課不退');
-ok('★★★ 送 plain，不送 none', /onclick="askSeriesCancel\('\$\{id\}','plain'\)">確定取消<\/button>/.test(CFM)
+ok('★★★ 送 plain，不送 none', /onclick="askSeriesCancel\('\$\{id\}','plain'\)">\$\{_gInfo0\?'確定取消整堂團課':'確定取消'\}<\/button>/.test(CFM)
    && !/onclick="askSeriesCancel\('\$\{id\}','none'\)">確定取消<\/button>/.test(CFM));
 ok('★★★ plain 不進 RPC（RPC 會套 24 小時規則扣課）', /refundMode!=='force' && refundMode!=='none' && refundMode!=='plain';/.test(CB));
 /* 2026-11-07 Phase1修正：refund_waived 不再由「取消前的意圖」(!doRefund) 直接決定，

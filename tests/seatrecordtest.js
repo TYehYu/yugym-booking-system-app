@@ -27,7 +27,7 @@ console.log('① 三條會扣團課票的路，都要記下名額歸屬');
   ok('★ 兩處還在 JS 直寫 seat_tickets（建立團課／連續預約補位）', writes===2, writes);
   const _sgm=grabFn('_saveGroupMembers')||'';
   ok('★ 管理名單那條路改成交給 fn_group_save_members RPC 寫（同一套名額鍵規則）',
-     /sb\.rpc\('fn_group_save_members'/.test(_sgm) && !/seat_tickets=Object\.assign\(/.test(_sgm));
+     /sb\.rpc\('fn_group_save_members(_v2)?'/.test(_sgm) && !/seat_tickets=Object\.assign\(/.test(_sgm));
 }
 
 console.log('\n② 建立團課（含連續預約開課）');

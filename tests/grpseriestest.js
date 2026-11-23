@@ -14,7 +14,7 @@ console.log('① 系列的判準沿用既有那一支，不另立一套');
 ok('★★ 兩個動作都問 grpSeriesSplit（同教練＋同星期＋同時段＋未來＋連續建立）',
    /async function grpSeriesLater\(b\)\{\s*\n\s*try\{ return grpSeriesSplit\(b, await dbGetAll\('bookings'\)\); \}/.test(src));
 ok('★★★ 單獨補開的那幾堂不自動處理，只講一聲（2026-08-07 的規則）',
-   (src.match(/不在連續系列裡，要刪請各自處理/)||[]).length===1
+   (src.match(/不在連續系列裡，要取消請各自處理/)||[]).length===1
    && (src.match(/不在連續系列裡，要換請各自處理/)||[]).length===1
    && /另有 '\+sp\.solo\.length\+' 堂是單獨建立的，不在這次範圍內。/.test(src));
 
@@ -27,16 +27,16 @@ console.log('\n③ 刪除');
 const DA=g('async function grpDelAsk(id){','\n}');
 ok('★★ 沒有後續就走原本的單堂流程', /return confirmCancelBooking\(id\);/.test(DA));
 ok('★★ 有後續就列出來，並算出總名額數（刪掉會逐一退票）',
-   /_heads=sp\.series\.reduce/.test(DA) && /個名額，刪掉會逐一退回票券/.test(DA));
+   /_seatN=all\.reduce/.test(DA) && /一起退票/.test(DA));
 /* 2026-10-03：主要那顆改寫「總數（含本堂）」—— 原本寫「連同後面 11 堂」，
    按下去實際動到 12 堂。四張問句視窗統一走 scAllBtn（見那支的說明）。 */
 ok('★★ 三顆按鈕：返回／只刪這一堂／刪除 N+1 堂',
-   /只刪這一堂<\/button>/.test(DA) && /scAllBtn\('刪除', sp\.series\.length\)/.test(DA));
+   /只取消這一堂<\/button>/.test(DA) && /取消本堂及後續，共 '\+all\.length\+' 堂、'\+_seatN\+' 個名額/.test(DA));
 const DR=g('async function _grpDelRun(){','\n}');
 ok('★★★ 逐堂走既有的 cancelBooking(force)，名額票券照原本的規則退',
    /await cancelBooking\(bid,'force',\{silent:true\}\)/.test(DR));
 ok('★★ 有進度、有失敗計數，失敗不會讓整批停住',
-   /刪除中…（'\+n\+'\/'\+ids\.length/.test(DR) && /catch\(e\)\{ fail\+\+;/.test(DR));
+   /取消中…（'\+n\+'\/'\+ids\.length/.test(DR) && /catch\(e\)\{ fail\+\+;/.test(DR));
 ok('★★ 做完清掉四張表的快取（票券與帳本都動到了）',
    /dbCacheClear\(\['bookings','member_tickets','ticket_logs','notifications'\]\)/.test(DR));
 
