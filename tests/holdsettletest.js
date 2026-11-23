@@ -89,7 +89,7 @@ const g = (a, b) => { const i = src.indexOf(a); if (i < 0) throw new Error('找�
   {
     const e = build(async () => ({ data: { ok: true }, error: null }));
     await e.api.holdSettleHandle({ ok: true, rows: rowsOf([['A', '2026-12-01', '10:00', 'bind'], ['D', '2026-12-05', '10:00', 'defer'], ['Z', '2026-12-09', '10:00', 'cancel']]), plan: { bind: ['A'], hold: [], cancel: ['Z'], skip: [], defer: ['D'], sig: 'x' } }, 'M1', 'TK1', null, {});
-    ok('★ 其他票券可承接的卡位標示「先不動（不扣、不取消）」並列日期；取消只剩真正承接不了的', /可由其他票券（含別人共享給他的票）承接，先不動/.test(e.modals[0] || '') && /12\/05 10:00/.test(e.modals[0] || '') && /取消 1 堂/.test(e.modals[0] || ''));
+    ok('★ 其他票券可承接的卡位標示「先不動（不扣、不取消）」並列日期；取消只剩真正承接不了的', /先保留（不取消，也沒有扣其他票）/.test(e.modals[0] || '') && /不會自動改用另一張票/.test(e.modals[0] || '') && /12\/05 10:00/.test(e.modals[0] || '') && /取消 1 堂/.test(e.modals[0] || ''));
     const e2 = build(async () => ({ data: null, error: null }));
     await e2.api.holdSettleHandle({ ok: true, rows: rowsOf([['D', '2026-12-05', '10:00', 'defer']]), plan: { bind: [], hold: [], cancel: [], skip: [], defer: ['D'], sig: 'x' } }, 'M1', 'TK1', null, { after: e2.after });
     ok('　　全部都可由其他票券承接 → 只提示、不寫入、接續原流程', e2.rpcs.length === 0 && /其他票券/.test(e2.toasts.join('|')) && e2.afterN() === 1);
@@ -137,7 +137,7 @@ const g = (a, b) => { const i = src.indexOf(a); if (i < 0) throw new Error('找�
        && apply.indexOf(mig.slice(mig.indexOf('create function public.fn_hold_settle_new_ticket('), mig.lastIndexOf('$fn$;') + 5)) > 0
        && require('crypto').createHash('md5').update(body.slice(4)).digest('hex') === '550c28a816b6e46f636287d7fa33405a');
     ok('　　前端：UNVERIFIABLE_OTHER 有人話訊息（不是「整理失敗：UNVERIFIABLE_OTHER」），且確認畫面的「先不動」列註明含別人共享的票',
-       /UNVERIFIABLE_OTHER:'[^']*為避免誤取消[^']*'/.test(src) && /可由其他票券（含別人共享給他的票）承接，先不動/.test(src));
+       /UNVERIFIABLE_OTHER:'[^']*為避免誤取消[^']*'/.test(src) && /先保留（不取消，也沒有扣其他票）/.test(src) && /含別人共享給他的票/.test(src));
   }
   console.log('\n結果：' + pass + ' 通過／' + fail + ' 失敗'); process.exit(fail ? 1 : 0);
 })();

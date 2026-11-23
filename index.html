@@ -6694,6 +6694,9 @@ body.wp-dragging-on .wp-item{cursor:grabbing;}
 .tk-stb-refund{background:#f3ded9;color:#8a2e26;}
 .tk-stb-done{background:#e2eee5;color:#1f6f54;}
 .tk-stb-exp{background:#f7efe0;color:#8a5e28;}
+.ad-row{display:flex;align-items:flex-start;gap:8px;padding:7px 0;line-height:1.7;font-size:13px;border-bottom:1px dashed var(--bd,#e5dfd3);}
+.ad-row:last-child{border-bottom:0;}
+.ad-row input{margin-top:4px;flex:0 0 auto;}
 .tk-stb-rev{background:#e9e6e1;color:#5f564b;}
 .tk-revnote{font-size:11.5px;color:#6b6258;background:#f3f1ed;border-radius:6px;padding:4px 9px;margin:6px 0 2px;line-height:1.6;}
 .tk-revtag{display:inline-block;font-size:10.5px;color:#6b6258;background:#f3f1ed;border-radius:999px;padding:1px 8px;margin-left:6px;vertical-align:1px;white-space:nowrap;}
@@ -15843,8 +15846,8 @@ async function empMergeSelf(rows){
 let sb=null;
 // ── 版本號（日期+時間格式：年後兩碼+月+日.時分，例 26620.1058 = 26年6/20 10:58）──
 // 每次改版手動更新這一行即可，畫面與 title 會一起更新
-const APP_VERSION = '261123.1740';
-const APP_VERSION_LABEL = 'v261123.1740';
+const APP_VERSION = '261123.2304';
+const APP_VERSION_LABEL = 'v261123.2304';
 const CLOUD = !!(window.YUGYM_CONFIG && window.YUGYM_CONFIG.url && window.YUGYM_CONFIG.anonKey);
 if(CLOUD){ sb = supabase.createClient(window.YUGYM_CONFIG.url, window.YUGYM_CONFIG.anonKey); }
 
@@ -38113,7 +38116,9 @@ function recurTkInfoRender(){
   const el=document.getElementById('bk-tkinfo');if(!el)return;
   const s=window._rcTk;
   el.textContent=s.state==='loading'?'確認預約資格中…':s.state==='err'?'無法確認可預約額度，請稍後再試':s.state!=='ok'?'':
-    s.contract?'合約暫定期間 '+s.contract.start+'～'+s.contract.end:
+    s.contract?'合約暫定期間 '+s.contract.start+'～'+s.contract.end
+      +(typeof s.contract.left==='number'?'｜合約尚可排 '+s.contract.left+' 堂':'')
+      +(s.contract.unassigned?'｜另有 '+s.contract.unassigned+' 筆未歸屬卡位，不計入這份合約':''):
     s.n?'票券可用 '+s.available+' 堂':'無有效票券';
   el.className='rc-tkinfo'+(s.state==='err'?' err':'');
   el.hidden=!el.textContent;
@@ -38140,13 +38145,14 @@ async function recurTkPlan(q){
     const plan=r&&r.payload&&r.payload.plan;
     if(!c||!r||!plan||plan.ticket_type_id!==q.type||(c.member_id&&c.member_id!==q.mid))throw Error('合約不屬於這位會員或課別，或已處理');
     const days=Number(plan.valid_days);if(!Number.isInteger(days)||days<=0)throw Error('合約有效天數異常');
-    const used=(await dbGetAll('bookings')).filter(x=>x.contract_id===q.cid&&x.status!=='cancelled');
+    const allB=await dbGetAll('bookings');
+    const used=allB.filter(x=>x.contract_id===q.cid&&x.status!=='cancelled');
     const left=Math.max(0,Number(c.sessions)-used.length);
     if(q.rc.on&&q.rc.dows.length)slots=buildRecurringSlots(q.date,q.time,q.rc.dows,q.rc.times,left,ymd(addDays(parseYmd(q.date),370)));
     const start=used.map(x=>x.date).concat(slots.map(x=>x.date),q.date).sort()[0];
     const end=ymd(addDays(parseYmd(start),days-1));
     let cap=0;for(const x of slots){if(cap>=left||x.date>end)break;cap++;}
-    return {n:0,cap,contract:{id:q.cid,start,end},slots};
+    return {n:0,cap,contract:{id:q.cid,start,end,left,unassigned:adoptUnassigned(allB,q.mid,q.type).length},slots};
   }
   if(!q.mid||!q.type) return {n:0,cap:recurUncontractedCap(slots),contract:null,slots};
   const capacities=new Map(),ids=new Set(),windows=new Map();let cap=0,holding=null,available=ticketBudget;
@@ -39852,11 +39858,13 @@ async function holdSettleHandle(res, memberId, tkId, anchorId, opts){
     <div class="sc-list">
       <div class="sc-row"><span class="sc-d">轉正並扣課（由近到遠）</span><span class="sc-x">${B.length} 堂</span></div>
       ${H.length?`<div class="sc-row"><span class="sc-d">合約內尚未繳費開通 → 分期待繳費保留</span><span class="sc-x">${H.length} 堂</span></div>`:''}
+      ${D.length?`<div class="sc-row"><span class="sc-d">其他票券可承接 → 先保留（不取消，也沒有扣其他票）</span><span class="sc-x">${D.length} 堂</span></div>`:''}
+      ${K.length?`<div class="sc-row"><span class="sc-d">超出票券使用期間 → 不動</span><span class="sc-x">${K.length} 堂</span></div>`:''}
       ${C.length?`<div class="sc-row"><span class="sc-d" style="color:var(--danger,#b5372e);">超出票券總堂數 → 取消</span><span class="sc-x" style="color:var(--danger,#b5372e);">${C.length} 堂</span></div>`:''}
     </div>
     ${B.length?`<div style="background:var(--card2);border-radius:9px;padding:8px 12px;font-size:13px;line-height:2;margin:8px 0;"><b>轉正：</b>${B.map(_d).join('、')}</div>`:''}
     ${H.length?`<div style="background:var(--card2);border-radius:9px;padding:8px 12px;font-size:13px;line-height:2;margin:8px 0;"><b>分期保留（不扣、不取消）：</b>${H.map(_d).join('、')}</div>`:''}
-    ${D.length?`<div style="background:var(--card2);border-radius:9px;padding:8px 12px;font-size:12.5px;line-height:1.9;margin:8px 0;color:var(--t2);"><b>可由其他票券（含別人共享給他的票）承接，先不動（不扣、不取消）：</b>${D.map(_d).join('、')}</div>`:''}
+    ${D.length?`<div style="background:var(--card2);border-radius:9px;padding:8px 12px;font-size:12.5px;line-height:1.9;margin:8px 0;color:var(--t2);"><b>先保留（不取消，也沒有扣其他票）：</b>${D.map(_d).join('、')}<br>這幾堂的其他票券（含別人共享給他的票）有名額可以承接，但這次整理不會動它們、也不會自動改用另一張票；之後請對那張票再按「轉正」整理。</div>`:''}
     ${K.length?`<div style="background:var(--card2);border-radius:9px;padding:8px 12px;font-size:12.5px;line-height:1.9;margin:8px 0;color:var(--t2);"><b>超出票券使用期間，不動（不轉正也不取消）：</b>${K.map(_d).join('、')}</div>`:''}
     ${C.length?`<div class="mk-key">這 ${C.length} 堂會取消、時段釋出（保留取消紀錄），不再保留等下一份合約<small>${C.map(_d).join('、')}</small></div>`:''}
     <div class="modal-foot" style="flex-wrap:wrap;gap:8px;">
@@ -64964,6 +64972,10 @@ async function _grantReqUnsign(id){
    ・資料庫 fn_contract_adopt_holds 單一交易、全有或全無：會員／票種／狀態／到期／是否屬其他合約／堂數／暫定使用期間任何一項不符
      就整批不動，逐筆講原因，不靜默漏接、不偷偷改期或換票；重送不重複占額。
    ・未付款時只是先綁合約占額度，仍是待簽約（不扣堂、不能簽到）；付款發放後走既有「轉正」綁新票扣堂。 */
+/* 2026-11-23：收款／發放視窗的「承接卡位」按鈕先隱藏（底層函式、RPC、視窗全部保留，方便日後恢復）。
+   原因：沒有合約時建立的卡位，簽約收款發票券後走「新票轉正整理」（fn_hold_settle_new_ticket）就能就地轉正，
+   不需要先承接。改回 true 即可恢復按鈕。「建立合約後自動詢問承接」那個入口（adoptOfferAfterCreate）沒有動。 */
+const ADOPT_HOLDS_BTN_VISIBLE=false;
 const ADOPT_REASON={ MEMBER_MISMATCH:'不是這位會員的預約', CANCELLED:'已取消', OWNED_BY_OTHER:'已屬於其他合約', NOT_BOOKED:'已簽到、請假，或不是「已預約」狀態',
   NOT_A_HOLD:'不是待簽約卡位（已綁票或已轉正）', TYPE_MISMATCH:'課別／票種和這份合約不同', EXPIRED:'卡位已過期（只保留到該堂課當天）', NOT_FOUND:'找不到這筆預約' };
 function adoptProblemsHtml(res, labelOf){
@@ -64975,11 +64987,52 @@ function adoptProblemsHtml(res, labelOf){
     return `<li>${labelOf(p.booking_id)}：${ADOPT_REASON[p.reason]||p.reason}</li>`;
   }).join('');
 }
+/* ══ 未歸屬卡位（2026-11-23）══════════════════════════════════════════
+   歸屬規則不變：只有 bookings.contract_id 明確指向某份合約的卡位才計入那份合約的占用（資料庫守門也只算這個）。
+   「未歸屬」＝同會員、同票種、待簽約、已預約、今天以後、尚未綁任何合約、不是影子卡／團課——與「新票轉正整理」的候選條件同一套。
+   已過期（日期已過）、已取消、請假、已轉正、已屬其他合約的都不算。 */
+function adoptUnassigned(bookings, memberId, typeId){
+  const today=ymd(TODAY);
+  return (bookings||[]).filter(b=>b && b.member_id===memberId && b.pending_contract && !b.ticket_id && !b.contract_id
+    && b.status==='booked' && String(b.date||'').slice(0,10)>=today && (!typeId||b.ticket_type_id===typeId)
+    && !b.sibling_of && !bkIsGroup(b));
+}
+const _adMd=b=>String(b.date).slice(5,10).replace('-','/');
+/* 提示的畫面（純字串）：s={ok:false} → 讀取失敗（不是 0 筆）；s.free 空 → 不顯示 */
+function adoptNoticeHtml(s){
+  const box='background:var(--card2);border-radius:9px;padding:8px 12px;font-size:12.5px;line-height:1.9;margin:0 0 10px;';
+  if(!s||s.ok!==true) return `<div style="${box}color:var(--danger,#b5372e);"><b>未歸屬卡位讀取失敗</b>：目前無法確認這位會員有沒有尚未歸屬的卡位（不是 0 筆）。請稍後重新開啟這個視窗。</div>`;
+  const free=s.free||[]; if(!free.length) return '';
+  const dates=free.slice(0,6).map(_adMd).join('、')+(free.length>6?` 等 ${free.length} 筆`:'');
+  const left=Math.max(0,(Number(s.cap)||0)-(Number(s.used)||0));
+  return `<div style="${box}">
+    <div><b>這位會員另有 ${free.length} 筆未歸屬卡位</b>（${dates}）</div>
+    <div>・尚未納入這份合約：合約 ${Number(s.cap)||0} 堂，已納入 ${Number(s.used)||0} 堂，尚可排 ${left} 堂</div>
+    <div>・這 ${free.length} 筆不計入合約額度，待簽約卡位總數可能多於合約堂數</div>
+    <div>・發放票券後，會在「卡位整理」畫面逐筆列出結果（轉正／分期保留／先保留／取消／不動），確認後才執行</div></div>`;
+}
+async function adoptNoticeFill(r){
+  if(!r||!r.contract_id||!document.getElementById('ad-unassigned')) return;
+  let st={ok:false};
+  try{
+    const type=(r.payload&&r.payload.plan&&r.payload.plan.ticket_type_id)||null;
+    const [bks,c]=await Promise.all([dbGetAll('bookings'), dbGet('contracts',r.contract_id).catch(()=>null)]);
+    const cap=c?Number(c.sessions):0;   /* 只認合約本身的堂數（與伺服器同一來源）；讀不到就是失敗，不退回申請單的 sessions */
+    if(Array.isArray(bks)&&cap>0) st={ok:true, cap, used:bks.filter(b=>b&&b.contract_id===r.contract_id&&b.status!=='cancelled').length, free:adoptUnassigned(bks,r.member_id,type)};
+  }catch(_){}
+  const host=document.getElementById('ad-unassigned'); if(host) host.innerHTML=adoptNoticeHtml(st);
+}
+function adoptSkip(){
+  const A=window._adopt; window._adopt=null; closeModal();
+  const n=A?(A.list||[]).filter(b=>!b.contract_id).length:0;
+  showToast(n?`這 ${n} 筆卡位仍未歸屬：不計入這份合約額度。發放票券後會在「卡位整理」畫面逐筆確認（轉正／保留／取消）`:'沒有納入任何卡位', 7000);
+}
 async function adoptOfferAfterCreate(grId){
   const r=await dbGet('ticket_grant_requests',grId).catch(()=>null); if(!r||!r.contract_id) return;
   const type=(r.payload&&r.payload.plan&&r.payload.plan.ticket_type_id)||null;
-  const n=(await dbGetAll('bookings')).filter(b=>b && b.member_id===r.member_id && b.pending_contract && !b.ticket_id && !b.contract_id
-    && b.status==='booked' && b.date>=ymd(TODAY) && (!type||b.ticket_type_id===type)).length;
+  let bks=null; try{ bks=await dbGetAll('bookings'); }catch(_){}
+  if(!Array.isArray(bks)){ showToast('讀取卡位失敗，無法確認有沒有未歸屬卡位（不是 0 筆）；請到收款視窗查看提示', 6000); return; }
+  const n=adoptUnassigned(bks,r.member_id,type).length;
   if(n>0) await openAdoptHolds(grId);
 }
 async function openAdoptHolds(grId){ return onceAct('adoptopen:'+grId, ()=>_openAdoptHolds(grId)); }
@@ -64988,55 +65041,64 @@ async function _openAdoptHolds(grId){
   const r=await dbGet('ticket_grant_requests',grId);
   if(!r||r.status!=='pending'||!r.contract_id){ showToast('這份合約已處理過，不能再承接卡位'); return; }
   const type=(r.payload&&r.payload.plan&&r.payload.plan.ticket_type_id)||null;
-  const c=await dbGet('contracts',r.contract_id).catch(()=>null);
-  const cap=(c&&Number(c.sessions))||Number(r.sessions)||0;
+  let c=null, bks=null;
+  try{ c=await dbGet('contracts',r.contract_id); bks=await dbGetAll('bookings'); }catch(_){}
+  const cap=c?Number(c.sessions):0;   /* 只認合約本身的堂數；不退回申請單 sessions */
+  if(!Array.isArray(bks)||!(cap>0)){ showToast('讀取合約或卡位失敗（不是「沒有卡位」），沒有做任何更動，請稍後再試', 6000); return; }
   const coachName={}; try{ (await dbGetAll('coaches')).forEach(x=>{ coachName[x.id]=x.name; }); }catch(_){}
-  const all=(await dbGetAll('bookings')).filter(b=>b && b.member_id===r.member_id && b.pending_contract && !b.ticket_id && b.status==='booked'
-    && b.date>=ymd(TODAY) && (!type||b.ticket_type_id===type) && (!b.contract_id||b.contract_id===r.contract_id))
-    .sort((a,z)=>(a.date+a.start_time).localeCompare(z.date+z.start_time));
-  if(!all.length){ showToast('這位會員沒有可承接的待簽約卡位（已取消、已過期、已屬其他合約或票種不同的不會列出）', 5000); return; }
-  const used=all.filter(b=>b.contract_id===r.contract_id).length;
-  let left=Math.max(0,cap-used);
-  window._adopt={ grId, contractId:r.contract_id, cap, list:all };
-  const rowHtml=b=>{ const mine=b.contract_id===r.contract_id; const on=mine||left-->0;
-    return `<label class="ad-row"><input type="checkbox" class="ad-ck" value="${b.id}" ${on?'checked':''} ${mine?'disabled':''} onchange="adoptRecheck()">
-      <span>${String(b.date).slice(5).replace('-','/')}（${'日一二三四五六'[parseYmd(b.date).getDay()]}） ${String(b.start_time).slice(0,5)}　${(coachName[b.coach_id]||'')}${mine?'　<b style="color:var(--green,#2d7d4f)">已承接</b>':''}</span></label>`; };
+  const today=ymd(TODAY);
+  const mineL=bks.filter(b=>b && b.member_id===r.member_id && b.contract_id===r.contract_id && b.pending_contract && !b.ticket_id
+    && b.status==='booked' && String(b.date||'').slice(0,10)>=today && (!type||b.ticket_type_id===type));
+  const free=adoptUnassigned(bks,r.member_id,type);
+  const all=mineL.concat(free).sort((a,z)=>(a.date+a.start_time).localeCompare(z.date+z.start_time));
+  if(!all.length){ showToast('這位會員沒有未歸屬的待簽約卡位（已取消、已過期、已屬其他合約或票種不同的不會列出）', 5000); return; }
+  /* 「可選清單」與「合約占用」分開：清單只列畫面上選得到的卡位（未歸屬＋已納入且今天以後）；
+     占用要算所有非取消、綁這份合約的預約（含日期已過、已轉正的），才與伺服器／預約表單的剩餘額度一致 */
+  const usedAll=bks.filter(b=>b && b.contract_id===r.contract_id && b.status!=='cancelled').length;
+  const hiddenUsed=Math.max(0,usedAll-mineL.length);
+  const left=Math.max(0,cap-usedAll);
+  window._adopt={ grId, contractId:r.contract_id, cap, list:all, left };
+  /* 一律不預設勾選：要納入哪幾筆由櫃檯逐筆選；沒有勾選前不能送出 */
+  const rowHtml=b=>{ const mine=b.contract_id===r.contract_id;
+    return `<label class="ad-row"><input type="checkbox" class="ad-ck" value="${b.id}" ${mine?'checked disabled':''} onchange="adoptRecheck()">
+      <span>${String(b.date).slice(5).replace('-','/')}（${'日一二三四五六'[parseYmd(b.date).getDay()]}） ${String(b.start_time).slice(0,5)}　${(coachName[b.coach_id]||'')}${mine?'　<b style="color:var(--green);">已納入這份合約</b>':'　<span style="color:var(--t3);">未歸屬</span>'}</span></label>`; };
   const weeks=all.map(rowHtml).join('');
-  showModal(`<div class="modal-title">承接既有卡位</div>
+  showModal(`<div class="modal-title">納入既有卡位</div>
     <div class="ash-eihead">${r.member_name||''}　·　${r.plan_name||'合約'}　·　共 ${cap} 堂</div>
-    <div style="font-size:12.5px;color:var(--t2);line-height:1.8;margin:8px 0;">勾選要納入這份合約的卡位（可跨多週）。<b>沿用原預約</b>（日期、時間、教練、場地不變），占用合約堂數；<b>未付款前仍是待簽約</b>，不扣堂、不能簽到，付款發放後在課卡按「轉正」綁新票扣堂。</div>
-    <div id="ad-sum" class="mk-key" style="margin:6px 0;">檢查中…</div>
+    <div style="font-size:12.5px;color:var(--t2);line-height:1.8;margin:8px 0;">這位會員有 <b>${free.length}</b> 筆<b>未歸屬</b>的卡位（尚未納入任何合約，目前不計入這份合約的額度）。勾選要納入<b>這份合約</b>的卡位，按「納入這份合約」後才會納入（沿用原預約，日期、時間、教練、場地不變）；沒有勾選前不能送出。</div>
+    ${hiddenUsed?`<div style="font-size:12px;color:var(--t2);line-height:1.8;margin:0 0 6px;">這份合約目前已占用 <b>${usedAll}</b> 堂，其中 ${hiddenUsed} 堂不在下方清單（例如日期已過），仍計入占用。</div>`:''}
+    <div id="ad-sum" class="mk-key" style="margin:6px 0;">尚未選取：本次納入 0 堂、合約尚可排 ${left} 堂</div>
     <div style="max-height:260px;overflow:auto;border:1px solid var(--bd);border-radius:10px;padding:6px 10px;">${weeks}</div>
     <div id="ad-prob" style="font-size:12px;color:var(--danger,#7F0303);line-height:1.7;margin-top:8px;"></div>
-    <div class="modal-foot"><button class="btn btn-ghost" onclick="closeModal()">先不承接</button>
-      <button id="ad-go" class="btn btn-green" onclick="adoptRun()" disabled>確定承接</button></div>`);
+    <div class="modal-foot"><button class="btn btn-ghost" onclick="adoptSkip()">先不納入</button>
+      <button id="ad-go" class="btn btn-green" onclick="adoptRun()" disabled>納入這份合約</button></div>`);
   adoptRecheck();
 }
 function adoptSelected(){ return [...document.querySelectorAll('.ad-ck:checked:not(:disabled)')].map(x=>x.value); }
 async function adoptRecheck(){
-  const A=window._adopt; if(!A) return; const ids=adoptSelected(); const go=document.getElementById('ad-go'); const sum=document.getElementById('ad-sum'); const pr=document.getElementById('ad-prob');
+  const A=window._adopt; if(!A) return; const my=(A._seq=(A._seq||0)+1); const ids=adoptSelected(); const go=document.getElementById('ad-go'); const sum=document.getElementById('ad-sum'); const pr=document.getElementById('ad-prob');
   const labelOf=id=>{ const b=A.list.find(x=>x.id===id); return b?(String(b.date).slice(5).replace('-','/')+' '+String(b.start_time).slice(0,5)):id; };
   if(go) go.disabled=true; if(pr) pr.innerHTML='';
-  if(!ids.length){ if(sum) sum.textContent='還沒有勾選要新承接的卡位'; return; }
+  if(!ids.length){ if(sum) sum.textContent='尚未選取：本次納入 0 堂、合約尚可排 '+A.left+' 堂'; return; }
   let res=null; try{ const x=await sb.rpc('fn_contract_adopt_holds',{p_contract_id:A.contractId,p_booking_ids:ids,p_dry:true}); res=x&&x.data; if(x&&x.error) res=null; }catch(_){}
-  if(!document.getElementById('ad-sum')) return;
+  if(!document.getElementById('ad-sum')||A._seq!==my) return;   /* 已有更新的一次檢查（又勾選或取消了）：這次結果作廢 */
   if(!res){ sum.textContent='檢查失敗（連線不穩），請稍後再試'; return; }
-  if(res.ok){ sum.innerHTML=`將承接 <b>${(res.would_adopt||[]).length}</b> 堂；合約 ${res.sessions} 堂，承接後還剩 <b>${res.left_after}</b> 堂可排`
+  if(res.ok){ sum.innerHTML=`本次納入 <b>${(res.would_adopt||[]).length}</b> 堂、合約尚可排 <b>${res.left_after}</b> 堂`
       +(res.window_start&&res.valid_days?`<br><span style="font-size:11.5px;color:var(--t2)">暫定使用期間：自最早一堂 ${String(res.window_start).slice(5).replace('-','/')} 起 ${res.valid_days} 天（暫定；首次實際簽到後才正式起算效期）</span>`:''); if(go) go.disabled=false; }
   else{ sum.textContent='有項目不符，這一批不會承接任何一堂：'; pr.innerHTML='<ul style="margin:4px 0 0 18px;padding:0">'+adoptProblemsHtml(res,labelOf)+'</ul>'; }
 }
 async function adoptRun(){ return onceAct('adoptrun', _adoptRun); }
 async function _adoptRun(){
   const A=window._adopt; if(!A) return; const ids=adoptSelected(); if(!ids.length) return;
-  const go=document.getElementById('ad-go'); if(go){ go.disabled=true; go.textContent='承接中…'; }
+  const go=document.getElementById('ad-go'); if(go){ go.disabled=true; go.textContent='納入中…'; }
   const labelOf=id=>{ const b=A.list.find(x=>x.id===id); return b?(String(b.date).slice(5).replace('-','/')+' '+String(b.start_time).slice(0,5)):id; };
   let res=null, err=null; try{ const x=await sb.rpc('fn_contract_adopt_holds',{p_contract_id:A.contractId,p_booking_ids:ids,p_dry:false}); res=x&&x.data; err=x&&x.error; }catch(e){ err=e; }
   dbCacheClear(['bookings']);
-  if(err||!res){ showToast('承接結果不確定（連線不穩）——請重新整理後再開一次承接視窗確認，不要重複按', 6000); if(go){ go.disabled=false; go.textContent='確定承接'; } return; }
+  if(err||!res){ showToast('承接結果不確定（連線不穩）——請重新整理後再開一次承接視窗確認，不要重複按', 6000); if(go){ go.disabled=false; go.textContent='納入這份合約'; } return; }
   if(!res.ok){
     if(res.error_code==='ADOPT.PROBLEMS'){ const pr=document.getElementById('ad-prob'); if(pr) pr.innerHTML='<ul style="margin:4px 0 0 18px;padding:0">'+adoptProblemsHtml(res,labelOf)+'</ul>'; showToast('有項目不符，沒有承接任何一堂（請依下方原因調整）', 5000); }
     else showToast('無法承接：'+({'BUSY':'系統忙碌，請稍後再試','CONTRACT.NOT_PENDING':'這份合約已處理過','CONTRACT.ALREADY_ISSUED':'這份合約已發放票券','NOT_DESK':'只有櫃檯以上可以承接'}[res.error_code]||res.error_code), 5000);
-    if(go){ go.disabled=false; go.textContent='確定承接'; } return;
+    if(go){ go.disabled=false; go.textContent='納入這份合約'; } return;
   }
   closeModal(); window._adopt=null;
   showToast(`已承接 ${(res.adopted||[]).length} 堂（沿用原預約）；合約還剩 ${res.left_after} 堂可排。尚未付款：仍是待簽約，付款發放後在課卡按「轉正」`, 7000);
@@ -65136,12 +65198,14 @@ async function openGrantApprove(id){
   const _signPicked= !!(c && c.sign_type && c.sign_type!=='undecided');
   /* 段落編號：實際有幾段就從 1 排到幾，不會跳號 */
   let _sn=0; const _n=()=>++_sn;
+  setTimeout(()=>{ adoptNoticeFill(r); },0);   /* 未歸屬卡位提示：視窗畫好後再讀（失敗會明講，不顯示成 0 筆） */
   showModal(`<div class="modal-title">${_undecided?'選擇簽署方式':'確認收款・發放票券'}</div>
     ${/* 定價與堂數併進這一行（2026-09-04）：原本躲在收款區塊最底下的 gr-fill-note，
          那裡是整個視窗最不會被看的位置，而它是核對金額時第一個要對的數字。 */''}
     <div style="font-size:13px;color:var(--text);padding:2px 0 12px;line-height:1.8;">
       ${escH(r.member_name||'—')}　·　${escH(r.plan_name||'')}　·　${Number(r.sessions)||0} 堂　·　${_ctAmtLine}
       <div class="gr-warn-amt" id="gr-warn-amt" style="display:none;"></div></div>
+    <div id="ad-unassigned"></div>
     ${/* ══ 順序：先定案數字，才送出去給客人簽（2026-09-04 二修）════════════
          使用者：「這個發放票券視窗的確認順序正確嗎?」—— 不正確，而且是今天才
          變成不正確的。0904 早上使用者描述的流程是「選電子或紙本 → 等回簽 →
@@ -65302,7 +65366,7 @@ async function openGrantApprove(id){
              但也不能藏起來（0823「不能用就寫原因，別藏按鈕」）。 */''}
       <button class="btn btn-ghost btn-sm" style="color:var(--danger,#7F0303);"
         onclick="grantReqCancel('${r.id}')" title="不發放這筆，待簽名的合約一併作廢">取消這筆</button>
-      ${r.contract_id?`<button class="btn btn-ghost btn-sm" onclick="openAdoptHolds('${r.id}')" title="把這位會員原本卡好的待簽約時段納入這份合約（沿用原預約，占用合約堂數）">承接卡位</button>`:''}
+      ${(ADOPT_HOLDS_BTN_VISIBLE&&r.contract_id)?`<button class="btn btn-ghost btn-sm" onclick="openAdoptHolds('${r.id}')" title="把這位會員原本卡好的待簽約時段納入這份合約（沿用原預約，占用合約堂數）">承接卡位</button>`:''}
       ${/* 2026-08-28 使用者：「只存收款資訊 這一格要改成 待回簽才能通過」。
            ⚠ 不用綠色：綠＝這一步做完了，但這一步沒做完。也不用金：金是「可以做、
              但要知道」，而這顆現在根本按不下去。暗化＝單純的「還不到時候」。

@@ -100,8 +100,9 @@ const addDays = (d, n) => { const x = new Date(d); x.setDate(x.getDate() + n); r
     ok('　　逐筆原因：已過期、已屬其他合約', /已過期/.test(o) && /已屬於其他合約/.test(o), o);
     ok('★ 前端呼叫的 RPC 名稱與參數就是 migration 的 fn_contract_adopt_holds(p_contract_id, p_booking_ids, p_dry)', /sb\.rpc\('fn_contract_adopt_holds',\{p_contract_id:A\.contractId,p_booking_ids:ids,p_dry:true\}\)/.test(src) && /sb\.rpc\('fn_contract_adopt_holds',\{p_contract_id:A\.contractId,p_booking_ids:ids,p_dry:false\}\)/.test(src) && /create function public\.fn_contract_adopt_holds\(p_contract_id text, p_booking_ids text\[\], p_dry boolean/.test(mig));
     ok('★ 確定承接前先 dry-run 檢查、有問題按鈕不亮；送出走 onceAct 防連點；結果不確定時不自動重送', /if\(go\) go\.disabled=true; if\(pr\)/.test(src) && /if\(res\.ok\)\{[\s\S]{0,500}go\.disabled=false/.test(src) && /onceAct\('adoptrun'/.test(src) && /承接結果不確定[\s\S]{0,60}不要重複按/.test(src));
-    ok('　　視窗只列「待簽約、沒綁票、已預約、今天以後、票種相符、尚無合約（或就是這份合約）」的卡位', /b\.pending_contract && !b\.ticket_id && b\.status==='booked'\s*\n\s*&& b\.date>=ymd\(TODAY\) && \(!type\|\|b\.ticket_type_id===type\) && \(!b\.contract_id\|\|b\.contract_id===r\.contract_id\)/.test(src));
-    ok('　　入口有兩個：建立合約後自動問、核准視窗的「承接卡位」鈕', /adoptOfferAfterCreate\(_gid\)/.test(src) && /onclick="openAdoptHolds\('\$\{r\.id\}'\)"/.test(src));
+    ok('　　視窗只列「待簽約、沒綁票、已預約、今天以後、票種相符、尚無合約（或就是這份合約）」的卡位', /function adoptUnassigned\(bookings, memberId, typeId\)\{[\s\S]*?!b\.ticket_id && !b\.contract_id[\s\S]*?b\.status==='booked' && String\(b\.date\|\|''\)\.slice\(0,10\)>=today && \(!typeId\|\|b\.ticket_type_id===typeId\)/.test(src) && /const free=adoptUnassigned\(bks,r\.member_id,type\);/.test(src));   // 2026-11-23：清單改用共用的 adoptUnassigned（與新票轉正整理的候選條件同一套）
+    ok('　　入口有兩個：建立合約後自動問、核准視窗的「承接卡位」鈕（2026-11-23 起按鈕先隱藏：旗標 ADOPT_HOLDS_BTN_VISIBLE=false，函式與 RPC 保留）', /adoptOfferAfterCreate\(_gid\)/.test(src) && /onclick="openAdoptHolds\('\$\{r\.id\}'\)"/.test(src)
+       && /const ADOPT_HOLDS_BTN_VISIBLE=false;\nconst ADOPT_REASON=/.test(src) && /\$\{\(ADOPT_HOLDS_BTN_VISIBLE&&r\.contract_id\)\?`<button/.test(src));
   }
 
   console.log('\n日常畫面：待簽約卡位顯示暫定起訖日期／只保留到當天');

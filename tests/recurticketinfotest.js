@@ -6,11 +6,11 @@ let passed=0;function ok(c,m){if(!c)throw Error(m);passed++;}
 function setup(){
  const els={},w={member_id:'M',type_id:'PT',date:'2026-11-20',time:'19:00',rc:{on:true,dows:[5,2],times:{},count:2}};
  let tickets=()=>[],contracts=[],requests=[],bookings=[],calls=0,fresh=[];
- const ctx={window:{},_bkWizard:w,RECUR_MAX:12,RECUR_HOLD_MAX:2,console:{error(){}},document:{getElementById:id=>els[id]||null},
+ const ctx={window:{},TODAY:new Date(2026,10,20),bkIsGroup:b=>!!(b&&b.category==='小班肌力'),_bkWizard:w,RECUR_MAX:12,RECUR_HOLD_MAX:2,console:{error(){}},document:{getElementById:id=>els[id]||null},
  tkUnlockedLeft:t=>t.left,listUsableTickets:async(...args)=>{calls++;return tickets(...args);},
  dbGet:async(t,id)=>contracts.find(x=>x.id===id),dbGetAll:async (t,opts)=>{if(opts&&opts.fresh)fresh.push(t);return t==='bookings'?bookings:t==='contracts'?contracts:requests;},
  recurSetMax:(p,n)=>{ctx.cap=n;},recurWhenSync:()=>{},showToast:m=>{ctx.toast=m;}};
- vm.createContext(ctx);vm.runInContext(src.split('\n').filter(line=>/^function (escH|parseYmd|ymd|addDays)\(/.test(line)).join('\n'),ctx);vm.runInContext(extract('buildRecurringDates')+'\n'+extract('buildRecurringSlots')+'\n'+extract('recurHoldCheck')+'\n'+src.slice(a,b),ctx);
+ vm.createContext(ctx);vm.runInContext(src.split('\n').filter(line=>/^function (escH|parseYmd|ymd|addDays)\(/.test(line)).join('\n'),ctx);vm.runInContext(extract('buildRecurringDates')+'\n'+extract('buildRecurringSlots')+'\n'+extract('recurHoldCheck')+'\n'+extract('adoptUnassigned')+'\n'+src.slice(a,b),ctx);
  return {ctx,w,els,setTickets:f=>{tickets=f;},setData:(c,r,b)=>{contracts=c;requests=r;bookings=b||[];},calls:()=>calls,fresh};
 }
 (async()=>{
