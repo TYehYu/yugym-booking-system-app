@@ -15854,8 +15854,8 @@ async function empMergeSelf(rows){
 let sb=null;
 // ── 版本號（日期+時間格式：年後兩碼+月+日.時分，例 26620.1058 = 26年6/20 10:58）──
 // 每次改版手動更新這一行即可，畫面與 title 會一起更新
-const APP_VERSION = '261124.2110';
-const APP_VERSION_LABEL = 'v261124.2110';
+const APP_VERSION = '261124.2210';
+const APP_VERSION_LABEL = 'v261124.2210';
 const CLOUD = !!(window.YUGYM_CONFIG && window.YUGYM_CONFIG.url && window.YUGYM_CONFIG.anonKey);
 if(CLOUD){ sb = supabase.createClient(window.YUGYM_CONFIG.url, window.YUGYM_CONFIG.anonKey); }
 
@@ -20350,7 +20350,9 @@ const ADMIN_NAV2=[
   /* 2026-07-30 使用者指示：管理員底下 15 個項目排成一長條，不知道從哪開始。
      依「人事／財務／環境設定」分三組，次選單插入組別標籤當分隔。 */
   {key:'g_admin', label:'管理員', sub:[
-    {grp:'人事', label:'員工管理', page:'staff', tab:'list'},
+    /* 2026-11-24：勞健保、特休併入員工管理的頁籤（員工名單／月度作業／勞健保／特休），這裡不再各佔一個項目；
+       tabs＝這個項目涵蓋的 tab，在勞健保或特休頁時「員工管理」仍會高亮。 */
+    {grp:'人事', tabs:['list','insurance','leave'], label:'員工管理', page:'staff', tab:'list'},
     /* 2026-07-30 使用者指示：「今日出勤」與「出勤紀錄」移除 —— 這些是逐日流水，
        放在員工各自的資料裡（員工名片 →「最近打卡」）就好，不必在管理頁再列一次。
        2026-08-01 使用者指示：「打卡異常與補卡」這個入口也移除，改掛在員工列表
@@ -20361,8 +20363,6 @@ const ADMIN_NAV2=[
        前兩個的內容在員工各自的資料裡就看得到（員工管理→該員工），不必在管理頁再開一層；
        「教練統計」一直是 soon 佔位，沒有內容。對應的 staff 分頁（payroll／schedule）
        程式保留，舊的 navToTab('staff',...,'payroll') 呼叫仍可用。 */
-    {grp:'人事', label:'勞健保',   page:'staff', tab:'insurance'},
-    {grp:'人事', label:'特休',     page:'staff', tab:'leave'},
     {grp:'人事', label:'權限設定', page:'settings_staff'},
     {grp:'財務', label:'經營報表', page:'finance'},   // 2026-08-05：財務總覽＋營運分析整合
     /* 2026-08-06 補回「票券管理」入口；2026-08-08 使用者定案再移除 ——
@@ -20853,7 +20853,7 @@ function renderSubnav(gkey, activePage){
   const grpCls={'人事':'sng-hr','財務':'sng-fin','環境設定':'sng-env'};
   return `<div class="subnav">${visibleSubs.map(s=>{
     // 同一頁面可掛不同 tab（例：薪資制度／勞健保／特休 都在 staff）→ 需一併比對 tab
-    const on = s.page && s.page===activePage && (!s.tab || s.tab===CUR_TAB);
+    const on = s.page && s.page===activePage && (!s.tab || s.tab===CUR_TAB || (s.tabs && s.tabs.includes(CUR_TAB)));
     const cls = 'subnav-item'+(on?' active':'')+(s.soon?' soon':'')+(grpCls[s.grp]?' '+grpCls[s.grp]:'');
     const click = s.soon
       ? `showSoon2('${(s.label||'').replace(/'/g,"")}')`
@@ -52035,7 +52035,7 @@ PAGES.staff=async function(){
   window._navTab=null;
   // 導覽已在左側次選單提供切換，頁面內不再重複顯示 seg-btn（避免兩層重複導覽）
   const h=STAFF_TAB_HEAD[_staffTab]||STAFF_TAB_HEAD.list;
-  C.innerHTML=head(h[0],h[1],h[2])+`<div id="staff-body"></div>`;
+  C.innerHTML=head(h[0],h[1],h[2])+((_staffTab==='insurance'||_staffTab==='leave')?`<section class="staff-v2"><div class="sh-top">${staffViewTabs(_staffTab)}</div></section>`:'')+`<div id="staff-body"></div>`;
   if(_staffTab==='list') await renderStaffHub();
   // records（出勤紀錄）已移除；舊的深連結／記憶的分頁落回員工列表，不要白畫面
   else if(_staffTab==='records'){ _staffTab='list'; CUR_TAB='list'; await renderStaffList(); }
@@ -54360,7 +54360,18 @@ function staffHubRuleProblem(e,month){
   return '';
 }
 function staffHubAttr(id){ return escH(JSON.stringify(String(id))); }
-function staffHubMode(mode){ STAFF_HUB.mode=mode==='monthly'?'monthly':'directory';renderStaffHub(); }
+/* 員工管理四個檢視：員工名單／月度作業／勞健保／特休（2026-11-24：勞健保、特休原本是左側選單獨立項目，併進來）。
+   員工名單、月度作業同在 renderStaffHub 內切換；勞健保、特休沿用原本的頁面（_staffTab），只是入口改在這排頁籤。 */
+const STAFF_VIEWS=[['directory','員工名單'],['monthly','月度作業'],['insurance','勞健保'],['leave','特休']];
+function staffViewTabs(active){
+  return `<div class="sh-tabs" role="tablist" aria-label="員工管理檢視">${STAFF_VIEWS.map(([k,l])=>`<button role="tab" aria-selected="${active===k}" onclick="staffHubMode('${k}')">${l}</button>`).join('')}</div>`;
+}
+function staffHubMode(mode){
+  if(mode==='insurance'||mode==='leave'){ _staffTab=mode; CUR_TAB=mode; navTo('staff', CUR_GROUP||'g_admin'); return; }
+  STAFF_HUB.mode=mode==='monthly'?'monthly':'directory';
+  if(_staffTab!=='list'){ _staffTab='list'; CUR_TAB='list'; navTo('staff', CUR_GROUP||'g_admin'); return; }   // 從勞健保／特休切回來：整頁重畫
+  renderStaffHub();
+}
 function staffHubFilter(key,value){ if(['query','type','status'].includes(key))STAFF_HUB[key]=value;staffHubDrawRows(); }
 async function renderStaffHub(){
   const box=document.getElementById('staff-body');if(!box)return;
@@ -54375,7 +54386,7 @@ async function renderStaffHub(){
     const monthly=STAFF_HUB.mode==='monthly';
     STAFF_HUB.stats={};
     if(monthly){ try{ STAFF_HUB.stats=await staffMonthStats(STAFF_HUB.rows,month); }catch(e){ console.error('員工當月表現載入失敗',e); } }
-    box.innerHTML=`<section class="staff-v2"><div class="sh-top"><div class="sh-tabs" role="tablist" aria-label="員工管理檢視"><button role="tab" aria-selected="${!monthly}" onclick="staffHubMode('directory')">員工名單</button><button role="tab" aria-selected="${monthly}" onclick="staffHubMode('monthly')">月度作業</button></div>${monthly?stMonthBar(month,month===ymd(TODAY).slice(0,7)):`<button class="btn btn-green" onclick="openStaffSignupQR()">＋ 員工申辦</button>`}</div>
+    box.innerHTML=`<section class="staff-v2"><div class="sh-top">${staffViewTabs(monthly?'monthly':'directory')}${monthly?stMonthBar(month,month===ymd(TODAY).slice(0,7)):`<button class="btn btn-green" onclick="openStaffSignupQR()">＋ 員工申辦</button>`}</div>
       <div class="sh-stats">${(monthly?[[pending.length,'待核准補卡','clock'],[abnormal.length,'缺下班卡','alert'],[missing.length,'薪資設定待補','file']]:[[active.length,'在職員工','people'],[active.filter(e=>e.is_manager).length,'主管','people'],[STAFF_HUB.rows.filter(e=>staffHubStatus(e)==='待設定').length,'待設定','file']]).map(([n,label,icon])=>`<div class="sh-stat">${staffHubIcon(icon)}<div><strong>${n}</strong><span>${label}</span></div></div>`).join('')}</div>
       <div class="sh-section"><div class="sh-section-head"><div><h2>${monthly?'先處理異常，再核對薪資':'找到員工，查看個人檔案'}</h2><p>${monthly?'本頁顯示核對狀態，薪資尚未月結。':'職務、任用類型與系統權限分開顯示。'}</p></div>${monthly?'<button class="btn btn-ghost" onclick="openPunchManage()">處理補打卡</button>':''}</div>
       <div class="sh-filters"><label class="sh-search"><span aria-hidden="true">⌕</span><input aria-label="搜尋員工" placeholder="搜尋姓名、英文名或員工編號" value="${escH(STAFF_HUB.query)}" oninput="staffHubFilter('query',this.value)"></label><select aria-label="任用類型" onchange="staffHubFilter('type',this.value)">${[['','全部任用'],['full_time','正職'],['part_time','兼職'],['contractor','合作'],['intern','支援']].map(([v,l])=>`<option value="${v}"${STAFF_HUB.type===v?' selected':''}>${l}</option>`).join('')}</select><select aria-label="員工狀態" onchange="staffHubFilter('status',this.value)">${[['active','在職'],['all','全部狀態'],['inactive','已停用'],['pending','待設定']].map(([v,l])=>`<option value="${v}"${STAFF_HUB.status===v?' selected':''}>${l}</option>`).join('')}</select></div><div id="staff-hub-rows"></div></div></section>`;
