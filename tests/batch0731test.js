@@ -192,7 +192,7 @@ console.log('\n課卡：體驗／待簽約另起一列放在姓名下面（2026-
      紅框的條件就是 pending_contract，跟那兩個標籤完全同一個旗標。 */
   ok('　　遮蔽卡不掛；團課掛「團課」；待簽約／待繳費交給紅框',
      /\(_grpCard \? '團課'/.test(src)
-     && /\(\(_nameTag==='待簽約' \|\| _nameTag==='待繳費'\) \? '' : \(_nameTag\|\|bkTagExtra\(b\)\)\)/.test(src));
+     && /\(\(_nameTag==='待簽約' \|\| _nameTag==='待繳費'\) \? bkTagExtra\(b\) : \(_nameTag\|\|bkTagExtra\(b\)\)\)/.test(src));
   ok('　　〔待安排〕留著（紅框表達不了「連人都還沒排」）',
      /〔待安排〕\*\*留著\*\*/.test(src));
   ok('　　小字樣式有定義，窄卡再縮一級',
