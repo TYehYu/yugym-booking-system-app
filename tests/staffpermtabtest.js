@@ -20,7 +20,7 @@ let n=0;const test=(l,f)=>{f();n++;console.log('✓ '+l);};
  test('五個檢視：員工名單／月度作業／勞健保／特休／權限設定',()=>assert.deepEqual(vm.runInContext('STAFF_VIEWS.map(x=>x[1])',c).join(),'員工名單,月度作業,勞健保,特休,權限設定'));
  for(const [tab,call] of [['insurance','renderStaffInsurance'],['leave','renderStaffLeave']]){
    c.S.tab=tab;out.calls=[];await c.PAGES.staff();
-   test(tab+'：頁首有同一排頁籤、選中自己、內容走原本的畫面',()=>{assert(out.html.includes('sh-tabs'));assert(out.html.includes('aria-selected="true" onclick="staffHubMode(\''+tab+'\')"'));assert(out.calls.includes(call));});
+   test(tab+'：頁首有同一排頁籤、選中自己、內容走原本的畫面',()=>{assert(out.html.includes('ui-tabs'));assert(out.html.includes('aria-selected="true" onclick="staffHubMode(\''+tab+'\')"'));assert(out.calls.includes(call));});
  }
  c.S.tab='perm';out.calls=[];out.html='';await c.PAGES.staff();
  test('權限設定：有頁籤列、選中權限設定、畫出角色權限與薪資制度',()=>{assert(out.html.includes('aria-selected="true" onclick="staffHubMode(\'perm\')"'));assert(out.body.includes('角色與權限')&&out.body.includes('薪資制度'));assert(out.calls.includes('renderSalaryTemplates:settings-salary-body'));});
