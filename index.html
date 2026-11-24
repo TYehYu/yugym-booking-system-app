@@ -15854,8 +15854,8 @@ async function empMergeSelf(rows){
 let sb=null;
 // ── 版本號（日期+時間格式：年後兩碼+月+日.時分，例 26620.1058 = 26年6/20 10:58）──
 // 每次改版手動更新這一行即可，畫面與 title 會一起更新
-const APP_VERSION = '261124.2010';
-const APP_VERSION_LABEL = 'v261124.2010';
+const APP_VERSION = '261124.2110';
+const APP_VERSION_LABEL = 'v261124.2110';
 const CLOUD = !!(window.YUGYM_CONFIG && window.YUGYM_CONFIG.url && window.YUGYM_CONFIG.anonKey);
 if(CLOUD){ sb = supabase.createClient(window.YUGYM_CONFIG.url, window.YUGYM_CONFIG.anonKey); }
 
@@ -28344,10 +28344,22 @@ async function lottoAward(mid,key){
     <div class="modal-foot"><button class="btn btn-ghost" onclick="openLottoModal('${mid}')">返回</button>
     <button class="btn btn-green" onclick="lottoAwardDo('${mid}','${key}')">確認登記</button></div>`);
 }
-async function lottoAwardDo(mid,key){
+/* 登記抽獎：防連按（同一位會員同時只跑一次）＋寫入前重新確認「還有沒有待抽次數」。
+   2026-11-24 吳淑琴／吳昆弦：同一份名單被登記了兩次（相隔 6、9 秒），多登記的那一筆把下一次的抽獎資格抵掉，
+   該出現的通知與名單就不見了；票券類獎品更會多發一張票。
+   ⚠ 用最新資料算一次 lottoStats，left<=0 就擋下（兩台平板同時登記、舊畫面按確認都會被擋）。 */
+async function lottoAwardDo(mid,key){ return onceAct('lotaward:'+mid, ()=>_lottoAwardDo(mid,key)); }
+async function _lottoAwardDo(mid,key){
  try{
   const p=LOTTO_PRIZES.find(x=>x.key===key); if(!p) return;
   const today=ymd(TODAY);
+  { const[_bk,_pu,_mem]=await Promise.all([dbGetAll('bookings'),dbGetAll('purchases').catch(()=>[]),dbGetAll('members')]);
+    const _st=lottoStats(_bk,_pu,today.slice(0,7),_mem).find(x=>x.id===mid);
+    if(!_st||_st.left<=0){
+      window._lottoMapCache=null;
+      showToast('這位會員目前沒有待抽的次數（可能剛剛已經登記過），這次沒有重複登記',7000);
+      openLottoModal(); return;
+    } }
   if(p.kind!=='goods'){
     let ttid=p.ttid||null, plan=p.plan||('抽獎－'+p.label);
     if(p.kind==='session'){
