@@ -132,7 +132,7 @@ console.log('\n⑨ 設定畫面');
 ok('★★★ 門檻那幾列不會撐出卡外（grid 子項要補 min-width:0）',
    /\.hr-tt-row\{display:grid;grid-template-columns:1fr 1\.1fr 34px;/.test(src)
    && /\.hr-tt-row>\*\{min-width:0;\}/.test(src)
-   && /<div class="hr-tt-head">/.test(src));
+   && /<div class="ui-gridhead ui-gridrow--team">/.test(src));
 ok('★★★ 門檻可以新增、可以刪除',
    /function hrAddTeamTier\(\)\{/.test(src)
    && /onclick="hrAddTeamTier\(\)"/.test(src)
@@ -151,7 +151,7 @@ ok('★★ 全選＝null（日後新進教練自動納入），不是把當下�
 
 console.log('\n⑦ 主管津貼金額可以就地調整（2026-09-08 使用者：「主管津貼3000 是要讓我可以調整」）');
 ok('★★★ 欄位就在團隊獎金那一塊裡（跟門檻、名單同一處，抬頭已寫「全主管共用」）',
-   /<input type="number" id="hr-supbonus"/.test(src)
+   /<input class="ui-input" type="number" id="hr-supbonus"/.test(src)
    && src.indexOf('id="hr-supbonus"') < src.indexOf('>獎金門檻</div>'));
 ok('★★★ 存進全域 _global.config.supervisor_bonus —— calcSalary 讀的就是這一個',
    /_G\.supervisor_bonus=Math\.max\(0,Number\(_sb\.value\)\|\|0\);/.test(src)

@@ -92,7 +92,7 @@ ok('　　為什麼只在計算入口換一次，寫在程式裡',
    /只要在計算入口換一次，底下的 empPayConfig \/ calcSalary \/ leaderBonusOf 就全都是月份版/.test(src));
 
 console.log('\n⑤ 設定畫面：一次編一個月');
-ok('★ 視窗上方可以挑月份', /<select onchange="openHrSalary\('\$\{id\}',this\.value\)">\$\{monthOptions\(window\._hrSalYm,''\)\}<\/select>/.test(src));
+ok('★ 視窗上方可以挑月份', /<select class="ui-select" onchange="openHrSalary\('\$\{id\}',this\.value\)">\$\{monthOptions\(window\._hrSalYm,''\)\}<\/select>/.test(src));
 ok('　　未來月份也挑得到（先排下個月的條件）', /monthOptions\(window\._hrSalYm,''\)/.test(src));
 ok('★ 畫面帶出「那個月適用的條件」', /const c=empAtMonth\(c0, window\._hrSalYm\);/.test(src));
 /* 2026-09-30：那一行灰色小字改成一枚狀態章 —— 它講的是這一頁最關鍵的事
@@ -101,7 +101,7 @@ ok('★ 畫面帶出「那個月適用的條件」', /const c=empAtMonth\(c0, wi
 ok('★★★ 用一枚章講清楚現在看的是自己的版本、沿用來的、還是歷史月份',
    /const _own=!!\(_hit && _hit\.ym===window\._hrSalYm\);/.test(src)
    && /const _past=String\(window\._hrSalYm\) < ymd\(TODAY\)\.slice\(0,7\);/.test(src)
-   && /hr-vtag-inherit">\$\{_hit\?`沿用 \$\{String\(Number\(_hit\.ym\.slice\(5,7\)\)\)\} 月`:'尚未設定'\}/.test(src)
+   && /ui-badge ui-badge--warn">\$\{_hit\?`沿用 \$\{String\(Number\(_hit\.ym\.slice\(5,7\)\)\)\} 月`:'尚未設定'\}/.test(src)
    && /歷史月份<b>僅供查閱<\/b>，更正需先核對原始紀錄/.test(src));
 ok('★ 儲存寫成那個月的快照', /_map\[_ym\]=payRuleSnapshot\(c\);/.test(src) && /c\.pay_rules=_map;/.test(src));
 ok('★ 儲存前先使用共用保護保留所有歷史月份', /const _historyRules=payRulesPreserveHistory\(c,_saveYm\);/.test(src) && /const _map=_historyRules;/.test(src));

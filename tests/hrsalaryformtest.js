@@ -31,7 +31,7 @@ console.log('① 區塊順序＝錢怎麼來');
   /* ⚠ hr-needduty 是組在 dutyRows 這個變數裡的，樣板上只看得到 ${dutyRows}。 */
   ok('★ 「需要值班」的勾選跟著值班區走，不再是第一列',
      T.indexOf('${dutyRows}')>管理
-     && /const dutyRows=`\s*\n\s*<label class="hr-check"[^>]*><input type="checkbox" id="hr-needduty"/.test(F));
+     && /const dutyRows=`\s*\n\s*<label class="ui-check"[^>]*><input type="checkbox" id="hr-needduty"/.test(F));
 }
 
 console.log('\n② 底薪：填 0（課堂抽成制）就淡化');
@@ -59,11 +59,11 @@ console.log('\n④ 新風格：每一區收進白底卡（2026-08-24 使用者�
   /* 2026-10-03：多了「生日禮金」一張（使用者：「生日禮金這個開關可以做在薪資設定這邊嗎」）
      —— 原本只在「人事 → 工作規則 → 編輯」裡，使用者找不到。 */
   ok('★★ 六區各一張白卡（固定薪資／課堂／達標獎金／管理職／生日禮金／值班）',
-     (R.match(/<div class="hr-card"[ >]/g)||[]).length===6);
+     (R.match(/<div class="ui-card"[ >]/g)||[]).length===6);
   ok('★★★ 不用上課就整段不出現（課堂薪資與達標獎金一起收）',
      /<input type="checkbox" id="hr-canteach"/.test(R)
      && /<div id="hr-teach-box"/.test(R)
-     && /<div class="hr-card" id="hr-bonus-card"/.test(R));
+     && /<div class="ui-card" id="hr-bonus-card"/.test(R));
   ok('★★ 區標退成卡上方的小標，不再是整條分隔線',
      /\.hr-sec\{font-size:11px;font-weight:800;color:var\(--t3\);letter-spacing:\.08em;/.test(src)
      && !/\.hr-sec\{[^}]*border-bottom/.test(src));
@@ -73,12 +73,12 @@ console.log('\n④ 新風格：每一區收進白底卡（2026-08-24 使用者�
   /* 2026-09-08：月份與聘僱類型併成一張「適用範圍」卡（兩個都是單一下拉），
      所以卡片數從 7 變 6；標題改成卡內的 .hr-ct。 */
   ok('　　外層那兩區併成一張「適用範圍」卡',
-     (src.match(/<div class="hr-card"[ >]/g)||[]).length>=6
-     && /<div class="hr-ct">適用範圍<\/div>/.test(src)
-     && /<div class="form-row"><label>聘僱類型<\/label><select id="hr-ettype"/.test(src));
+     (src.match(/<div class="ui-card"[ >]/g)||[]).length>=6
+     && /<div class="ui-card__title">適用範圍<\/div>/.test(src)
+     && /<div class="ui-field"><label class="ui-label">聘僱類型<\/label><select class="ui-select" id="hr-ettype"/.test(src));
   ok('★★ 區標收進卡片裡（原本卡外小標＋白卡，兩層標題還各自留白）',
      /\.hr-ct\{font-size:11px;font-weight:800/.test(src)
-     && (src.match(/<div class="hr-ct">/g)||[]).length>=6);
+     && (src.match(/<div class="ui-card__title">/g)||[]).length>=6);
 }
 
 console.log('\n⑤ 唯讀那張摘要要跟編輯視窗講同一件事');

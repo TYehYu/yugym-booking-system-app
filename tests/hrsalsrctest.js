@@ -59,23 +59,23 @@ console.log('① 哪幾項是跟著範本走的');
 console.log('\n② 章怎麼畫');
 {
   const H=grabFn('hrTplSrcHtml');
-  ok('★★★ 有跟著範本的 → 金章，寫出是哪幾項', /hr-vtag-tpl">沿用 \$\{lb\} 範本/.test(H)
+  ok('★★★ 有跟著範本的 → 金章，寫出是哪幾項', /ui-badge ui-badge--warn">沿用 \$\{lb\} 範本/.test(H)
      && /\$\{miss\.join\('、'\)\}/.test(H));
   ok('★★★ 全部自訂 → 綠章，寫明「改範本不會動到他」',
-     /hr-vtag-own2">全部自訂/.test(H) && /改<b>\$\{lb\}<\/b>薪資模板不會動到他/.test(H));
+     /ui-badge">全部自訂/.test(H) && /改<b>\$\{lb\}<\/b>薪資模板不會動到他/.test(H));
   ok('★★★ 畫在「適用範圍」卡裡，與月份版本章並排成兩行',
      /<div id="hr-tplsrc">\$\{hrTplSrcHtml\(c, HR_SAL_ET\)\}<\/div>/.test(src));
   /* ⚠ 換聘僱類型＝換一份範本，「沿用正職範本」那句話當場就不對了 */
   ok('★★★ 換聘僱類型時這枚章要跟著重畫',
      /const sb=document\.getElementById\('hr-tplsrc'\);\s*\n\s*if\(sb\) sb\.innerHTML=hrTplSrcHtml\(src, et\);/.test(src));
   ok('★★ 月份版本章沒被動到（那枚講的是「改的是哪個月」，兩件事）',
-     /hr-vtag\$\{_past\?' hr-vtag-past':' hr-vtag-own'\}">\$\{_ymLb\} 專屬/.test(src)
-     && /hr-vtag hr-vtag-inherit">/.test(src));
+     /ui-badge\$\{_past\?' ui-badge--danger':''\}">\$\{_ymLb\} 專屬/.test(src)
+     && /ui-badge ui-badge--warn">\$\{_hit/.test(src));
 }
 
 console.log('\n③ 管理職的全店共用框');
 {
-  ok('★★★ 團隊獎金那一塊包在金框裡', /<div class="hr-shared">\s*\n\s*<div class="hr-shared-h"><span class="hr-shared-b">全店共用<\/span>/.test(src));
+  ok('★★★ 團隊獎金那一塊包在金框裡', /<div class="ui-card ui-card--shared">\s*\n\s*<div class="ui-sharedhead"><span class="ui-badge ui-badge--warn">全店共用<\/span>/.test(src));
   ok('★★★ 框裡寫明「不是只改這一位」', /以下三項改的是<b>全店設定<\/b>，不是只改這一位/.test(src));
   ok('★★★ 內容還是原本那一支（沒有複製一份出來）', /<\/div>\s*\n\s*\$\{hrTeamBoxHtml\(\)\}/.test(src));
   ok('★★ 金色＝次要警示（紅 > 金 > 綠）', /\.hr-shared\{border:1\.5px solid var\(--gold,#B48A56\)/.test(src));
@@ -87,7 +87,7 @@ console.log('\n③ 管理職的全店共用框');
 console.log('\n④ 生日禮金那張卡');
 {
   const B=grabFn('hrSalaryBodyHtml');
-  ok('★★★ 有這張卡、有勾選框', /<div class="hr-ct">生日禮金<\/div>/.test(B)
+  ok('★★★ 有這張卡、有勾選框', /<div class="ui-card__title">生日禮金<\/div>/.test(B)
      && /<input type="checkbox" id="hr-bday" \$\{c\.birthday_bonus_off\?'':'checked'\}>發生日禮金/.test(B));
   /* ⚠ 欄位存的是「關掉」，所以讀寫都要反過來 —— 寫反了就是全店一起開或一起關 */
   ok('★★★ 存檔時反過來寫（勾著＝照發）',

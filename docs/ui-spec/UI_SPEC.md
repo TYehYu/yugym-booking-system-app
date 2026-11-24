@@ -26,6 +26,9 @@
 - **標籤** `.ui-badge`（預設綠）`--warn` `--danger` `--info` `--muted`。
 - **視窗** 放進 `showModal()` 的內容：開頭放一個 `<div class="ui-modal"></div>` 當標記（會把外層改成規格外觀），標題 `.ui-modal-title`、副標 `.ui-modal-sub`、內容 `.ui-modal-body`、底部按鈕 `.ui-modal-foot`。
   ⚠ 底部按鈕列用 `.ui-modal-foot`，**不要用 `.modal-foot`**：手機版 `.modal-foot` 有浮動透明底欄的特殊規則，自訂按鈕會看不見（2026-11-24 薪資條件視窗踩到）。
+- **表格式輸入列** `.ui-gridrow`＋`--tier`／`--bonus`／`--team`（欄頭用 `.ui-gridhead` 搭同一個 modifier，欄寬一致），刪除鈕用 `.ui-btn--icon`。
+- **全店共用區塊** `.ui-card--shared`＋`.ui-sharedhead`；版本／範本狀態列 `.ui-verrow`。
+- **寬視窗** 標記改成 `<div class="ui-modal ui-modal--wide"></div>`（桌機最寬 680）。
 - **空狀態** `.ui-empty`。
 
 ## 遷移原則（第 2 批起）

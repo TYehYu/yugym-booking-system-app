@@ -9,7 +9,7 @@ const css=src.slice(a,b).replace(/\/\*[\s\S]*?\*\//g,'');
 // 展開 @media，取出所有選擇器
 const sels=[];css.replace(/([^{}@]+)\{[^{}]*\}/g,(m,s)=>{s.split(',').forEach(x=>sels.push(x.trim()));return m;});
 test('每個選擇器都只碰 ui- 開頭的名稱（或 :root、.modal:has(.ui-modal)）→ 不影響任何既有畫面',()=>{
-  const bad=sels.filter(x=>x&&!(x===':root'||/^\.modal:has\(\.ui-modal\)$/.test(x)||/^\.ui-[a-z0-9_-]+([\s>+~.:\[][^,]*)?$/.test(x)||/^\.ui-/.test(x)));
+  const bad=sels.filter(x=>x&&!(x===':root'||/^\.modal:has\(\.ui-modal(--wide)?\)$/.test(x)||/^\.ui-[a-z0-9_-]+([\s>+~.:\[][^,]*)?$/.test(x)||/^\.ui-/.test(x)));
   assert.deepEqual(bad,[],'非 ui- 選擇器：'+bad.join(' | '));});
 test('變數只新增 --ui-*',()=>{const root=css.slice(css.indexOf(':root{'),css.indexOf('}',css.indexOf(':root{')));const vars=[...root.matchAll(/(--[a-z0-9-]+)\s*:/g)].map(m=>m[1]);assert(vars.length>30);assert.deepEqual(vars.filter(v=>!v.startsWith('--ui-')),[]);});
 test('字級只用階梯（變數或階梯內的值）、圓角只用變數',()=>{
