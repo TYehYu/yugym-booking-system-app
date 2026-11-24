@@ -101,13 +101,12 @@ console.log('\n④ 改成其他場地且有同行預約');
 {
   const mk=()=>{ const e=mkEnv(); e.rows.push(root({status:'booked'}),sib()); e.window._svPick={id:'BK1',unit:'group',units:1}; return e; };
   const e=mk(); await e.api.setSelfVenue();
-  ok('★ 先跳「保留／一併取消」視窗', e.log.modals.length===1 && /保留/.test(e.log.modals[0]) && /一併取消/.test(e.log.modals[0]), e.log.modals);
+  ok('★ 先跳確認視窗：沒有「保留」選項，只有返回／改場地並取消同行', e.log.modals.length===1 && !/保留（/.test(e.log.modals[0]) && /取消同行/.test(e.log.modals[0]), e.log.modals);
   ok('★ 跳視窗這一步零寫入（還沒改主預約、也沒碰同行）', writes(e)===0, e.log);
   ok('★ 有「返回」，且返回只是重開場地視窗（bkOrbitVenue）', /bkOrbitVenue\('BK1'\)/.test(e.log.modals[0]));
   ok('★ 關閉視窗（不按任何鍵）＝零寫入、資料不變', writes(e)===0 && e.rows.find(r=>r.id==='BK1').venue_unit==='treadmill_1' && e.rows.find(r=>r.id==='BK2').status==='booked');
   const k=mk(); await k.api.setSelfVenue(); await wait(450); await k.api.svSibChoose('keep'); await wait(5);
-  ok('★ 保留：只改主預約場地，同行預約不動，沒有偷偷取消', k.rows.find(r=>r.id==='BK1').venue_unit==='group_1' && k.rows.find(r=>r.id==='BK2').status==='booked' && k.log.updates.length===0, k.log);
-  ok('　　保留的提示明講同行仍保留', /仍保留/.test(k.log.toasts.slice(-1)[0]||''), k.log.toasts);
+  ok('★ 即使舊畫面傳來 keep，也當作一併取消（不會留下幽靈佔位）', k.rows.find(r=>r.id==='BK1').venue_unit==='group_1' && k.rows.find(r=>r.id==='BK2').status==='cancelled', k.log);
   const c=mk(); await c.api.setSelfVenue(); await wait(450); await c.api.svSibChoose('cancel'); await wait(5);
   ok('★ 一併取消：主預約改場地＋同行預約取消，並核對結果', c.rows.find(r=>r.id==='BK1').venue_unit==='group_1' && c.rows.find(r=>r.id==='BK2').status==='cancelled' && /同行預約已取消/.test(c.log.toasts.slice(-1)[0]||''), c.log.toasts);
   const f=mk(); f.rows.find(r=>r.id==='BK2').status='checked_in'; await f.api.setSelfVenue(); await wait(450); await f.api.svSibChoose('cancel'); await wait(5);
