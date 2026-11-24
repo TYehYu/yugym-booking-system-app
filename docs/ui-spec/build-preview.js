@@ -1,0 +1,21 @@
+// 產生 docs/ui-spec/preview.html：從 index.html 取出 /*UI-SPEC:BEGIN*/…/*UI-SPEC:END*/ 規格區塊，
+// 排上每個元件的範例，用瀏覽器開就能看（規格改了就重跑一次：node docs/ui-spec/build-preview.js）。
+const fs=require('fs'),path=require('path');
+const src=fs.readFileSync(path.join(__dirname,'../../index.html'),'utf8');
+const a=src.indexOf('/*UI-SPEC:BEGIN*/'),b=src.indexOf('/*UI-SPEC:END*/');
+if(a<0||b<0)throw new Error('找不到規格區塊');
+const css=src.slice(a,b);
+const html=`<!doctype html><html lang="zh-Hant"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>UI 規格預覽</title>
+<style>body{margin:0;background:#faf7f0;font-family:-apple-system,"PingFang TC","Noto Sans TC",sans-serif;color:#2d241c}main{max-width:720px;margin:0 auto;padding:20px 16px 60px}h1{font-size:22px}h2{font-size:13px;letter-spacing:.08em;color:#948f84;margin:28px 0 10px}.row{display:flex;gap:10px;flex-wrap:wrap;align-items:center}.demo-modal{background:#faf7f0;border-radius:22px;padding:20px 18px 18px;box-shadow:0 12px 40px rgba(30,25,15,.22);max-width:420px;border:1px solid #deddd5}</style>
+<style>${css}</style></head><body><main>
+<h1>YUGYM UI 規格 v1</h1>
+<h2>按鈕</h2><div class="row"><button class="ui-btn ui-btn--primary">儲存</button><button class="ui-btn">取消</button><button class="ui-btn ui-btn--danger">刪除</button><button class="ui-btn ui-btn--danger-soft">作廢</button><button class="ui-btn ui-btn--link">完整設定 ›</button><button class="ui-btn ui-btn--sm">小按鈕</button><button class="ui-btn" disabled>停用</button></div>
+<h2>輸入框</h2><div class="ui-card"><div class="ui-field-row"><div class="ui-field"><label class="ui-label">底薪（月）</label><input class="ui-input" type="number" value="29500"></div><div class="ui-field"><label class="ui-label">計算方式</label><select class="ui-select"><option>累進制</option><option>固定制</option></select></div></div><div class="ui-field"><label class="ui-label">備註</label><textarea class="ui-textarea">範例文字</textarea><span class="ui-help">輔助說明文字</span></div><label class="ui-check"><input type="checkbox" checked>需要上課</label></div>
+<h2>卡片與提示</h2><div class="ui-card"><div class="ui-card__title">固定薪資</div><div class="ui-note">一般提示文字，放在卡片裡的說明。</div></div><div class="ui-card"><div class="ui-card__title">缺資料</div><div class="ui-note ui-note--warn">缺歷史依據：2026-07～2026-10 沒有薪資快照。</div></div>
+<h2>頁籤</h2><div class="ui-tabs"><button class="ui-tab" aria-selected="false">員工名單</button><button class="ui-tab" aria-selected="false">月度作業</button><button class="ui-tab" aria-selected="true">勞健保</button><button class="ui-tab" aria-selected="false">特休</button><button class="ui-tab" aria-selected="false">權限設定</button></div>
+<h2>標籤</h2><div class="row"><span class="ui-badge">正職</span><span class="ui-badge ui-badge--warn">待補</span><span class="ui-badge ui-badge--danger">已停用</span><span class="ui-badge ui-badge--info">兼職</span><span class="ui-badge ui-badge--muted">未設定</span></div>
+<h2>視窗（放進 showModal 的內容樣式）</h2><div class="demo-modal"><div class="ui-modal"></div><div class="ui-modal-title">薪資條件 · 範例</div><div class="ui-modal-sub">只調整本月起，過去月份不受影響。</div><div class="ui-modal-body"><div class="ui-card"><div class="ui-card__title">固定薪資</div><div class="ui-field"><label class="ui-label">底薪</label><input class="ui-input" value="29500"></div></div></div><div class="ui-modal-foot"><button class="ui-btn">取消</button><button class="ui-btn ui-btn--primary">儲存</button></div></div>
+<h2>空狀態</h2><div class="ui-card"><div class="ui-empty">目前沒有資料</div></div>
+</main></body></html>`;
+fs.writeFileSync(path.join(__dirname,'preview.html'),html);
+console.log('preview.html 已產生（規格 '+css.length+' 字元）');
