@@ -31,5 +31,14 @@ let n=0;function test(label,fn){fn();n++;console.log('✓ '+label);}
  await c.staffHubProfile('E1','salary');test('薪資試算清楚標示尚未月結',()=>assert(c.modal.includes('尚未月結或發布')));
  c.SESSION={role:'coach'};calls=[];await c.renderStaffHub();test('非管理員不讀取員工管理資料',()=>{assert.equal(calls.length,0);assert(nodes['staff-body'].innerHTML.includes('沒有員工管理權限'));});
  c.SESSION={role:'admin'};failRead=true;await c.renderStaffHub();test('讀取失敗明確報錯而非當成零人',()=>assert(nodes['staff-body'].innerHTML.includes('無法讀取')));
+ 
+ failRead=false;c.SESSION={role:'admin'};c.empCountSalary=()=>true;c.staffMonthStats=async rows=>{const o={};rows.forEach(e=>o[e.id]={pt:3,ptAll:4,grp:1,grpAll:2,renew:1,net:12345});return o;};
+ c.staffHubFilter('type','');c.staffHubFilter('query','');
+ c.staffHubMode('monthly');await c.renderStaffHub();
+ test('月度作業有當月表現',()=>{const h=nodes['staff-hub-rows'].innerHTML;assert(h.includes('教練課'),h.slice(0,300));assert(h.includes('3/4'));assert(h.includes('$12,345'));assert(h.includes('sh-rk'));assert(h.includes('sh-legend'));});
+ c.staffMonthStats=async()=>{throw new Error('boom')};c.staffHubMode('monthly');await c.renderStaffHub();
+ test('統計失敗不拖垮名單',()=>{const h=nodes['staff-hub-rows'].innerHTML;assert(h.includes('sh-row'));assert(h.includes('—'));});
+ c.staffHubMode('directory');await c.renderStaffHub();
+ test('名單模式無當月表現',()=>assert(!nodes['staff-hub-rows'].innerHTML.includes('教練課')));
  console.log(n+' passed, 0 failed');
 })().catch(e=>{console.error(e);process.exitCode=1;});
