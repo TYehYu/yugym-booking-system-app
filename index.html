@@ -15846,8 +15846,8 @@ async function empMergeSelf(rows){
 let sb=null;
 // ── 版本號（日期+時間格式：年後兩碼+月+日.時分，例 26620.1058 = 26年6/20 10:58）──
 // 每次改版手動更新這一行即可，畫面與 title 會一起更新
-const APP_VERSION = '261124.1446';
-const APP_VERSION_LABEL = 'v261124.1446';
+const APP_VERSION = '261124.1620';
+const APP_VERSION_LABEL = 'v261124.1620';
 const CLOUD = !!(window.YUGYM_CONFIG && window.YUGYM_CONFIG.url && window.YUGYM_CONFIG.anonKey);
 if(CLOUD){ sb = supabase.createClient(window.YUGYM_CONFIG.url, window.YUGYM_CONFIG.anonKey); }
 
@@ -54365,10 +54365,17 @@ function staffHubIcon(kind){
   const paths={people:'<circle cx="9" cy="8" r="3"/><path d="M3 20v-2a6 6 0 0 1 12 0v2M16 5a3 3 0 0 1 0 6M18 14a5 5 0 0 1 3 5"/>',clock:'<circle cx="12" cy="12" r="9"/><path d="M12 7v5l3 2"/>',file:'<path d="M6 3h9l4 4v14H6zM14 3v5h5M9 12h7M9 16h5"/>',alert:'<path d="m12 3 10 18H2zM12 9v5M12 17v1"/>'};
   return `<svg aria-hidden="true" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round">${paths[kind]||paths.file}</svg>`;
 }
+/* 員工名單排序：管理員 → 主管 → 正職 → 兼職／其他；同級依姓名。只影響顯示順序，不動資料。 */
+function staffHubRank(e,month){
+  if(e.role==='admin')return 0;
+  if(e.is_supervisor||e.is_manager||staffHubJob(e)==='主管')return 1;
+  return stEtNow(e,month)==='full_time'?2:3;
+}
 function staffHubDrawRows(){
   const box=document.getElementById('staff-hub-rows');if(!box)return;
   const query=STAFF_HUB.query.trim().toLowerCase(),month=stMonthCur(),monthly=STAFF_HUB.mode==='monthly';
   const rows=STAFF_HUB.rows.filter(e=>(!STAFF_HUB.type||stEtNow(e,month)===STAFF_HUB.type)&&(STAFF_HUB.status==='all'||(STAFF_HUB.status==='active'?staffHubStatus(e)==='在職':STAFF_HUB.status==='pending'?staffHubStatus(e)==='待設定':staffHubStatus(e)==='已停用'))&&(!query||[e.name,e.name_en,e.emp_no].some(v=>String(v||'').toLowerCase().includes(query)))).sort((a,b)=>Number(!!b.is_manager)-Number(!!a.is_manager)||String(a.name||'').localeCompare(String(b.name||''),'zh-Hant'));
+  rows.sort((x,y)=>staffHubRank(x,month)-staffHubRank(y,month)||String(x.name||'').localeCompare(String(y.name||''),'zh-Hant'));
   if(!rows.length){box.innerHTML='<div class="empty">找不到符合條件的員工</div>';return;}
   box.innerHTML=`<div class="sh-table-head"><span>員工</span><span>${monthly?'出勤核對':'職務／任用'}</span><span>${monthly?'薪資條件':'到職日／年資'}</span><span>${monthly?'操作':'系統權限／狀態'}</span></div>`+rows.map(e=>{
     const attr=staffHubAttr(e.id),pending=STAFF_HUB.requests.filter(r=>r.emp_id===e.id&&r.status==='pending'&&String(r.date||'').slice(0,7)===month).length;
