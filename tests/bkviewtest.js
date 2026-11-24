@@ -103,14 +103,14 @@ ok('　　章的文字集中在一個表', /const BK_STAMP_TEXT=\{cancel:'刪', 
 console.log('\n四個畫面都改用共用層');
 ok('★ ① 桌機行事曆（四種情況都走同一支）',
    (src.match(/_nameBase=bkName\(b,id=>memMap\[id\]\); _nameTag=bkTag\(b\); memName=bkNameFull\(b,id=>memMap\[id\]\);/g)||[]).length===4);
-ok('★ ② 手機週檢視', /else \{ disp=bkName\(b,id=>memMap\[id\]\); dispTag=bkTag\(b\); if\(disp==='—'\) disp='課程'; \}/.test(src));
+ok('★ ② 手機週檢視', /else \{ disp=bkName\(b,id=>memMap\[id\]\); dispTag=bkTagShow\(b\); if\(disp==='—'\) disp='課程'; \}/.test(src));
 /* 2026-08-01：人數改用共用的 grpHeadLabel（有人請假就標「會來的/報名的」） */
 ok('★ ③ 首頁任務卡',
    /const nm = _isGrp \? grpHeadLabel\(b\) : bkName\(b,_nameOf\);/.test(src)
-   && /const _tag = _isGrp \? '' : bkTag\(b\);/.test(src));
+   && /const _tag = _isGrp \? '' : bkTagShow\(b\);/.test(src));
 ok('★ ④ 首頁圓點',
    /const nm2=_grpN2\?grpHeadLabel\(b\):bkName\(b,_nameOf2\);/.test(src)
-   && /const _lb2=_grpN2\?'':bkTag\(b\);/.test(src));
+   && /const _lb2=_grpN2\?'':bkTagShow\(b\);/.test(src));
 ok('★ 狀態章：手機週檢視、首頁任務卡、首頁圓點都吃 bkStampKind',
    (src.match(/bkStampKind\(b\)/g)||[]).length>=3);
 ok('　　nameOf 由呼叫端傳（各畫面的 map 存法不同：有的存物件、有的存字串）',

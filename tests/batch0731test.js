@@ -153,7 +153,7 @@ console.log('\n手機行事曆：待簽約的課要看得到名字（2026-07-31 
   const i=src.indexOf('    let disp, dispTag=\'\';');
   const blk=src.slice(i, src.indexOf('\n    /* 卡片視覺改桌機版標準卡', i));
   ok('★ 非團課一律走共用層（體驗／待簽約／場租／待繳費都涵蓋）',
-     /else \{ disp=bkName\(b,id=>memMap\[id\]\); dispTag=bkTag\(b\); if\(disp==='—'\) disp='課程'; \}/.test(blk));
+     /else \{ disp=bkName\(b,id=>memMap\[id\]\); dispTag=bkTagShow\(b\); if\(disp==='—'\) disp='課程'; \}/.test(blk));
   ok('★ 團課主行仍是人數（各畫面不同，維持各自處理）', /disp=n>0\?`團 \$\{n\}`:'團體課';/.test(blk));
   ok('　　沒有人的自主訓練仍顯示「自主訓練」', /bkIsSelf\(b\) && !b\.member_id && !b\.trial_name/.test(blk));
   ok('★ 標籤畫成第二列，與桌機一致', /\$\{dispTag\?`<span class="evc-sub">\$\{dispTag\}<\/span>`:''\}/.test(src));
@@ -192,7 +192,7 @@ console.log('\n課卡：體驗／待簽約另起一列放在姓名下面（2026-
      紅框的條件就是 pending_contract，跟那兩個標籤完全同一個旗標。 */
   ok('　　遮蔽卡不掛；團課掛「團課」；待簽約／待繳費交給紅框',
      /\(_grpCard \? '團課'/.test(src)
-     && /\(\(_nameTag==='待簽約' \|\| _nameTag==='待繳費'\) \? '' : \(_nameTag\|\|''\)\)/.test(src));
+     && /\(\(_nameTag==='待簽約' \|\| _nameTag==='待繳費'\) \? '' : \(_nameTag\|\|bkTagExtra\(b\)\)\)/.test(src));
   ok('　　〔待安排〕留著（紅框表達不了「連人都還沒排」）',
      /〔待安排〕\*\*留著\*\*/.test(src));
   ok('　　小字樣式有定義，窄卡再縮一級',

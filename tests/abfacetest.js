@@ -331,7 +331,7 @@ ok('★★★ 團課也有標籤了（1027 使用者：「友善＋體驗＋團�
    /_grpCard \? '團課'/.test(src));
 ok('★★★ 換成自己的 class，而且有一字版（st-fl／st-ab）',
    /<span class="evc-stag"><i class="st-fl">\$\{_stagTx\}<\/i><i class="st-ab">\$\{bkTagAbbr\(_stagTx\)\}<\/i><\/span>/.test(src)
-   && /const BK_TAG_AB=\{'體驗':'體','待簽約':'約','待繳費':'費','場租':'租','待安排':'排','團課':'團'\}/.test(src));
+   && /const BK_TAG_AB=\{'體驗':'體','待簽約':'約','待繳費':'費','場租':'租','待安排':'排','團課':'團','運動':'運'\}/.test(src));
 ok('★★ 標籤的三階（全字 76px↑／一字 56–75／55px↓ 收起來）',
    /@container \(max-width:75px\)\{\s*\n\s*\.cal-ev\.cal-ev-std \.st-fl\{display:none;\}/.test(css)
    && /@container \(max-width:55px\)\{\s*\n\s*\.cal-ev\.cal-ev-std \.evc-stag\{display:none;\}/.test(css));

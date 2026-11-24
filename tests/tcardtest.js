@@ -49,7 +49,7 @@ ok('★ 標籤仍走 _tagOut（0822 起跟教練標籤一起放在右下角那�
 /* 2026-07-31 重構：標籤走共用的 bkTag（待簽約／待繳費由有沒有綁會員決定） */
 ok('★ 待簽約／待繳費分得開（有沒有綁會員）',
    /if\(b\.pending_contract\) return bkIsInstHold\(b\) \? '待繳費' : '待簽約';/.test(src)   // 2026-08-04 純綁定仍是待簽約
-   && /const _tag = _isGrp \? '' : bkTag\(b\);/.test(src));
+   && /const _tag = _isGrp \? '' : bkTagShow\(b\);/.test(src));   // 2026-11-24：首頁任務卡改用 bkTagShow（bkTag 再補運動按摩的〔運動〕）
 ok('　　體驗與場租沿用 bkGuestLabel（與行事曆同一套判定）',
    /if\(b\.category==='體驗'\) return '體驗';/.test(src));
 ok('　　團課不掛（主行是人數，不是姓名）', /_isGrp \? '' :/.test(src));
