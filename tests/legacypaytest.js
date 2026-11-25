@@ -134,7 +134,7 @@ ok('　　為什麼掛在前一個月，寫在程式裡',
 ok('★ 生日禮金算進應發', /const grossPay = ptIncome \+ bonus \+ groupPay \+ dutyPay \+ renewPay \+ mgmtPay \+ bdayPay;/.test(src));
 ok('★ 金額是全域設定，不寫死在計算裡', /birthday_bonus: 1000,/.test(src)
    && /const bdayPay=isBday\?\(Number\(G\.birthday_bonus\)\|\|0\):0;/.test(src));
-ok('　　設定畫面改得到', /<input type="number" id="sg-bday" value="\$\{G\.birthday_bonus\?\?1000\}">/.test(src)
+ok('　　設定畫面改得到', /<input class="ui-input" type="number" id="sg-bday" value="\$\{G\.birthday_bonus\?\?1000\}">/.test(src)
    && /birthday_bonus:gv\('sg-bday'\)\?\?1000,/.test(src));
 ok('　　全域制度卡看得到這一條', /\$\{grow\('生日禮金',money\(G\.birthday_bonus\?\?1000\)\+'（生日當月自動加給）'\)\}/.test(src));
 ok('★ 三處薪資明細都列得出來（月結表格、月結卡片、個人薪資頁）',

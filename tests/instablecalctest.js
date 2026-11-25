@@ -64,7 +64,7 @@ ok('★ 級距欄可直接點開設定（沒設定時顯示「＋ 設定級距�
    /\$\{c\.insured_grade\?'\$'\+Number\(c\.insured_grade\)\.toLocaleString\(\):'＋ 設定級距'\}/.test(src));
 ok('★ 加保日顯示在級距下面', /加保 \$\{String\(c\.insured_enroll_date\)\.slice\(5\)\.replace\('-','\/'\)\}/.test(src));
 ok('★ 編輯視窗：級距與加保日提到最上面，改了即時試算',
-   /<label>投保級距（金額）\*<\/label><input type="number" id="ins-grade"[^>]*oninput="insPreview/.test(src)
+   /<label class="ui-label">投保級距（金額）\*<\/label><input class="ui-input" type="number" id="ins-grade"[^>]*oninput="insPreview/.test(src)
    && /function insPreview\(\)\{/.test(src)
    && /合計：員工自付/.test(src));
 ok('　　費率說明列在表格下方（含健保下限與眷屬未計入）',
