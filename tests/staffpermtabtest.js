@@ -35,5 +35,6 @@ let n=0;const test=(l,f)=>{f();n++;console.log('✓ '+l);};
    const g=src.slice(src.indexOf("{key:'g_admin'"),src.indexOf("]},",src.indexOf("{key:'g_admin'")));
    assert(!/label:'勞健保'/.test(g)&&!/label:'特休'/.test(g)&&!/label:'權限設定'/.test(g));assert(/tabs:\['list','insurance','leave','perm'\]/.test(g));});
  test('舊頁面 settings_staff 仍在（舊深層連結不壞），用同一份內容',()=>assert(/PAGES\.settings_staff=async function\(\)\{[\s\S]{0,200}staffPermBodyHtml\(\)/.test(src)));
+ test('勞健保：姓名欄有職等色頭像＋英文名，名單依職等排序（與員工名單一致）',()=>{const i=src.indexOf('async function renderStaffInsurance');const b=src.slice(i,i+1600);assert(/staffPersonCell\(c\)/.test(b)&&/staffHubRank\(a,stMonthCur\(\)\)-staffHubRank\(b,stMonthCur\(\)\)/.test(b));assert(/function staffPersonCell\(e,month\)\{[\s\S]{0,400}sh-avatar sh-rk/.test(src));});
  console.log(n+' passed, 0 failed');
 })().catch(e=>{console.error(e);process.exitCode=1;});
