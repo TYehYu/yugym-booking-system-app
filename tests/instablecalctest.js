@@ -60,8 +60,8 @@ ok('★ 表頭：級距·加保日在前，後面三欄是金額',
 ok('★ 三欄都走同一支 insCell（上自付、下公司）',
    (src.match(/insCell\(a,'(labor|health|pension)'/g)||[]).length===3
    && /公司 \$\{money\(v\.co\)\}/.test(src));
-ok('★ 級距欄可直接點開設定（沒設定時顯示「＋ 設定級距」）',
-   /\$\{c\.insured_grade\?'\$'\+Number\(c\.insured_grade\)\.toLocaleString\(\):'＋ 設定級距'\}/.test(src));
+ok('★ 級距欄顯示金額（沒設定時顯示「未設定」），編輯統一走最右邊的「編輯」按鈕（2026-11-25：不再兩顆按鈕開同一個視窗）',
+   src.includes('<td data-label="投保級距 · 加保日">${c.insured_grade?`<b style="font-size:var(--ui-fs-5)">$${Number(c.insured_grade).toLocaleString()}</b>`:\'<span class="ui-help">未設定</span>\'}'));
 ok('★ 加保日顯示在級距下面', /加保 \$\{String\(c\.insured_enroll_date\)\.slice\(5\)\.replace\('-','\/'\)\}/.test(src));
 ok('★ 編輯視窗：級距與加保日提到最上面，改了即時試算',
    /<label class="ui-label">投保級距（金額）\*<\/label><input class="ui-input" type="number" id="ins-grade"[^>]*oninput="insPreview/.test(src)
