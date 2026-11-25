@@ -6,7 +6,7 @@ const nodes={'staff-body':{innerHTML:''},'staff-hub-rows':{innerHTML:''}};
 const fixtures=[{id:'E1',name:'測試主管',name_en:'MANGO',role:'coach',job_title:'主管',is_manager:true,status:'active',employment_type:'full_time',hire_date:'2024-07-01',pay_rules:{'2026-10':{employment_type:'full_time',base_salary:29500,pt_mode:'tier',pt_rate:0,group_rate:200,duty_hourly:0}}},{id:'E2',name:'<img src=x onerror=bad()>',role:'coach',status:'active',employment_type:'contractor',pay_rules:{'2026-10':{insured_grade:29500}}},{id:'E3',name:'櫃檯員工',role:'front_desk',status:'active',employment_type:'part_time'},{id:'DEVICE',name:'設備',is_device:true,role:'front_desk'}];
 let navs=[],calls=[],failRead=false,toasts=[];
 const esc=s=>String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;').replace(/'/g,'&#39;');
-const c={_staffTab:'list',CUR_TAB:'list',CUR_GROUP:'g_admin',navTo:(...a)=>{navs.push(a);},SESSION:{role:'admin'},TODAY:'2026-11-18',PAY_LABEL:{full_time:'正職',contractor:'合作',part_time:'兼職'},document:{getElementById:id=>nodes[id]},console:{error:()=>{}},ymd:x=>x,stMonthCur:()=> '2026-11',stEtNow:e=>e.employment_type,jobTitleTx:x=>x||'',isLegacyPayMonth:m=>m<'2026-07',empRuleAt:(e,m)=>{const k=Object.keys(e.pay_rules||{}).filter(k=>k<=m).sort().pop();return k?{ym:k,rule:e.pay_rules[k]}:null;},escH:esc,stMonthBar:()=>'<span>2026-11</span>',dbGetAll:async name=>{calls.push(name);if(failRead)throw Error('offline');return name==='coaches'?fixtures:name==='punch_requests'?[{emp_id:'E1',status:'pending',date:'2026-11-12'}]:[];},showModal:html=>{c.modal=html;},closeModal:()=>{},showToast:msg=>toasts.push(msg),openSalarySheet:async(id,m)=>{c.salary=[id,m];}};
+const c={normEmp:v=>v||'full_time',window:{_leaveYear:2026},EMP_RULES:{full_time:{},part_time:{},contractor:{leaveApplicable:false},intern:{}},annualLeaveAccount:()=>({grant:56,used:8,remain:48}),_staffTab:'list',CUR_TAB:'list',CUR_GROUP:'g_admin',navTo:(...a)=>{navs.push(a);},SESSION:{role:'admin'},TODAY:'2026-11-18',PAY_LABEL:{full_time:'正職',contractor:'合作',part_time:'兼職'},document:{getElementById:id=>nodes[id]},console:{error:()=>{}},ymd:x=>x,stMonthCur:()=> '2026-11',stEtNow:e=>e.employment_type,jobTitleTx:x=>x||'',isLegacyPayMonth:m=>m<'2026-07',empRuleAt:(e,m)=>{const k=Object.keys(e.pay_rules||{}).filter(k=>k<=m).sort().pop();return k?{ym:k,rule:e.pay_rules[k]}:null;},escH:esc,stMonthBar:()=>'<span>2026-11</span>',dbGetAll:async name=>{calls.push(name);if(failRead)throw Error('offline');return name==='coaches'?fixtures:name==='punch_requests'?[{emp_id:'E1',status:'pending',date:'2026-11-12'}]:[];},showModal:html=>{c.modal=html;},closeModal:()=>{},showToast:msg=>toasts.push(msg),openSalarySheet:async(id,m)=>{c.salary=[id,m];}};
 vm.createContext(c);vm.runInContext(src.slice(a,b)+'\nthis.H=STAFF_HUB;',c);
 let n=0;function test(label,fn){fn();n++;console.log('✓ '+label);}
 (async()=>{
@@ -40,5 +40,12 @@ let n=0;function test(label,fn){fn();n++;console.log('✓ '+label);}
  test('統計失敗不拖垮名單',()=>{const h=nodes['staff-hub-rows'].innerHTML;assert(h.includes('sh-row'));assert(h.includes('—'));});
  c.staffHubMode('directory');await c.renderStaffHub();
  test('名單模式無當月表現',()=>assert(!nodes['staff-hub-rows'].innerHTML.includes('教練課')));
+ c.SESSION={role:'admin'};failRead=false;c.staffHubFilter('type','');c.staffHubFilter('query','');
+ c.staffHubMode('directory');await c.renderStaffHub();
+ test('員工名單：有「特休年度結算」按鈕、每列顯示特休剩餘',()=>{const h=nodes['staff-body'].innerHTML,r=nodes['staff-hub-rows'].innerHTML;assert(h.includes('openLeaveSettlement()'));assert(r.includes('特休剩餘 48 小時'));});
+ await c.staffHubProfile('E1','attendance');
+ test('個人檔案「出勤與休假」：顯示特休帳戶並可進明細／編輯',()=>{assert(c.modal.includes('應給 56')&&c.modal.includes('剩餘 48 小時'));assert(c.modal.includes('openLeaveEdit('));});
+ c.staffHubMode('monthly');await c.renderStaffHub();
+ test('月度作業：有「全店薪資設定」按鈕（原權限設定頁的全域薪資設定）',()=>assert(nodes['staff-body'].innerHTML.includes('openSalaryGlobalEdit()')));
  console.log(n+' passed, 0 failed');
 })().catch(e=>{console.error(e);process.exitCode=1;});

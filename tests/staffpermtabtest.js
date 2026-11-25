@@ -17,19 +17,19 @@ vm.runInContext([blk('const STAFF_TABS=[','];'),"let _staffTab='list';let CUR_TA
   fn('staffViewTabs'),fn('staffHubMode'),fn('staffPermBodyHtml'),fn('staffPermLoadSalary'),pagesStaff,'this.S={get tab(){return _staffTab;},set tab(v){_staffTab=v;},get cur(){return CUR_TAB;}};'].join('\n'),c);
 let n=0;const test=(l,f)=>{f();n++;console.log('✓ '+l);};
 (async()=>{
- test('五個檢視：員工名單／月度作業／勞健保／特休／權限設定',()=>assert.deepEqual(vm.runInContext('STAFF_VIEWS.map(x=>x[1])',c).join(),'員工名單,月度作業,勞健保,特休,權限設定'));
+ test('三個檢視：員工名單／月度作業／勞健保（特休併進員工名單，權限設定頁籤移除）',()=>assert.equal(vm.runInContext('STAFF_VIEWS.map(x=>x[1])',c).join(),'員工名單,月度作業,勞健保'));
  for(const [tab,call] of [['insurance','renderStaffInsurance'],['leave','renderStaffLeave']]){
    c.S.tab=tab;out.calls=[];await c.PAGES.staff();
-   test(tab+'：頁首有同一排頁籤、選中自己、內容走原本的畫面',()=>{assert(out.html.includes('ui-tabs'));assert(out.html.includes('aria-selected="true" onclick="staffHubMode(\''+tab+'\')"'));assert(out.calls.includes(call));});
+   test(tab+'：頁首有同一排頁籤、內容走原本的畫面'+(tab==='insurance'?'、選中自己':'（舊連結相容）'),()=>{assert(out.html.includes('ui-tabs'));if(tab==='insurance')assert(out.html.includes('aria-selected="true" onclick="staffHubMode(\''+tab+'\')"'));assert(out.calls.includes(call));});
  }
  c.S.tab='perm';out.calls=[];out.html='';await c.PAGES.staff();
- test('權限設定：有頁籤列、選中權限設定、畫出角色權限與薪資制度',()=>{assert(out.html.includes('aria-selected="true" onclick="staffHubMode(\'perm\')"'));assert(out.body.includes('角色與權限')&&out.body.includes('薪資制度'));assert(out.calls.includes('renderSalaryTemplates:settings-salary-body'));});
+ test('權限設定（舊連結相容）：仍畫得出角色權限與薪資制度',()=>{assert(out.html.includes('ui-tabs'));assert(out.body.includes('角色與權限')&&out.body.includes('薪資制度'));assert(out.calls.includes('renderSalaryTemplates:settings-salary-body'));});
  test('權限設定頁的薪資制度存檔後會回到這個頁籤（host=staffperm）',()=>assert.equal(c.window._salaryHost,'staffperm'));
  // 切換
- out.navs=[];c.S.tab='list';c.staffHubMode('perm');
- test('點「權限設定」→ 記住頁籤並整頁重畫',()=>{assert.equal(c.S.tab,'perm');assert.equal(c.S.cur,'perm');assert.equal(out.navs.length,1);});
+ out.navs=[];c.S.tab='list';c.staffHubMode('insurance');
+ test('點「勞健保」→ 記住頁籤並整頁重畫',()=>{assert.equal(c.S.tab,'insurance');assert.equal(c.S.cur,'insurance');assert.equal(out.navs.length,1);});
  out.navs=[];c.staffHubMode('directory');
- test('從權限設定切回員工名單 → 整頁重畫回 list',()=>{assert.equal(c.S.tab,'list');assert.equal(out.navs.length,1);});
+ test('從勞健保切回員工名單 → 整頁重畫回 list',()=>{assert.equal(c.S.tab,'list');assert.equal(out.navs.length,1);});
  // 選單與舊頁
  test('左側選單不再有勞健保／特休／權限設定獨立項目，員工管理涵蓋這三個 tab',()=>{
    const g=src.slice(src.indexOf("{key:'g_admin'"),src.indexOf("]},",src.indexOf("{key:'g_admin'")));

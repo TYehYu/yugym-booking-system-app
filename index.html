@@ -15972,8 +15972,8 @@ async function empMergeSelf(rows){
 let sb=null;
 // ── 版本號（日期+時間格式：年後兩碼+月+日.時分，例 26620.1058 = 26年6/20 10:58）──
 // 每次改版手動更新這一行即可，畫面與 title 會一起更新
-const APP_VERSION = '261125.0200';
-const APP_VERSION_LABEL = 'v261125.0200';
+const APP_VERSION = '261125.0300';
+const APP_VERSION_LABEL = 'v261125.0300';
 const CLOUD = !!(window.YUGYM_CONFIG && window.YUGYM_CONFIG.url && window.YUGYM_CONFIG.anonKey);
 if(CLOUD){ sb = supabase.createClient(window.YUGYM_CONFIG.url, window.YUGYM_CONFIG.anonKey); }
 
@@ -54482,7 +54482,7 @@ function staffHubRuleProblem(e,month){
 function staffHubAttr(id){ return escH(JSON.stringify(String(id))); }
 /* 員工管理四個檢視：員工名單／月度作業／勞健保／特休（2026-11-24：勞健保、特休原本是左側選單獨立項目，併進來）。
    員工名單、月度作業同在 renderStaffHub 內切換；勞健保、特休沿用原本的頁面（_staffTab），只是入口改在這排頁籤。 */
-const STAFF_VIEWS=[['directory','員工名單'],['monthly','月度作業'],['insurance','勞健保'],['leave','特休'],['perm','權限設定']];
+const STAFF_VIEWS=[['directory','員工名單'],['monthly','月度作業'],['insurance','勞健保']];   /* 2026-11-25：特休併進員工名單／個人檔案；權限設定頁籤移除（全店薪資設定改在月度作業的按鈕）。舊的 leave／perm 頁面程式保留給舊連結 */
 function staffViewTabs(active){
   return `<div class="ui-tabs" role="tablist" aria-label="員工管理檢視">${STAFF_VIEWS.map(([k,l])=>`<button class="ui-tab" role="tab" aria-selected="${active===k}" onclick="staffHubMode('${k}')">${l}</button>`).join('')}</div>`;
 }
@@ -54499,6 +54499,7 @@ async function renderStaffHub(){
   box.innerHTML='<div class="empty">正在載入員工資料…</div>';
   try{
     const [rows,attendance,requests]=await Promise.all([dbGetAll('coaches'),dbGetAll('attendance'),dbGetAll('punch_requests')]);
+    try{ STAFF_HUB.shifts=await dbGetAll('shifts'); }catch(_){ STAFF_HUB.shifts=[]; }
     STAFF_HUB.rows=rows.filter(e=>e.is_device!==true);STAFF_HUB.attendance=attendance;STAFF_HUB.requests=requests;STAFF_HUB.loaded=true;
     const active=STAFF_HUB.rows.filter(e=>staffHubStatus(e)==='在職'),month=stMonthCur();
     const pending=requests.filter(r=>r.status==='pending'&&String(r.date||'').slice(0,7)===month),abnormal=attendance.filter(r=>r.clock_in&&!r.clock_out&&r.date<ymd(TODAY)&&String(r.date||'').slice(0,7)===month);
@@ -54506,9 +54507,9 @@ async function renderStaffHub(){
     const monthly=STAFF_HUB.mode==='monthly';
     STAFF_HUB.stats={};
     if(monthly){ try{ STAFF_HUB.stats=await staffMonthStats(STAFF_HUB.rows,month); }catch(e){ console.error('員工當月表現載入失敗',e); } }
-    box.innerHTML=`<section class="staff-v2"><div class="sh-top">${staffViewTabs(monthly?'monthly':'directory')}${monthly?stMonthBar(month,month===ymd(TODAY).slice(0,7)):`<button class="ui-btn ui-btn--primary" onclick="openStaffSignupQR()">＋ 員工申辦</button>`}</div>
+    box.innerHTML=`<section class="staff-v2"><div class="sh-top">${staffViewTabs(monthly?'monthly':'directory')}${monthly?stMonthBar(month,month===ymd(TODAY).slice(0,7)):`<div style="display:flex;gap:8px;flex-wrap:wrap"><button class="ui-btn" onclick="openLeaveSettlement()">特休年度結算</button><button class="ui-btn ui-btn--primary" onclick="openStaffSignupQR()">＋ 員工申辦</button></div>`}</div>
       <div class="sh-stats">${(monthly?[[pending.length,'待核准補卡','clock'],[abnormal.length,'缺下班卡','alert'],[missing.length,'薪資設定待補','file']]:[[active.length,'在職員工','people'],[active.filter(e=>e.is_manager).length,'主管','people'],[STAFF_HUB.rows.filter(e=>staffHubStatus(e)==='待設定').length,'待設定','file']]).map(([n,label,icon])=>`<div class="sh-stat ui-card">${staffHubIcon(icon)}<div><strong>${n}</strong><span>${label}</span></div></div>`).join('')}</div>
-      <div class="sh-section ui-card"><div class="sh-section-head"><div><h2>${monthly?'先處理異常，再核對薪資':'找到員工，查看個人檔案'}</h2><p>${monthly?'本頁顯示核對狀態，薪資尚未月結。':'職務、任用類型與系統權限分開顯示。'}</p></div>${monthly?'<button class="ui-btn" onclick="openPunchManage()">處理補打卡</button>':''}</div>
+      <div class="sh-section ui-card"><div class="sh-section-head"><div><h2>${monthly?'先處理異常，再核對薪資':'找到員工，查看個人檔案'}</h2><p>${monthly?'本頁顯示核對狀態，薪資尚未月結。':'職務、任用類型與系統權限分開顯示。'}</p></div>${monthly?'<div style="display:flex;gap:8px;flex-wrap:wrap"><button class="ui-btn" onclick="openSalaryGlobalEdit()">全店薪資設定</button><button class="ui-btn" onclick="openPunchManage()">處理補打卡</button></div>':''}</div>
       <div class="sh-filters"><input class="ui-input sh-search" type="search" aria-label="搜尋員工" placeholder="搜尋姓名、英文名或員工編號" value="${escH(STAFF_HUB.query)}" oninput="staffHubFilter('query',this.value)"><select class="ui-select" aria-label="任用類型" onchange="staffHubFilter('type',this.value)">${[['','全部任用'],['full_time','正職'],['part_time','兼職'],['contractor','合作'],['intern','支援']].map(([v,l])=>`<option value="${v}"${STAFF_HUB.type===v?' selected':''}>${l}</option>`).join('')}</select><select class="ui-select" aria-label="員工狀態" onchange="staffHubFilter('status',this.value)">${[['active','在職'],['all','全部狀態'],['inactive','已停用'],['pending','待設定']].map(([v,l])=>`<option value="${v}"${STAFF_HUB.status===v?' selected':''}>${l}</option>`).join('')}</select></div><div id="staff-hub-rows"></div></div></section>`;
     staffHubDrawRows();
   }catch(e){STAFF_HUB.loaded=false;box.innerHTML='<div class="empty">無法讀取員工資料，請重新開啟此頁。</div>';console.error('員工管理載入失敗',e);}
@@ -54620,6 +54621,15 @@ async function staffHubSalaryCondSave(id){
     renderStaffHub();
   }catch(e){ console.error('薪資條件儲存失敗',e); showToast('儲存失敗：'+((e&&e.message)||e),6000); }
 }
+/* 名單每列的特休剩餘（算法同特休頁：annualLeaveAccount；不適用特休的身分不顯示） */
+function staffHubLeaveTx(e){
+  try{
+    const rule=EMP_RULES[normEmp(e.employment_type||e.pay_type)]||{};
+    if(rule.leaveApplicable===false) return '';
+    const a=annualLeaveAccount(e,STAFF_HUB.shifts||[],window._leaveYear||TODAY.getFullYear());
+    return '　·　特休剩餘 '+a.remain+' 小時';
+  }catch(_){ return ''; }
+}
 const STAFF_RANK_TX=['管理員','主管','正職','兼職','合作／支援'];
 /* 月度作業的「當月表現」：教練課／團課 已完成/已預約、續約數、當月薪資（與舊員工列表同口徑，見 staffMonthStats） */
 function staffHubPerf(e,st,month){
@@ -54646,7 +54656,7 @@ function staffHubDrawRows(){
   box.innerHTML=`<div class="sh-legend">${STAFF_RANK_TX.map((t,i)=>`<span><i class="sh-rk${i}"></i>${t}</span>`).join('')}</div><div class="sh-table-head"><span>員工</span><span>${monthly?'出勤核對':'職務／任用'}</span><span>${monthly?'薪資條件':'到職日／年資'}</span>${monthly?'<span>當月表現</span>':''}<span>${monthly?'操作':'系統權限／狀態'}</span></div>`+rows.map(e=>{
     const attr=staffHubAttr(e.id),pending=STAFF_HUB.requests.filter(r=>r.emp_id===e.id&&r.status==='pending'&&String(r.date||'').slice(0,7)===month).length;
     const problem=staffHubRuleProblem(e,month),hire=e.hire_date||'',state=staffHubStatus(e),role={admin:'管理員',coach:'教練帳號',front_desk:'櫃檯帳號'}[e.role]||'未設定';
-    return `<article class="sh-row"><button class="sh-person" onclick="staffHubProfile(${attr})"><span class="sh-avatar sh-rk${staffHubRank(e,month)}" title="${STAFF_RANK_TX[staffHubRank(e,month)]}" aria-hidden="true">${escH(String(e.name||'員').slice(0,1))}</span><span><strong>${escH(e.name||'待填寫姓名')}</strong><small>${escH(e.name_en||e.emp_no||'查看個人檔案')}</small></span></button>${monthly?`<div><span class="sh-label">出勤核對</span>${pending?`<button class="ui-btn ui-btn--sm ui-btn--warn" onclick="openPunchFixModal(${attr})">${pending} 筆待核准</button>`:'<span class="ui-badge">無待審補卡</span>'}</div><div><span class="sh-label">薪資條件</span><button class="ui-btn ui-btn--sm${problem?' ui-btn--warn':''}" onclick="staffHubSalaryCond(${attr})" title="調整薪資條件">${problem?'待補・設定條件':'設定薪資條件'} ›</button></div><div><span class="sh-label">當月表現</span>${staffHubPerf(e,STAFF_HUB.stats&&STAFF_HUB.stats[e.id],month)}</div><button class="ui-btn" onclick="staffHubOpenSalary(${attr})">核對薪資</button>`:`<div><span class="sh-label">職務／任用</span><b>${escH(staffHubJob(e))}</b><small>${escH(staffHubType(e))}</small></div><div><span class="sh-label">到職日／年資</span><b>${escH(hire||'待補到職日')}</b><small>${staffHubTenure(hire,ymd(TODAY))}</small></div><div><span class="sh-label">系統權限／狀態</span><b>${role}</b><small class="sh-status">${state}</small></div>`}</article>`;
+    return `<article class="sh-row"><button class="sh-person" onclick="staffHubProfile(${attr})"><span class="sh-avatar sh-rk${staffHubRank(e,month)}" title="${STAFF_RANK_TX[staffHubRank(e,month)]}" aria-hidden="true">${escH(String(e.name||'員').slice(0,1))}</span><span><strong>${escH(e.name||'待填寫姓名')}</strong><small>${escH(e.name_en||e.emp_no||'查看個人檔案')}</small></span></button>${monthly?`<div><span class="sh-label">出勤核對</span>${pending?`<button class="ui-btn ui-btn--sm ui-btn--warn" onclick="openPunchFixModal(${attr})">${pending} 筆待核准</button>`:'<span class="ui-badge">無待審補卡</span>'}</div><div><span class="sh-label">薪資條件</span><button class="ui-btn ui-btn--sm${problem?' ui-btn--warn':''}" onclick="staffHubSalaryCond(${attr})" title="調整薪資條件">${problem?'待補・設定條件':'設定薪資條件'} ›</button></div><div><span class="sh-label">當月表現</span>${staffHubPerf(e,STAFF_HUB.stats&&STAFF_HUB.stats[e.id],month)}</div><button class="ui-btn" onclick="staffHubOpenSalary(${attr})">核對薪資</button>`:`<div><span class="sh-label">職務／任用</span><b>${escH(staffHubJob(e))}</b><small>${escH(staffHubType(e))}</small></div><div><span class="sh-label">到職日／年資</span><b>${escH(hire||'待補到職日')}</b><small>${staffHubTenure(hire,ymd(TODAY))}${staffHubLeaveTx(e)}</small></div><div><span class="sh-label">系統權限／狀態</span><b>${role}</b><small class="sh-status">${state}</small></div>`}</article>`;
   }).join('');
 }
 async function staffHubOpenSalary(id){
@@ -54663,7 +54673,20 @@ async function staffHubProfile(id,tab){
   const field=(label,value)=>`<div class="sh-field"><span>${label}</span><strong>${escH(value==null||value===''?'未設定':String(value))}</strong></div>`;
   let content='';
   if(tab==='employment')content=field('職務',staffHubJob(e))+field('任用類型',staffHubType(e))+field('系統權限',{admin:'管理員',coach:'教練帳號',front_desk:'櫃檯帳號'}[e.role])+field('到職日',e.hire_date)+field('年資',staffHubTenure(e.hire_date,ymd(TODAY)))+field('在職狀態',staffHubStatus(e));
-  if(tab==='attendance')content=field('待審補卡',STAFF_HUB.requests.filter(r=>r.emp_id===e.id&&r.status==='pending').length+' 筆')+field('特休已用',e.annual_leave_used==null?null:e.annual_leave_used+' 小時')+`<button class="btn btn-green" onclick="closeModal();stGoEmp(${attr},'punch')">查看打卡紀錄</button><p class="sh-note">休假申請與核准流程尚未開放。</p>`;
+  if(tab==='attendance'){
+    /* 特休併進這裡（2026-11-25）：原本是員工管理的獨立「特休」頁籤。帳戶算法不變（annualLeaveAccount），編輯走原本的 openLeaveEdit。 */
+    let leave=field('特休','—');
+    try{
+      const rule=EMP_RULES[normEmp(e.employment_type||e.pay_type)]||{};
+      if(rule.leaveApplicable===false) leave=field('特休','不適用');
+      else{
+        const shifts=await dbGetAll('shifts').catch(()=>[]),yr=(window._leaveYear||TODAY.getFullYear());
+        const a=annualLeaveAccount(e,shifts,yr);
+        leave=field('特休 '+yr+' 年度','應給 '+a.grant+'・已用 '+a.used+'・剩餘 '+a.remain+' 小時')+`<button class="ui-btn" onclick="closeModal();openLeaveEdit(${attr})">特休明細／編輯</button>`;
+      }
+    }catch(err){ console.error('特休帳戶讀取失敗',err); }
+    content=field('待審補卡',STAFF_HUB.requests.filter(r=>r.emp_id===e.id&&r.status==='pending').length+' 筆')+leave+`<button class="ui-btn ui-btn--primary" onclick="closeModal();stGoEmp(${attr},'punch')">查看打卡紀錄</button><p class="sh-note">休假申請與核准流程尚未開放。</p>`;
+  }
   if(tab==='salary')content=`<div class="sh-callout">${staffHubRuleProblem(e,stMonthCur())?'此月份薪資條件待補，暫不提供試算。':'查看 '+escH(stMonthCur())+' 的薪資試算，尚未月結或發布。'}</div><button class="btn btn-green" onclick="staffHubOpenSalary(${attr})">核對本月薪資</button>`;
   if(tab==='insurance')content=field('投保級距',e.insured_grade)+field('勞保狀態',{enrolled:'投保中',withdrawn:'已退保'}[e.labor_insurance_status]||'未設定')+field('健保狀態',{enrolled:'投保中',withdrawn:'已退保'}[e.health_insurance_status]||'未設定');
   showModal(`<div class="ui-modal"></div><section class="staff-v2 sh-profile"><div class="sh-profile-head">${staffHubIcon('people')}<div><h2>${escH(e.name||'員工檔案')}</h2><p>${escH(staffHubJob(e))} · ${escH(staffHubType(e))}</p></div></div><div class="ui-tabs sh-profile-tabs" role="tablist" aria-label="員工檔案">${tabs.map(([k,l])=>`<button class="ui-tab" role="tab" aria-selected="${tab===k}" onclick="staffHubProfile(${attr},'${k}')">${l}</button>`).join('')}</div><div class="sh-profile-body">${content}</div><div class="ui-modal-foot"><button class="ui-btn" onclick="closeModal()">關閉</button><button class="ui-btn ui-btn--primary" onclick="closeModal();openPersonProfile('employee',${attr})">完整資料與編輯</button></div></section>`);
