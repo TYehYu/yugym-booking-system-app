@@ -15972,8 +15972,8 @@ async function empMergeSelf(rows){
 let sb=null;
 // ── 版本號（日期+時間格式：年後兩碼+月+日.時分，例 26620.1058 = 26年6/20 10:58）──
 // 每次改版手動更新這一行即可，畫面與 title 會一起更新
-const APP_VERSION = '261125.0340';
-const APP_VERSION_LABEL = 'v261125.0340';
+const APP_VERSION = '261127.1613';
+const APP_VERSION_LABEL = 'v261127.1613';
 const CLOUD = !!(window.YUGYM_CONFIG && window.YUGYM_CONFIG.url && window.YUGYM_CONFIG.anonKey);
 if(CLOUD){ sb = supabase.createClient(window.YUGYM_CONFIG.url, window.YUGYM_CONFIG.anonKey); }
 
@@ -28240,7 +28240,11 @@ async function openLottoModal(selId){
   /* 登記會把票券發出去 —— 入口多了一個（帳號選單）之後，這裡也要自己擋一次，
      不能只靠畫面沒畫出按鈕（2026-08-24）。 */
   if(typeof isDeskLike==='function' && !isDeskLike()){ showToast('僅管理員／櫃台可登記抽獎'); return; }
-  const[bookings,purchases,members]=await Promise.all([dbGetAll('bookings'),dbGetAll('purchases').catch(()=>[]),dbGetAll('members')]);
+  /* 讀取失敗必須停下（2026-11-26 GPT 驗收）：原本 purchases 讀失敗被 .catch(()=>[]) 當成「0 筆登記」，
+     名單會把已抽過的人當成還有次數。登記本身另由資料庫 fn_lottery_award 在鎖內重算把關，這裡只是不要顯示錯的名單。 */
+  let bookings,purchases,members;
+  try{ [bookings,purchases,members]=await Promise.all([dbGetAll('bookings'),dbGetAll('purchases'),dbGetAll('members')]); }
+  catch(e){ console.error('openLottoModal 讀取失敗',e); showToast('讀取抽獎資料失敗，請稍後重試（沒有登記任何東西）',7000); return; }
   const ym=ymd(TODAY).slice(0,7);
   const list=lottoStats(bookings,purchases,ym,members);
   const mMap=Object.fromEntries(members.map(m=>[m.id,m]));
@@ -28345,6 +28349,7 @@ async function lottoFixAsk(lotId, from){
    這一步會作廢一張票、再發一張新的，不該點一下就發生。 */
 async function lottoFixConfirm(lotId,key){
   const np=LOTTO_PRIZES.find(x=>x.key===key); if(!np) return;
+  const _op=uid('FIX');   // 這個確認視窗的操作識別：連點、網路重送都用同一個 → 資料庫只認一次（見 fn_lottery_fix）
   const pu=await dbGet('purchases',lotId).catch(()=>null);
   if(!pu){ showToast('找不到這筆登記'); return; }
   const m=await dbGet('members',pu.member_id).catch(()=>null);
@@ -28361,79 +28366,41 @@ async function lottoFixConfirm(lotId,key){
       抽獎次數不會多扣、也不會多給。已經被拿去預約的獎品票券不能改，會擋下來。</div>
     <div class="modal-foot">
       <button class="btn btn-ghost" onclick="lottoFixAsk('${lotId}','${_bk}')">‹ 返回</button>
-      <button class="btn btn-green" onclick="lottoFixDo('${lotId}','${key}')">確定更改</button></div>`);
+      <button class="btn btn-green" onclick="lottoFixDo('${lotId}','${key}','${_op}')">確定更改</button></div>`);
 }
-async function lottoFixDo(lotId,key){ return onceAct('lotfix:'+lotId, ()=>_lottoFixDo(lotId,key)); }
-async function _lottoFixDo(lotId,key){
+async function lottoFixDo(lotId,key,opId){ return onceAct('lotfix:'+lotId, ()=>_lottoFixDo(lotId,key,opId)); }
+const LOTTO_FIX_ERR={ 'LOTTERY.FIX_NO_PURCHASE':'找不到這筆登記（可能剛被別人改過），沒有更正',
+  'LOTTERY.FIX_DATE_LOCKED':'過了當天就不能自己改了，請找管理員處理',
+  'LOTTERY.FIX_TICKET_USED':'這張獎品票券已經被用過或拿去預約了，不能直接改 —— 請先取消那一堂，或在票券頁人工處理',
+  'LOTTERY.FIX_NO_ORIGINAL_TICKET':'系統找不到這筆登記對應的原票券（舊資料或已被處理過），不會用猜的，也沒有動任何票券，請到票券頁人工處理',
+  'LOTTERY.FIX_UNKNOWN_ORIGINAL':'這筆登記的原獎項系統認不得，請到票券頁人工處理' };
+async function _lottoFixDo(lotId,key,opId){
  try{
   const np=LOTTO_PRIZES.find(x=>x.key===key); if(!np) return;
   const pu=await dbGet('purchases',lotId); if(!pu){ showToast('找不到這筆登記'); return; }
   /* 寫入前再擋一次：入口有兩個（今日營收那一列、抽獎視窗），
-     而且視窗開著跨過午夜就會從「當天」變成「隔天」（2026-08-24）。 */
+     而且視窗開著跨過午夜就會從「當天」變成「隔天」（2026-08-24）。資料庫端也會再核對一次權限與日期。 */
   const _al=lottoFixAllow(pu);
   if(!_al.ok){ showToast(_al.why, 7000); return; }
   const cur=String(pu.plan_name||'').replace(/^抽獎[：:]/,'');
   if(cur===np.label){ showToast('本來就是這一項，沒有變動'); openLottoModal(); return; }
-  const mid=pu.member_id;
-  /* ① 找出當初發的那張票（同一位、抽獎來源、時間貼著這筆登記）。
-     ⚠ 用時間相近而不是只看最新一張：同一天可能抽過兩次。
-     ⚠ 已經用掉（有預約掛著）或已經被作廢的，處理方式不同 —— 見下面。 */
-  const _t0=new Date(pu.created_at||Date.now()).getTime();
-  const allTk=await dbGetAll('member_tickets').catch(()=>[]);
-  const old=(allTk||[]).filter(t=>t && t.member_id===mid && t.source==='lottery')
-    .map(t=>({t, d:Math.abs(new Date(t.created_at||0).getTime()-_t0)}))
-    .filter(x=>x.d<5*60000).sort((a,b)=>a.d-b.d).map(x=>x.t)[0] || null;
-  if(old){
-    const bks=(await dbGetAll('bookings').catch(()=>[]))||[];
-    if(bks.some(b=>b && b.ticket_id===old.id && b.status!=='cancelled')){
-      showToast('這張獎品票券已經被拿去預約了，不能直接改 —— 請先取消那一堂，或在票券頁人工處理', 8000);
-      return;
-    }
-    /* 發錯的那張直接刪掉（2026-08-24 使用者：「像這種發錯的調整，照理來講換完
-       應該就要刪掉發錯的內容吧」）——它是 $0 的贈品、從來沒被用過、也沒有任何收款，
-       留一張「已退費」的票躺在會員的票券夾裡只會讓人問「這是什麼」。
-       ⚠ 連它的帳本一起刪：留著會變成指向不存在票券的孤兒紀錄。
-       ⚠ 更正的軌跡不會消失 —— 記在這一筆登記的 note 上（見下面第 ③ 步），
-         那才是「這件事發生過」該待的地方。
-       ⚠ 只有「沒有被預約用掉」才走到這裡（上面已經擋掉）；刪不掉時退回作廢，
-         寧可留一張看得懂的廢票，也不要一半刪一半留。 */
-    let _del=false;
-    try{
-      const _lgs=((await dbGetAll('ticket_logs').catch(()=>[]))||[]).filter(l=>l&&l.ticket_id===old.id);
-      for(const l of _lgs){ await dbDel('ticket_logs', l.id); }
-      await dbDel('member_tickets', old.id);
-      _del=true;
-    }catch(_){ _del=false; }
-    if(!_del && old.status==='usable'){
-      old.status='refunded'; old.sessions_remaining=0;
-      await dbPut('member_tickets', old);
-      await logTicket(old.id,'adjust',-1,null,SESSION.id,`抽獎項目更正：改為「${np.label}」`);
-    }
-  }
-  /* ② 發正確的獎品（與 lottoAwardDo 同一段，只是不再寫一筆 purchases） */
-  const today=ymd(TODAY);
-  if(np.kind!=='goods'){
-    let ttid=np.ttid||null, plan=np.plan||('抽獎－'+np.label);
-    if(np.kind==='session'){
-      const types=await dbGetAll('ticket_types');
-      const t=types.find(t=>t.category===np.cat && !/友善|VIP|限定/.test(t.name||'') && t.active!==false)
-        || types.find(t=>t.category===np.cat);
-      ttid=t?t.id:null; plan='抽獎－'+np.label+' 1 堂';
-    }
-    if(!ttid){ showToast('找不到對應票種，無法發放'); return; }
-    const tk={id:uid('TK'),member_id:mid,ticket_type_id:ttid,plan_name:plan,source:'lottery',
-      unit_price:0,amount_paid:0,purchase_date:today,start_date:today,expire_date:null,
-      sessions_total:1,sessions_remaining:1,status:'usable',created_at:new Date().toISOString()};
-    await dbPut('member_tickets',tk);
-    await logTicket(tk.id,'grant',1,null,SESSION.id,`現場抽獎－${np.label}（更正自「${cur}」）`);
-  }
-  /* ③ 更正登記本身 —— 不新增一筆，否則「這個月抽過幾次」會多算。 */
-  pu.plan_name='抽獎：'+np.label;
-  pu.note=((pu.note?pu.note+'\n':'')+`${today} 更正抽獎項目：${cur} → ${np.label}（${SESSION.name||SESSION.id}）`);
-  await dbPut('purchases',pu);
-  dbCacheClear(['member_tickets','ticket_logs','purchases']);
+  if(!(CLOUD && typeof sb!=='undefined' && sb)){ showToast('目前沒有連上雲端，這次沒有更正'); return; }
+  if(!opId) opId=uid('FIX');
+  /* 2026-11-27：原本是前端「刪舊帳 → 刪舊票 → 發新票 → 改登記」多段寫入，刪完才發現發不出新票就會留下缺票狀態。
+     改成資料庫 fn_lottery_fix 單一交易：核對原登記、原票（沒被用過）→ 才刪舊發新、更正登記，任何一步失敗整筆回滾。 */
+  let res;
+  try{ res=await sb.rpc('fn_lottery_fix',{p_purchase_id:String(lotId),p_prize_key:String(key),p_op_id:String(opId)}); }
+  catch(e){ console.error('fn_lottery_fix 連線失敗',e); showToast('更正沒有確認成功（連線失敗），請再按一次「確定更改」重試（不會重複發放）',7000); return; }
+  dbCacheClear(['member_tickets','ticket_logs','purchases']);   // RPC 繞過 dbPut：快取要丟掉
   window._lottoMapCache=null; window._lottoDirty=true;
-  showToast(`已更正為「${np.label}」`+(np.kind==='goods'?'（實體贈品現場交付）':'，獎品已重新發進會員票券'), 6000);
+  if(res&&res.error){ console.error('fn_lottery_fix 錯誤',res.error); showToast('更正沒有確認成功（'+(res.error.message||'連線失敗')+'），請再按一次「確定更改」重試（不會重複發放）',7000); return; }
+  const d=res&&res.data;
+  if(!d || d.ok!==true){
+    const ec=(d&&d.error_code)||'';
+    showToast(LOTTO_FIX_ERR[ec]||LOTTO_ERR_MSG[ec]||('更正失敗'+(ec?'：'+ec:'')),8000);
+    return;
+  }
+  showToast(d.replayed?'這一筆已經更正過了（沒有重複發放）':(d.no_change?'本來就是這一項，沒有變動':(`已更正為「${np.label}」`+(np.kind==='goods'?'（實體贈品現場交付）':'，獎品已重新發進會員票券'))), 6000);
   /* 從今日營收進來的：關掉視窗、重畫那一頁（那一列的標籤與品名要跟著更新）。 */
   if(window._lotFixFrom==='rev'){ window._lotFixFrom=''; closeModal(); navTo(CUR_PAGE); return; }
   openLottoModal();
@@ -28450,6 +28417,7 @@ function lotFilter(q){
 }
 async function lottoAward(mid,key){
   const p=LOTTO_PRIZES.find(x=>x.key===key); if(!p) return;
+  const _op=uid('LOT');   // 這個確認視窗的操作識別：連點、網路重送都用同一個 → 資料庫只認一次（見 fn_lottery_award）
   const m=await dbGet('members',mid).catch(()=>null);
   showModal(`<div class="modal-title">確認登記</div>
     <div style="background:var(--card2);border-radius:10px;padding:14px;font-size:13.5px;line-height:2;">
@@ -28459,44 +28427,42 @@ async function lottoAward(mid,key){
         :'<div style="font-size:11.5px;color:var(--t3);">確認後發放至會員票券（無到期日）。</div>'}
     </div>
     <div class="modal-foot"><button class="btn btn-ghost" onclick="openLottoModal('${mid}')">返回</button>
-    <button class="btn btn-green" onclick="lottoAwardDo('${mid}','${key}')">確認登記</button></div>`);
+    <button class="btn btn-green" onclick="lottoAwardDo('${mid}','${key}','${_op}')">確認登記</button></div>`);
 }
 /* 登記抽獎：防連按（同一位會員同時只跑一次）＋寫入前重新確認「還有沒有待抽次數」。
    2026-11-24 吳淑琴／吳昆弦：同一份名單被登記了兩次（相隔 6、9 秒），多登記的那一筆把下一次的抽獎資格抵掉，
    該出現的通知與名單就不見了；票券類獎品更會多發一張票。
    ⚠ 用最新資料算一次 lottoStats，left<=0 就擋下（兩台平板同時登記、舊畫面按確認都會被擋）。 */
-async function lottoAwardDo(mid,key){ return onceAct('lotaward:'+mid, ()=>_lottoAwardDo(mid,key)); }
-async function _lottoAwardDo(mid,key){
+async function lottoAwardDo(mid,key,opId){ return onceAct('lotaward:'+mid, ()=>_lottoAwardDo(mid,key,opId)); }
+const LOTTO_ERR_MSG={ 'LOTTERY.NO_QUOTA':'這位會員目前沒有待抽的次數（可能剛剛已經在別的畫面登記過），這次沒有重複登記',
+  'LOTTERY.BUSY':'系統忙碌中，這次沒有登記，請稍後重試','AUTH.FORBIDDEN':'沒有權限登記抽獎（僅管理員／櫃台）',
+  'LOTTERY.BAD_PRIZE':'找不到這個獎項，沒有登記','LOTTERY.NO_MEMBER':'找不到這位會員，沒有登記',
+  'LOTTERY.NO_TICKET_TYPE':'找不到對應票種，無法發放','LOTTERY.OP_CONFLICT':'操作識別重複，沒有登記，請重新開啟確認視窗',
+  'LOTTERY.BAD_ARGS':'登記參數不完整，沒有登記','LOTTERY.VIP_EXCLUDED':'這位會員是 VIP，不參與常態抽獎，這次沒有登記',
+  'LOTTERY.CLIENT_OUTDATED':'抽獎登記已升級，請重新整理頁面更新到最新版後再登記' };
+async function _lottoAwardDo(mid,key,opId){
  try{
   const p=LOTTO_PRIZES.find(x=>x.key===key); if(!p) return;
-  const today=ymd(TODAY);
-  { const[_bk,_pu,_mem]=await Promise.all([dbGetAll('bookings'),dbGetAll('purchases').catch(()=>[]),dbGetAll('members')]);
-    const _st=lottoStats(_bk,_pu,today.slice(0,7),_mem).find(x=>x.id===mid);
-    if(!_st||_st.left<=0){
-      window._lottoMapCache=null;
-      showToast('這位會員目前沒有待抽的次數（可能剛剛已經登記過），這次沒有重複登記',7000);
-      openLottoModal(); return;
-    } }
-  if(p.kind!=='goods'){
-    let ttid=p.ttid||null, plan=p.plan||('抽獎－'+p.label);
-    if(p.kind==='session'){
-      const types=await dbGetAll('ticket_types');
-      const t=types.find(t=>t.category===p.cat && !/友善|VIP|限定/.test(t.name||'') && t.active!==false)
-        || types.find(t=>t.category===p.cat);
-      ttid=t?t.id:null; plan='抽獎－'+p.label+' 1 堂';
-    }
-    if(!ttid){ showToast('找不到對應票種，無法發放'); return; }
-    const tk={id:uid('TK'),member_id:mid,ticket_type_id:ttid,plan_name:plan,source:'lottery',
-      unit_price:0,amount_paid:0,purchase_date:today,start_date:today,expire_date:null,
-      sessions_total:1,sessions_remaining:1,status:'usable',created_at:new Date().toISOString()};
-    await dbPut('member_tickets',tk);
-    await logTicket(tk.id,'grant',1,null,SESSION.id,'現場抽獎－'+p.label);
-  }
-  await dbPut('purchases',{id:uid('LOT'),member_id:mid,plan_name:'抽獎：'+p.label,deal_amount:0,
-    payment_method:null,source:'lottery',operator:SESSION.id,note:'現場籤筒抽獎登記',created_at:new Date().toISOString()});
+  if(!(CLOUD && typeof sb!=='undefined' && sb)){ showToast('目前沒有連上雲端，這次沒有登記'); return; }
+  if(!opId) opId=uid('LOT');
+  /* 2026-11-26（GPT 驗收 P1）：資格重驗＋發票＋寫帳＋寫登記全部搬進資料庫 fn_lottery_award，同一個交易、
+     同一位會員排隊（advisory lock）；opId 即 purchases.id，重送只會回「已登記」不會再發一張。
+     原本五個分離請求＋頁面記憶體鎖，兩台裝置同時按確認會超發獎品票。 */
+  let res;
+  try{ res=await sb.rpc('fn_lottery_award',{p_member_id:String(mid),p_prize_key:String(key),p_op_id:String(opId)}); }
+  catch(e){ console.error('fn_lottery_award 連線失敗',e); showToast('登記沒有確認成功（連線失敗），請再按一次「確認登記」重試（不會重複發放）',7000); return; }
+  dbCacheClear(['member_tickets','ticket_logs','purchases']);   // RPC 繞過 dbPut：快取要丟掉
   window._lottoMapCache=null;   // 抽完立即失效課卡抽獎鈕的資格快取（60 秒 TTL 不夠即時）
+  if(res&&res.error){ console.error('fn_lottery_award 錯誤',res.error); showToast('登記沒有確認成功（'+(res.error.message||'連線失敗')+'），請再按一次「確認登記」重試（不會重複發放）',7000); return; }
+  const d=res&&res.data;
+  if(!d || d.ok!==true){
+    const ec=(d&&d.error_code)||'';
+    showToast(LOTTO_ERR_MSG[ec]||('登記失敗'+(ec?'：'+ec:'')),7000);
+    if(ec==='LOTTERY.NO_QUOTA'){ openLottoModal(); }
+    return;
+  }
   window._lottoDirty=true;      // 關閉抽獎視窗時重繪首頁，右下角「N 位可抽獎」即時更新（2026-07-27）
-  showToast('已登記'+(p.kind==='goods'?'（贈品現場交付）':'，獎品已發進會員票券'));
+  showToast(d.replayed?'這一筆已經登記過了（沒有重複發放）':('已登記'+(p.kind==='goods'?'（贈品現場交付）':'，獎品已發進會員票券')));
   openLottoModal();
  }catch(e){ console.error('lottoAwardDo 錯誤:',e); showToast('登記失敗：'+(e&&e.message?e.message:e)); }
 }
@@ -53964,7 +53930,7 @@ function openSalaryGlobalEdit(){
         <div class="ui-field" style="margin:0;"><label class="ui-label">門檻② 課堂</label><input class="ui-input" type="number" id="sg-ldt2" value="${G.leader_t2??100}"></div>
         <div class="ui-field" style="margin:0;"><label class="ui-label">門檻② 追加獎金</label><input class="ui-input" type="number" id="sg-ldb2" value="${G.leader_b2??2000}"></div>
       </div>
-      <div style="font-size:11px;color:var(--t3);margin:6px 0;">＊這裡只是<b>新主管的預設值</b>。實際計算用的是每位主管自己的名單與金額（員工資料 → 薪資規則 → 主管），這樣分店之後每位主管可以單獨設定。<br>＊2026 年 7 月以前的月份仍用舊的全店總堂數制（每滿 ${G.leader_per_classes??80} 堂 ${money(G.leader_per_amount??4000)}），歷史薪資不受影響。</div>
+      <div style="font-size:11px;color:var(--t3);margin:6px 0;">＊這裡只是<b>新主管的預設值</b>。實際計算用的是每位主管自己的名單與金額（員工資料 → 薪資規則 → 主管），這樣分店之後每位主管可以單獨設定。<br>＊2026 年 7 月以前的月份仍用舊的全店總堂數制（每滿 ${G.leader_per_classes??80} 堂 $${Number(G.leader_per_amount??4000).toLocaleString()}），歷史薪資不受影響。</div>
       ${sec('⑤ 勞健保級距表（員工負擔／公司三合一負擔）')}
       <div id="sg-ins">${ins.map((x,i)=>`<div style="border:1px solid var(--bd);border-radius:8px;padding:8px;margin-bottom:8px;">
         <div class="ui-field" style="margin:0 0 6px;"><label class="ui-label">投保級距</label><input class="ui-input" type="text" id="sg-ins-grade-${i}" value="${x.grade||''}" placeholder="如 29500"></div>

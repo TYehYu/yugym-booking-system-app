@@ -9,7 +9,7 @@
    「滿 4 堂」仍然逐月結算（月底沒滿 4 堂的零頭不帶到下個月）—— 變的只有
    「抽獎機會不會過期」，不是門檻的算法。 */
 const fs=require('fs');
-const src=fs.readFileSync(process.env.HOME+'/Projects/yugym-booking-system-app/index.html','utf8');
+const src=fs.readFileSync(process.env.INDEX_PATH||require('path').join(__dirname,'../index.html'),'utf8');
 
 let pass=0,fail=0;
 const ok=(n,c,x)=>{ if(c){pass++;console.log('  ✓ '+n);} else {fail++;console.log('  ✗ '+n+(x!==undefined?'  → '+JSON.stringify(x):''));} };
@@ -133,35 +133,42 @@ console.log('\n改抽獎項目');
 {
   /* ⚠ 結尾要停在 _lottoFixDo 自己的結尾 —— 抓到 lottoAwardDo 就會把它那一筆
      dbPut('purchases',{id:uid('LOT')…}) 也含進來，「不新增一筆」那條會假失敗。 */
-  const _fi=src.indexOf('async function _lottoFixDo(lotId,key){');
-  const f=src.slice(_fi, src.indexOf('/* 名單就地篩選', _fi));
+  /* 2026-11-27：「改抽獎項目」的刪票／刪帳／發票／改登記搬進資料庫 fn_lottery_fix（單一交易，失敗整筆回滾）。
+     前端這一段只剩：權限／日期預檢、帶一次性 opId 呼叫 RPC、顯示結果。下面「資料庫語意」改釘在 migration 檔，
+     行為本身的測試在 docs/handoff/lottery-award/01_test_TESTDB_ONLY.sql（F1~F7）。 */
+  const _fi=src.indexOf('async function _lottoFixDo(lotId,key,opId){');
+  const f=src.slice(_fi, src.indexOf('/* 名單就地篩選（2026-08-03 使用者指示', _fi));
+  const fs2=require('fs'), pth=require('path');
+  const sql=fs2.readFileSync(pth.join(__dirname,'..','docs','migrations','20261126_fn_lottery_award.sql'),'utf8');
   ok('★★ 只列今天的登記可以改（改的是剛剛按錯，不是翻舊帳）',
      /p\.source==='lottery' && _lotPuDate\(p\)===ymd\(TODAY\)/.test(src)
      && /只列今天的：改的是「剛剛按錯」，不是翻舊帳/.test(src));
-  ok('★★ 已經被拿去預約的獎品票券不給改（會擋下來並說怎麼辦）',
-     /if\(bks\.some\(b=>b && b\.ticket_id===old\.id && b\.status!=='cancelled'\)\)\{/.test(f)
-     && /這張獎品票券已經被拿去預約了，不能直接改/.test(f));
-/* 2026-08-24 使用者：「像這種發錯的調整，照理來講換完應該就要刪掉發錯的內容吧」——
-   $0 的贈品、從來沒用過、也沒有收款，留一張「已退費」的票在票券夾只會讓人問「這是什麼」。 */
-  ok('★★ 發錯的那張直接刪掉，連它的帳本一起（孤兒紀錄不要留）',
-     /for\(const l of _lgs\)\{ await dbDel\('ticket_logs', l\.id\); \}/.test(f)
-     && /await dbDel\('member_tickets', old\.id\);/.test(f));
-  ok('★★ 刪不掉才退回作廢 —— 寧可留一張看得懂的廢票，也不要一半刪一半留',
-     /if\(!_del && old\.status==='usable'\)\{/.test(f)
-     && /logTicket\(old\.id,'adjust',-1,null,SESSION\.id,`抽獎項目更正：改為「\$\{np\.label\}」`\)/.test(f));
+  ok('★★ 已經被拿去預約的獎品票券不給改（資料庫擋下並回 FIX_TICKET_USED，前端說怎麼辦）',
+     /exists \(select 1 from bookings where ticket_id = v_old\.id and status::text <> 'cancelled'\)/.test(sql)
+     && /LOTTERY\.FIX_TICKET_USED/.test(sql)
+     && /'LOTTERY\.FIX_TICKET_USED':'這張獎品票券已經被用過或拿去預約了，不能直接改/.test(src));
+  ok('★★ 發錯的那張直接刪掉，連它的帳本一起（資料庫同一交易內刪，孤兒紀錄不要留）',
+     /delete from ticket_logs where ticket_id = v_old\.id;\s*delete from member_tickets where id = v_old\.id;/.test(sql)
+     && !/dbDel\(/.test(f));
+  ok('★★ 前端不再「刪不掉就退回作廢」那種半套寫法（缺票／留廢票都不會發生：失敗整筆回滾）',
+     !/old\.status='refunded'/.test(f) && !/logTicket\(/.test(f));
   ok('★ 更正的軌跡記在登記那一筆的 note 上（票刪了，事情還查得到）',
-     /更正抽獎項目：\$\{cur\} → \$\{np\.label\}/.test(f)
-     && /那才是「這件事發生過」該待的地方/.test(src));
+     /更正抽獎項目：' \|\| v_cur \|\| ' → ' \|\| v_label/.test(sql));
   ok('★★ 更正的是**同一筆**登記，不新增一筆 —— 否則「這個月抽過幾次」會多算',
-     /pu\.plan_name='抽獎：'\+np\.label;/.test(f)
-     && /不新增一筆，否則「這個月抽過幾次」會多算/.test(f)
-     && !/dbPut\('purchases',\{id:uid\('LOT'\)/.test(f));
+     /update purchases set plan_name = '抽獎：' \|\| v_label/.test(sql) && !/insert into purchases/.test(sql.slice(sql.indexOf('create function public.fn_lottery_fix'), sql.indexOf('create function public.fn_lottery_gate_tk')))
+     && !/dbPut\(/.test(f));
   ok('★ 更正的軌跡寫進 note（誰、什麼時候、從什麼改成什麼）',
-     /更正抽獎項目：\$\{cur\} → \$\{np\.label\}/.test(f));
-  ok('★ 選到同一項時什麼都不做', /if\(cur===np\.label\)\{ showToast\('本來就是這一項，沒有變動'\)/.test(f));
-  ok('★ 防連點', /async function lottoFixDo\(lotId,key\)\{ return onceAct\('lotfix:'\+lotId/.test(src));
-  ok('　　找當初那張票用「時間貼近」而不是「最新一張」（同一天可能抽過兩次）',
-     /\.filter\(x=>x\.d<5\*60000\)\.sort\(\(a,b\)=>a\.d-b\.d\)/.test(f));
+     /v_today::text \|\| ' 更正抽獎項目：' \|\| v_cur \|\| ' → ' \|\| v_label\s*\|\| '（' \|\| coalesce\(v_ename, v_emp\)/.test(sql));
+  ok('★ 選到同一項時什麼都不做', /if\(cur===np\.label\)\{ showToast\('本來就是這一項，沒有變動'\)/.test(f)
+     && /if v_cur = v_label then/.test(sql));
+  ok('★ 防連點（頁面內）＋一次性 opId（跨裝置／重送）', /async function lottoFixDo\(lotId,key,opId\)\{ return onceAct\('lotfix:'\+lotId/.test(src)
+     && /sb\.rpc\('fn_lottery_fix'/.test(f));
+  ok('　　找當初那張票：只認 TK-登記id 的精確對應，找不到就拒絕，絕不用時間相近去猜（2026-11-27）',
+     /id = 'TK-' \|\| v_pu\.id for update/.test(sql) && !/< 300/.test(sql) && !/abs\(extract\(epoch/.test(sql)
+     && /if not found then return jsonb_build_object\('ok', false, 'error_code', 'LOTTERY\.FIX_NO_ORIGINAL_TICKET'\)/.test(sql));
+  ok('★ 舊頁面直接 upsert／update 改既有抽獎登記的獎項、歸屬、來源會被資料庫擋下（一般購買不受影響）',
+     /elsif old\.source = 'lottery' or new\.source = 'lottery' then/.test(sql)
+     && /create trigger trg_lottery_gate_pu before insert or update on public\.purchases/.test(sql));
 }
 
 /* 2026-08-24 使用者回報：「抽獎的視窗沒有路徑了」——
@@ -190,7 +197,7 @@ ok('★★ 改成清單＋先確認（不再是六格方塊、也不再點一下
    /class="ash-eirow ash-ei-2c lot-row/.test(src)
    && /onclick="lottoFixConfirm\('\$\{lotId\}','\$\{x\.key\}'\)"/.test(src)
    && /async function lottoFixConfirm\(lotId,key\)\{/.test(src)
-   && /<button class="btn btn-green" onclick="lottoFixDo\('\$\{lotId\}','\$\{key\}'\)">確定更改<\/button>/.test(src));
+   && /<button class="btn btn-green" onclick="lottoFixDo\('\$\{lotId\}','\$\{key\}','\$\{_op\}'\)">確定更改<\/button>/.test(src));
 /* 2026-08-24 使用者：「列表都改成白色框，選取的這一個用品牌綠底」「就不用多一列」 */
 ok('★★ 清單是白底框，目前登記的那一項用品牌綠底、按不動',
    /\$\{isCur\?' lot-row-cur':''\}"\$\{isCur\?' disabled':''\}/.test(src)
