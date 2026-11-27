@@ -10583,6 +10583,46 @@ body:has(#wtl-page),body:has(.cag-wrap){overscroll-behavior-y:none;}
   .cag-wk-col .cal-ev.cal-ev-std .evc-nmrow{flex-direction:column-reverse;
     align-items:flex-start;gap:2px;min-height:0;}
 }
+/* ══ 窄課卡右下角的教練標籤（2026-11-27）══════════════════════════════════════
+   直書的窄卡（≤62px）原本把教練名整個收起來（上面那條 .evc-coach{display:none}），
+   不點開就認不出是哪位教練。改成右下角一顆小標籤（教練色底，與寬卡同色）：
+   ・放得下完整名稱就寫完整名稱，放不下才換縮寫（JS：cagFitCoachTags 只加／拿掉 .is-ab）；
+     縮寫唯一、穩定，見 coachAbbrUniqueMap。代課寫「代」（寬卡仍是「（代）」）。
+   ・預留空間：有標籤的卡（.cag-hascot）文字區下內距加到 20px（標籤 15px＋下緣 3px＋間距 2px），
+     姓名最高 100cqh−24px（上內距 3＋下內距 20＋保險 1；cqh＝卡片自己的高度；60 分鐘的卡＝38px，三個中文字剛好放得下），整組往上讓位，不會跟標籤疊在一起；出席章在姓名上方、同一欄，不受影響。
+     （不用 calc(100% − N)：.evc-name 的 100% 是相對內容撐開的列，扣 18px 會把三個字縮成一個字；改用卡片高度 cqh 才算得準。）
+   ・字級 11px：手機下限（cagdragtest ⑨），標籤也不例外。
+   ・卡太矮（≤55px，例如 30／45 分鐘的課，姓名會被擠到不足三個字）放不下標籤時整顆不畫，文字區下內距恢復原本的 3px。
+   ・縮寫也放不下（卡寬 ≲30px）：整顆不畫（.is-none），預留空間還給姓名（.cag-nocot）；不顯示切掉一半的縮寫。
+   ・沒有教練的課沒有 .cag-cotag（不畫空標籤）；請假標籤與場地標籤（沒有 .cag-cotag）維持原本窄卡收起。
+   ・只在 .cag-wk-col（手機行事曆）底下、且只在窄卡的容器查詢裡生效；寬卡與桌機行事曆完全不受影響。
+   ⚠ 選擇器帶 .cag-cotag（0,5,0）才蓋得過上面窄卡規則的 display:none（0,4,0）與全域 white-space:normal !important。 */
+.cag-wk-col .cal-ev.cal-ev-std .evc-coach .cag-cn-ab,
+.cag-wk-col .cal-ev.cal-ev-std .evc-coach .cag-dai-ab{display:none;}
+.cag-wk-col .cal-ev.cal-ev-std .evc-coach i{font-style:normal;}
+@container (max-width: 62px){
+  .cag-wk-col .cal-ev.cal-ev-std .evc-coach.cag-cotag{
+    display:inline-flex;align-items:center;justify-content:center;
+    white-space:nowrap !important;text-overflow:clip !important;overflow:hidden;
+    right:2px;bottom:3px;max-width:calc(100% - 4px);padding:2px 3px;border-radius:999px;
+    font-size:11px;font-weight:700;line-height:1;letter-spacing:0;z-index:2;}
+  .cag-wk-col .cal-ev.cal-ev-std .evc-coach.cag-cotag .cag-dai-fl{display:none;}
+  .cag-wk-col .cal-ev.cal-ev-std .evc-coach.cag-cotag .cag-dai-ab{display:inline;}
+  .cag-wk-col .cal-ev.cal-ev-std .evc-coach.cag-cotag.is-ab .cag-cn-fl{display:none;}
+  .cag-wk-col .cal-ev.cal-ev-std .evc-coach.cag-cotag.is-ab .cag-cn-ab{display:inline;}
+  .cag-wk-col .cal-ev.cal-ev-std.cag-hascot .evc-txt{padding-bottom:20px;}
+  .cag-wk-col .cal-ev.cal-ev-std.cag-hascot .evc-name{max-height:calc(100cqh - 24px);}
+}
+@container (max-width: 62px) and (max-height: 55px){
+  .cag-wk-col .cal-ev.cal-ev-std .evc-coach.cag-cotag{display:none;}
+  .cag-wk-col .cal-ev.cal-ev-std.cag-hascot .evc-txt{padding-bottom:3px;}
+  .cag-wk-col .cal-ev.cal-ev-std.cag-hascot .evc-name{max-height:100%;}
+}
+@container (max-width: 62px){
+  .cag-wk-col .cal-ev.cal-ev-std .evc-coach.cag-cotag.is-none{display:none;}
+  .cag-wk-col .cal-ev.cal-ev-std.cag-hascot.cag-nocot .evc-txt{padding-bottom:3px;}
+  .cag-wk-col .cal-ev.cal-ev-std.cag-hascot.cag-nocot .evc-name{max-height:100%;}
+}
 /* 教練手機行事曆的拖移分工（2026-08-03 使用者定案）：左欄自己的課卡要「維持拖移」、
    右欄別人的預約滑了要捲動。自己的課卡（左欄）關掉原生捲動 —— 否則長按還沒完成
    （350ms）前的微小移動就被瀏覽器搶去捲動並 touchcancel，拖移永遠起不來。
@@ -16002,8 +16042,8 @@ async function empMergeSelf(rows){
 let sb=null;
 // ── 版本號（日期+時間格式：年後兩碼+月+日.時分，例 26620.1058 = 26年6/20 10:58）──
 // 每次改版手動更新這一行即可，畫面與 title 會一起更新
-const APP_VERSION = '261127.2325';
-const APP_VERSION_LABEL = 'v261127.2325';
+const APP_VERSION = '261128.0020';
+const APP_VERSION_LABEL = 'v261128.0020';
 const CLOUD = !!(window.YUGYM_CONFIG && window.YUGYM_CONFIG.url && window.YUGYM_CONFIG.anonKey);
 if(CLOUD){ sb = supabase.createClient(window.YUGYM_CONFIG.url, window.YUGYM_CONFIG.anonKey); }
 
@@ -20740,6 +20780,51 @@ function coachAva(c){
   if(zh){ const s=zh.replace(/^小/,''); return s.slice(-1)||zh.slice(-1); }
   return '?';
 }
+/* ══ 手機行事曆窄課卡的教練標籤（2026-11-27）══════════════════════════════════
+   縮寫沿用既有的 coachAbbr（英文名前 2 字母大寫 RANDY→RA；中文暱稱／名字取後 2 字）。
+   但 coachAbbr 不保證唯一（RANDY／RACHEL 都是 RA），窄卡上看到兩個 RA 就分不出人，所以另外補規則：
+     ① 以全體非櫃檯員工為範圍（含已離職，歷史課卡才不會跳號）；先照 coachAbbr 分組。
+     ② 同組有 2 人以上 → 組內每個人一起加長：拉丁字母取前 3、4…個字母，加到組內互不相同為止；
+        中文名直接用完整名字（去空白）。這樣結果與員工建立順序無關，只跟「誰跟誰撞」有關。
+     ③ 加長後仍相同（真的同名）→ 依 id 排序，第一位維持原樣、其餘加上 2、3… 的尾碼。
+   回傳 { 員工id: 縮寫 }；沒有姓名資料的員工不放進表，呼叫端退回 coachAbbr。 */
+function coachAbbrUniqueMap(list){
+  const arr=(list||[]).filter(c=>c && c.id && c.role!=='front_desk' && (c.name||c.name_en));
+  const src=c=>{ const en=String(c.name_en||''), zh=String(c.name||'');
+    const lat=en.replace(/[^A-Za-z]/g,''); if(lat) return {latin:true,s:lat.toUpperCase()};
+    const cj=en.replace(/[^一-鿿]/g,''); if(cj) return {latin:false,s:cj};
+    return {latin:false,s:zh.replace(/\s+/g,'')}; };
+  const out={}, groups={};
+  arr.forEach(c=>{ const a=coachAbbr(c); out[c.id]=a; (groups[a]=groups[a]||[]).push(c); });
+  Object.keys(groups).forEach(a=>{ const g=groups[a]; if(g.length<2) return;
+    const ss=g.map(src); let n=Math.max(...ss.map(x=>a.length))+1, max=Math.max(...ss.map(x=>x.s.length));
+    let done=false;
+    if(ss.every(x=>x.latin)){
+      for(; n<=max; n++){ const pre=ss.map(x=>x.s.slice(0,n)); if(new Set(pre).size===pre.length){ g.forEach((c,i)=>{ out[c.id]=pre[i]; }); done=true; break; } }
+    }
+    if(!done) g.forEach((c,i)=>{ out[c.id]=ss[i].s || out[c.id]; });
+  });
+  const seen={}; Object.keys(out).sort().forEach(id=>{ let v=out[id]; if(seen[v]){ let k=2; while(seen[v+k]) k++; out[id]=v+k; v=out[id]; } seen[v]=true; });
+  return out;
+}
+/* 窄課卡（卡寬 ≤62px，直書姓名那種）右下角的教練標籤：放得下完整名稱就用完整名稱，放不下才換縮寫。
+   「放不下」用實測：標籤有 max-width＋overflow:hidden＋nowrap，內容比盒子寬（scrollWidth>clientWidth）就是放不下。
+   只負責加／拿掉 .is-ab，不改任何位置、尺寸或資料；寬卡不受影響（.is-ab 的 CSS 只寫在窄卡的容器查詢裡）。 */
+function cagFitCoachTags(root){
+  const tags=(root||document).querySelectorAll('.evc-coach.cag-cotag');
+  tags.forEach(t=>{ t.classList.remove('is-ab','is-none'); const c=t.closest('.cal-ev'); if(c) c.classList.remove('cag-nocot'); });
+  tags.forEach(t=>{
+    if(!t.getClientRects().length) return;                      // 太矮的卡：CSS 本來就沒畫，不處理
+    const c0=t.closest('.cal-ev'), cs0=c0?getComputedStyle(c0):null;
+    if(cs0 && c0.clientWidth-(parseFloat(cs0.paddingLeft)||0)-(parseFloat(cs0.paddingRight)||0)>62) return;   // 寬卡（>62px，與容器查詢同一條線）：不加任何 class
+    if(t.scrollWidth>t.clientWidth+0.5) t.classList.add('is-ab');
+    /* 縮寫也放不下（卡窄到 ~30px）：整顆不畫，並把預留給標籤的空間還給姓名 —— 寧可沒有標籤，
+       也不要顯示被切掉一半的縮寫（切掉的「RA」會讓 RANDY／RACHEL 又分不出來）。 */
+    if(t.scrollWidth>t.clientWidth+0.5){ t.classList.add('is-none'); const c=t.closest('.cal-ev'); if(c) c.classList.add('cag-nocot'); }
+  });
+}
+let _cagFitTimer=null;
+window.addEventListener('resize',()=>{ clearTimeout(_cagFitTimer); _cagFitTimer=setTimeout(()=>{ const h=document.getElementById('wtl-page'); if(h) cagFitCoachTags(h); },120); });
 // ── 角色 × 裝置 導覽白名單 ──
 // 管理員｜手機版：快速查看、快速審核、快速處理（不放完整後台）
 const MOBILE_ADMIN_NAV=[
@@ -35191,6 +35276,7 @@ async function renderCoachAgenda(){
   if(window._cagAgendaGen!==_myAgendaGen) return;
   const memMap=memNameMap(members);
   const coachObj=Object.fromEntries(coaches.map(c=>[c.id,c]));
+  const _abMap=coachAbbrUniqueMap(coaches);   // 窄課卡教練標籤用的唯一縮寫（見 coachAbbrUniqueMap）
   /* 2026-08-01 使用者回報：「A 教練請 B 教練代課，這堂課應該要顯示在 B 教練這邊」——
      教練端 15 處已改成 bkCoachId(b)===SESSION.id ＝「這堂實際由誰上」。
      2026-08-15 使用者補案（Mango 週一 13:00 團課請代課）：這裡原本用 bkIsCoach（含原教練），
@@ -35318,8 +35404,9 @@ async function renderCoachAgenda(){
          @media(min-width:601px) 裡，手機兩個都會顯示成「RANDY RA」。這裡直接給全名，
          太長由 .evc-coach 既有的 ellipsis 收尾。 */
     const _coNm = _co ? coachDisp(_co) : '';
+    const _coAb = _co ? (_abMap[_cid]||coachAbbr(_co)) : '';   // 窄卡縮寫：唯一、穩定（見 coachAbbrUniqueMap）
     const tag = bkIsCoachLeave(b) ? `<span class="evc-coach" style="background:#7A2E28;color:#F4F1E8;">請假</span>`
-      : (_coNm?`<span class="evc-coach" style="background:${_ccol.bg};color:${_ccol.fg};">${_coNm}${b.substitute_coach_id?'（代）':''}</span>`
+      : (_coNm?`<span class="evc-coach cag-cotag" style="background:${_ccol.bg};color:${_ccol.fg};"><span class="cag-cn-fl">${escH(_coNm)}</span><span class="cag-cn-ab">${escH(_coAb)}</span>${b.substitute_coach_id?'<i class="cag-dai-fl">（代）</i><i class="cag-dai-ab">代</i>':''}</span>`
               :(_venue?`<span class="evc-coach" style="background:${_ccol.bg};color:${_ccol.fg};">${_venue}</span>`:''));
     /* 其他教練的課卡（2026-08-01 使用者指示定版）：「一樣正常顯示課卡內容，但移除互動功能」——
        內容照舊畫（時間／課種／人數都看得到），但完全不掛點擊，手機與桌機一致。
@@ -35353,7 +35440,7 @@ async function renderCoachAgenda(){
     /* 教練請假整堂取消的團課：0817 是跟遮蔽卡共用 .dim（opacity .4＝透明化），
        2026-08-22 使用者定義「暗化＝沒有有效票券」，改用 .cal-ev-dark（壓亮度、字不糊）。
        .dim 留給「教練看別人的課」那種遮蔽卡 —— 那是看不到內容，不是沒有票。 */
-    return `<div class="cal-ev cal-ev-std cal-ev-7d cag-std ${courseCls}${done?' cal-ev-checked':''}${dim?' dim':''}${bkDarkNoTicket(b)?' cal-ev-dark':''}${canClick?'':' cag-view'}${_mkAlert}" ${canClick?`data-bid="${b.id}"`:''} style="top:${top}px;height:${height}px;${posStyle}"${canClick?` onclick="wtlCardClick('${b.id}',this)"`:''}>
+    return `<div class="cal-ev cal-ev-std cal-ev-7d cag-std${(_coNm&&!bkIsCoachLeave(b))?' cag-hascot':''} ${courseCls}${done?' cal-ev-checked':''}${dim?' dim':''}${bkDarkNoTicket(b)?' cal-ev-dark':''}${canClick?'':' cag-view'}${_mkAlert}" ${canClick?`data-bid="${b.id}"`:''} style="top:${top}px;height:${height}px;${posStyle}"${canClick?` onclick="wtlCardClick('${b.id}',this)"`:''}>
       ${_mk}
       ${/* 2026-08-23 使用者指示：「課卡不再標示簽到」—— 右下角那顆「簽」角章拿掉。
            「假」（全員請假）留著：那是課的狀態，不是簽到與否，拿掉就看不出這堂沒上。 */''}
@@ -35535,6 +35622,8 @@ async function renderCoachAgenda(){
 
   // 定位：頂列固定，本容器填滿其下方到底部導覽
   cagPositionWrap();
+  cagFitCoachTags(host);   // 窄課卡教練標籤：放不下全名才換縮寫（只加 class）
+  if(document.fonts&&document.fonts.ready) document.fonts.ready.then(()=>{ if(host.isConnected) cagFitCoachTags(host); });
   // 捲到目前時間附近（若本週含今天），否則捲到 09:00
   const body=document.getElementById('cag-body');
   if(body){
