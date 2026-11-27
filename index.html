@@ -15674,6 +15674,36 @@ body.ink .tcard-row .tcard-co:not(.tcard-leavetag){display:none;}
   .ui-table .ui-actions{justify-content:flex-end}
 }
 .ui-empty{padding:var(--ui-sp-5) var(--ui-sp-4);text-align:center;color:var(--ui-text-2);font-size:var(--ui-fs-4)}
+/* 數值列與卡片（特休視窗用，2026-11-27）：標籤靠左、數字靠右對齊；姓名不拆行 */
+.ui-kv{display:flex;justify-content:space-between;align-items:baseline;gap:var(--ui-sp-3);padding:6px 0;font-size:var(--ui-fs-4);color:var(--ui-text)}
+.ui-kv>span:first-child{color:var(--ui-text-2);white-space:nowrap}
+.ui-kv__v{font-variant-numeric:tabular-nums;text-align:right}
+.ui-kv--total{border-top:1px dashed var(--ui-line-strong);margin-top:4px;padding-top:10px;font-size:var(--ui-fs-5)}
+.ui-kv--total>span:first-child{color:var(--ui-text);font-weight:800}
+.ui-kv--minor{font-size:var(--ui-fs-3);color:var(--ui-text-3)}
+.ui-kv--minor>span:first-child{color:inherit}
+.ui-num{text-align:right;font-variant-numeric:tabular-nums;white-space:nowrap}
+.ui-nowrap{white-space:nowrap}
+.ui-name{max-width:190px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.ui-table--compact th,.ui-table--compact td{padding:10px 12px}
+.ui-lvstat{display:flex;align-items:center;justify-content:flex-end;gap:var(--ui-sp-2);flex-wrap:nowrap}
+.ui-qtitle{font-size:var(--ui-fs-4);font-weight:700;color:var(--ui-text)}
+.ui-opt{display:flex;gap:var(--ui-sp-3);align-items:flex-start;border:1.5px solid var(--ui-line-strong);border-radius:var(--ui-r-md);padding:var(--ui-sp-3);background:var(--ui-surface);cursor:pointer;font-size:var(--ui-fs-4);line-height:1.6}
+.ui-opt:has(input:checked){border-color:var(--ui-brand);background:var(--ui-brand-soft)}
+.ui-opt input{margin-top:4px;accent-color:var(--ui-brand);flex:none}
+.ui-opt small{display:block;color:var(--ui-text-3);font-size:var(--ui-fs-2)}
+.ui-lvbody .ui-field{margin-bottom:0}
+.ui-lvbody{padding-right:8px}
+.ui-lvtitle{min-width:0;max-width:100%;overflow-wrap:anywhere;word-break:break-word}
+.ui-lvbody,.ui-lvbody .ui-note,.ui-lvbody .ui-card,.ui-lvbody .ui-kv>span{min-width:0;overflow-wrap:anywhere}
+.ui-table--compact th.ui-num,.ui-table--compact th.ui-actions{text-align:right}
+.ui-lvlist{display:flex;flex-direction:column;gap:var(--ui-sp-3)}
+.ui-lvcard{padding:var(--ui-sp-3) var(--ui-sp-4)}
+.ui-lvcard__name{font-size:var(--ui-fs-5);font-weight:800;color:var(--ui-text);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.ui-lvcard__status{display:flex;align-items:center;gap:var(--ui-sp-2);flex-wrap:wrap;margin:4px 0 var(--ui-sp-2)}
+.ui-lvcard .ui-btn{margin-top:var(--ui-sp-3)}
+@media(min-width:721px){.ui-mob-only{display:none!important}}
+@media(max-width:720px){.ui-desk-only{display:none!important}}
 /*UI-SPEC:END*/
 </style>
 </head>
@@ -15972,8 +16002,8 @@ async function empMergeSelf(rows){
 let sb=null;
 // ── 版本號（日期+時間格式：年後兩碼+月+日.時分，例 26620.1058 = 26年6/20 10:58）──
 // 每次改版手動更新這一行即可，畫面與 title 會一起更新
-const APP_VERSION = '261127.1613';
-const APP_VERSION_LABEL = 'v261127.1613';
+const APP_VERSION = '261127.2325';
+const APP_VERSION_LABEL = 'v261127.2325';
 const CLOUD = !!(window.YUGYM_CONFIG && window.YUGYM_CONFIG.url && window.YUGYM_CONFIG.anonKey);
 if(CLOUD){ sb = supabase.createClient(window.YUGYM_CONFIG.url, window.YUGYM_CONFIG.anonKey); }
 
@@ -55488,30 +55518,38 @@ async function openLeaveSettlement(){
   let settled=[]; try{ settled=await dbGetAll('leave_settlements'); }catch(_){}
   const settledMap={}; (settled||[]).forEach(s=>{ if(String(s.year)===String(curYear)) settledMap[s.emp_id]=s; });
   const applic=list.filter(c=>{const et=normEmp(c.employment_type||c.pay_type);const rule=EMP_RULES[et]||{};return rule.leaveApplicable!==false;});
-  const rows=applic.map(c=>{
-    const a=annualLeaveAccount(c, shifts, curYear);
-    const done=settledMap[c.id];
-    const status = done
-      ? `<span style="color:var(--t3);font-size:11.5px;">已結算<br>結轉 ${Number(done.carry_forward_hours)||0}h · 折薪 ${Number(done.cashout_hours)||0}h</span>`
-      : `<button class="ui-btn ui-btn--sm ui-btn--primary" onclick="openLeaveSettleOne('${c.id}',${curYear})">結算</button>`;
-    return `<tr>
-      <td data-label="姓名">${c.name||'—'}</td>
-      <td data-label="去年結轉剩餘">${a.carryRemain} h</td>
-      <td data-label="本年新增剩餘">${a.earnedRemain} h</td>
-      <td data-label="剩餘合計"><b>${a.remain} h</b></td>
-      <td class="ui-actions" data-label="" style="white-space:nowrap;text-align:right;">${status}</td>
-    </tr>`;
-  }).join('');
-  showModal(`<div class="ui-modal"></div><div class="ui-modal-title">特休年度結算　<span style="font-size:13px;color:var(--t3);">${curYear} 年度</span></div>
-    <div class="ui-note" style="margin-bottom:12px;">
+  const _e=(typeof escH==='function')?escH:(x=>String(x));
+  const _items=applic.map(c=>({c, a:annualLeaveAccount(c, shifts, curYear), done:settledMap[c.id]}));
+  const _badge=d=>d?'<span class="ui-badge">已結算</span>':'<span class="ui-badge ui-badge--warn">待結算</span>';
+  const _detail=d=>d?`結轉 ${Number(d.carry_forward_hours)||0}h · 折薪 ${Number(d.cashout_hours)||0}h`:'';
+  const _btn=(c,blk)=>`<button class="ui-btn ui-btn--sm ui-btn--primary${blk?' ui-btn--block':''}" onclick="openLeaveSettleOne('${c.id}',${curYear})">結算</button>`;
+  const rows=_items.map(({c,a,done})=>`<tr>
+      <td class="ui-name" data-label="姓名" title="${_e(c.name||'—')}"><b>${_e(c.name||'—')}</b></td>
+      <td class="ui-num" data-label="去年結轉剩餘">${a.carryRemain}</td>
+      <td class="ui-num" data-label="本年新增剩餘">${a.earnedRemain}</td>
+      <td class="ui-num" data-label="剩餘合計"><b>${a.remain}</b></td>
+      <td class="ui-actions" data-label="狀態">${done?`<div class="ui-lvstat">${_badge(done)}</div><div class="ui-help">${_detail(done)}</div>`:`<div class="ui-lvstat">${_badge(done)}${_btn(c,false)}</div>`}</td>
+    </tr>`).join('');
+  const cards=_items.map(({c,a,done})=>`<div class="ui-card ui-lvcard">
+      <div class="ui-lvcard__name" title="${_e(c.name||'—')}">${_e(c.name||'—')}</div>
+      <div class="ui-lvcard__status">${_badge(done)}${done?`<span class="ui-help">${_detail(done)}</span>`:''}</div>
+      <div class="ui-kv"><span>去年結轉剩餘</span><span class="ui-kv__v">${a.carryRemain} 小時</span></div>
+      <div class="ui-kv"><span>本年新增剩餘</span><span class="ui-kv__v">${a.earnedRemain} 小時</span></div>
+      <div class="ui-kv ui-kv--total"><span>剩餘合計</span><span class="ui-kv__v">${a.remain} 小時</span></div>
+      ${done?'':_btn(c,true)}
+    </div>`).join('');
+  showModal(`<div class="ui-modal ui-modal--wide"></div><div class="ui-modal-title">特休年度結算</div>
+    <div class="ui-modal-sub">${curYear} 年度</div>
+    <div class="ui-modal-body ui-lvbody">
+    <div class="ui-note">
       逐一員工結算。<b>去年結轉剩餘一律折薪歸零</b>（依規定不可再遞延）；<b>本年新增剩餘</b>可選折薪或結轉至 ${curYear+1} 年。<br>
-      <span style="color:var(--t3);">折薪金額為系統估算（時薪 × 折薪時數），實際發放以貴司規定為準。</span>
+      <small>折薪金額為系統估算（時薪 × 折薪時數），實際發放以貴司規定為準。</small>
     </div>
-    ${applic.length===0?'<div class="ui-empty" style="padding:22px 8px;"><div>本年度無適用特休的員工</div></div>':
-    `<div style="max-height:52vh;overflow:auto;-webkit-overflow-scrolling:touch;">
-      <table class="ui-table"><thead><tr><th>姓名</th><th>去年結轉剩餘</th><th>本年新增剩餘</th><th>剩餘合計</th><th></th></tr></thead>
+    ${applic.length===0?'<div class="ui-empty">本年度無適用特休的員工</div>':
+    `<table class="ui-table ui-table--compact ui-desk-only"><thead><tr><th>姓名</th><th class="ui-num">去年結轉剩餘<br><span class="ui-help">小時</span></th><th class="ui-num">本年新增剩餘<br><span class="ui-help">小時</span></th><th class="ui-num">剩餘合計<br><span class="ui-help">小時</span></th><th class="ui-actions">狀態／操作</th></tr></thead>
       <tbody>${rows}</tbody></table>
-    </div>`}
+    <div class="ui-lvlist ui-mob-only">${cards}</div>`}
+    </div>
     <div class="ui-modal-foot"><button class="ui-btn" onclick="closeModal()">關閉</button></div>`);
 }
 // 個別員工結算視窗
@@ -55529,40 +55567,40 @@ async function openLeaveSettleOne(id, year){
   const earnedRemain=a.earnedRemain; // 本年新增剩餘
   window._settleCtx={ id, year, carryRemain, earnedRemain, hourly, isResigned };
   const carryCash=Math.round(carryRemain*hourly);
-  const resignNote=isResigned?`<div style="background:#fbe9e7;border:1px solid #e0b4a8;border-radius:9px;padding:10px 12px;margin-bottom:12px;font-size:12px;line-height:1.75;color:#b03a2e;">
+  const resignNote=isResigned?`<div class="ui-note ui-note--warn">
       <b>${earnedInfo.resignDate} 離職</b>　本年新增特休已按在職比例折算：<br>
       全年應給 ${earnedInfo.fullHours}h × 在職 ${earnedInfo.inService}/${earnedInfo.daysInYear} 天（${Math.round(earnedInfo.ratio*100)}%）= <b>${earnedInfo.hours}h</b><br>
-      <span style="color:#8a5a2a;">離職結算：剩餘一律折薪，不可結轉。</span>
+      <b>離職結算：剩餘一律折薪，不可結轉。</b>
     </div>`:'';
-  showModal(`<div class="ui-modal"></div><div class="ui-modal-title">年度結算 · ${c.name||''}　<span style="font-size:13px;color:var(--t3);">${year} 年度</span></div>
+  showModal(`<div class="ui-modal"></div><div class="ui-modal-title ui-lvtitle">年度結算 · ${escH(c.name||'')}</div>
+    <div class="ui-modal-sub">${year} 年度</div>
+    <div class="ui-modal-body ui-lvbody">
     ${resignNote}
-    <div style="background:var(--card2);border:1px solid var(--bd);border-radius:9px;padding:12px 14px;margin-bottom:12px;font-size:13px;line-height:2;">
-      <div style="display:flex;justify-content:space-between;"><span>去年結轉剩餘</span><span><b>${carryRemain}</b> 小時</span></div>
-      <div style="display:flex;justify-content:space-between;"><span>本年新增剩餘</span><span><b>${earnedRemain}</b> 小時</span></div>
-      <div style="border-top:1px dashed var(--bd);margin:6px 0;"></div>
-      <div style="display:flex;justify-content:space-between;color:var(--t3);font-size:11.5px;"><span>折薪估算時薪</span><span>$${hourly.toLocaleString()} / 小時</span></div>
+    <div class="ui-card">
+      <div class="ui-kv"><span>去年結轉剩餘</span><span class="ui-kv__v"><b>${carryRemain}</b> 小時</span></div>
+      <div class="ui-kv"><span>本年新增剩餘</span><span class="ui-kv__v"><b>${earnedRemain}</b> 小時</span></div>
+      <div class="ui-kv ui-kv--minor"><span>折薪估算時薪</span><span class="ui-kv__v">$${hourly.toLocaleString()} / 小時</span></div>
     </div>
-    <div style="background:#fff7f2;border:1px solid #e8c9b5;border-radius:9px;padding:10px 12px;margin-bottom:12px;font-size:12.5px;line-height:1.8;">
-      <b style="color:#a85a2a;">去年結轉剩餘 ${carryRemain} 小時 → 折薪歸零</b><br>
+    <div class="ui-note ui-note--warn">
+      <b>去年結轉剩餘 ${carryRemain} 小時 → 折薪歸零</b><br>
       折薪估算：${carryRemain} h × $${hourly.toLocaleString()} = <b>$${carryCash.toLocaleString()}</b>
     </div>
-    <div class="ui-field" style="margin-bottom:6px;"><label style="font-weight:600;">本年新增剩餘 ${earnedRemain} 小時，如何處理？</label></div>
+    <div class="ui-qtitle">本年新增剩餘 ${earnedRemain} 小時，如何處理？</div>
     ${earnedRemain<=0
-    ?`<div style="font-size:12.5px;color:var(--t3);padding:4px 0 10px;">本年新增已用罄，無剩餘需處理。</div>`
+    ?`<div class="ui-help">本年新增已用罄，無剩餘需處理。</div>`
     :(isResigned
-    ?`<div style="background:#fff7f2;border:1px solid #e8c9b5;border-radius:9px;padding:10px 12px;margin-bottom:10px;font-size:12.5px;line-height:1.8;">
-      <b style="color:#a85a2a;">離職一律折薪</b>：${earnedRemain} h × $${hourly.toLocaleString()} = <b>$${Math.round(earnedRemain*hourly).toLocaleString()}</b>
-    </div>`
+    ?`<div class="ui-note ui-note--warn"><b>離職一律折薪</b>：${earnedRemain} h × $${hourly.toLocaleString()} = <b>$${Math.round(earnedRemain*hourly).toLocaleString()}</b></div>`
     :`
-    <label class="settle-opt" style="display:flex;gap:9px;align-items:flex-start;border:1px solid var(--bd);border-radius:9px;padding:10px 12px;margin-bottom:8px;cursor:pointer;">
-      <input type="radio" name="earnedDisp" value="carry" onchange="settlePreview()" style="margin-top:3px;">
-      <span style="font-size:13px;line-height:1.7;"><b>結轉至 ${year+1} 年</b><br><span style="color:var(--t3);font-size:11.5px;">寫入明年「去年結轉」＝ ${earnedRemain} 小時</span></span>
+    <label class="ui-opt settle-opt">
+      <input type="radio" name="earnedDisp" value="carry" onchange="settlePreview()">
+      <span><b>結轉至 ${year+1} 年</b><small>寫入明年「去年結轉」＝ ${earnedRemain} 小時</small></span>
     </label>
-    <label class="settle-opt" style="display:flex;gap:9px;align-items:flex-start;border:1px solid var(--bd);border-radius:9px;padding:10px 12px;margin-bottom:10px;cursor:pointer;">
-      <input type="radio" name="earnedDisp" value="cash" onchange="settlePreview()" style="margin-top:3px;">
-      <span style="font-size:13px;line-height:1.7;"><b>折薪</b><br><span style="color:var(--t3);font-size:11.5px;">估算 ${earnedRemain} h × $${hourly.toLocaleString()} = $${Math.round(earnedRemain*hourly).toLocaleString()}</span></span>
+    <label class="ui-opt settle-opt">
+      <input type="radio" name="earnedDisp" value="cash" onchange="settlePreview()">
+      <span><b>折薪</b><small>估算 ${earnedRemain} h × $${hourly.toLocaleString()} = $${Math.round(earnedRemain*hourly).toLocaleString()}</small></span>
     </label>`)}
-    <div id="settle-preview" style="background:var(--card2);border:1px solid var(--bd);border-radius:9px;padding:11px 13px;margin-bottom:12px;font-size:13px;line-height:1.9;display:none;"></div>
+    <div id="settle-preview" class="ui-card" style="display:none;"></div>
+    </div>
     <div class="ui-modal-foot">
       <button class="ui-btn" onclick="openLeaveSettlement()">‹ 返回</button>
       <button class="ui-btn ui-btn--primary" id="settle-confirm" onclick="confirmLeaveSettle()" ${(earnedRemain>0&&!isResigned)?'disabled style="opacity:.5;"':''}>確認結算</button>
@@ -55590,9 +55628,9 @@ function settlePreview(){
   window._settleCtx.totalCash=totalCash;
   const el=document.getElementById('settle-preview');
   el.style.display='block';
-  el.innerHTML=`<div style="font-weight:600;margin-bottom:4px;">結算結果</div>
-    <div style="display:flex;justify-content:space-between;"><span>結轉至明年</span><span><b>${earnedCarry}</b> 小時</span></div>
-    <div style="display:flex;justify-content:space-between;color:#a85a2a;"><span>折薪合計（估算）</span><span><b>$${totalCash.toLocaleString()}</b>（${window._settleCtx.cashoutHours} h）</span></div>`;
+  el.innerHTML=`<div class="ui-card__title">結算結果</div>
+    <div class="ui-kv"><span>結轉至明年</span><span class="ui-kv__v"><b>${earnedCarry}</b> 小時</span></div>
+    <div class="ui-kv"><span>折薪合計（估算）</span><span class="ui-kv__v"><b>$${totalCash.toLocaleString()}</b>（${window._settleCtx.cashoutHours} h）</span></div>`;
   const b=document.getElementById('settle-confirm'); if(b){b.disabled=false;b.style.opacity='1';}
 }
 async function confirmLeaveSettle(){
@@ -55639,7 +55677,7 @@ async function openLeaveEdit(id){
   const rule=EMP_RULES[et]||EMP_RULES.full_time;
   const sen=calcSeniority(c.hire_date);
   if(rule.leaveApplicable===false){
-    showModal(`<div class="ui-modal"></div><div class="ui-modal-title">特休 · ${c.name||''}</div>
+    showModal(`<div class="ui-modal"></div><div class="ui-modal-title ui-lvtitle">特休 · ${escH(c.name||'')}</div>
       <div class="ui-empty" style="padding:24px 8px;"><div>${rule.label}不適用特休</div>
       <div style="font-size:12px;color:var(--t3);margin-top:8px;">合作教練為課程抽成制、自主安排授課，依規定不適用特別休假。</div></div>
       <div class="ui-modal-foot"><button class="ui-btn" onclick="closeModal()">關閉</button></div>`);
@@ -55650,26 +55688,27 @@ async function openLeaveEdit(id){
   let shifts=[]; try{ shifts=await dbGetAll('shifts'); }catch(_){}
   const curYear=(window._leaveYear||TODAY.getFullYear());
   const a=annualLeaveAccount(c, shifts, curYear);
-  showModal(`<div class="ui-modal"></div><div class="ui-modal-title">特休 · ${c.name||''}　<span style="font-size:13px;color:var(--t3);">${curYear} 年度</span></div>
-    <div class="ui-note" style="margin-bottom:12px;">
+  showModal(`<div class="ui-modal"></div><div class="ui-modal-title ui-lvtitle">特休 · ${escH(c.name||'')}</div>
+    <div class="ui-modal-sub">${curYear} 年度</div>
+    <div class="ui-modal-body ui-lvbody">
+    <div class="ui-note">
       類型：<b>${rule.label}</b>　·　到職日：${c.hire_date||'—'}　·　年資：${sen?sen.years+' 年 '+(sen.days%365)+' 天':'—'}<br>
-      依勞基法應給：<b style="color:var(--green);">${statDays!=null?statDays+' 天（≈ '+statHours+' 小時）':'—'}</b>　<span style="color:var(--t3);">（參考值）</span>
+      依勞基法應給：<b style="color:var(--ui-brand);">${statDays!=null?statDays+' 天（≈ '+statHours+' 小時）':'—'}</b>　<span class="ui-help">（參考值）</span>
     </div>
-    <div style="background:var(--card2);border:1px solid var(--bd);border-radius:9px;padding:12px 14px;margin-bottom:14px;font-size:13px;line-height:2;">
-      <div style="display:flex;justify-content:space-between;"><span>去年結轉</span><span><b>${a.carry}</b> 小時　<span style="color:var(--t3);font-size:11px;">（剩 ${a.carryRemain}）</span></span></div>
-      <div style="display:flex;justify-content:space-between;"><span>本年度新增</span><span><b>${a.earned}</b> 小時　<span style="color:var(--t3);font-size:11px;">（剩 ${a.earnedRemain}）</span></span></div>
-      <div style="border-top:1px dashed var(--bd);margin:6px 0;"></div>
-      <div style="display:flex;justify-content:space-between;"><span>可用合計（應給）</span><span><b>${a.grant}</b> 小時</span></div>
-      <div style="display:flex;justify-content:space-between;color:#c0392b;"><span>已使用（取自排班表）</span><span>−${a.used} 小時</span></div>
-      <div style="border-top:1px dashed var(--bd);margin:6px 0;"></div>
-      <div style="display:flex;justify-content:space-between;font-size:15px;"><span><b>剩餘</b></span><span style="color:var(--green);"><b>${a.remain}</b> 小時</span></div>
-      <div style="font-size:11px;color:var(--t3);margin-top:4px;">扣除順序：先扣去年結轉，扣完才扣本年度新增（FIFO）。</div>
+    <div class="ui-card">
+      <div class="ui-kv"><span>去年結轉</span><span class="ui-kv__v"><b>${a.carry}</b> 小時　<span class="ui-help">（剩 ${a.carryRemain}）</span></span></div>
+      <div class="ui-kv"><span>本年度新增</span><span class="ui-kv__v"><b>${a.earned}</b> 小時　<span class="ui-help">（剩 ${a.earnedRemain}）</span></span></div>
+      <div class="ui-kv ui-kv--minor"><span>可用合計（應給）</span><span class="ui-kv__v"><b>${a.grant}</b> 小時</span></div>
+      <div class="ui-kv" style="color:var(--ui-danger);"><span style="color:inherit;">已使用（取自排班表）</span><span class="ui-kv__v">−${a.used} 小時</span></div>
+      <div class="ui-kv ui-kv--total"><span>剩餘</span><span class="ui-kv__v" style="color:var(--ui-brand);">${a.remain} 小時</span></div>
+      <div class="ui-help" style="margin-top:6px;">扣除順序：先扣去年結轉，扣完才扣本年度新增（FIFO）。</div>
     </div>
     <div class="ui-field-row">
       <div class="ui-field"><label class="ui-label">去年結轉（小時）</label><input class="ui-input" type="number" id="lv-carry" value="${c.al_carry_hours??''}" placeholder="0" step="0.5" min="0"></div>
       <div class="ui-field"><label class="ui-label">本年度新增（小時）</label><input class="ui-input" type="number" id="lv-earned" value="${c.al_earned_hours??(statHours??'')}" placeholder="${statHours??0}" step="0.5" min="0"></div>
     </div>
-    <div style="font-size:11.5px;color:var(--t3);line-height:1.7;margin-bottom:4px;">＊「已使用」自動取自排班表的特休時數，不在此手動填寫。<br>＊「去年結轉」一般由年度結算自動寫入，亦可手動調整。</div>
+    <div class="ui-help">＊「已使用」自動取自排班表的特休時數，不在此手動填寫。<br>＊「去年結轉」一般由年度結算自動寫入，亦可手動調整。</div>
+    </div>
     <div class="ui-modal-foot"><button class="ui-btn" onclick="closeModal()">取消</button><button class="ui-btn ui-btn--primary" onclick="saveLeave('${id}')">儲存</button></div>`);
 }
 async function saveLeave(id){

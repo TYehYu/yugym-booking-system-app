@@ -30,6 +30,10 @@
 - **全店共用區塊** `.ui-card--shared`＋`.ui-sharedhead`；版本／範本狀態列 `.ui-verrow`。
 - **寬視窗** 標記改成 `<div class="ui-modal ui-modal--wide"></div>`（桌機最寬 680）。
 - **空狀態** `.ui-empty`。
+- **數值列** `.ui-kv`（標籤靠左、數字靠右對齊；`--total` 合計列加虛線、`--minor` 次要資訊），數字欄用 `.ui-num`（靠右、等寬數字）。（2026-11-27，特休三個視窗）
+- **選項卡** `.ui-opt`：整張可點的單選項（內含 `<input type=radio>`，選中時品牌綠底）。
+- **名單：桌機表格＋手機卡片** 同一份資料各產一份：表格加 `.ui-desk-only`、卡片容器加 `.ui-mob-only`（≤720px 只顯示卡片）；卡片 `.ui-card.ui-lvcard`，姓名 `.ui-lvcard__name` 單行不拆行（過長以刪節號，全名放 `title`）。表格較窄用 `.ui-table--compact`，長姓名欄用 `.ui-name`（最寬 190px 截斷）。
+- **視窗內容區** 長內容放 `.ui-modal-body`（可捲動），加 `.ui-lvbody` 讓欄位間距一致、右側留出捲軸空間；底部按鈕列永遠在內容區之外，不遮住欄位。
 
 ## 遷移原則（第 2 批起）
 1. 一頁一個 commit，可單獨退回。
